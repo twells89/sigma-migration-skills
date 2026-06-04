@@ -176,20 +176,47 @@ def build_element(rec, fields, masters)
 
   case kind
   when 'control'
-    # bead 14w(a): a PBI slicer -> a Sigma control (list/value filter), NOT a
-    # bar chart. The control's targets/source are wired in the workbook UI or a
-    # follow-up; here we emit a faithful list control bound to the sliced column.
+    # bead 14w(a)/6z5: a PBI slicer -> a Sigma `list` control bound to the sliced
+    # column on its master element. Valid shape (controls.md): controlType:list +
+    # controlId + mode + selectionMode + values[] + source{kind:source,...} +
+    # filters[]. The control defines NO columns of its own — it references the
+    # master's existing column id, so it both populates from and filters that col.
     qr = (b['Values'] || b['Category'] || b['Fields'] || []).first
-    fs = field_spec(qr, fields)
-    cid = "#{eid}-ctl"
-    cols << { 'id' => cid, 'formula' => fs['ref'], 'name' => (qr || 'Filter').split('.').last }
+    colname = (qr || 'Filter').split('.').last
+    mcols = (master && masters[master] ? (masters[master]['columns'] || []) : [])
+    mcol = mcols.find { |c| c['name'] == colname } || mcols.first
+    tgt = mcol ? mcol['id'] : nil
     el['kind'] = 'control'
-    el['controlType'] = 'list-values'
-    el['columnId'] = cid
-    el.delete('source') # controls bind to a column, not a chart source
-    el['source'] = { 'elementId' => master_id, 'kind' => 'table' } if master_id
+    el['controlId'] = colname.gsub(/[^A-Za-z0-9]/, '') + 'Filter'
+    el['name'] = colname
+    el['controlType'] = 'list'
+    el['mode'] = 'include'
+    el['selectionMode'] = 'multiple'
+    el['values'] = []
+    el.delete('source')
+    if master_id && tgt
+      el['source']  = { 'kind' => 'source', 'source' => { 'kind' => 'table', 'elementId' => master_id }, 'columnId' => tgt }
+      el['filters'] = [{ 'source' => { 'kind' => 'table', 'elementId' => master_id }, 'columnId' => tgt }]
+    end
   when 'kpi-chart'
-    qr = (b['Values'] || b['Y'] || []).first
+    # A single-value PBI card -> kpi-chart. A multiRowCard (multiple Values) ->
+    # ONE kpi-chart tile per measure (bead x81l: a kpi-chart renders only
+    # value.id, so a flat table or single-value KPI would drop the rest).
+    # Returns an ARRAY here; the page/layout assembly flattens + tiles them.
+    vals = (b['Values'] || b['Y'] || [])
+    if vals.length > 1
+      return vals.each_with_index.map do |qr, i|
+        fs = field_spec(qr, fields)
+        kid = "#{eid}-k#{i}"
+        col = { 'id' => "#{kid}-v", 'formula' => measure_formula(fs), 'name' => qr.split('.').last }
+        apply_fmt(col, qr, fields, vfmts)
+        e = { 'id' => kid, 'kind' => 'kpi-chart', 'name' => qr.split('.').last,
+              'columns' => [col], 'value' => { 'id' => "#{kid}-v" } }
+        e['source'] = { 'elementId' => master_id, 'kind' => 'table' } if master_id
+        e
+      end
+    end
+    qr = vals.first
     fs = field_spec(qr, fields)
     cid = "#{eid}-v"
     col = { 'id' => cid, 'formula' => measure_formula(fs), 'name' => (qr || 'Value').split('.').last }
@@ -197,7 +224,9 @@ def build_element(rec, fields, masters)
     cols << col
     el['value'] = { 'id' => cid }
   when 'bar-chart', 'line-chart', 'area-chart'
-    dim = (b['Category'] || b['Axis'] || b['X'] || []).first
+    # b['Group'] is the treemap/funnel category role (1zh9) — alias it to the dim
+    # so a treemap-as-bar fallback keeps its category instead of emitting '[]'.
+    dim = (b['Category'] || b['Axis'] || b['X'] || b['Group'] || []).first
     meas = (b['Y'] || b['Values'] || [])
     series = (b['Series'] || b['Legend'] || []).first
     dfs = field_spec(dim, fields)
@@ -221,7 +250,12 @@ def build_element(rec, fields, masters)
     # Stacking fidelity: emit explicitly so a multi-series clustered PBI chart does
     # NOT inherit Sigma's stacked default. PBI clustered->"none", stacked->"stacked",
     # 100%-stacked->"100".
-    el['stacking'] = rec['stacking'] if kind == 'bar-chart' && rec['stacking']
+    # Stacking: only `none`/`stacked` are accepted by /v2/workbooks/spec; the
+    # percent-stacked token "100" is rejected ("Invalid value: string") despite
+    # the doc claiming it's valid — degrade to "stacked" (bead pi8v).
+    if kind == 'bar-chart' && rec['stacking']
+      el['stacking'] = rec['stacking'] == '100' ? 'stacked' : rec['stacking']
+    end
     # c07: default to single series. Only split by color when PBI bound a
     # Series/Legend role. Never auto-color a line by a dimension that PBI did
     # not legend (see refs/measure-patterns.md §1 + §4).
@@ -231,6 +265,37 @@ def build_element(rec, fields, masters)
       cols << { 'id' => scid, 'formula' => sfs['ref'], 'name' => series.split('.').last }
       el['color'] = { 'by' => 'category', 'column' => scid }
     end
+  when 'combo-chart'
+    # bead 6v5u: PBI lineClustered/StackedColumnComboChart -> Sigma combo. Roles:
+    # Category (x), Y (columns -> primary/left axis), Y2 (lines -> secondary/right
+    # axis). Dual-axis persists via the bare-string-vs-object form of
+    # yAxis.columnIds (feedback_sigma_combo_dual_axis): bare string = primary,
+    # {columnId, type:'line'} = secondary line.
+    dim = (b['Category'] || b['Axis'] || b['X'] || []).first
+    col_meas  = (b['Y'] || b['Values'] || [])
+    line_meas = (b['Y2'] || [])
+    dfs = field_spec(dim, fields)
+    dcid = "#{eid}-x"
+    cols << { 'id' => dcid, 'formula' => dfs['ref'], 'name' => (dim || 'Dim').split('.').last }
+    ycids = []
+    col_meas.each_with_index do |qr, i|
+      fs = field_spec(qr, fields)
+      cid = "#{eid}-y#{i}"
+      col = { 'id' => cid, 'formula' => measure_formula(fs), 'name' => qr.split('.').last }
+      apply_fmt(col, qr, fields, vfmts)
+      cols << col
+      ycids << cid                                   # bare string -> primary (left) bars
+    end
+    line_meas.each_with_index do |qr, i|
+      fs = field_spec(qr, fields)
+      cid = "#{eid}-l#{i}"
+      col = { 'id' => cid, 'formula' => measure_formula(fs), 'name' => qr.split('.').last }
+      apply_fmt(col, qr, fields, vfmts)
+      cols << col
+      ycids << { 'columnId' => cid, 'type' => 'line' } # object -> secondary (right) line
+    end
+    el['xAxis'] = { 'columnId' => dcid }
+    el['yAxis'] = { 'columnIds' => ycids }
   when 'scatter-chart'
     # bead 14w(b): scatter -> xAxis (measure), yAxis (measure), point category for
     # color/detail. PBI scatter binds X + Y (both measures) and a Category/Details.
@@ -317,7 +382,8 @@ def build_element(rec, fields, masters)
     el['values'] = valids
   end
 
-  el['columns'] = cols
+  # Controls reference a master column; they carry no columns array of their own.
+  el['columns'] = cols unless el['kind'] == 'control'
   el
 end
 
@@ -333,7 +399,11 @@ data_elements = masters.map do |_name, m|
 end
 
 content_pages = signals['pages'].map do |pg|
-  els = pg['visuals'].map { |v| build_element(v, fields, masters) }
+  # build_element may return one element or an array (multiRowCard -> N KPIs).
+  els = pg['visuals'].flat_map do |v|
+    r = build_element(v, fields, masters)
+    r.is_a?(Array) ? r : [r]   # NB: not Array(r) — that explodes a Hash into pairs
+  end
   { 'id' => "page-#{pg['page_id']}", 'name' => pg['page_title'], 'elements' => els }
 end
 
@@ -343,21 +413,56 @@ end
 # WITHOUT an embedded layout makes Sigma auto-generate a single-column stack
 # that wipes any grid. Embedding it on every write means the layout survives the
 # initial POST; put-layout.rb is still the authoritative FINAL write.
+# bead p4h: end grid lines must be floor((start+size)/unit)+1 on BOTH axes.
+# The old form (cols: floor((x+w-1)/unit)+2; rows: ceil((y+h)/unit)+1) overshot
+# the end line by one cell, so adjacent PBI visuals shared a grid line ->
+# "Element collisions found during layout edit". gridColumn/gridRow lines are
+# end-EXCLUSIVE, so floor/floor tiles adjacent visuals without overlap.
 col_for = ->(x, w, pw) {
   unit = pw / 24.0
   cs = (x / unit).floor + 1
-  ce = ((x + w - 1) / unit).floor + 2
+  ce = ((x + w) / unit).floor + 1
+  ce = cs + 1 if ce <= cs
   [[cs, 1].max, [ce, 25].min]
 }
 ROW_UNIT = 30.0
 pages_xml = signals['pages'].map do |pg|
   pw = pg['page_w'] || 1280
-  les = pg['visuals'].map do |v|
+  les = pg['visuals'].flat_map do |v|
     cs, ce = col_for.call(v['x'], v['w'], pw)
     rs = (v['y'] / ROW_UNIT).floor + 1
-    re = ((v['y'] + v['h']) / ROW_UNIT).ceil + 1
-    eid = "el-#{short(v['visual_id'])}"
-    %(  <LayoutElement elementId="#{eid}" gridColumn="#{cs} / #{ce}" gridRow="#{rs} / #{re}"/>)
+    re = ((v['y'] + v['h']) / ROW_UNIT).floor + 1
+    re = rs + 1 if re <= rs
+    base = "el-#{short(v['visual_id'])}"
+    vvals = (v['bindings'] || {})['Values'] || []
+    if v['visual_type'] == 'multiRowCard' && vvals.length > 1
+      # tile the card's column span across N KPI sub-elements (must match the
+      # `#{eid}-k#{i}` ids emitted by build_element's kpi multi-value branch).
+      # Tile the N KPIs in a grid (ncol = ceil(sqrt n)) inside the card's box so
+      # wide values (e.g. $180,504) aren't truncated by a 1-column-wide tile.
+      n = vvals.length
+      ncol = Math.sqrt(n).ceil
+      nrow = (n.to_f / ncol).ceil
+      cspan = ce - cs
+      # A KPI tile needs ~3 grid rows (90px) to render value+title; a short PBI
+      # card box would clip the lower tiles. Grow the box down to nrow*3 rows
+      # (the row band above the first chart is empty, so this won't collide).
+      re_eff = [re, rs + nrow * 3].max
+      rspan = re_eff - rs
+      (0...n).map do |i|
+        r = i / ncol
+        c = i % ncol
+        scs = cs + (c * cspan.to_f / ncol).round
+        sce = cs + ((c + 1) * cspan.to_f / ncol).round
+        srs = rs + (r * rspan.to_f / nrow).round
+        sre = rs + ((r + 1) * rspan.to_f / nrow).round
+        sce = scs + 1 if sce <= scs
+        sre = srs + 1 if sre <= srs
+        %(  <LayoutElement elementId="#{base}-k#{i}" gridColumn="#{scs} / #{sce}" gridRow="#{srs} / #{sre}"/>)
+      end
+    else
+      [%(  <LayoutElement elementId="#{base}" gridColumn="#{cs} / #{ce}" gridRow="#{rs} / #{re}"/>)]
+    end
   end.join("\n")
   %(<Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-#{pg['page_id']}">\n#{les}\n</Page>)
 end.join("\n")
