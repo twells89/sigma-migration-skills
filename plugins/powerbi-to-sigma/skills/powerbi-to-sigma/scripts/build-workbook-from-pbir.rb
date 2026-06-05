@@ -211,7 +211,7 @@ def build_element(rec, fields, masters)
         col = { 'id' => "#{kid}-v", 'formula' => measure_formula(fs), 'name' => qr.split('.').last }
         apply_fmt(col, qr, fields, vfmts)
         e = { 'id' => kid, 'kind' => 'kpi-chart', 'name' => qr.split('.').last,
-              'columns' => [col], 'value' => { 'id' => "#{kid}-v" } }
+              'columns' => [col], 'value' => { 'columnId' => "#{kid}-v" } }
         e['source'] = { 'elementId' => master_id, 'kind' => 'table' } if master_id
         e
       end
@@ -222,7 +222,10 @@ def build_element(rec, fields, masters)
     col = { 'id' => cid, 'formula' => measure_formula(fs), 'name' => (qr || 'Value').split('.').last }
     apply_fmt(col, qr, fields, vfmts)
     cols << col
-    el['value'] = { 'id' => cid }
+    # KPI value binds by `columnId` (the API rejects `{id}` -> "value.columnId:
+    # Invalid string"; live readback also normalizes to columnId). NB: pie/donut
+    # `value` uses `{id}` — do not change that one.
+    el['value'] = { 'columnId' => cid }
   when 'bar-chart', 'line-chart', 'area-chart'
     # b['Group'] is the treemap/funnel category role (1zh9) — alias it to the dim
     # so a treemap-as-bar fallback keeps its category instead of emitting '[]'.
@@ -250,12 +253,10 @@ def build_element(rec, fields, masters)
     # Stacking fidelity: emit explicitly so a multi-series clustered PBI chart does
     # NOT inherit Sigma's stacked default. PBI clustered->"none", stacked->"stacked",
     # 100%-stacked->"100".
-    # Stacking: only `none`/`stacked` are accepted by /v2/workbooks/spec; the
-    # percent-stacked token "100" is rejected ("Invalid value: string") despite
-    # the doc claiming it's valid — degrade to "stacked" (bead pi8v).
-    if kind == 'bar-chart' && rec['stacking']
-      el['stacking'] = rec['stacking'] == '100' ? 'stacked' : rec['stacking']
-    end
+    # Stacking enum is none|stacked|normalized (OpenAPI BarChart.stacking;
+    # "normalized" = scaled to 100%). extract-pbir already maps PBI 100%-stacked
+    # -> "normalized", so pass it through verbatim (bead pi8v).
+    el['stacking'] = rec['stacking'] if kind == 'bar-chart' && rec['stacking']
     # c07: default to single series. Only split by color when PBI bound a
     # Series/Legend role. Never auto-color a line by a dimension that PBI did
     # not legend (see refs/measure-patterns.md §1 + §4).

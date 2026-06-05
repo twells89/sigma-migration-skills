@@ -61,14 +61,17 @@ HBAR_TYPES = {"barChart", "clusteredBarChart", "stackedBarChart",
               "hundredPercentStackedBarChart"}
 
 # Stacking: PBI clustered -> Sigma "none" (side-by-side), stacked -> "stacked",
-# 100% -> "100". IMPORTANT: emit "none" explicitly — a multi-series Sigma bar
-# defaults to STACKED, so a clustered PBI chart comes out stacked otherwise.
+# 100% -> "normalized". The Sigma `stacking` enum is none|stacked|normalized
+# (OpenAPI BarChart.stacking; "normalized" = "stack scaled to 100%"). "100" is
+# NOT valid — the API rejects it as "Invalid value: string" (beads-sigma-pi8v).
+# IMPORTANT: emit "none" explicitly — a multi-series Sigma bar defaults to
+# STACKED, so a clustered PBI chart comes out stacked otherwise.
 STACKED_TYPES = {"stackedBarChart", "stackedColumnChart",
                  "hundredPercentStackedBarChart", "hundredPercentStackedColumnChart"}
 PCT_STACKED_TYPES = {"hundredPercentStackedBarChart", "hundredPercentStackedColumnChart"}
 
 def _stacking(vtype):
-    if vtype in PCT_STACKED_TYPES: return "100"
+    if vtype in PCT_STACKED_TYPES: return "normalized"
     if vtype in STACKED_TYPES: return "stacked"
     return "none"
 
