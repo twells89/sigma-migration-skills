@@ -45,6 +45,7 @@ OptionParser.new do |p|
   p.on('--folder-id ID')          { |v| opts[:folder_id] = v }
   p.on('--chart-kind K')          { |v| opts[:chart_kind] = v }
   p.on('--label L')               { |v| opts[:label] = v }
+  p.on('--keep-workbook')         { opts[:keep] = true }
 end.parse!
 %i[formula dm_id el_id].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
 
@@ -67,8 +68,9 @@ BASE; TOK = get_token
 def http(method, path, body: nil, accept_json: true)
   uri = URI("#{BASE}#{path}")
   req = case method
-        when :post then r = Net::HTTP::Post.new(uri); r.body = body; r['Content-Type'] = 'application/json'; r
-        when :get  then Net::HTTP::Get.new(uri)
+        when :post   then r = Net::HTTP::Post.new(uri); r.body = body; r['Content-Type'] = 'application/json'; r
+        when :get    then Net::HTTP::Get.new(uri)
+        when :delete then Net::HTTP::Delete.new(uri)
         end
   req['Authorization'] = "Bearer #{TOK}"
   req['Accept']        = 'application/json' if accept_json
@@ -174,10 +176,21 @@ error_cols = entries.select do |c|
 end
 
 status = error_cols.empty? ? 'ok' : 'error'
+
+# Clean up the throwaway test workbook (unless --keep-workbook). The scout only
+# needs the column-type verdict; leaving the workbook behind orphans one file per
+# attempt in the customer's folder.
+cleaned = false
+unless opts[:keep]
+  del = http(:delete, "/v2/files/#{wb_id}")
+  cleaned = del.code.to_i.between?(200, 299)
+end
+
 puts JSON.pretty_generate({
   'status'        => status,
   'phase'         => 'columns',
   'workbook_id'   => wb_id,
+  'workbook_cleaned' => cleaned,
   'error_columns' => error_cols.map { |c| { 'label' => c['label'], 'formula' => c['formula'], 'err' => c['type'] } },
   'all_columns'   => entries.map { |c| { 'label' => c['label'], 'type' => (c['type'].is_a?(Hash) ? c['type']['type'] : c['type']) } },
   'spec_used'     => spec

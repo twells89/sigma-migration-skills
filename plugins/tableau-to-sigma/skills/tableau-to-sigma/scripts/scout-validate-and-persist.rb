@@ -120,6 +120,14 @@ else
   # user the draft (dry run) and only files if they say yes (--yes). Tableau
   # calc-field gaps are converter gaps → mirror to the converter repos.
   escalate = File.join(__dir__, 'escalate-gap.py')
+  # Trim the validator output to the error verdict — never forward spec_used /
+  # all_columns into the issue body (it bloats the command + issue to KBs).
+  res = attempt['result'] || {}
+  resp_summary = {
+    'status'        => res['status'],
+    'phase'         => res['phase'],
+    'error_columns' => res['error_columns']
+  }.compact
   esc_cmd = [
     'python3', escalate,
     '--skill',              'tableau-to-sigma',
@@ -129,7 +137,7 @@ else
     '--source-pattern',     (opts[:pattern] || ''),
     '--template-attempted', (opts[:template] || ''),
     '--test-formula',       (opts[:test_formula] || ''),
-    '--sigma-response',     JSON.generate(attempt['result']),
+    '--sigma-response',     JSON.generate(resp_summary),
     '--example-from',       (opts[:example_from] || ''),
     '--escalation-yaml',    esc_path
   ]
