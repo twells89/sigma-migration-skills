@@ -24,9 +24,9 @@
 # Output (JSON to stdout):
 #   {
 #     "status": "validated" | "escalated",
-#     "rule_path": "~/.tableau-to-sigma/learned-rules.yaml",     // on success
+#     "rule_path": "~/.quicksight-to-sigma/learned-rules.yaml",  // on success
 #     "workbook_id": "...",                                       // on success
-#     "escalation_path": "~/.tableau-to-sigma/escalations/...",   // on failure
+#     "escalation_path": "~/.quicksight-to-sigma/escalations/...",// on failure
 #     "escalation": { "dry_run_cmd": "...", "file_cmd": "..." },  // on failure
 #     "attempts": [...]
 #   }
@@ -117,12 +117,12 @@ else
 
   # Opt-in escalation (NOT automatic). We record the gap locally and hand the
   # main agent a ready-to-run command for the shared filer. The agent shows the
-  # user the draft (dry run) and only files if they say yes (--yes). Tableau
+  # user the draft (dry run) and only files if they say yes (--yes). QuickSight
   # calc-field gaps are converter gaps → mirror to the converter repos.
   escalate = File.join(__dir__, 'escalate-gap.py')
   esc_cmd = [
     'python3', escalate,
-    '--skill',              'tableau-to-sigma',
+    '--skill',              'quicksight-to-sigma',
     '--category',           'converter',
     '--feature',            opts[:feature],
     '--description',        (opts[:description] || ''),

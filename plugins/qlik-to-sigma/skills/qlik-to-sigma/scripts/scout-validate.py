@@ -46,6 +46,38 @@ def dm_element_master_columns(dm_id, el_id):
                 return name, cols
     raise SystemExit("element not found in DM spec")
 
+def build_escalation(a, err):
+    """Record the gap locally and return opt-in escalate-gap.py commands.
+
+    Filing a tracking issue is NOT automatic: the main agent runs dry_run_cmd
+    (drafts the issue + dedupes against open issues/beads), shows the user, and
+    runs file_cmd only if they accept. Source-formula gaps are converter gaps."""
+    import shlex
+    skill = (a.skill or os.path.basename(os.path.normpath(a.home)).lstrip("."))
+    esc_dir = os.path.join(a.home, "escalations"); os.makedirs(esc_dir, exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "-", a.feature.lower()).strip("-") or "gap"
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    esc_path = os.path.join(esc_dir, f"{ts}-{slug}.yaml")
+    payload = {"feature": a.feature, "description": a.description,
+               "source_pattern": a.pattern, "sigma_template_attempted": a.template,
+               "test_formula": a.formula, "example_from": a.example_from,
+               "error_column": err, "escalated_at": ts}
+    try:
+        import yaml; yaml.safe_dump(payload, open(esc_path, "w"), sort_keys=False)
+    except Exception:
+        json.dump(payload, open(esc_path, "w"), indent=2)
+    filer = os.path.join(os.path.dirname(os.path.abspath(__file__)), "escalate-gap.py")
+    cmd = ["python3", filer, "--skill", skill, "--category", "converter",
+           "--feature", a.feature, "--description", a.description or "",
+           "--source-pattern", a.pattern or "", "--template-attempted", a.template or "",
+           "--test-formula", a.formula, "--sigma-response", json.dumps(err)[:1500],
+           "--example-from", a.example_from or "", "--escalation-yaml", esc_path]
+    dry = " ".join(shlex.quote(c) for c in cmd)
+    return {"note": "Gap recorded locally. Filing a tracking issue is opt-in — run "
+                    "dry_run_cmd, show the user, then file_cmd only if they accept.",
+            "escalation_yaml": esc_path, "dry_run_cmd": dry, "file_cmd": dry + " --yes"}
+
+
 def main():
     ap = argparse.ArgumentParser()
     for f in ["formula","data-model-id","element-id","feature"]:
@@ -56,6 +88,7 @@ def main():
     ap.add_argument("--example-from", default="")
     ap.add_argument("--kind", default="kpi-chart", choices=["kpi-chart","table"])
     ap.add_argument("--home", default=os.path.expanduser("~/.qlik-to-sigma"))
+    ap.add_argument("--skill", default="", help="skill name for issue routing (default: derived from --home)")
     a = ap.parse_args()
 
     elem_name, cols = dm_element_master_columns(a.data_model_id, a.element_id)
@@ -94,20 +127,23 @@ def main():
         err = {"parse": str(e), "raw": cbody[:200]}
     status = "error" if err else "validated"
     # persist on success
-    if status == "validated" and a.pattern and a.template:
-        os.makedirs(a.home, exist_ok=True)
-        import yaml
-        rp = os.path.join(a.home, "learned-rules.yaml")
-        doc = yaml.safe_load(open(rp)) if os.path.exists(rp) else None
-        doc = doc or {"rules":[]}
-        doc["rules"].append({"feature":a.feature,"description":a.description,
-            "source_pattern":a.pattern,"sigma_template":a.template,"hint":a.hint,
-            "validated_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "validated_workbook":wb,"example_from":a.example_from,"confidence":"validated"})
-        yaml.safe_dump(doc, open(rp,"w"), sort_keys=False)
-        result["persisted_to"] = rp
+    if status == "validated":
+        if a.pattern and a.template:
+            os.makedirs(a.home, exist_ok=True)
+            import yaml
+            rp = os.path.join(a.home, "learned-rules.yaml")
+            doc = yaml.safe_load(open(rp)) if os.path.exists(rp) else None
+            doc = doc or {"rules":[]}
+            doc["rules"].append({"feature":a.feature,"description":a.description,
+                "source_pattern":a.pattern,"sigma_template":a.template,"hint":a.hint,
+                "validated_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "validated_workbook":wb,"example_from":a.example_from,"confidence":"validated"})
+            yaml.safe_dump(doc, open(rp,"w"), sort_keys=False)
+            result["persisted_to"] = rp
     else:
+        # opt-in escalation: record the gap locally + hand back ready-to-run filer cmds
         result["error_column"] = err
+        result["escalation"] = build_escalation(a, err)
     # cleanup test workbook
     api("DELETE", f"/v2/files/{wb}")
     print(json.dumps({**result,"status":status}, indent=2))

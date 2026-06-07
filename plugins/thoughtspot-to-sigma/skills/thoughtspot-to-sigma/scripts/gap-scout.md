@@ -53,6 +53,23 @@ DO
      --feature '<fn>' --pattern '<regex>' --template '<sigma template>' \
      --description '<fn> -> Sigma' --home ~/.thoughtspot-to-sigma
 3. If status=validated it's persisted; report the rule. If error, try another form
-   (≤4 attempts) then report it as genuine-(c) needing redesign.
+   (≤4 attempts). After the last failed attempt the result carries an
+   `escalation.dry_run_cmd` / `escalation.file_cmd`; report it as genuine-(c)
+   needing redesign. Do NOT file anything yourself — see "Opt-in issue filing".
 ```
 Validated rules auto-apply on the next migrate via `learned-rules.py`.
+
+## Opt-in issue filing (escalations)
+
+Filing a GitHub issue is **opt-in and confirm-before-file** — never automatic.
+When `scout-validate.py` returns `status=error`, its `escalation` block carries
+ready-to-run commands for the shared `escalate-gap.py` filer. The main agent:
+
+1. Runs `escalation.dry_run_cmd` — files NOTHING; prints the drafted issue, the
+   target repo(s), and any existing open issues/beads that already cover the gap.
+2. Shows the user that draft and asks whether to open the issue.
+3. Only if the user says yes, runs `escalation.file_cmd` (the same command + `--yes`).
+
+ThoughtSpot formula gaps are **converter** gaps, so they mirror to both converter
+repos (`sigma-data-model-manager` + `sigma-data-model-mcp`) with a cross-link and a
+bead as the authoritative tracker. See `scripts/escalate-gap.py`.

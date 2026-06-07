@@ -56,11 +56,31 @@ PROCEDURE
        --description '<one-line>' --example-from '<measure name>' \
        --data-model-id <dm-id> --element-id <element-id> --folder-id <folder-id> \
        --home ~/.powerbi-to-sigma   [--kind table]
-4. Parse JSON: status=validated → done; status=error → retry (≤3) then escalate as a WARN.
+4. Parse JSON: status=validated → done; status=error → retry (≤3). After the last
+   failed attempt the result carries an `escalation.dry_run_cmd` / `escalation.file_cmd`
+   and the gap is left as a WARN. Do NOT file anything yourself — see "Opt-in issue
+   filing" below.
 
 OUTPUT
-One paragraph: feature, candidate, status. The validator auto-deletes its test workbook.
+One paragraph: feature, candidate, status, and — if escalated — the
+`escalation.dry_run_cmd` so the main agent can offer the user a tracking issue.
+The validator auto-deletes its test workbook.
 ```
+
+## Opt-in issue filing (escalations)
+
+Filing a GitHub issue is **opt-in and confirm-before-file** — never automatic.
+When `scout-validate.py` returns `status=error`, its `escalation` block carries
+ready-to-run commands for the shared `escalate-gap.py` filer. The main agent:
+
+1. Runs `escalation.dry_run_cmd` — files NOTHING; prints the drafted issue, the
+   target repo(s), and any existing open issues/beads that already cover the gap.
+2. Shows the user that draft and asks whether to open the issue.
+3. Only if the user says yes, runs `escalation.file_cmd` (the same command + `--yes`).
+
+Power BI DAX gaps are **converter** gaps, so they mirror to both converter repos
+(`sigma-data-model-manager` + `sigma-data-model-mcp`) with a cross-link and a
+bead as the authoritative tracker. See `scripts/escalate-gap.py`.
 
 ## What the scout depends on
 
@@ -68,6 +88,9 @@ One paragraph: feature, candidate, status. The validator auto-deletes its test w
   element + a column using the candidate), checks the column's resolved type via
   `/v2/workbooks/{id}/elements/{el}/columns`, persists on success, deletes the test workbook.
 - `scripts/learned-rules.py` — loader (`load(home="~/.powerbi-to-sigma")` + `apply()`).
+- `scripts/escalate-gap.py` — shared opt-in issue filer: category→repo routing, dedupe
+  (open issues + beads), converter-repo mirroring, bead cross-link. Dry-run by default;
+  files only with `--yes`. Identical copy across all migration skills.
 
 ## File locations (CRITICAL)
 

@@ -63,13 +63,31 @@ PROCEDURE
        --home ~/.qlik-to-sigma   [--kind table]   # default kpi-chart; use table for row-level/dimension formulas
 4. Parse the JSON:
    - status=validated → rule is now in the local YAML; done.
-   - status=error     → try a different candidate (≤3 attempts), then escalate
-                        (note it as a manual WARN for post-publish handling).
+   - status=error     → try a different candidate (≤3 attempts). After the last
+                        failed attempt the result carries an `escalation.dry_run_cmd`
+                        / `escalation.file_cmd` and the gap is left as a manual WARN.
+                        Do NOT file anything yourself — see "Opt-in issue filing".
 
 OUTPUT
-One paragraph: feature, candidate, status, and (for cleanup) note the test workbook is
-auto-deleted by the validator.
+One paragraph: feature, candidate, status, the test workbook is auto-deleted by the
+validator, and — if escalated — the `escalation.dry_run_cmd` so the main agent can
+offer the user a tracking issue.
 ```
+
+## Opt-in issue filing (escalations)
+
+Filing a GitHub issue is **opt-in and confirm-before-file** — never automatic.
+When `scout-validate.py` returns `status=error`, its `escalation` block carries
+ready-to-run commands for the shared `escalate-gap.py` filer. The main agent:
+
+1. Runs `escalation.dry_run_cmd` — files NOTHING; prints the drafted issue, the
+   target repo(s), and any existing open issues/beads that already cover the gap.
+2. Shows the user that draft and asks whether to open the issue.
+3. Only if the user says yes, runs `escalation.file_cmd` (the same command + `--yes`).
+
+Qlik expression gaps are **converter** gaps, so they mirror to both converter repos
+(`sigma-data-model-manager` + `sigma-data-model-mcp`) with a cross-link and a bead
+as the authoritative tracker. See `scripts/escalate-gap.py`.
 
 ## What the scout depends on
 
@@ -77,6 +95,9 @@ auto-deleted by the validator.
   element + a column using the candidate), checks `/v2/workbooks/{id}/elements/{el}/columns`
   for `type=="error"`, persists to the local YAML on success, deletes the test workbook.
 - `scripts/learned-rules.py` — the loader the build step uses (`load()` + `apply()`).
+- `scripts/escalate-gap.py` — shared opt-in issue filer: category→repo routing, dedupe
+  (open issues + beads), converter-repo mirroring, bead cross-link. Dry-run by default;
+  files only with `--yes`. Identical copy across all migration skills.
 
 ## File locations (CRITICAL)
 
