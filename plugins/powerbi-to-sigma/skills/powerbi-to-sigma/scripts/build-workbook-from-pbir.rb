@@ -133,6 +133,11 @@ def apply_fmt(col, queryref, fields, vfmts)
 end
 
 def measure_formula(fs)
+  # bead qb2i: an explicit `formula` wins — lets the master-map emit a verbatim
+  # Sigma expression (e.g. a window calc "Lag(Sum([X/v]), 1)" / "Rank(Sum([X/v]),
+  # \"desc\")" / percent-of-total "Sum([X/v]) / GrandTotal(Sum([X/v]))") the
+  # agg/`?` encodings can't express, instead of falling back to a wrong stub.
+  return fs['formula'] if fs['formula'].is_a?(String) && !fs['formula'].empty?
   agg = fs['agg']
   return fs['ref'] if agg.nil? || (agg.respond_to?(:empty?) && agg.empty?)
   # Multi-arg aggregator support (bead 14w c): PercentileCont(col, 0.9), etc.
@@ -205,6 +210,21 @@ def build_element(rec, fields, masters)
   end
 
   master = visual_master(rec, fields)
+  # bead 8vzj: a Sigma element sources exactly ONE master. visual_master picks the
+  # one covering the MOST fields, but any bound field that cannot resolve on it
+  # (not its master and not among its `alts`) is silently DROPPED. Warn loudly so
+  # the agent supplies a single joined master (or per-field override) for those.
+  if master
+    unreachable = rec['bindings'].values.flatten.compact.reject do |qr|
+      fs = field_spec(qr, fields)
+      fs['master'] == master || Array(fs['alts']).any? { |a| a['master'] == master }
+    end.map { |qr| qr.to_s }.uniq
+    unless unreachable.empty?
+      warn "[build-workbook] WARN visual '#{(rec['title'] || rec['visual_id'])}' has field(s) " \
+           "#{unreachable.join(', ')} not reachable on the chosen master '#{master}'; a Sigma element " \
+           "sources only one master, so they will be DROPPED — point them at a single joined master element."
+    end
+  end
   master_id = master && masters[master] ? masters[master]['id'] : nil
   el = { 'id' => eid, 'kind' => kind, 'name' => name }
   el['source'] = { 'elementId' => master_id, 'kind' => 'table' } if master_id
@@ -370,23 +390,26 @@ def build_element(rec, fields, masters)
     # grouping whose `calculations` lists the measure col ids (bead 14w(f)).
     # The first non-aggregated (dimension) column becomes the groupBy; every
     # aggregated column id goes into that grouping's calculations[].
-    group_id = nil; calc_ids = []
+    # bead ne48: group by ALL leading dimension columns, not just the first —
+    # otherwise a 2-dim matrix collapses to the wrong grain. A field with an
+    # explicit `formula` (bead qb2i window calc) is a calculation, never a groupBy.
+    group_ids = []; calc_ids = []
     (b['Values'] || []).each_with_index do |qr, i|
       fs = field_spec(qr, fields, master)
       cid = "#{eid}-c#{i}"
-      is_dim = fs['agg'].to_s.empty?
+      is_dim = fs['agg'].to_s.empty? && fs['formula'].to_s.empty?
       col = { 'id' => cid, 'formula' => is_dim ? fs['ref'] : measure_formula(fs),
               'name' => qr.split('.').last }
       apply_fmt(col, qr, fields, vfmts) unless is_dim
       cols << col
       if is_dim
-        group_id ||= cid
+        group_ids << cid
       else
         calc_ids << cid
       end
     end
-    if group_id && !calc_ids.empty?
-      el['groupings'] = [{ 'id' => "#{eid}-g", 'groupBy' => [group_id], 'calculations' => calc_ids }]
+    if !group_ids.empty? && !calc_ids.empty?
+      el['groupings'] = [{ 'id' => "#{eid}-g", 'groupBy' => group_ids, 'calculations' => calc_ids }]
     end
   when 'pivot-table'
     rows = (b['Rows'] || b['Category'] || [])

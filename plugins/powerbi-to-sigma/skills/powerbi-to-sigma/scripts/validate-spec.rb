@@ -70,6 +70,17 @@ spec.fetch('pages', []).each do |page|
       own_prefixes << src['path'].last
     end
     own_prefixes << 'Custom SQL' if src['kind'] == 'sql'
+    # bead 1t6c: a master sourcing a DM element (kind: data-model) carries
+    # pass-through column formulas like [EMPLOYEES/Department] whose prefix is the
+    # DM element's source-table name — that lives INSIDE the data model, not this
+    # spec, so it can't be cross-checked here and was false-flagged "unknown
+    # prefix". The DM post already validated these columns; trust the prefixes the
+    # element's own formulas use.
+    if src['kind'] == 'data-model'
+      cols.each do |c|
+        (c['formula'] || '').to_s.scan(/\[([^\]\/]+)\//).flatten.each { |p| own_prefixes << p }
+      end
+    end
 
     cols.each do |col|
       f = (col['formula'] || '').to_s
