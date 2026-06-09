@@ -9,7 +9,7 @@
     {
       "name": "tableau-to-sigma",
       "source": "./tableau-to-sigma",
-      "description": "Tableau workbooks/datasources → Sigma data model + workbook, with parity verification. Bundles tableau-to-sigma + tableau-assessment.",
+      "description": "Tableau workbooks/datasources → Sigma data model + workbook, with parity verification. Bundles tableau-to-sigma + tableau-assessment + tableau-vds-to-snowflake (lands published-datasource/extract data in Snowflake when it isn't already in the warehouse).",
       "category": "migration",
       "keywords": ["tableau", "migration", "bi"]
     },
