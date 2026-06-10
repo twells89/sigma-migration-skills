@@ -53,7 +53,7 @@ Sigma SEs, technical CSMs, and migration partners running 1:1 Tableau-to-Sigma c
   <li><strong>Sigma API credentials</strong> — client ID + secret. Run <code>ruby scripts/setup.rb</code> once; it writes them to both <code>~/.claude/settings.json</code> (Claude Code auto-loads it) and a neutral <code>~/.sigma-migration/env</code> that the scripts auto-source under any agent.</li>
   <li><strong>Tableau access</strong> — either the Tableau MCP tools loaded in your agent session (preferred) or a Tableau Personal Access Token via <code>ruby scripts/setup-tableau.rb</code> (PAT mode fallback). PAT mode is required when you need the workbook's <code>.twb</code> XML (most conversions).</li>
   <li>A target Tableau workbook you're authorized to convert. Sample dashboards live at <a href="https://public.tableau.com/app/profile/tableau.docs.team">Tableau Public's docs profile</a> if you don't have one handy.</li>
-  <li>The source workbook's underlying tables must be reachable via a Sigma connection (Snowflake, BigQuery, Databricks, Redshift, Postgres, etc.). If the data only lives inside a Tableau extract, land it first with the <strong><code>tableau-vds-to-snowflake</code></strong> sibling skill — see the decision tree in the next section.</li>
+  <li>The source workbook's underlying tables must be reachable via a Sigma connection (Snowflake, BigQuery, Databricks, Redshift, Postgres, etc.). If the data only lives inside a Tableau extract, land it first with the <strong><code>tableau-vds-to-cdw</code></strong> sibling skill — see the decision tree in the next section.</li>
 </ul>
 
 <aside class="positive">
@@ -87,11 +87,11 @@ Duration: 5
 <ul>
   <li><strong><code>tableau-assessment</code></strong> — <em>Phase 0: scoping</em>. Point it at a Tableau Cloud site and it inventories everything in ~90 seconds — environment counts, licenses, datasource mix, refresh history, per-workbook usage, per-workbook complexity (via a <code>.twb</code> gap-scan), and a value/cost-ranked migration shortlist. Run this BEFORE you commit to a conversion plan; the output tells you which workbooks convert clean today, which need redesign, and which to leave on Tableau. Complements (does not replace) Hakkoda's deeper Assessment App. Also emits the cluster plan that <code>tableau-to-sigma</code> consumes for batch runs.</li>
   <li><strong><code>tableau-to-sigma</code></strong> — <em>Phases 1–6: the conversion</em>. The subject of this QuickStart. Takes a single workbook URL (or a cluster plan from <code>tableau-assessment</code>) and produces a live Sigma workbook with verified parity. Hardened against the four most-common silent regressions via a four-gate finalize check.</li>
-  <li><strong><code>tableau-vds-to-snowflake</code></strong> — <em>Phase 0.5: data landing, when needed</em>. Extracts a published Tableau datasource via the VizQL Data Service (VDS) API and lands it in a Snowflake table via a stored procedure + External Access Integration, optionally scheduled for ongoing refresh with a Snowflake Task. Reach for this when a customer's data lives <em>only</em> inside Tableau (extracts, Tableau Prep outputs, Web Data Connector feeds) and isn't already in the warehouse Sigma reads. Sigma needs warehouse-native data; this skill is the bridge.</li>
+  <li><strong><code>tableau-vds-to-cdw</code></strong> — <em>Phase 0.5: data landing, when needed</em>. Extracts a published Tableau datasource via the VizQL Data Service (VDS) API and lands it in your cloud warehouse — Snowflake (stored procedure + External Access Integration) or Databricks (serverless notebook on Unity Catalog), optionally scheduled for ongoing refresh. Reach for this when a customer's data lives <em>only</em> inside Tableau (extracts, Tableau Prep outputs, Web Data Connector feeds) and isn't already in the warehouse Sigma reads. Sigma needs warehouse-native data; this skill is the bridge.</li>
 </ul>
 
 <aside class="positive">
-<strong>IMPORTANT:</strong><br> The decision tree below tells you when each skill applies. Don't run <code>tableau-to-sigma</code> until you've confirmed the underlying warehouse tables are reachable by Sigma — and don't run <code>tableau-vds-to-snowflake</code> unless you actually need to (most customer data is already in the warehouse).
+<strong>IMPORTANT:</strong><br> The decision tree below tells you when each skill applies. Don't run <code>tableau-to-sigma</code> until you've confirmed the underlying warehouse tables are reachable by Sigma — and don't run <code>tableau-vds-to-cdw</code> unless you actually need to (most customer data is already in the warehouse).
 </aside>
 
 ![Alt text](assets/horizonalline.png)
@@ -100,8 +100,8 @@ Duration: 5
 
 <ul>
   <li><strong>Migrating 1 workbook, data is in the warehouse</strong> → <code>tableau-to-sigma</code> only. Skip assessment.</li>
-  <li><strong>Migrating 1 workbook, data is in a Tableau extract / not in the warehouse</strong> → <code>tableau-vds-to-snowflake</code> first to land the data, then <code>tableau-to-sigma</code>.</li>
-  <li><strong>Migrating 10+ workbooks (any data source)</strong> → start with <code>tableau-assessment</code> to inventory, classify, and cluster. Then run <code>tableau-to-sigma</code> in batch mode using the emitted cluster plan. Add <code>tableau-vds-to-snowflake</code> per-datasource where warehouse coverage is missing.</li>
+  <li><strong>Migrating 1 workbook, data is in a Tableau extract / not in the warehouse</strong> → <code>tableau-vds-to-cdw</code> first to land the data, then <code>tableau-to-sigma</code>.</li>
+  <li><strong>Migrating 10+ workbooks (any data source)</strong> → start with <code>tableau-assessment</code> to inventory, classify, and cluster. Then run <code>tableau-to-sigma</code> in batch mode using the emitted cluster plan. Add <code>tableau-vds-to-cdw</code> per-datasource where warehouse coverage is missing.</li>
   <li><strong>Auditing BI sprawl / scoping a migration without committing</strong> → <code>tableau-assessment</code> only. Output is a shareable readout HTML + ranked workbook list. No Sigma artifacts created.</li>
   <li><strong>Just converting a Tableau datasource (TDS / TDSX) to a Sigma data model, no workbook</strong> → use the more general <code>sigma-data-model</code> converter (lives in the <code>sigma-skills</code> repo). It accepts pasted YAML / JSON / TDS XML and emits a Sigma DM spec. Out of scope for <code>tableau-to-sigma</code>, which is workbook-centric.</li>
 </ul>
@@ -112,7 +112,7 @@ Duration: 5
 
 <ol>
   <li><code>tableau-assessment</code> against the customer's Tableau Cloud site → readout HTML, ranked shortlist, cluster plan</li>
-  <li>Per cluster: confirm warehouse data coverage; run <code>tableau-vds-to-snowflake</code> for any datasource Sigma can't reach</li>
+  <li>Per cluster: confirm warehouse data coverage; run <code>tableau-vds-to-cdw</code> for any datasource Sigma can't reach</li>
   <li><code>tableau-to-sigma</code> per workbook (or in batch via <code>orchestrate-batch.rb</code> firing parallel subagents)</li>
   <li>Per-workbook GREEN/YELLOW/RED tier emitted into <code>batch-results.jsonl</code>; share with the customer</li>
 </ol>
@@ -341,7 +341,7 @@ Duration: 5
   <li><strong>Pivot table appears as a flat table.</strong> Verify <code>parse-twb-layout.rb</code> emitted <code>chart_kind: pivot-table</code>. If it emitted <code>table</code> instead, the source worksheet had dims on only one shelf — that's a flat detail list, not a crosstab.</li>
   <li><strong>KPI tile missing from Sigma.</strong> If a Tableau scorecard parsed as something other than <code>chart_kind: kpi</code>, the worksheet probably had a hidden dim on a shelf (color encoding, detail). Inspect <code>rows_shelf</code> / <code>cols_shelf</code> on the zone JSON.</li>
   <li><strong>Sigma MCP query 401s mid-Phase 6.</strong> The MCP session has staled. Re-call <code>mcp__sigma-mcp-v2__begin_session</code> and retry the query. Do not abandon Phase 6 over a recoverable auth error.</li>
-  <li><strong>"Table not found" / "Connection has no access" during Phase 2.</strong> The warehouse table the Tableau workbook reads isn't in any Sigma connection your user can reach. Either (a) ask the customer to grant Sigma access to the existing warehouse table, or (b) land the Tableau datasource into a fresh warehouse table using the sibling <strong><code>tableau-vds-to-snowflake</code></strong> skill, then re-run <code>tableau-to-sigma</code>. The skill explicitly bails before authoring a broken spec.</li>
+  <li><strong>"Table not found" / "Connection has no access" during Phase 2.</strong> The warehouse table the Tableau workbook reads isn't in any Sigma connection your user can reach. Either (a) ask the customer to grant Sigma access to the existing warehouse table, or (b) land the Tableau datasource into a fresh warehouse table using the sibling <strong><code>tableau-vds-to-cdw</code></strong> skill, then re-run <code>tableau-to-sigma</code>. The skill explicitly bails before authoring a broken spec.</li>
 </ul>
 
 ![Footer](assets/sigma_footer.png)
@@ -354,7 +354,7 @@ For multi-workbook migrations (10+ workbooks at once), `tableau-to-sigma` is one
 
 <ol>
   <li><strong><code>tableau-assessment</code></strong> inventories the customer's Tableau Cloud site (workbooks, datasources, refresh history, license posture, per-workbook complexity from a <code>.twb</code> gap-scan) and emits two artifacts: a shareable readout HTML for the customer conversation, and a <code>batch-plan.json</code> with wave-by-wave subagent briefs. Workbooks are clustered by shared warehouse tables so workbooks that should share a DM build a leader DM first and followers reuse it.</li>
-  <li>For any cluster whose data <em>isn't</em> already in the warehouse, run <strong><code>tableau-vds-to-snowflake</code></strong> per datasource before kicking off the cluster's conversion wave. Sigma needs warehouse-native data; the converter can't operate on a Tableau-extract-only datasource.</li>
+  <li>For any cluster whose data <em>isn't</em> already in the warehouse, run <strong><code>tableau-vds-to-cdw</code></strong> per datasource before kicking off the cluster's conversion wave. Sigma needs warehouse-native data; the converter can't operate on a Tableau-extract-only datasource.</li>
   <li>The conversation-layer agent fires each conversion wave as a parallel batch of <code>Agent()</code> calls, each carrying a self-contained brief generated by <strong><code>tableau-to-sigma</code></strong>'s <code>scripts/orchestrate-batch.rb</code> companion in <code>tableau-assessment</code>. Cluster leaders build the DM; followers reuse it via <code>find-or-pick-dm.rb</code> + <code>inspect-dm-shape.rb</code>. Continue-on-failure semantics mean a single broken workbook doesn't block the rest of the batch.</li>
 </ol>
 
@@ -373,7 +373,7 @@ Duration: 5
 In this QuickStart we:
 
 <ul>
-  <li>Mapped the three Tableau migration skills — <code>tableau-assessment</code> for scoping, <code>tableau-to-sigma</code> for conversion, <code>tableau-vds-to-snowflake</code> for data landing — and the decision tree for picking the right one</li>
+  <li>Mapped the three Tableau migration skills — <code>tableau-assessment</code> for scoping, <code>tableau-to-sigma</code> for conversion, <code>tableau-vds-to-cdw</code> for data landing — and the decision tree for picking the right one</li>
   <li>Installed and configured the <code>tableau-to-sigma</code> skill for Claude Code</li>
   <li>Ran Phase 1 discovery against a real Tableau dashboard — workbook metadata, view CSVs, .twb XML, dashboard PNG</li>
   <li>Read the gap report to set expectations before authoring a spec</li>

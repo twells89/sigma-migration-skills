@@ -41,7 +41,7 @@ and the skill drives discovery → translation → build → parity.
 
 | Plugin | Source tool | Skills it installs |
 |---|---|---|
-| [`tableau-to-sigma`](plugins/tableau-to-sigma/) | Tableau | `tableau-to-sigma`, `tableau-assessment`, `tableau-vds-to-snowflake` |
+| [`tableau-to-sigma`](plugins/tableau-to-sigma/) | Tableau | `tableau-to-sigma`, `tableau-assessment`, `tableau-vds-to-cdw` |
 | [`powerbi-to-sigma`](plugins/powerbi-to-sigma/) | Power BI | `powerbi-to-sigma`, `powerbi-assessment` |
 | [`qlik-to-sigma`](plugins/qlik-to-sigma/) | Qlik Sense / Cloud | `qlik-to-sigma`, `qlik-assessment` |
 | [`thoughtspot-to-sigma`](plugins/thoughtspot-to-sigma/) | ThoughtSpot | `thoughtspot-to-sigma`, `thoughtspot-assessment` |
@@ -51,10 +51,10 @@ and the skill drives discovery → translation → build → parity.
 
 In Claude Code, installed skills are namespaced — e.g. `/powerbi-to-sigma:powerbi-assessment`.
 
-The `tableau-to-sigma` plugin bundles a third skill, **`tableau-vds-to-snowflake`** — a
+The `tableau-to-sigma` plugin bundles a third skill, **`tableau-vds-to-cdw`** — a
 data-landing bridge for when a Tableau datasource's data lives only inside Tableau (a
 published extract / VDS feed) and isn't yet in the warehouse Sigma reads. It pulls the data
-via the VizQL Data Service API and lands it in a Snowflake table (optionally on a schedule)
+via the VizQL Data Service API and lands it in your cloud warehouse — **Snowflake** or **Databricks**, optionally on a schedule —
 so the converter has a warehouse-native table to build on. `tableau-assessment` flags the
 datasources that need it.
 

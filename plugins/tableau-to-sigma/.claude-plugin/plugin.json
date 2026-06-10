@@ -3,7 +3,7 @@
   "name": "tableau-to-sigma",
   "displayName": "Tableau → Sigma",
   "version": "1.0.0",
-  "description": "Migrate Tableau workbooks and datasources to Sigma — discovery, calc/LOD translation, data model + workbook build, and parity verification against the source warehouse. Includes a tenant assessment skill and a VDS→Snowflake data-landing skill.",
+  "description": "Migrate Tableau workbooks and datasources to Sigma — discovery, calc/LOD translation, data model + workbook build, and parity verification against the source warehouse. Includes a tenant assessment skill and a VDS→warehouse data-landing skill (Snowflake or Databricks).",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",
   "keywords": ["tableau", "sigma", "migration", "bi", "converter"],

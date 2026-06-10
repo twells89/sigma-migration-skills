@@ -82,7 +82,7 @@ def verdict_for(connection_types, host_classes)
     return [
       'land-in-warehouse',
       'File-based data source (Excel / CSV / Google Drive / hyper extract)',
-      'Land this content in your cloud warehouse before migration. For .tds files, the tableau-vds-to-snowflake skill auto-generates Snowflake DDL + a matching Sigma data model.'
+      'Land this content in your cloud warehouse before migration. For .tds files, the tableau-vds-to-cdw skill auto-generates warehouse DDL (Snowflake or Databricks) + a matching Sigma data model.'
     ]
   end
 

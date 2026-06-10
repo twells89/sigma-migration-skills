@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # Compose a migration-plan.json that the assessment hands to downstream
-# migration skills (tableau-to-sigma, tableau-vds-to-snowflake) for direct
+# migration skills (tableau-to-sigma, tableau-vds-to-cdw) for direct
 # invocation.
 #
 # Inputs (all from /tmp/assessment-<site>/):

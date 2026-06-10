@@ -45,7 +45,7 @@ flowchart TB
     subgraph REBUILD["3 · REBUILD — build the model + dashboard"]
         direction TB
         SRCQ{"Source = a LIVE<br/>warehouse connection?"}
-        VDS["<b>Land it in the warehouse FIRST</b> — sibling skill<br/><b>tableau-vds-to-snowflake</b><br/>.tds / .hyper / published VDS → warehouse DDL + load<br/>+ a Sigma DM on the landed table"]
+        VDS["<b>Land it in the warehouse FIRST</b> — sibling skill<br/><b>tableau-vds-to-cdw</b><br/>.tds / .hyper / published VDS → warehouse DDL + load<br/>+ a Sigma DM on the landed table"]
         P2["<b>2 · Warehouse columns</b><br/>discover-warehouse-columns.rb · discover-columns.rb<br/>probe-custom-sql-columns.rb"]
         P25["<b>2.5 · View-level filters</b><br/>fetch-view-data.rb (distinct-value diff)"]
         P3["<b>3 · Build data-model spec</b><br/>refs/data-model-spec.md · validate-spec.rb"]
@@ -93,7 +93,7 @@ flowchart TB
 | **1 — Discover Tableau** | Pull workbook + views + VizQL data + Metadata GraphQL + `.twb` XML; parse the dashboard zone tree; extract calc fields & Custom SQL | `tableau-discover.rb`, `fetch-view-data.rb`, `parse-twb-layout.rb`, `extract-calc-fields.rb`, `extract-custom-sql.rb`, `get-tableau-token.sh` · **Tableau MCP + REST** |
 | **— Translate** | Rewrite calc fields, LODs, table calcs, and formats into Sigma formulas; **flag** what can't be mechanized | **`convert_tableau_to_sigma`** (Sigma data-model converter, MCP) |
 | **1.5 — Reuse a DM** | Find an existing Sigma DM that already covers the columns; emit a denormalization plan (a match skips Phases 2–3) | `find-or-pick-dm.rb`, `inspect-dm-shape.rb` |
-| **— Land data first** *(branch)* | If the datasource is **not a live warehouse connection** (file-based `.hyper`/Excel/CSV, or a published extract / VDS), materialize it in the warehouse first, then convert the workbook on the landed table | **`tableau-vds-to-snowflake`** *(sibling skill)* — `.tds` → warehouse DDL + load + Sigma DM |
+| **— Land data first** *(branch)* | If the datasource is **not a live warehouse connection** (file-based `.hyper`/Excel/CSV, or a published extract / VDS), materialize it in the warehouse first, then convert the workbook on the landed table | **`tableau-vds-to-cdw`** *(sibling skill)* — `.tds` → warehouse DDL + load + Sigma DM |
 | **2 — Warehouse columns** | Resolve real warehouse column names/types; probe via Custom-SQL when the catalog 404s | `discover-warehouse-columns.rb`, `discover-columns.rb`, `probe-custom-sql-columns.rb` · **Sigma REST** |
 | **2.5 — View filters** | Detect view-level filters by diffing view-CSV distinct values vs. the warehouse | `fetch-view-data.rb` |
 | **3 — Build data model** | Assemble the DM spec (sources, calc columns, relationships) and validate it | `refs/data-model-spec.md`, `validate-spec.rb` |
@@ -110,7 +110,7 @@ flowchart TB
 - **Sigma REST API** (`get-token.sh` → `SIGMA_API_TOKEN`, ~1h TTL) — `/v2/dataModels/spec`, `/v2/workbooks/spec`, `/v2/connections/tables/{inodeId}/columns`, `/v2/files/{id}`, `/v2/workbooks/{id}/export`.
 - **Sigma MCP** (`sigma-mcp-v2`) — live parity queries in Phase 6.
 - **Warehouse** — Snowflake / BigQuery / Databricks / Postgres / SQL Server / Redshift / Synapse / Oracle, reached **through the Sigma connection** (the conversion is warehouse-agnostic).
-- **`tableau-vds-to-snowflake`** *(sibling skill)* — for datasources that aren't a live warehouse connection (file-based extracts / published VDS): generates warehouse DDL, loads the data, and builds a Sigma DM on the landed table so the workbook has something to convert against. The `tableau-assessment` skill flags these as `recommended_path: vds-to-snowflake`.
+- **`tableau-vds-to-cdw`** *(sibling skill)* — for datasources that aren't a live warehouse connection (file-based extracts / published VDS): generates warehouse DDL, loads the data, and builds a Sigma DM on the landed table so the workbook has something to convert against. The `tableau-assessment` skill flags these as `recommended_path: vds-to-snowflake`.
 
 ---
 

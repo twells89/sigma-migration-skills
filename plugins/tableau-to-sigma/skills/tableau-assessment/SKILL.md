@@ -447,7 +447,7 @@ For each data source (published + embedded), classifies:
 | `verify-db` | Database supported via a Sigma connector that may need extra config |
 | `verify-modeling` | Federated cross-source join; review Sigma data-model relationship coverage |
 | `resolve-published` | References another published datasource; resolve recursively |
-| `land-in-warehouse` | File-based (Excel / CSV / Google Drive / .hyper); needs warehouse upload first. **Recommended path: use the sibling `tableau-vds-to-snowflake` skill to auto-generate Snowflake DDL + Sigma data model from the .tds.** |
+| `land-in-warehouse` | File-based (Excel / CSV / Google Drive / .hyper); needs warehouse upload first. **Recommended path: use the sibling `tableau-vds-to-cdw` skill to auto-generate warehouse DDL (Snowflake or Databricks) + Sigma data model from the .tds.** |
 
 Also emits:
 - **Similarity clusters** — embedded datasources whose field-name sets overlap by ≥75% (Jaccard). Strong consolidation candidates.
@@ -539,7 +539,7 @@ Assessment summary:
 What next?
   → Migrate top N dashboards in parallel  [tableau-to-sigma × N subagents]
   → Migrate one specific dashboard  [pick from list]
-  → Land Tableau datasources in Snowflake first  [tableau-vds-to-snowflake]
+  → Land Tableau datasources in Snowflake first  [tableau-vds-to-cdw]
   → Do both: VDS first, then dashboards  [chained]
   → Just write the readout — act later
 ```
@@ -590,7 +590,7 @@ User wants to land Tableau-managed datasources into Snowflake before dashboards.
 
 ```
 Skill(
-  skill: "tableau-vds-to-snowflake",
+  skill: "tableau-vds-to-cdw",
   args:  "Land these <K> datasources from /tmp/assessment-<site>/migration-plan.json (each flagged recommended_path=vds-to-snowflake) into Snowflake. After completion, workbooks that source from these datasources become candidates for tableau-to-sigma conversion."
 )
 ```
@@ -645,7 +645,7 @@ unchanged.
 
 Every worked example in this SKILL.md (the `TJ.PUBLIC.*` fixture tables,
 the `snow sql` reconciliation, the `--snowflake-conn` flag, the
-`tableau-vds-to-snowflake` sibling skill) uses Snowflake because that's
+`tableau-vds-to-cdw` sibling skill) uses Snowflake because that's
 where the development corpus and audit-run fixtures live. The Sigma-side
 calls (`/v2/connections`, `/v2/connections/tables/<inodeId>/columns`,
 `mcp__sigma-mcp-v2__query`) are warehouse-agnostic, so a customer running

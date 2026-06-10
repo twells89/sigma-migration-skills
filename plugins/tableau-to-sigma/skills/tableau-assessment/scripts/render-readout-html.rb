@@ -1020,7 +1020,7 @@ if has_ds_deep
     'verify-db'         => ['risk-amber', 'Verify connector',   'Confirm Sigma supports this database; plan additional setup.'],
     'verify-modeling'   => ['risk-amber', 'Verify modeling',    'Federated cross-source join — review whether Sigma model relationships replicate it.'],
     'resolve-published' => ['risk-amber', 'Resolve published',  'References another published datasource — resolve recursively to the underlying connection.'],
-    'land-in-warehouse' => ['risk-red',   'Land in warehouse',  'File-based. Land in your warehouse first. Use the <code>tableau-vds-to-snowflake</code> skill to auto-generate Snowflake DDL + Sigma data model from the .tds.'],
+    'land-in-warehouse' => ['risk-red',   'Land in warehouse',  'File-based. Land in your warehouse first. Use the <code>tableau-vds-to-cdw</code> skill to auto-generate warehouse DDL (Snowflake or Databricks) + Sigma data model from the .tds.'],
     'other'             => ['risk-mute',  'Inspect',            'Mixed or unrecognized connection types — review individually.'],
     'unknown'           => ['risk-mute',  'Inspect',            'No connection metadata exposed (often Tableau Virtual Connections or Admin Insights internals) — review individually.']
   }
