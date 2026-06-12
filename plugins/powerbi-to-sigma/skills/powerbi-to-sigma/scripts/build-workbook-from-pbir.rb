@@ -1139,7 +1139,7 @@ col_for = ->(x, w, pw) {
   ce = cs + 1 if ce <= cs
   [[cs, 1].max, [ce, 25].min]
 }
-ROW_UNIT = 30.0
+ROW_UNIT = 20.0
 # Container-banded pages (layout-playbook.md): the PBI canvas regions cluster
 # into horizontal row bands, each band a full-width <GridContainer> whose
 # children keep the canvas-derived geometry (container-relative rows). Every
@@ -1232,6 +1232,34 @@ pages_xml = signals['pages'].map do |pg|
       end
       items = items.sort_by { |i| [i[3], i[1]] }
       break unless moved
+    end
+    # FILL THE CANVAS (customer feedback: "no white space, things big enough
+    # to show the data"): PBI's compact widgets leave the converted page
+    # sparse. Snap every element to its neighbors / page edges — stretch right
+    # and down until the next element or the grid border (gaps <= 3 cols/rows
+    # are dead gutters, not intentional spacing).
+    overlap = ->(a0, a1, b0, b1) { a0 < b1 && b0 < a1 }
+    items.each do |it|
+      it[1] = 1 if it[1] <= 3 &&
+                   items.none? { |o| !o.equal?(it) && o[2] <= it[1] + 1 && overlap.call(it[3], it[4], o[3], o[4]) }
+      it[3] = 1 if it[3] <= 3 &&
+                   items.none? { |o| !o.equal?(it) && o[4] <= it[3] + 1 && overlap.call(it[1], it[2], o[1], o[2]) }
+    end
+    items.each do |it|
+      right = items.reject { |o| o.equal?(it) }
+                   .select { |o| o[1] >= it[2] && overlap.call(it[3], it[4], o[3], o[4]) }
+                   .map { |o| o[1] }.min || 25
+      it[2] = right if right > it[2] && right - it[2] <= 3
+      below = items.reject { |o| o.equal?(it) }
+                   .select { |o| o[3] >= it[4] && overlap.call(it[1], it[2], o[1], o[2]) }
+                   .map { |o| o[3] }.min
+      it[4] = below if below && below > it[4] && below - it[4] <= 3
+    end
+    # bottom band: level everything to the page's max row
+    maxr = items.map { |i| i[4] }.max
+    items.each do |it|
+      nothing_below = items.none? { |o| !o.equal?(it) && o[3] >= it[4] && overlap.call(it[1], it[2], o[1], o[2]) }
+      it[4] = maxr if nothing_below && maxr - it[4] <= 4
     end
     inner = items.map { |i| SigmaLayout.le(i[0], i[1], i[2], i[3], i[4]) }.join("\n")
     next SigmaLayout.page_xml(page_id, inner)
