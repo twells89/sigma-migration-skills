@@ -32,7 +32,7 @@ VISUAL_KIND = {
     "pieChart": "pie", "donutChart": "donut", "scatterChart": "scatter",
     "tableEx": "table", "pivotTable": "pivot-table", "matrix": "pivot-table",
     "slicer": "control",
-    "map": "bar", "filledMap": "bar", "shapeMap": "bar", "azureMap": "bar",
+    "map": "map", "filledMap": "map", "shapeMap": "map", "azureMap": "map",
 }
 
 # *Bar* = horizontal, *Column* = vertical (Sigma default). Sigma's bar-chart
@@ -45,10 +45,8 @@ HBAR_TYPES = {"barChart", "clusteredBarChart", "stackedBarChart",
 # but ONLY for map visuals (bead ry0n): on a scatterChart, Size is the real
 # bubble-size role and Series the legend; remapping them corrupts the scatter.
 ROLE_REMAP = {
-    "Series": "Category",
     "Size": "Y",
     "Location": "Category",
-    "Latitude": "Category",
 }
 MAP_TYPES = {"map", "filledMap", "shapeMap", "azureMap"}
 

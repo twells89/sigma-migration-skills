@@ -49,7 +49,7 @@ VISUAL_KIND = {
     "pieChart": "pie", "donutChart": "donut", "scatterChart": "scatter",
     "tableEx": "table", "pivotTable": "pivot-table", "matrix": "pivot-table",
     "slicer": "control",
-    "map": "bar", "filledMap": "bar", "shapeMap": "bar", "azureMap": "bar",
+    "map": "map", "filledMap": "map", "shapeMap": "map", "azureMap": "map",
 }
 
 # PBI bar families: *Bar* visuals render HORIZONTALLY; *Column* visuals render
