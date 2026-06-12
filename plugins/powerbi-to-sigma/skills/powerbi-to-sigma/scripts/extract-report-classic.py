@@ -53,16 +53,58 @@ ROLE_REMAP = {
 MAP_TYPES = {"map", "filledMap", "shapeMap", "azureMap"}
 
 
+# Aggregation.Function enum -> modern queryRef wrapper (Sum(Table.Col)).
+_AGG_FN = {0: "Sum", 1: "Avg", 2: "Min", 3: "Max", 4: "Count"}
+
+
+def _select_alias_map(sv):
+    """Legacy classic layouts (PBIX vintage ~2017 and earlier, e.g. the MS
+    'Retail Analysis Sample') bind projections by POSITIONAL aliases
+    ('select', 'select1', ...) instead of qualified 'Table.Field' refs. The
+    alias is prototypeQuery.Select[].Name, and that entry's Column/Measure/
+    Aggregation expression carries the real Entity.Property (Entity via the
+    From[] alias table). Map alias -> qualified ref; for modern classic files
+    Name already IS the qualified ref, so the mapping is an identity."""
+    pq = sv.get("prototypeQuery") or {}
+    ents = {f.get("Name"): f.get("Entity") for f in pq.get("From", []) if isinstance(f, dict)}
+
+    def qualify(expr):
+        src = ((expr.get("Expression") or {}).get("SourceRef") or {}).get("Source")
+        ent = ents.get(src)
+        prop = expr.get("Property")
+        return f"{ent}.{prop}" if ent and prop else None
+
+    out = {}
+    for sel in pq.get("Select", []):
+        if not isinstance(sel, dict) or not sel.get("Name"):
+            continue
+        ref = None
+        if "Column" in sel or "Measure" in sel or "HierarchyLevel" in sel:
+            ref = qualify(sel.get("Column") or sel.get("Measure") or sel.get("HierarchyLevel") or {})
+        elif "Aggregation" in sel:
+            agg = sel["Aggregation"]
+            inner = (agg.get("Expression") or {}).get("Column") or {}
+            base = qualify(inner)
+            fn = _AGG_FN.get(agg.get("Function"))
+            ref = f"{fn}({base})" if base and fn else base
+        if ref:
+            out[sel["Name"]] = ref
+    return out
+
+
 def _projections(sv, vt=None):
     # bead hjke(c): classic configs record the drilled-to hierarchy level in
     # singleVisual.activeProjections — prefer it over the full level list so a
     # day-drilled line binds Day instead of collapsing to Year.
     act = sv.get("activeProjections", {}) or {}
+    smap = _select_alias_map(sv)
     out = {}
     for role, items in (sv.get("projections", {}) or {}).items():
         a = act.get(role) or []
-        arefs = [it.get("queryRef") for it in a if isinstance(it, dict) and it.get("queryRef")]
-        refs = [it.get("queryRef") for it in items if isinstance(it, dict) and it.get("queryRef")]
+        arefs = [smap.get(it["queryRef"], it["queryRef"]) for it in a
+                 if isinstance(it, dict) and it.get("queryRef")]
+        refs = [smap.get(it["queryRef"], it["queryRef"]) for it in items
+                if isinstance(it, dict) and it.get("queryRef")]
         if arefs and arefs != refs:
             print(f"[classic] drill: role {role} -> active projection {arefs} "
                   f"(of {len(refs)} level(s))", file=sys.stderr)
@@ -114,7 +156,9 @@ def _sort_signal(sv):
             continue
         sel_expr = {k: v for k, v in sel.items() if k not in ("Name", "NativeReferenceName")}
         if sel_expr == expr and sel.get("Name"):
-            return {"queryRef": sel["Name"], "direction": direction}
+            # resolve legacy 'selectN' aliases the same way projections do
+            ref = _select_alias_map(sv).get(sel["Name"], sel["Name"])
+            return {"queryRef": ref, "direction": direction}
     return None
 
 
