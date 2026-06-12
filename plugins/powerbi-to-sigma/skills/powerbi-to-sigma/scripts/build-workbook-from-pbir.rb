@@ -56,6 +56,8 @@ OptionParser.new do |p|
   p.on('--signals PATH')     { |v| opts[:sig] = v }
   p.on('--master-map PATH')  { |v| opts[:mmap] = v }
   p.on('--bim PATH', 'model.bim — geo dataCategory lookup so PBI map visuals emit real Sigma region/point maps') { |v| opts[:bim] = v }
+  p.on('--image-map PATH', 'JSON {registeredResourceName: hostedUrl} — PBI image visuals become Sigma image elements (no map: skipped with a note)') { |v| opts[:imap] = v }
+  p.on('--layout MODE', 'pbi (default: flat canvas-proportional, matches the PBI page 1:1) | banded (legacy header+row-band containers)') { |v| opts[:layout_mode] = v }
   p.on('--data-model ID')    { |v| opts[:dm] = v }
   p.on('--out PATH')         { |v| opts[:out] = v }
   p.on('--layout-out PATH')  { |v| opts[:layout_out] = v }
@@ -78,6 +80,7 @@ end.parse!
 %i[sig mmap out].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
 
 signals = JSON.parse(File.read(opts[:sig]))
+$image_map = (opts[:imap] && File.exist?(opts[:imap])) ? JSON.parse(File.read(opts[:imap])) : {}
 if opts[:bim] && File.exist?(opts[:bim])
   $geo_categories ||= {}
   $sort_by_column ||= {}
@@ -195,7 +198,7 @@ SIGMA_KIND = {
   'area' => 'area-chart', 'combo' => 'combo-chart', 'scatter' => 'scatter-chart',
   'pie' => 'pie-chart', 'donut' => 'donut-chart',
   'table' => 'table', 'pivot-table' => 'pivot-table', 'text' => 'text',
-  'control' => 'control', 'map' => 'map'
+  'control' => 'control', 'map' => 'map', 'image' => 'image'
 }.freeze
 
 # PBI role -> (dim_role?, value_role?) per visual kind handled below.
@@ -523,8 +526,23 @@ def build_element(rec, fields, masters, extra_data = [])
   name  = title.empty? ? (derived_title(rec, kind) || KIND_LABEL[kind] || 'Chart') : title
 
   if kind == 'text'
-    body = rec['text'] ? "## #{rec['text']}" : '## '
-    return { 'id' => eid, 'kind' => 'text', 'body' => body }
+    # Size-aware: PBI textboxes are titles OR small decorative labels
+    # (copyright lines, urls). Rendering every one as an H2 made tiny footer
+    # text huge and overlapping (customer QS feedback). Boxes under ~60px tall
+    # render as plain body text.
+    txt = rec['text'].to_s
+    body = (rec['h'].to_f >= 60 ? "## #{txt}" : txt)
+    return { 'id' => eid, 'kind' => 'text', 'body' => body.empty? ? ' ' : body }
+  end
+
+  if kind == 'image'
+    url = ($image_map || {})[rec['resource']]
+    unless url
+      warn "[build-workbook] visual '#{rec['visual_id']}': image asset '#{rec['resource']}' " \
+           'skipped — supply --image-map {resource: hostedUrl} to embed it (Sigma images are URL-only).'
+      return nil
+    end
+    return { 'id' => eid, 'kind' => 'image', 'url' => url }
   end
 
   master = visual_master(rec, fields)
@@ -1174,6 +1192,51 @@ pages_xml = signals['pages'].map do |pg|
     items = items.select { |i| built_ids.include?(i[0]) }
   end
   next nil if items.empty?
+
+  # ---- PBI-fidelity FLAT layout (default) ---------------------------------
+  # The page mirrors the PBI canvas 1:1: flat LayoutElements at the canvas-
+  # proportional grid coords (exactly the shape Sigma's own UI writes), no
+  # header band, no row containers. Band containers with auto rows COLLAPSE
+  # around short content (KPIs lost their titles; map/scatter bands rendered
+  # blank in page exports) — verified against the PBI page renders.
+  if (opts[:layout_mode] || 'pbi') != 'banded'
+    kind_of = {}
+    (page_spec ? page_spec['elements'] : []).each { |e| kind_of[e['id']] = e['kind'] }
+    # Sigma needs more vertical room than PBI's compact widgets: clamp minimum
+    # row spans per kind (KPI value+title needs ~5 rows; charts breathe at 6+).
+    min_rows = { 'kpi-chart' => 4, 'scatter-chart' => 8, 'region-map' => 8, 'point-map' => 8,
+                 'pie-chart' => 6, 'bar-chart' => 6, 'line-chart' => 6, 'area-chart' => 6,
+                 'combo-chart' => 6 }
+    items = items.map do |id, c0, c1, r0, r1|
+      need = min_rows[kind_of[id]]
+      r1 = r0 + need if need && (r1 - r0) < need
+      c1 = c0 + 2 if c1 - c0 < 2
+      [id, c0, c1, r0, r1]
+    end
+    # Sigma rejects overlapping LayoutElements ("Element collisions") while a
+    # PBI canvas freely z-stacks (decorative text over chart corners). Resolve
+    # deterministically: later/lower items push DOWN past whatever they hit.
+    items = items.sort_by { |i| [i[3], i[1]] }
+    10.times do
+      moved = false
+      items.each_with_index do |a, ai|
+        items.each_with_index do |b, bi|
+          next if bi <= ai
+          cols = a[1] < b[2] && b[1] < a[2]
+          rows = a[3] < b[4] && b[3] < a[4]
+          next unless cols && rows
+          delta = a[4] - b[3]
+          b[3] += delta; b[4] += delta
+          moved = true
+        end
+      end
+      items = items.sort_by { |i| [i[3], i[1]] }
+      break unless moved
+    end
+    inner = items.map { |i| SigmaLayout.le(i[0], i[1], i[2], i[3], i[4]) }.join("\n")
+    next SigmaLayout.page_xml(page_id, inner)
+  end
+  # ---- legacy banded layout (--layout banded) ------------------------------
   # phase-e layout-quality fix: a short title TEXTBOX at the top of the source
   # canvas becomes the header band's text (white-on-dark), MOVED out of band 1
   # (never left behind as a dead zone). The candidate may start up to one grid
