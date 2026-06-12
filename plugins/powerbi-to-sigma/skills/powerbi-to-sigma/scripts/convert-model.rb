@@ -51,6 +51,7 @@ OptionParser.new do |p|
   p.on('--name NAME')           { |v| opts[:name] = v }
   p.on('--out PATH')            { |v| opts[:out] = v }
   p.on('--restructure-map PATH','Optional JSON: measure name -> {generator, args} overrides for (b)-bucket DAX') { |v| opts[:rmap] = v }
+  p.on('--table-map PATH','Optional JSON: model table -> actual warehouse table name; repoints sources + base column refs (use when the customer landed import-mode data under different table names)') { |v| opts[:tmap] = v }
   p.on('--restructure-from-bim PATH','model.bim to scan for (b)-bucket DAX measures to auto-emit as elements') { |v| opts[:rbim] = v }
 end.parse!
 
@@ -125,6 +126,38 @@ named = 0
   end
 end
 dm['name'] = opts[:name] if opts[:name]
+
+# Fixup 4 (bead xe7r): --table-map repoints warehouse-table sources at the
+# tables the customer actually landed the import-mode data in (a JSON map,
+# e.g. {"Store": "RETAIL_STORE"}). Two coupled rewrites, both required:
+#   1. source.path tail -> the landed table name;
+#   2. base column formulas "[<OLD_TAIL>/Col]" -> "[<NEW_TAIL>/Col]" — raw
+#      warehouse-column refs are TABLE-TAIL-prefixed, not element-name-prefixed,
+#      so a path change without the formula rewrite fails the POST with
+#      "dependency not found". Element NAMES stay untouched (derived "View"
+#      elements reference base elements BY NAME).
+if opts[:tmap]
+  tmap = JSON.parse(File.read(opts[:tmap]))
+  remapped = 0
+  (dm['pages'] || []).each do |pg|
+    (pg['elements'] || []).each do |el|
+      src = el['source'] || {}
+      next unless src['kind'] == 'warehouse-table' && src['path'].is_a?(Array) && !src['path'].empty?
+      tail = src['path'][-1].to_s
+      hit = tmap.find { |k, _| k.to_s.upcase == tail.upcase }
+      next unless hit && hit[1].to_s.upcase != tail.upcase
+      landed = hit[1].to_s
+      src['path'] = src['path'][0..-2] + [landed]
+      (el['columns'] || []).each do |c|
+        f = c['formula']
+        c['formula'] = f.sub("[#{tail}/", "[#{landed}/") if f.is_a?(String) && f.start_with?("[#{tail}/")
+      end
+      remapped += 1
+      warn "[convert-model] table-map: #{tail} -> #{landed}"
+    end
+  end
+  warn "[convert-model] table-map applied to #{remapped} element(s)"
+end
 
 # ---- bjd: auto-emit (b)-bucket DAX restructure elements --------------------
 # Scan the model.bim measures, classify each with DaxRestructure.classify, and

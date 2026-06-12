@@ -181,13 +181,23 @@ def extract(report):
             cfg = json.loads(vc.get("config", "{}"))
             sv = cfg.get("singleVisual", {})
             vt = sv.get("visualType", "unknown")
+            # bead a1cv: image visuals are static assets (StaticResources) — the
+            # 'bar' fallback would emit a junk empty chart. Skip with a note.
+            if vt == "image":
+                print(f"[classic] skipping image visual on page '{s.get('displayName')}'"
+                      " (static asset; not portable)", file=sys.stderr)
+                continue
             # position: prefer vc top-level x/y/w/h, fall back to config layouts
             x = vc.get("x"); y = vc.get("y"); w = vc.get("width"); h = vc.get("height")
             if x is None:
                 pos = (cfg.get("layouts", [{}])[0] or {}).get("position", {})
                 x, y, w, h = pos.get("x", 0), pos.get("y", 0), pos.get("width", 0), pos.get("height", 0)
             rec = {
-                "visual_id": cfg.get("name", f"{s.get('name')}-{len(visuals)}"),
+                # bead npo0: classic config `name`s are NOT unique in pre-2018
+                # files (truncated visualContainer strings collide) and the
+                # builder derives element ids from visual_id — synthesize a
+                # deterministic page/index id instead of trusting cfg name.
+                "visual_id": f"p{len(out_pages)}v{len(visuals)}{vt[:8]}",
                 "visual_type": vt,
                 "title": _title(sv),
                 "sigma_kind": VISUAL_KIND.get(vt, "bar"),

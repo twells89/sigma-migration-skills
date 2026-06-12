@@ -122,6 +122,11 @@ def qr_leaf(qr, fallback = 'Value')
   s = qr.to_s.strip
   s = Regexp.last_match(1).strip while s =~ /\A[A-Za-z_][A-Za-z0-9_ ]*\(\s*(.*)\s*\)\z/
   leaf = s.split('.').last.to_s
+  # bead c2kf: a '/' (or bracket) inside a generated column NAME breaks the
+  # [Element/Col] cross-element ref path — "Avg $/Unit TY" parses as a
+  # two-segment path and the referencing column compiles to type "error".
+  # Sanitize at this single chokepoint so names and refs stay in sync.
+  leaf = leaf.tr('[]', '').tr('/', '-')
   leaf.empty? ? fallback : leaf
 end
 
