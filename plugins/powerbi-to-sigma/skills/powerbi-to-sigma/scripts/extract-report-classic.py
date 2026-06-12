@@ -37,6 +37,19 @@ VISUAL_KIND = {
 
 # *Bar* = horizontal, *Column* = vertical (Sigma default). Sigma's bar-chart
 # `orientation` accepts only "horizontal"; vertical = omit the field.
+# PBI visualType -> Sigma `stacking` enum (none|stacked|normalized). Classic
+# files encode it in the TYPE NAME; without an explicit value Sigma defaults
+# multi-series bars to STACKED, corrupting clustered PBI charts (customer
+# catch on the Retail sample's clustered variance chart).
+def _stacking(vtype):
+    v = (vtype or "")
+    if v.startswith("hundredPercentStacked"):
+        return "normalized"
+    if v.startswith("stacked"):
+        return "stacked"
+    return "none"
+
+
 HBAR_TYPES = {"barChart", "clusteredBarChart", "stackedBarChart",
               "hundredPercentStackedBarChart"}
 
@@ -223,6 +236,7 @@ def extract(report):
                 "bindings": _projections(sv, vt),
                 # bead f972: visual sort ({queryRef, direction asc|desc}) or None
                 "sort": _sort_signal(sv),
+                "stacking": _stacking(vt) if VISUAL_KIND.get(vt) == "bar" else None,
                 "formats": {},
                 # bead n9u9: PBI data-label toggle (objects.labels show) — true/false/None
                 "data_labels": _obj_flag(sv, "labels"),

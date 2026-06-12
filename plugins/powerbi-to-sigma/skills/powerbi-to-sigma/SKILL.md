@@ -86,6 +86,29 @@ Then: `tableau-to-sigma/scripts/post-and-readback.rb --type datamodel`. See `ref
 ## Phase 5d — Layout (do NOT skip — stacked ≠ done)
 Map each visual's `x,y,w,h` → 24-col grid (`COL_UNIT = page_w/24`, `ROW_UNIT ≈ 30`) → single top-level `layout` XML (one `<Page>` per page, server page IDs) → `tableau-to-sigma/scripts/put-layout.rb`. Math + snap rules in `research/powerbi-visual-layout.md §4`.
 
+## Phase 5e — VISUAL COMPARE vs the SOURCE (MANDATORY — numbers lie about looks)
+Phase 6 proves the NUMBERS; this phase proves the PAGES. A conversion shipped
+with exact query parity and still looked broken (collapsed KPIs, stacked bars
+that should be clustered, alphabetical months) — caught only by putting full
+pages next to the Power BI renders. Do this BEFORE Phase 6, every run:
+
+1. Export the SOURCE pages: `"$PY" scripts/export-pbi-pages.py --report <reportId> --out-dir $WORK/visual-qa`
+   (PNG is commonly tenant-disabled — the script falls through to PDF; per-page when pypdf is installed).
+2. Export EVERY Sigma page: `"$PY" scripts/sigma-export-png.py --workbook <wbId> --page <pageId> --out $WORK/visual-qa/sigma-<page>.png`.
+3. **Read both images for each page, side by side.** Check, per page: same
+   elements in the same spots; charts show MARKS (not just axes); clustered vs
+   stacked matches the source; axis order (months Jan→Dec, not alphabetical);
+   KPI tiles show value AND label; no giant decorative text; no dead bands.
+4. Write `$WORK/visual-qa/visual-compare.json`: `[{page, verdict: PASS|ACCEPTED|FAIL, deltas: ["…"]}]`
+   — ACCEPTED means the user explicitly OK'd a listed delta (e.g. zip
+   choropleth instead of PBI's bubble map; theme colors). FAIL = fix and re-export.
+5. Gate: `ruby scripts/assert-visual-compare.rb --dir $WORK/visual-qa --signals $WORK/signals.json`
+   must print GREEN before Phase 6 may be declared.
+
+Layout escalation if the compare fails on arrangement: the builder's default
+`--layout clean` preserves the source positions inside a normalized grid; use
+`--layout pbi` for literal 1:1 canvas geometry; `--layout banded` is legacy.
+
 ## Phase 6 — Verify (mandatory)
 - `sigma-mcp-v2 query` each element → confirm real rows (not blank).
 - True parity: PBI `POST /v1.0/myorg/groups/{ws}/datasets/{id}/executeQueries` (DAX) vs the same Sigma aggregation. DAX-only; breaks under service-principal if RLS.
@@ -222,6 +245,8 @@ The conversion is script-driven (mirrors `tableau-to-sigma/scripts/`). `scripts/
 | `fabric-extract-batch.py` | 1 batch | Fleet extraction: every requested report → 2 artifact tasks (model TMSL + report def) on ONE 4-wide pool; report→model binding via PBI REST `datasetId` (name-match fallback); `manifest.json` + `timings.json`. 3 reports = 7.5s measured. |
 | `extract-pbir.py` | 1 extract | Fetch a report's PBIR (or parse one already on disk) → normalized `signals.json` (per-visual `sigma_kind` + role bindings + x/y/w/h). Live fetch uses the `pbi_fabric` fast LRO path. The PBI analog of `parse-twb-layout.rb`. |
 | `pbi-freshness.py` | 1.5 preflight | SOURCE-FRESHNESS: refresh history (incl. FAILED/creds-expired refreshes) + cheap executeQueries row-count/max-date snapshot (**4-wide parallel per-table probes**) → `freshness.json`. Launched **non-blocking** by run.sh/migrate-powerbi.rb (consumed at parity). Leads the parity output; deltas classify MATCH / STALE-EXPLAINED / DIVERGENT (bead fmte). |
+| `export-pbi-pages.py` | 5e compare | SOURCE page renders via ExportToFile (PNG → PDF fallback; per-page split with pypdf) for the mandatory visual compare. |
+| `assert-visual-compare.rb` | 5e gate | HARD GATE: blocks Phase 6 unless visual-compare.json has a PASS/ACCEPTED verdict (with explained deltas) for every content page. |
 | `convert-model.rb` | 2–3 convert/post | MODE A prints the exact `convert_powerbi_to_sigma` MCP call for a `model.bim`; MODE B takes the converter output and applies the 3 fixups (schemaVersion + folderId/ownerId via a ref-DM harvest + base-element names) → postable DM spec. |
 | `build-workbook-from-pbir.rb` | 4 build | `signals.json` + a `master-map.json` → full workbook spec + 24-col layout XML. Applies the measure-translation patterns in `refs/measure-patterns.md`; **line charts default to a single series** (`beads-sigma-c07`) unless PBI bound a Series/Legend role. **Carries the PBI visual sort** (`f972` — PBIR `query.sortDefinition` / classic `prototypeQuery.OrderBy` → chart `xAxis.sort`/`color.sort`; grouped table → `groupings[0].sort` — element-level sort is rejected on grouped tables). Analog of `build-charts-from-signals.rb`. |
 | `phase6-parity-pbi.rb` | 7 parity | executeQueries(DAX) adapter: `--emit-dax` runs the PBI side and writes the parity plan's `expected` rows; `--finalize` injects Sigma actuals and runs the shared `verify-parity.rb`. The PBI analog of Tableau's view-CSV parity adapter. |
