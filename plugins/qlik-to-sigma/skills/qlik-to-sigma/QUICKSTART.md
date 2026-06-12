@@ -43,6 +43,14 @@ Duration: 2
 
 - **A coding agent that runs skills** — Claude Code (CLI or desktop), Cursor, Cortex Code, etc.
 - **qlik-cli** on your PATH (official; reaches both the REST API and the Engine/qix API — the Engine API is required for sheet/chart definitions, the data model, and the load script). Install the GitHub-release binary from `qlik-oss/qlik-cli`.
+  - **On-prem (client-managed) Qlik Sense instead of Cloud?** Skip qlik-cli — it's
+    Cloud-only. Use the bundled `scripts/qlik-onprem-shim.py` (QRS + Engine
+    WebSocket, same command surface): `pip3 install websocket-client`, configure
+    auth per `refs/connection-onprem.md` (QMC certificate export or a JWT virtual
+    proxy), then `export QLIK_BIN="$PWD/scripts/qlik-onprem-shim.py"` — every
+    step below runs unchanged. A shim-driven discovery is verified
+    output-identical to a qlik-cli run on the same app. QlikView ≠ Qlik Sense:
+    not covered.
 - **Qlik Cloud access** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible).
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity).

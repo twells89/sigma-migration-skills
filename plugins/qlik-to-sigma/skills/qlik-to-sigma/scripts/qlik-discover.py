@@ -76,6 +76,10 @@ _LOCK = threading.Lock()
 # --pool the true total, whatever shape the fan-out has.
 _SEM = threading.Semaphore(8)
 
+# On-prem (client-managed) Qlik Sense: point QLIK_BIN at scripts/qlik-onprem-shim.py
+# (qlik-cli is Cloud-only; the shim speaks the same command subset over QRS + Engine).
+QLIK_BIN = os.environ.get("QLIK_BIN", "qlik")
+
 TRANSIENT_RX = re.compile(
     r"session closed|socket: close|websocket|connection reset|broken pipe"
     r"|unexpected EOF|timed? ?out|temporarily unavailable"
@@ -99,7 +103,7 @@ def qlik_run(args, attempts=4):
     out = None
     for attempt in range(attempts):
         with _SEM:
-            out = subprocess.run(["qlik", *args], capture_output=True, text=True)
+            out = subprocess.run([QLIK_BIN, *args], capture_output=True, text=True)
         if out.returncode == 0:
             return out
         if attempt < attempts - 1 and TRANSIENT_RX.search((out.stderr or "") + (out.stdout or "")):

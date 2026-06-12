@@ -68,6 +68,13 @@ qlik-cli context (OAuth M2M or API key). `qlik context use <ctx>`.
 > data-connection ("Connector not found"). Reload as a real user or via M2M
 > impersonation. (Discovery/extraction works fine under M2M.)
 
+> **CLIENT-MANAGED (on-prem) Qlik Sense?** qlik-cli is Cloud-only. Use the
+> bundled shim instead — same pipeline, different transport (QRS + Engine
+> WebSocket): set up auth per `refs/connection-onprem.md` (certs or JWT virtual
+> proxy), then `export QLIK_BIN="$PWD/scripts/qlik-onprem-shim.py"` before
+> Phase 1. Everything else below is unchanged. QlikView is NOT covered —
+> confirm the product first.
+
 ### Sigma access
 ```bash
 bash -c 'eval "$(scripts/vendor/get-token.sh)"; <cmd>'   # sets SIGMA_BASE_URL + SIGMA_API_TOKEN
@@ -77,7 +84,7 @@ The verified CSA.TJ connection is `cb2f5180-641f-47bd-8efa-da9d590d855a` (Snowfl
 
 ---
 
-## Phase 1 — Discover (qlik-cli)
+## Phase 1 — Discover (qlik-cli, or the on-prem shim via `QLIK_BIN`)
 `scripts/qlik-discover.py --app <id> --context <ctx> --out WORK` extracts:
 - **Data model** — tables + fields. Source of truth = the **load script** (`qlik app script get`); it encodes renames/joins/drops. Capture the effective table→field map (post-rename).
 - **Master measures** — `qMeasure.qDef` (Qlik expressions) + label. (List via the engine; for known ids `qlik app object get <id>`.)
