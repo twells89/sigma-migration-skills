@@ -57,7 +57,7 @@ OptionParser.new do |p|
   p.on('--master-map PATH')  { |v| opts[:mmap] = v }
   p.on('--bim PATH', 'model.bim — geo dataCategory lookup so PBI map visuals emit real Sigma region/point maps') { |v| opts[:bim] = v }
   p.on('--image-map PATH', 'JSON {registeredResourceName: hostedUrl} — PBI image visuals become Sigma image elements (no map: skipped with a note)') { |v| opts[:imap] = v }
-  p.on('--layout MODE', 'pbi (default: flat canvas-proportional, matches the PBI page 1:1) | banded (legacy header+row-band containers)') { |v| opts[:layout_mode] = v }
+  p.on('--layout MODE', 'clean (default: opinionated Sigma-native grid — dark header, KPI row, uniform 2-up chart grid) | pbi (flat canvas-proportional, matches the PBI page 1:1) | banded (legacy row-band containers)') { |v| opts[:layout_mode] = v }
   p.on('--data-model ID')    { |v| opts[:dm] = v }
   p.on('--out PATH')         { |v| opts[:out] = v }
   p.on('--layout-out PATH')  { |v| opts[:layout_out] = v }
@@ -1193,13 +1193,110 @@ pages_xml = signals['pages'].map do |pg|
   end
   next nil if items.empty?
 
-  # ---- PBI-fidelity FLAT layout (default) ---------------------------------
+  # ---- CLEAN opinionated layout (default) ----------------------------------
+  # Customer-tuned (2026-06-12): keep every element in the SAME SPOT as the
+  # PBI canvas (same row band, same left-to-right position, same vertical
+  # stacking), but make overriding decisions about sizing: bands become
+  # uniform full-width rows, column widths are normalized to fill the 24-col
+  # grid edge-to-edge, items stacked in a sub-column split the band height
+  # evenly, and per-kind minimum heights apply. Tiny decorative textboxes
+  # (copyright lines, urls) are DROPPED; the page title moves into the dark
+  # header band.
+  if (opts[:layout_mode] || 'clean') == 'clean'
+    kind_of = {}
+    (page_spec ? page_spec['elements'] : []).each { |e| kind_of[e['id']] = e['kind'] }
+    src_rec = ->(id) { pg['visuals'].find { |v| "el-#{short(v['visual_id'])}" == id } }
+
+    # 1) header promotion + decorative-text drop
+    hdr_text_id = nil
+    drop = []
+    items.each do |it|
+      next unless kind_of[it[0]] == 'text'
+      r = src_rec.call(it[0])
+      txt = r && r['text'].to_s.strip
+      if hdr_text_id.nil? && txt && txt != '' && r['h'].to_f >= 40 && r['y'].to_f < 120
+        hdr_text_id = it[0]
+        drop << it[0]
+      elsif r.nil? || r['h'].to_f < 60 || txt == ''
+        warn "[build-workbook] clean layout: decorative textbox '#{it[0]}' dropped (#{txt.to_s[0, 30].inspect})."
+        page_spec['elements'] = page_spec['elements'].reject { |e| e['id'] == it[0] } if page_spec
+        drop << it[0]
+      end
+    end
+    items = items.reject { |i| drop.include?(i[0]) }
+
+    children = []
+    extra = []
+    hdr_id = "band-#{page_id}-hdr"
+    extra << SigmaLayout.container_el(hdr_id, SigmaLayout::HEADER_STYLE.dup)
+    if hdr_text_id
+      hdr_el = page_spec && page_spec['elements'].find { |e| e['id'] == hdr_text_id }
+      ttl = src_rec.call(hdr_text_id)['text'].to_s.strip
+      hdr_el['body'] = %(# <span style="color: #FFFFFF">#{ttl}</span>) if hdr_el
+      children << SigmaLayout.header_band_xml(hdr_id, hdr_text_id)
+    else
+      ttl = SigmaLayout.resolve_header_title(pg['page_title'], opts[:source_title], opts[:name]) || 'Dashboard'
+      txt_id = "band-#{page_id}-hdrtext"
+      extra << SigmaLayout.header_text_el(txt_id, ttl)
+      children << SigmaLayout.header_band_xml(hdr_id, txt_id)
+    end
+
+    # 2) bands from the SOURCE rows, columns from the SOURCE x-positions
+    min_rows = { 'kpi-chart' => 4, 'control' => 2, 'text' => 2, 'image' => 20,
+                 'scatter-chart' => 9, 'region-map' => 9, 'point-map' => 9 }
+    bands = SigmaLayout.cluster_bands(items)
+    cursor = 1 + SigmaLayout::HEADER_ROWS
+    les = []
+    bands.each do |band|
+      # columns: cluster band items by x-overlap, preserving left-to-right order
+      cols = []
+      band.sort_by { |i| i[1] }.each do |it|
+        hit = cols.find { |c| it[1] < c[:c1] && c[:c0] < it[2] }
+        if hit
+          hit[:items] << it
+          hit[:c0] = [hit[:c0], it[1]].min
+          hit[:c1] = [hit[:c1], it[2]].max
+        else
+          cols << { c0: it[1], c1: it[2], items: [it] }
+        end
+      end
+      # normalized widths proportional to source widths, filling 1..25 exactly
+      total = cols.sum { |c| c[:c1] - c[:c0] }.to_f
+      alloc = cols.map { |c| [(24 * (c[:c1] - c[:c0]) / total).round, 3].max }
+      diff = 24 - alloc.sum
+      alloc[alloc.index(alloc.max)] += diff
+      # band height: tallest member's source height, clamped by kind minimums
+      band_h = band.map do |it|
+        h = it[4] - it[3]
+        [h, min_rows[kind_of[it[0]]] || 6].max
+      end.max
+      edge = 1
+      cols.each_with_index do |c, ci|
+        c0 = edge
+        c1 = edge + alloc[ci]
+        edge = c1
+        stack = c[:items].sort_by { |i| i[3] }
+        each_h = [band_h / stack.length, 2].max
+        stack.each_with_index do |it, si|
+          r0 = cursor + si * each_h
+          r1 = (si == stack.length - 1) ? cursor + band_h : r0 + each_h
+          les << [it[0], c0, c1, r0, r1]
+        end
+      end
+      cursor += band_h
+    end
+    page_spec['elements'] = page_spec['elements'] + extra if page_spec
+    inner = les.map { |i| SigmaLayout.le(i[0], i[1], i[2], i[3], i[4]) }.join("\n")
+    next SigmaLayout.page_xml(page_id, children.join("\n"), inner)
+  end
+
+  # ---- PBI-fidelity FLAT layout (--layout pbi) ------------------------------
   # The page mirrors the PBI canvas 1:1: flat LayoutElements at the canvas-
   # proportional grid coords (exactly the shape Sigma's own UI writes), no
   # header band, no row containers. Band containers with auto rows COLLAPSE
   # around short content (KPIs lost their titles; map/scatter bands rendered
   # blank in page exports) — verified against the PBI page renders.
-  if (opts[:layout_mode] || 'pbi') != 'banded'
+  if opts[:layout_mode] == 'pbi'
     kind_of = {}
     (page_spec ? page_spec['elements'] : []).each { |e| kind_of[e['id']] = e['kind'] }
     # Sigma needs more vertical room than PBI's compact widgets: clamp minimum
