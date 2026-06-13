@@ -66,7 +66,7 @@ HBAR_TYPES = {"barChart", "clusteredBarChart", "stackedBarChart",
 # NOT valid — the API rejects it as "Invalid value: string" (beads-sigma-pi8v).
 # IMPORTANT: emit "none" explicitly — a multi-series Sigma bar defaults to
 # STACKED, so a clustered PBI chart comes out stacked otherwise.
-STACKED_TYPES = {"stackedBarChart", "stackedColumnChart",
+STACKED_TYPES = {"stackedBarChart", "stackedColumnChart", "stackedAreaChart",
                  "hundredPercentStackedBarChart", "hundredPercentStackedColumnChart"}
 PCT_STACKED_TYPES = {"hundredPercentStackedBarChart", "hundredPercentStackedColumnChart"}
 
@@ -251,7 +251,7 @@ def extract(pbir_dir):
                 "title": _visual_title(visual),
                 "sigma_kind": VISUAL_KIND.get(vtype, "bar"),
                 "orientation": "horizontal" if vtype in HBAR_TYPES else None,
-                "stacking": _stacking(vtype) if VISUAL_KIND.get(vtype) == "bar" else None,
+                "stacking": _stacking(vtype) if VISUAL_KIND.get(vtype) in ("bar", "area") else None,
                 "x": pos.get("x", 0), "y": pos.get("y", 0),
                 "w": pos.get("width", 0), "h": pos.get("height", 0),
                 "z": pos.get("z", 0),

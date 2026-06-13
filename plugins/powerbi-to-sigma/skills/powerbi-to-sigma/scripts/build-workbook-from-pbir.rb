@@ -786,7 +786,7 @@ def build_element(rec, fields, masters, extra_data = [])
     # Stacking enum is none|stacked|normalized (OpenAPI BarChart.stacking;
     # "normalized" = scaled to 100%). extract-pbir already maps PBI 100%-stacked
     # -> "normalized", so pass it through verbatim (bead pi8v).
-    el['stacking'] = rec['stacking'] if kind == 'bar-chart' && rec['stacking']
+    el['stacking'] = rec['stacking'] if %w[bar-chart area-chart].include?(kind) && rec['stacking']
     # bead n9u9: honor the PBI per-visual data-label signal (objects.labels show)
     # when the extractor provided one: true -> shown, false -> omit (Sigma default
     # is off). Verified `dataLabel:{labels:"shown"}` persists + renders for bar AND

@@ -236,7 +236,7 @@ def extract(report):
                 "bindings": _projections(sv, vt),
                 # bead f972: visual sort ({queryRef, direction asc|desc}) or None
                 "sort": _sort_signal(sv),
-                "stacking": _stacking(vt) if VISUAL_KIND.get(vt) == "bar" else None,
+                "stacking": _stacking(vt) if VISUAL_KIND.get(vt) in ("bar", "area") else None,
                 "formats": {},
                 # bead n9u9: PBI data-label toggle (objects.labels show) — true/false/None
                 "data_labels": _obj_flag(sv, "labels"),
