@@ -196,6 +196,15 @@ post-snapshot rows — the fixture's shared demo tables drift daily).
 It also writes the gate sentinels `parity-final.json` + `wb-ids.json` next to
 the report — the contract Phase 6 reads.
 
+## Visual QA (mandatory gate — never skip)
+A workbook that POSTs 200 and passes parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters over charts.** Sigma's grid has no z-order; the shared layout lib de-overlaps bands, but this visual gate is the safety net (without a top-level layout the workbook renders as a single-column stack — see the existing layout gate).
+
+1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
+   `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
+2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in-band, no clipped titles, even heights, right chart kind/format).
+3. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit → push) — then **re-render and re-read**.
+4. Declare the migration done on a **clean render**, not on HTTP 200.
+
 ## Phase 6 — Finalize (hard gate before declaring GREEN)
 
 ```bash

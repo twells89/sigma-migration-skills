@@ -129,6 +129,34 @@ module SigmaLayout
     out
   end
 
+  # Two placed items collide when their column AND row ranges both overlap.
+  # Items are [eid, c0, c1, r0, r1, *rest] with grid-line (exclusive-end) coords.
+  def collide?(a, b)
+    a[1] < b[2] && b[1] < a[2] && a[3] < b[4] && b[3] < a[4]
+  end
+
+  # De-overlap each band. Sigma's grid has NO z-order, so two items sharing a
+  # cell — common when a source tool floats a filter/legend/listbox on top of a
+  # chart (e.g. Qlik's associative-model listboxes over charts) — render
+  # stacked on top of each other. When any pair in a band overlaps in BOTH
+  # axes, tile that band's items edge-to-edge across the full grid width at the
+  # band's row range (same tiling math as reflow_bands). Collision-free bands
+  # are returned untouched, so clean source geometry is preserved exactly. This
+  # is the universal safety net that runs after reflow on every banded_page.
+  def decollide_bands(bands)
+    bands.map do |band|
+      next band unless band.combination(2).any? { |a, b| collide?(a, b) }
+      r0 = band.map { |i| i[3] }.min
+      r1 = band.map { |i| i[4] }.max
+      n = band.length
+      band.sort_by { |i| [i[1], i[3]] }.each_with_index.map do |it, j|
+        c0 = 1 + (GRID_COLS * j / n.to_f).round
+        c1 = 1 + (GRID_COLS * (j + 1) / n.to_f).round
+        [it[0], c0, c1, r0, r1, *it[5..]]
+      end
+    end
+  end
+
   # One band of items -> a full-width GridContainer spanning the band's row
   # range at page level, children re-emitted with CONTAINER-RELATIVE rows.
   # row_offset shifts the container's page-level position (e.g. +3 when a
@@ -178,6 +206,7 @@ module SigmaLayout
     end
     bands = cluster_bands(items)
     bands = reflow_bands(bands) if reflow
+    bands = decollide_bands(bands)
     top = bands.flatten(1).map { |i| i[3] }.min
     offset += (1 - top) if top # first band starts right under the header
     bands.each_with_index do |band, i|

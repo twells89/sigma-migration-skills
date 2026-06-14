@@ -400,6 +400,27 @@ def _cluster_bands(items):
             bands.append({"r0": it[3], "r1": it[4], "items": [it]})
     return [b["items"] for b in bands]
 
+def _collide(a, b):
+    """Two items collide when their column AND row ranges both overlap."""
+    return a[1] < b[2] and b[1] < a[2] and a[3] < b[4] and b[3] < a[4]
+
+def _decollide_bands(bands):
+    """De-overlap each band. Sigma's grid has NO z-order, so two items sharing
+    a cell (e.g. a Qlik listbox floated on top of a chart) render stacked on
+    each other. When any pair in a band overlaps in BOTH axes, tile that band's
+    items edge-to-edge across the full grid width at the band's row range.
+    Collision-free bands are returned untouched (clean geometry preserved)."""
+    out = []
+    for band in bands:
+        if not any(_collide(band[i], band[j])
+                   for i in range(len(band)) for j in range(i + 1, len(band))):
+            out.append(band); continue
+        r0 = min(i[3] for i in band); r1 = max(i[4] for i in band)
+        n = len(band)
+        out.append([[it[0], 1 + round(24 * j / n), 1 + round(24 * (j + 1) / n), r0, r1]
+                    for j, it in enumerate(sorted(band, key=lambda i: (i[1], i[3])))])
+    return out
+
 def banded_page(page_id, items, title, id_prefix=None):
     """Header band + one full-width GridContainer per row band, children
     container-relative. Returns (page_xml, extra_spec_elements)."""
@@ -415,7 +436,7 @@ def banded_page(page_id, items, title, id_prefix=None):
         offset = HEADER_ROWS
     if items:
         offset += 1 - min(i[3] for i in items)  # first band starts under the header
-    for n, band in enumerate(_cluster_bands(items), 1):
+    for n, band in enumerate(_decollide_bands(_cluster_bands(items)), 1):
         cid = f"{pfx}-{n}"
         extra.append({"id": cid, "kind": "container"})
         r0 = min(i[3] for i in band); r1 = max(i[4] for i in band)
@@ -428,9 +449,16 @@ def banded_page(page_id, items, title, id_prefix=None):
 def grid_layout(page_id, sheet, placed):
     """Map the Qlik sheet cell grid onto Sigma's 24-col grid, then wrap each
     cell-grid row in a band container (relative proportions preserved).
+
+    Controls (Qlik listboxes/filterpanes) are LIFTED out of their floating cell
+    coords into a clean full-width band at the top: Qlik's associative model
+    floats filters ON TOP of charts, and Sigma's grid has no z-order, so
+    preserving those coords renders filters stacked over charts. Charts/KPIs
+    keep their relative geometry below the controls band; _decollide_bands in
+    banded_page is the final safety net for any chart-on-chart overlap.
     Returns (page_xml, extra_spec_elements)."""
     qcols = sheet.get("columns") or 24
-    items = []
+    ctls, charts = [], []
     for cell, el in placed:
         c0 = round(cell["col"] * 24 / qcols) + 1
         c1 = round((cell["col"] + cell["colspan"]) * 24 / qcols) + 1
@@ -439,9 +467,20 @@ def grid_layout(page_id, sheet, placed):
         r1 = int(round((cell["row"] + cell["rowspan"]) * ROW_SCALE)) + 1
         if el["kind"] == "kpi-chart" and (r1 - r0) < KPI_MIN_ROWS:
             r1 = r0 + KPI_MIN_ROWS
-        if el["kind"] == "control" and (r1 - r0) < 2:
-            r1 = r0 + 2
-        items.append([el["id"], c0, c1, r0, r1])
+        if el["kind"] == "control":
+            ctls.append(el["id"])            # float-over-chart coords discarded
+        else:
+            charts.append([el["id"], c0, c1, r0, r1])
+    items, row = [], 1
+    if ctls:
+        n = len(ctls)
+        for i, eid in enumerate(ctls):
+            cc0 = 1 + round(24 * i / n); cc1 = 1 + round(24 * (i + 1) / n)
+            items.append([eid, cc0, cc1, row, row + 3])
+        row += 3
+    if charts:
+        shift = row - min(c[3] for c in charts)   # drop charts below the controls band
+        items += [[c[0], c[1], c[2], c[3] + shift, c[4] + shift] for c in charts]
     return banded_page(page_id, items, sheet.get("title"))
 
 def auto_layout(page_id, elems, title=None):

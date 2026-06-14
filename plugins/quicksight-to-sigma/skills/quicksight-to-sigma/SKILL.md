@@ -158,6 +158,15 @@ ruby scripts/put-layout.rb --workbook <WORKBOOK_ID> --layout layout.xml
 
 Maps each QuickSight visual's grid cell → a 24-col Sigma layout. **QuickSight grid lines are 1-based** — `ColumnIndex`/`RowIndex` start at 1, so subtract 1 before scaling to the 0-based Sigma grid. Free-form / section-based QS layouts are approximated to the grid.
 
+## Visual QA (mandatory gate — never skip)
+A workbook that POSTs 200 and passes parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters over charts.** QuickSight FreeForm pixel coords can overlap and Sigma's grid has no z-order; the build collapses collisions, but this visual gate is the safety net.
+
+1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
+   `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
+2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in their own band, no clipped titles, even heights, right chart kind/format).
+3. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit → push) — then **re-render and re-read**.
+4. Declare the migration done on a **clean render**, not on HTTP 200.
+
 ## Phase 7 — Parity (hard gate)
 
 ```bash
@@ -194,7 +203,7 @@ ruby scripts/assert-phase6-ran.rb --workdir /tmp/<name> --workbook-id <WORKBOOK_
 - **Window/table-calc functions are a known gap** — they degrade to a `/* TODO */` placeholder; verify the graceful degradation rather than treating it as a failure, and surface it in the migration warning manifest.
 
 ## Reuse, don't reinvent
-These vendor-agnostic Sigma-side scripts are reused across the migration skills: `get-token.sh`, `lib/sigma_rest.rb`, `post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `validate-spec.rb`, `verify-parity.rb`, `cleanup-orphan-workbooks.rb`. Only the QuickSight-specific stages (`quicksight-discover.py`, `convert-model.rb`, `build-workbook-from-quicksight.rb`, `build-quicksight-layout.rb`, `phase6-parity-quicksight.rb`, `qs-dm-signature.py`) are new.
+These vendor-agnostic Sigma-side scripts are reused across the migration skills: `get-token.sh`, `lib/sigma_rest.rb`, `post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `validate-spec.rb`, `verify-parity.rb`, `cleanup-orphan-workbooks.rb`. Only the QuickSight-specific stages (`quicksight-discover.py`, `convert-model.rb`, `build-workbook-from-quicksight.rb`, `build-quicksight-layout.rb`, `phase6-parity-quicksight.rb`, `qs-dm-signature.py`) are new. `scripts/sigma-export-png.py` renders a workbook page to PNG for the mandatory **Visual QA** gate (read each image against `refs/layout-visual-qa.md`).
 
 
 ## Security: Row- & Column-Level Security (RLS/CLS)

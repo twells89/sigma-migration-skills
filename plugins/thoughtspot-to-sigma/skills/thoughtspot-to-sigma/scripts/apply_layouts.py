@@ -94,6 +94,31 @@ def _reflow_bands(bands):
     return out
 
 
+def _collide(a, b):
+    """Two items collide when their column AND row ranges both overlap."""
+    return a[1] < b[2] and b[1] < a[2] and a[3] < b[4] and b[3] < a[4]
+
+
+def _decollide_bands(bands):
+    """Sigma's grid has NO z-order: two items sharing a cell render stacked on
+    each other. When a band has any pair overlapping in BOTH axes, tile its
+    items edge-to-edge across the full grid width at the band's row range.
+    Collision-free bands are kept as-is (clean tile geometry preserved). This is
+    the universal safety net that runs after reflow on every banded_page."""
+    out = []
+    for b in bands:
+        its = b["items"]
+        if not any(_collide(its[i], its[j])
+                   for i in range(len(its)) for j in range(i + 1, len(its))):
+            out.append(b); continue
+        r0 = min(i[3] for i in its); r1 = max(i[4] for i in its); n = len(its)
+        tiled = [[it[0], 1 + int(GRID_COLS * j / n + 0.5),
+                  1 + int(GRID_COLS * (j + 1) / n + 0.5), r0, r1]
+                 for j, it in enumerate(sorted(its, key=lambda i: (i[1], i[3])))]
+        out.append({"r0": r0, "r1": r1, "items": tiled})
+    return out
+
+
 def banded_page(page_id, items, title):
     """items: [eid, c0, c1, r0, r1] page-absolute. Header band + one container
     per row band (children relative; relative TS proportions preserved inside).
@@ -111,6 +136,7 @@ def banded_page(page_id, items, title):
         else:
             bands.append({"r0": it[3], "r1": it[4], "items": [it]})
     bands = _reflow_bands(bands)
+    bands = _decollide_bands(bands)
     offset = HEADER_ROWS + (1 - min(b["r0"] for b in bands)) if bands else HEADER_ROWS
     for n, b in enumerate(bands, 1):
         cid = f"band-{n}"

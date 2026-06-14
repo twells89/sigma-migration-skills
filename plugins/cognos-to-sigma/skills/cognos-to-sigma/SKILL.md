@@ -213,6 +213,15 @@ parity, land the Cognos source DB in the warehouse Sigma reads (the GO samples a
 canonical IBM `GOSALES`/`GOSALESDW` DBs — published, loadable), then confirm the Cognos
 report's numbers match the migrated Sigma workbook to the cent.
 
+## Visual QA (mandatory gate — never skip)
+A workbook that POSTs 200 and passes parity ($-total / row-count) can still be visually broken — **overlapping tiles, clipped titles, dead zones, filters over charts.** Sigma's grid has no z-order; the shared layout lib de-overlaps bands, but this visual gate is the safety net (especially for crosstab→pivot sizing and map title/legend overlap).
+
+1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
+   `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
+2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in-band, no clipped titles, even heights, right chart kind/format; short map titles).
+3. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit → push) — then **re-render and re-read**.
+4. Declare the migration done on a **clean render**, not on HTTP 200.
+
 ---
 
 ## What converts, what's flagged (never faked)

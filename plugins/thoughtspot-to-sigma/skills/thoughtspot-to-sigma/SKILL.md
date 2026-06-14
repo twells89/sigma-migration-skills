@@ -164,6 +164,19 @@ python3 scripts/migrate.py --model-tml fixtures/retail-analytics-model.tml \
    `verify-parity.rb` and writes the `parity-final.json` sentinel. Then run
    `ruby scripts/assert-phase6-ran.rb --workdir <dir> --workbook-id <wb>` —
    it must **exit 0** before declaring the migration GREEN.
+7. **Visual QA (HARD GATE)** — **never skip, never declare done on HTTP 200.** A
+   workbook that POSTs cleanly and passes parity can still be visually broken
+   (overlapping tiles, clipped KPI titles, dead zones, orphaned filters; Sigma's
+   grid has no z-order — the build de-overlaps bands via `_decollide_bands`, but
+   this visual gate is the safety net). After `compare.py` renders the Sigma
+   element/page PNGs (side-by-side vs the TS viz):
+   1. **Read each Sigma PNG** and check it against `refs/layout-visual-qa.md` (no
+      overlaps/stacking, no dead zones, controls placed in-band, no clipped
+      titles, even heights, right chart kind/format).
+   2. Fix any failure in the spec — for multi-page workbooks use
+      `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit → push) —
+      then **re-render and re-read**.
+   3. Loop until the render passes inspection.
 
 ## Step 2.5 — Reuse an existing DM? (between convert and POST — mirrors tableau Phase 1.5 / powerbi Phase 3.5)
 
@@ -221,7 +234,7 @@ you export for `migrate.py`). Decision:
 - `ts_common.py` — `build_resolver` (from model TML), viz↔element mappers, format/currency mapping
 - `apply_layouts.py` — layout pass (run LAST): TML tile geometry → Sigma 24-col
   grid, auto-grid fallback; `--workdir` reads the manifest
-- `compare.py` — visual + structural compare (TS viz PNG vs Sigma element PNG → HTML)
+- `compare.py` — visual + structural compare (TS viz PNG vs Sigma element PNG → HTML); **mandatory visual-QA gate** — read each rendered Sigma PNG against `refs/layout-visual-qa.md` and loop until clean
 - `ts_screenshot.py` — per-viz PNG export from ThoughtSpot; detects blank /
   connection-error placeholder renders (near-uniform image or non-PNG error
   body) and reports them as ✗ failures, never ✓

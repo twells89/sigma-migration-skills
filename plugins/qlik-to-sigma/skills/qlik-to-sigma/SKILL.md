@@ -251,6 +251,15 @@ staleness-explained deltas don't block.)
 > (`SUM("<colId>")`/`COUNT(DISTINCT ...)`), or use the REST export API. See
 > `refs/sigma-build-gotchas.md` → Metrics.
 
+## Phase 5.5 — Visual QA (mandatory gate — never skip)
+A workbook that POSTs 200 and passes numeric/bucket parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters floating over charts.** Qlik's associative model floats listboxes/filterpanes on top of charts and Sigma's grid has no z-order; the build script now lifts controls to a top band and de-overlaps (`_decollide_bands`), but novel sheets can still slip through.
+
+1. Render every page to PNG (token first: `eval "$(scripts/vendor/get-token.sh)"`):
+   `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
+2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in their own band, no clipped titles, even heights, right chart kind/format).
+3. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit element files → push) — then **re-render and re-read**.
+4. Declare the migration done on a **clean render**, not on HTTP 200.
+
 ---
 
 ## Scripts
@@ -267,6 +276,7 @@ staleness-explained deltas don't block.)
 | `scripts/scout-validate.py` | 2 | Gap-scout primitive: validate a candidate formula via a throwaway test workbook (column-type check) + persist to `~/.qlik-to-sigma/learned-rules.yaml`. **Validated.** |
 | `scripts/learned-rules.py` | 2 | Loader: the build step applies customer-accumulated rules before falling back to a WARN. |
 | `scripts/qlik-screenshot.py` | 1/6 | Export PNGs of a sheet's charts (or specific viz ids) via the Qlik reporting API, for before/after capture. **Validated** (per-viz PNG; whole-sheet is PDF only). |
+| `scripts/sigma-export-png.py` | 5.5 | Render a workbook page/element to PNG via the export API for visual inspection against `refs/layout-visual-qa.md` (the Visual QA gate). |
 | `scripts/build-sigma-dm.py` | 3 | Author + POST the Sigma data model FROM THE PIPELINE ARTIFACTS (converter-out + reconcile + denorm): repointed star + relationships + denorm SQL element + metrics. `--dry-run` for offline. **Proven (generalized 2026-06-10).** |
 | `scripts/build-sigma-workbook.py` | 4 | Author + POST the workbook FROM DISCOVERY (charts.json + layout.json): one page per Qlik sheet, cell-grid layout, sorts, formats, null-suppression filters. `--dry-run` for offline. **Proven (generalized 2026-06-10).** |
 | `scripts/lib/control_lint.rb` | 5 | **Shared control-wiring lint (gate 7)** — dead controls / ghost targets / reach / `control-scope.json` coverage; vendored byte-identical across plugins; run automatically by `migrate-qlik.rb` Phase 6e. |
