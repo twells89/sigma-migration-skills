@@ -165,6 +165,16 @@ Duration: 3
 - **Building Qlik fixtures:** charts created via the API render only as `auto-chart`
   (concrete `bar`/`line`/`pie` come up blank); sheets must be UI-created (or impersonated)
   to list in the hub; copy an app to clone its data without a reload.
+- **"tables=0" / empty data model = the identity can't read the app's load script.**
+  Discovery fetches the app's load script (the data-model source of truth) via the
+  Qlik engine `GetScript`. If the connecting identity doesn't own the app (someone
+  else's app, unpublished), `GetScript` returns `GENERIC ACCESS DENIED` and discovery
+  now **hard-fails** (`FATAL: load script is empty`, exit 3) instead of silently
+  building an empty model. Fix: run discovery as the **app owner**, copy/transfer the
+  app so your identity owns it, or publish it to a managed space your identity can read.
+  This is the #1 cause of a Qlik migration "running but producing nothing useful" —
+  the M2M client must act as a user who can actually read the app (see Prerequisites).
+  DirectQuery apps legitimately have no load script and are exempt.
 
 ## The techniques worth carrying forward
 Duration: 1

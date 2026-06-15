@@ -117,8 +117,10 @@ def qlik_run(args, attempts=4):
 
 def qlik(*args, parse_json=True):
     out = qlik_run(list(args))
-    if out.returncode != 0 and parse_json:
-        sys.stderr.write(f"WARN {' '.join(args)} -> {out.stderr[:160]}\n")
+    if out.returncode != 0:
+        # Warn on ANY non-zero exit — including parse_json=False calls like the
+        # load-script fetch, whose failure was previously swallowed silently.
+        sys.stderr.write(f"WARN {' '.join(str(x) for x in args)} -> {((out.stderr or out.stdout) or '')[:200]}\n")
     if not parse_json:
         return out.stdout
     try:
@@ -398,7 +400,9 @@ def main():
     results = {}
     def _script():
         with stage("script"):
-            results["script"] = qlik("app", "script", "get", "-a", a.app, *ctx, parse_json=False)
+            out = qlik_run(["app", "script", "get", "-a", a.app, *ctx])
+            results["script"] = out.stdout if out.returncode == 0 else ""
+            results["script_error"] = None if out.returncode == 0 else ((out.stderr or out.stdout) or "unknown error").strip()[:200]
 
     def _items():
         with stage("app-meta"):
@@ -443,6 +447,25 @@ def main():
     awrite(os.path.join(a.out, "dimensions.json"), dims_raw)
     app_meta = results["app_meta"]
     awrite(os.path.join(a.out, "app-meta.json"), app_meta)
+
+    # HARD FAIL if the load script — the data-model source of truth — is empty.
+    # A silent empty script yields tables=0 and a Sigma data model with no data
+    # (the "migration ran but produced nothing useful" failure). The usual cause
+    # is GetScript "GENERIC ACCESS DENIED": the app is owned by another user /
+    # unpublished and the connecting identity lacks read rights. DirectQuery apps
+    # legitimately carry no load script, so they are exempt.
+    if not script.strip() and not app_meta.get("isDirectQueryMode"):
+        sys.stderr.write("\nFATAL: load script is empty — cannot build a data model (tables=0).\n")
+        if results.get("script_error"):
+            sys.stderr.write(f"  GetScript failed: {results['script_error']}\n")
+        sys.stderr.write(
+            "  The load script is the data-model source of truth; without it the converter\n"
+            "  produces an empty model. Most common cause: the connecting identity cannot read\n"
+            "  this app (owned by another user / unpublished -> 'GENERIC ACCESS DENIED').\n"
+            "  Fix one of: (a) run discovery as the app OWNER, (b) copy/transfer the app so the\n"
+            "  connecting identity owns it, or (c) publish it to a managed space that identity\n"
+            "  can read. (DirectQuery apps have no script and are exempt.)\n")
+        sys.exit(3)
 
     # sheets first, so each chart can be annotated with its sheet
     charts, sheets, obj_sheet = [], [], {}
