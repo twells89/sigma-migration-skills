@@ -64,7 +64,7 @@ All via the function map (rename only — **no argument transformation**).
 |---|---|---|---|
 | `ABS` `ROUND` `CEILING` `FLOOR` `POWER` `SQRT` | `Abs` `Round` `Ceiling` `Floor` `Power` `Sqrt` | ✅ | |
 | `INT` `FLOAT` | `Int` `Number` | ✅ | casts |
-| `SIGN` `PI` `LN` `LOG` `MOD` `EXP` | — | ⛔ | **silent gap** — not in the Tableau map; emitted verbatim (Sigma has `Ln`/`Log`/`Mod`/`Exp`/`Pi`/`Sign`, but the converter doesn't map them yet) |
+| `LN` `LOG` `EXP` `MOD` `SIGN` `PI` | `Ln` `Log` `Exp` `Mod` `Sign` `Pi` | ✅ | Sigma `Log` defaults to base 10 (matches Tableau `LOG`), verified 2026-06-15 |
 
 ## 5. Date functions
 
@@ -73,7 +73,7 @@ All via the function map (rename only — **no argument transformation**).
 | `DATEPART('unit',d)` | `Year(d)`/`Month(d)`/… | ✅ | unit consumed → named extractor |
 | `DATENAME('month',d)` | `MonthName(d)` | ✅ | weekday→`WeekdayName`; numeric units → `Text(Year(d))` etc. |
 | `DATETRUNC` `DATEADD` `DATEDIFF` | `DateTrunc` `DateAdd` `DateDiff` | ✅ | unit single→double-quoted; arg order preserved |
-| `DATEPARSE('fmt',str)` | `DateParse(str,"%Y…")` | 🟡 | **arg order reversed**; Java tokens→strftime; verify the pattern |
+| `DATEPARSE('fmt',str)` | `DateParse(str,"%Y…")` | ✅ | resolves to datetime (verified 2026-06-15); **arg order reversed** + Java tokens→strftime — a verify warning is emitted |
 | `MAKEDATE` `DATE` `DATETIME` | `MakeDate` `Date` `Datetime` | ✅ | |
 | `TODAY` `NOW` | `Today` `Now` | ✅ | |
 | `YEAR/MONTH/DAY/HOUR/MINUTE/SECOND/WEEK/QUARTER` | same-named | ✅ | |
@@ -94,7 +94,8 @@ All via the function map (rename only — **no argument transformation**).
 | Tableau | Sigma | Status | Notes |
 |---|---|---|---|
 | `REGEXP_EXTRACT` `REGEXP_REPLACE` `REGEXP_MATCH` | `RegexpExtract` `RegexpReplace` `RegexpMatch` | ✅ | arg order preserved |
-| `CORR` `COVAR` `COVARP` (non-window) | — | ⛔ | silent gap — passed through unchanged |
+| `CORR(x,y)` | `Corr(x,y)` | ✅ | routed to a metric (aggregate); verified 2026-06-15 |
+| `COVAR` `COVARP` | — | ❌ | no Sigma covariance function — flagged with a warning, not emitted |
 
 ## 8. LOD expressions
 
@@ -159,7 +160,7 @@ All 🧩 forms are **chart-context only** — place in a grouped workbook elemen
 
 ## Known follow-ups (beads)
 
-- `beads-sigma-dnia` — close the ⛔ math/stat silent gaps (`SIGN/PI/LN/LOG/MOD/EXP/CORR/COVAR`) and the `INDEX()<=N`→Top-N idiom. (Note: `ZN`/`ISNULL`/`IFNULL` are already handled — verified 2026-06-15.)
+- `beads-sigma-dnia` — ✅ scalar math/stat gaps closed 2026-06-15 (`LN/LOG/EXP/MOD/SIGN/PI`→Sigma equivs, `CORR`→`Corr` metric, `COVAR/COVARP` flagged; `ZN/ISNULL/IFNULL` were already fine; `DateParse` confirmed working). Remaining: the `INDEX()<=N`→Top-N idiom and Tableau set-membership `IN` rewrite on the Tableau path.
 - `beads-sigma-hnx0` — nested-LOD / double-aggregation grouped-child shape.
 - `beads-sigma-qtjz` — set parity edge cases (`%null%` members, `except`).
 - `beads-sigma-w9o4` — partial-date coercion (bare year / `FY2016` → full date).

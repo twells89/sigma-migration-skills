@@ -98,7 +98,7 @@ string and passing it to `Date()`:
 Key points:
 - `Text()` is the correct string conversion function — `ToText()` does not exist in Sigma
 - `Date()` takes a single ISO date string (`"YYYY-MM-DD"`) — it does not accept 3 separate arguments
-- `DateParse()` does not exist in Sigma — do not use it
+- `DateParse(text, format)` DOES exist in Sigma and returns a datetime (verified 2026-06-15) — but it parses a **text** input with an **strftime** format (e.g. `DateParse(Text([YYYYMMDD]), "%Y%m%d")`), not a Java/Tableau format string. The Tableau converter emits it for `DATEPARSE` (with the format auto-rewritten to strftime). `Date("YYYY-MM-DD")` is still the simplest path for an ISO-string column.
 - `Mid()` is 1-indexed (position 5 gives the month digits of a YYYYMMDD integer)
 
 Do this in the workbook master table column, not in the data model — keep the integer column
