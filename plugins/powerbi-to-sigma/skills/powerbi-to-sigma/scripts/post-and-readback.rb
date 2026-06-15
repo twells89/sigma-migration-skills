@@ -111,6 +111,22 @@ end
 
 # Read back
 spec = JSON.parse(http(:get, format(GET_PATH, oid), accept_json: true).body)
+
+# Fetch the resolved /columns BEFORE writing the id-map so we can attach the
+# AUTHORITATIVE per-element column labels (the suffixed display names Sigma
+# assigns to disambiguate joined-dim columns — e.g. "Customer Id (CUSTOMER_DIM)").
+# derive_master needs these to emit master-column formulas that actually resolve.
+# (Same response is reused below for the error-type guard — one round trip.)
+columns_path = opts[:type] == 'datamodel' ?
+  "/v2/dataModels/#{oid}/columns" :
+  "/v2/workbooks/#{oid}/columns"
+cols_res = http(:get, columns_path, accept_json: true)
+cols_json = cols_res.is_a?(Net::HTTPSuccess) ? (JSON.parse(cols_res.body) rescue { 'entries' => [] }) : nil
+labels_by_el = Hash.new { |h, k| h[k] = [] }
+(cols_json && cols_json['entries'] || []).each do |c|
+  labels_by_el[c['elementId']] << c['label'] if c['elementId'] && c['label']
+end
+
 out = {
   ID_FIELD => oid,
   'pages'  => spec.fetch('pages', []).map do |p|
@@ -118,7 +134,11 @@ out = {
       'id'       => p['id'],
       'name'     => p['name'],
       'visibility' => p['visibility'],
-      'elements' => (p['elements'] || []).map { |e| { 'id' => e['id'], 'kind' => e['kind'], 'name' => e['name'] } }
+      'elements' => (p['elements'] || []).map do |e|
+        el = { 'id' => e['id'], 'kind' => e['kind'], 'name' => e['name'] }
+        el['columnLabels'] = labels_by_el[e['id']] if labels_by_el.key?(e['id'])
+        el
+      end
     }
   end
 }
@@ -141,13 +161,8 @@ puts JSON.pretty_generate(out)
 # Endpoint: GET /v2/{dataModels|workbooks}/<id>/columns — returns one entry per
 # column with `type.type` resolved. Scan for type == "error".
 
-columns_path = opts[:type] == 'datamodel' ?
-  "/v2/dataModels/#{oid}/columns" :
-  "/v2/workbooks/#{oid}/columns"
-
-res = http(:get, columns_path, accept_json: true)
+res = cols_res
 if res.is_a?(Net::HTTPSuccess)
-  cols_json = JSON.parse(res.body) rescue { 'entries' => [] }
   error_columns = (cols_json['entries'] || []).select { |c| c.dig('type', 'type') == 'error' }
   if error_columns.any?
     warn "\n========================================"
