@@ -5,6 +5,14 @@
 
 set -euo pipefail
 
+# Agent-neutral credential bootstrap. Claude Code auto-loads creds from
+# ~/.claude/settings.json into the env; other agents (Cursor, Cortex Code, plain
+# shell) don't. If the creds aren't already present, source the neutral cred
+# file written by setup.rb so this works under any agent.
+if [ -z "${SIGMA_CLIENT_ID:-}" ] && [ -f "$HOME/.sigma-migration/env" ]; then
+  . "$HOME/.sigma-migration/env"
+fi
+
 : "${SIGMA_BASE_URL:?Run scripts/setup.rb to configure credentials}"
 : "${SIGMA_CLIENT_ID:?Run scripts/setup.rb to configure credentials}"
 : "${SIGMA_CLIENT_SECRET:?Run scripts/setup.rb to configure credentials}"
