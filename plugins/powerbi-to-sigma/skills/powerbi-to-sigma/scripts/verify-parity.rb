@@ -93,10 +93,14 @@ end
 
 def round_row(row)
   # Convert all numerics to Float-rounded so Integer 11 and Float 11.0 compare equal in the set,
-  # and canonicalize date-like dim strings so equivalent monthly buckets match.
+  # canonicalize date-like dim strings so equivalent monthly buckets match, and
+  # coerce purely-numeric STRINGS to floats (a scatter x-axis value reads back as a
+  # string in the workbook query and must compare equal to the numeric expected side).
   row.map do |v|
     if v.is_a?(Numeric)
       v.to_f.round(2)
+    elsif v.is_a?(String) && v.strip.match?(/\A-?\d+(\.\d+)?\z/)
+      v.strip.to_f.round(2)   # numeric-string (e.g. a scatter x-axis value) -> float, so it compares equal to the numeric side
     else
       canonicalize_dim(v)
     end
