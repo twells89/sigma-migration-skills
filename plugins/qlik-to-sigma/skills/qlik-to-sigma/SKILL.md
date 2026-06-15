@@ -283,7 +283,7 @@ staleness-explained deltas don't block.)
 ## Phase 5.5 — Visual QA (mandatory gate — never skip)
 A workbook that POSTs 200 and passes numeric/bucket parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters floating over charts.** Qlik's associative model floats listboxes/filterpanes on top of charts and Sigma's grid has no z-order; the build script now lifts controls to a top band and de-overlaps (`_decollide_bands`), but novel sheets can still slip through.
 
-1. Render every page to PNG (token first: `eval "$(scripts/vendor/get-token.sh)"`):
+1. `migrate-qlik.rb` now **auto-renders** every content page to a full-page PNG (Phase 5b → `<workdir>/visual-qa/<pageId>.png`) so the gate runs by default. To re-render a page manually (token first: `eval "$(scripts/vendor/get-token.sh)"`):
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
 2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in their own band, no clipped titles, even heights, right chart kind/format).
 3. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit element files → push) — then **re-render and re-read**.

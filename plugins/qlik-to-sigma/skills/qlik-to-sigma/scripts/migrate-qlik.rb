@@ -566,6 +566,34 @@ end
 mark('phase5-layout')
 
 # ---------------------------------------------------------------------------
+# Phase 5b — Visual QA: render each content page to a FULL-PAGE PNG so the
+# layout can be reviewed against refs/layout-visual-qa.md AND compared to the
+# source Qlik sheet capture (scripts/qlik-screenshot.py) — matching the other
+# migration skills' visual-QA gate. Render is non-fatal (a transient export
+# failure must not sink a green migration); the REVIEW is the gate.
+# ---------------------------------------------------------------------------
+unless opts[:dry_run]
+  vqa = File.join(WORK, 'visual-qa'); FileUtils.mkdir_p(vqa)
+  live = (Sigma.request(:get, "/v2/workbooks/#{WB_ID}/spec") rescue {})
+  wbspec = live.is_a?(Hash) ? (live['spec'] || live) : {}
+  content_pages = (wbspec['pages'] || []).reject { |p| p['id'].to_s.downcase.include?('data') }
+  pngs = []
+  content_pages.each do |pg|
+    out = File.join(vqa, "#{pg['id']}.png")
+    _o, st = Open3.capture2e('python3', File.join(HERE, 'sigma-export-png.py'),
+                             '--workbook', WB_ID, '--page', pg['id'], '--out', out, '--w', '1800', '--h', '1000')
+    st.success? ? pngs << out : (puts "   [warn] visual-QA render failed for page #{pg['id']}")
+  end
+  if pngs.any?
+    puts "   ✓ rendered #{pngs.size} full-page PNG(s) → #{vqa}"
+    puts '   VISUAL QA (mandatory review — do not skip): open each PNG and check vs'
+    puts '   refs/layout-visual-qa.md AND the source Qlik sheet — populated controls, titles'
+    puts '   present, right chart kinds, sensible colors/heights, no overlaps/dead zones.'
+  end
+end
+mark('phase5b-visual-qa')
+
+# ---------------------------------------------------------------------------
 # Phase 6 — Parity (freshness banner FIRST, then columns + values + buckets)
 # ---------------------------------------------------------------------------
 hdr(6, TOTAL, 'Parity')
