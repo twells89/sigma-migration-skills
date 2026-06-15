@@ -153,6 +153,56 @@ def post_workbook(spec, wd):
         f.write(json.dumps({"id": wb, "name": spec.get("name")}) + "\n")
     return wb
 
+def render_page_png(wb, page_id, out, w=1800, h=1000):
+    """Render one workbook PAGE to a PNG via the REST export API (token explicit
+    via the same SIGMA_API_TOKEN the rest of the run uses). Returns True on a
+    real PNG, False otherwise — NON-FATAL (a transient export must not sink a
+    green migration). Promotes compare.py's element render to a full-page one."""
+    base, tok = need_env("SIGMA_BASE_URL", "SIGMA_API_TOKEN")
+    body = json.dumps({"pageId": page_id,
+                       "format": {"type": "png", "pixelWidth": w, "pixelHeight": h}}).encode()
+    try:
+        r = urllib.request.Request(base + f"/v2/workbooks/{wb}/export", data=body, method="POST",
+            headers={"Authorization": "Bearer " + tok, "Content-Type": "application/json"})
+        qid = json.loads(urllib.request.urlopen(r, context=_SSL).read().decode()).get("queryId")
+    except Exception as ex:
+        print(f"     [warn] visual-QA export POST failed for page {page_id}: {ex}")
+        return False
+    for _ in range(40):
+        try:
+            g = urllib.request.Request(base + f"/v2/query/{qid}/download",
+                                       headers={"Authorization": "Bearer " + tok})
+            data = urllib.request.urlopen(g, context=_SSL).read()
+            if data[:4] == b"\x89PNG":
+                open(out, "wb").write(data)
+                return True
+        except urllib.error.HTTPError as e:
+            if e.code not in (202, 204, 404):
+                print(f"     [warn] visual-QA download {e.code} for page {page_id}"); return False
+        time.sleep(2)
+    return False
+
+def visual_qa(wb, local_spec, wd, display):
+    """Phase-5b-style visual-QA gate: render every CONTENT page (ids from the
+    LOCAL posted spec — deterministic; a live /spec readback proved flaky in the
+    qlik pipeline) to a full-page PNG under <wd>/visual-qa/. Non-fatal; the
+    human/agent REVIEW of the PNGs is the actual gate (refs/layout-visual-qa.md)."""
+    vqa = os.path.join(wd, "visual-qa"); os.makedirs(vqa, exist_ok=True)
+    content = [p for p in local_spec.get("pages", []) if (p.get("name") or "") != "Data"]
+    pngs = []
+    safe = re.sub(r"[^A-Za-z0-9]+", "-", display)[:40].strip("-") or wb[:8]
+    for pg in content:
+        out = os.path.join(vqa, f"{safe}-{pg['id']}.png")
+        if render_page_png(wb, pg["id"], out):
+            pngs.append(out)
+    if pngs:
+        print(f"     ✓ visual-QA: {len(pngs)}/{len(content)} full-page PNG(s) → {vqa}")
+        print(f"       REVIEW (do not skip): open each PNG, check vs refs/layout-visual-qa.md")
+        print(f"       and the source Liveboard — populated controls, titles, ref-lines, colors, no overlaps.")
+    else:
+        print(f"     [warn] visual-QA: no pages rendered for {wb} (export transient/disabled)")
+    return pngs
+
 def lb_tiles(lb, viz_specs, elements):
     """Map the Liveboard's layout.tiles (ThoughtSpot 12-col grid) to the built
     Sigma elements, in viz order. Returns None when geometry is incomplete
@@ -172,18 +222,29 @@ def migrate_liveboard(lb_doc, dm, denorm_id, denorm_name, resolver, prefix, fall
     display = lb.get("name") or fallback_name          # never name a workbook after a UUID
     viz_specs = [(v.get("id"), ps) for v in lb["visualizations"] if (ps := ts_common.parse_ts_viz(v, resolver))]
     specs = [ps for _, ps in viz_specs]
+    # gap C: Liveboard page filters become INTERACTIVE Sigma controls. When a
+    # column is governed by a Liveboard-level filter, drop the matching static
+    # per-viz search-query filter (the control now governs it globally) so the
+    # workbook isn't both hard-filtered AND control-filtered on the same column.
+    lb_filters = ts_common.parse_liveboard_filters(lb)
+    controlled = {f["col"] for f in lb_filters}
+    for s in specs:
+        s["filters"] = [vf for vf in s.get("filters", []) if vf["col"] not in controlled]
     master = ts_common.master_element(specs, resolver, dm, denorm_id, denorm_name)
     elements = [ts_common.sigma_element(s, resolver) for s in specs]
+    controls = ts_common.liveboard_controls(lb_filters, resolver, master)
     # Hidden grouped scatter-source tables must live on the SAME page as the
     # m-ofv master they source (visibleAsSource:False → no layout slot needed).
     data_elems = [master] + ts_common.drain_scatter_sources()
     spec = {"name": f"{prefix}{display} (from ThoughtSpot)", "folderId": folder, "schemaVersion": 1,
             "pages": [{"id": "p-data", "name": "Data", "elements": data_elems},
-                      {"id": "p-main", "name": display[:40], "elements": elements}]}
+                      {"id": "p-main", "name": display[:40], "elements": controls + elements}]}
     wb = post_workbook(spec, wd)
     tiles = lb_tiles(lb, viz_specs, elements)
-    apply_layouts.apply(wb, tiles=tiles)
-    return wb, display, len(specs), tiles
+    control_ids = [c["id"] for c in controls]
+    apply_layouts.apply(wb, tiles=tiles, controls=control_ids)
+    visual_qa(wb, spec, wd, display)               # Phase-5b: render full-page PNGs (non-fatal)
+    return wb, display, len(specs), tiles, control_ids
 
 def collect_liveboards(a, model_name):
     """Liveboard candidate selection + TML export — runs as a LANE concurrent
@@ -247,6 +308,7 @@ def migrate_answer(ans_id, dm, denorm_id, denorm_name, resolver, prefix, folder,
                       {"id": "p-main", "name": display[:40], "elements": [main_el]}]}
     wb = post_workbook(spec, wd)
     apply_layouts.apply(wb)
+    visual_qa(wb, spec, wd, display)               # Phase-5b: render full-page PNG (non-fatal)
     return wb, display
 
 def main():
@@ -332,10 +394,12 @@ def main():
         lb_path = os.path.join(lbdir, f"lb-{i + 1}.tml")
         open(lb_path, "w").write(lb_doc)
         try:
-            wb, display, n, tiles = migrate_liveboard(lb_doc, dm, denorm_id, denorm_name,
+            wb, display, n, tiles, control_ids = migrate_liveboard(lb_doc, dm, denorm_id, denorm_name,
                                                       resolver, prefix, fallback, folder, wd)
-            results[display] = {"workbook": wb, "viz": n, "tiles": tiles, "lb_tml": lb_path}
-            print(f"  ✓ {display[:34]:34s} WB {wb} ({n} viz, layout={'TML tiles' if tiles else 'auto grid'})")
+            results[display] = {"workbook": wb, "viz": n, "tiles": tiles,
+                                "controls": control_ids, "lb_tml": lb_path}
+            print(f"  ✓ {display[:34]:34s} WB {wb} ({n} viz, {len(control_ids)} control(s), "
+                  f"layout={'TML tiles' if tiles else 'auto grid'})")
         except Exception as ex:
             results[fallback] = {"error": str(ex), "lb_tml": lb_path}
             print(f"  ✗ {fallback[:34]:34s} {ex}")

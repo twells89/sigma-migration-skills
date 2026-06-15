@@ -205,7 +205,117 @@ def parse_ts_viz(v, resolver=None):
             "filters": parse_filters(a.get("search_query", "")), "sorts": parse_sorts(a),
             "mtypes": mtypes, "row_formulas": row_formulas, "flagged": flagged,
             "color_dim": color, "topn": int(m.group(1)) if m else None,
+            "refmarks": parse_refmarks(a, measures, dims),
+            "measure_color": parse_measure_color(a, measures),
             "af_names": sorted(af.keys())}
+
+# ── Reference / threshold lines (gap A) ──────────────────────────────────────
+# ThoughtSpot draws a target value or limit range as a line on a chart via two
+# routes: (1) `answer.conditional_formatting` with a per-metric `simple_threshold`
+# / `range` carrying an operator, value(s) and a HEX color; (2) the chart's own
+# `client_state_v2` JSON, which encodes them under `referenceLines` /
+# `refLines` (each {value|expr, label, color, axis}). Both are surfaced here as
+# {value, label, color, axis} dicts; the builder (ts_refmarks) turns each into a
+# Sigma refMark. Defensive about the exact key spelling (the public TML docs do
+# not expose the client_state internals — same posture as parse_sorts).
+def _client_states(a):
+    out = []
+    for holder in (a.get("chart") or {}), (a.get("table") or {}):
+        for key in ("client_state_v2", "client_state"):
+            raw = holder.get(key) or ""
+            if isinstance(raw, dict):
+                out.append(raw); continue
+            if not str(raw).strip():
+                continue
+            try:
+                out.append(json.loads(raw, strict=False))
+            except (ValueError, TypeError):
+                continue
+    return out
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+def parse_refmarks(a, measures, dims):
+    """→ [{value(float|str), label, color, axis('series'|'axis'), col(optional)}].
+    A threshold on a MEASURE → a y/series line; on a dimension → an x/axis line."""
+    out = []
+    measure_set = set(measures)
+    # (1) conditional_formatting metrics with a threshold operator that draws a line
+    for met in (a.get("conditional_formatting") or {}).get("metric", []) \
+            if isinstance(a.get("conditional_formatting"), dict) \
+            else (a.get("conditional_formatting") or []):
+        if not isinstance(met, dict):
+            continue
+        col = _strip_total(met.get("column_id") or met.get("column") or "")
+        rules = met.get("simple_threshold") or met.get("thresholds") or met.get("range") or []
+        if isinstance(rules, dict):
+            rules = [rules]
+        for r in rules:
+            if not isinstance(r, dict):
+                continue
+            val = r.get("value")
+            if val is None:
+                val = r.get("min") if r.get("min") is not None else r.get("max")
+            n = _num(val)
+            if n is None:
+                continue
+            axis = "axis" if col and col not in measure_set and col in dims else "series"
+            out.append({"value": n, "label": r.get("label") or met.get("label") or col,
+                        "color": r.get("color") or met.get("color"), "axis": axis, "col": col})
+    # (2) client_state reference lines
+    for cs in _client_states(a):
+        if not isinstance(cs, dict):
+            continue
+        for rl in (cs.get("referenceLines") or cs.get("refLines") or []):
+            if not isinstance(rl, dict) or rl.get("show") is False:
+                continue
+            val = rl.get("value")
+            n = _num(val)
+            formula = n if n is not None else (rl.get("expr") or rl.get("formula"))
+            if formula in (None, ""):
+                continue
+            ax = (rl.get("axis") or rl.get("axisType") or "Y").upper()
+            out.append({"value": formula, "label": rl.get("label") or rl.get("name"),
+                        "color": rl.get("color"), "axis": "axis" if ax.startswith("X") else "series",
+                        "col": _strip_total(rl.get("columnId") or rl.get("column") or "")})
+    return out
+
+# ── Per-measure color scale (gap B) ──────────────────────────────────────────
+# A by-measure color encoding: a conditional_formatting `range` on a measure (a
+# low→high gradient) or a per-column color set in client_state columnProperties.
+# Surfaced as {col, scheme(list[hex])}; the builder turns it into a Sigma
+# color:{by:scale} on a DUPLICATE measure column (a column can't be on both the
+# value/yAxis well and the color well). By-dimension category colors already
+# flow through `color_dim` → color:{by:category}.
+def parse_measure_color(a, measures):
+    measure_set = set(measures)
+    # conditional_formatting range gradient on a measure
+    cf = a.get("conditional_formatting")
+    metrics = cf.get("metric", []) if isinstance(cf, dict) else (cf or [])
+    for met in metrics if isinstance(metrics, list) else []:
+        if not isinstance(met, dict):
+            continue
+        col = _strip_total(met.get("column_id") or met.get("column") or "")
+        if col not in measure_set:
+            continue
+        rng = met.get("range") or met.get("gradient")
+        scheme = [r.get("color") for r in rng if isinstance(r, dict) and r.get("color")] \
+            if isinstance(rng, list) else None
+        if scheme and len(scheme) >= 2:
+            return {"col": col, "scheme": scheme}
+    # client_state per-column color → single-hue scale on that measure
+    for cs in _client_states(a):
+        for cp in (cs.get("columnProperties") or []) if isinstance(cs, dict) else []:
+            prop = cp.get("columnProperty") or {}
+            hue = prop.get("color") or prop.get("columnColor")
+            col = _strip_total(cp.get("columnId") or "")
+            if hue and col in measure_set:
+                return {"col": col, "scheme": ["#ffffff", hue]}
+    return None
 
 def parse_sorts(a):
     """Carry the answer's sorts: (1) `sort by [Col] descending` tokens in the
@@ -280,6 +390,59 @@ def _fmt(entry):
 def _resolve(resolver, base):
     return resolver.get(base) or {"measure": True, "ofv": base, "friendly": re.sub(r'[()]', '', base).strip()}
 
+# Sigma refMark axes: a measure/Y threshold → "series"; a dimension/X line →
+# "axis". value MUST be the wrapped {type:formula, formula} form (a bare number
+# 400s) and label.visibility must be "shown" (qlik-to-sigma qlik_refmarks, bead-
+# verified 2026-06-15).
+def ts_refmarks(refmark_specs):
+    out = []
+    for r in refmark_specs or []:
+        val = r.get("value")
+        if isinstance(val, float) and val.is_integer():
+            formula = str(int(val))                 # 80000.0 → "80000" (clean axis label)
+        elif isinstance(val, (int, float)):
+            formula = repr(val)
+        else:
+            formula = str(val or "")
+        if not formula.strip():
+            continue
+        rm = {"type": "line", "axis": r.get("axis") or "series",
+              "value": {"type": "formula", "formula": formula},
+              "line": {"color": r.get("color") or "#ef4444", "width": 2}}
+        if r.get("label"):
+            rm["label"] = {"visibility": "shown", "text": str(r["label"])}
+        out.append(rm)
+    return out
+
+# Charts that take an x/y axis (refMarks apply) vs the donut/pie/table/kpi kinds
+# where a reference line has no axis to hang on.
+_AXIS_KINDS = {"bar-chart", "line-chart", "area-chart", "combo-chart", "scatter-chart"}
+
+def _apply_measure_color(el, spec, resolver):
+    """gap B — by-measure color scale → color:{by:scale} on a DUPLICATE measure
+    column (a column can't sit on both the yAxis and color wells). Only for axis
+    charts that don't already carry a category color (color_dim)."""
+    mc = spec.get("measure_color")
+    if not mc or el.get("kind") not in _AXIS_KINDS or el.get("color"):
+        return
+    base = next((c for c in el.get("columns", []) if c.get("name") == mc["col"]), None)
+    if not base:
+        return
+    dup_id = nid("c")
+    dup = {"id": dup_id, "formula": base["formula"], "name": base["name"] + " (color)"}
+    if base.get("format"):
+        dup["format"] = base["format"]
+    el["columns"].append(dup)
+    el["color"] = {"by": "scale", "column": dup_id, "scheme": list(mc["scheme"])}
+
+def _apply_refmarks(el, spec):
+    """gap A — attach Sigma refMarks for axis charts."""
+    if el.get("kind") not in _AXIS_KINDS:
+        return
+    rm = ts_refmarks(spec.get("refmarks"))
+    if rm:
+        el["refMarks"] = rm
+
 def sigma_element(spec, resolver, master="OFV"):
     """Build the element, then apply any ThoughtSpot search-query filters as
     Sigma element list-filters (adds the filter column if not already present).
@@ -314,6 +477,8 @@ def sigma_element(spec, resolver, master="OFV"):
         ftarget.setdefault("filters", []).append({"id": nid(), "columnId": col_id, "kind": "list",
                                              "mode": f["mode"], "values": f["values"]})
     _apply_sorts(el, spec)
+    _apply_measure_color(el, spec, resolver)   # gap B: by-measure color scale
+    _apply_refmarks(el, spec)                  # gap A: reference / threshold lines
     return el
 
 def _apply_sorts(el, spec):
@@ -483,6 +648,89 @@ def _element_core(spec, resolver, master="OFV"):
         cc = nid("c"); cols.append({"id": cc, "formula": dref(color_dim), "name": color_dim})
         el["color"] = {"by": "category", "column": cc}
     return el
+
+# ── Liveboard filters → interactive Sigma list controls (gap C) ──────────────
+# A ThoughtSpot Liveboard carries page-level filters (liveboard.filters[]) that
+# apply across every tile. The OLD path turned a viz search-query clause into a
+# STATIC per-element list-filter — non-interactive (no dropdown, can't change).
+# An interactive Sigma control instead points its VALUE LIST at the master
+# column via the double-nested source shape (verified, qlik-to-sigma
+# build_control):
+#   source: {kind:"source", source:{kind:"table", elementId:<master>}, columnId:<c>}
+# so the dropdown populates from the data, AND carries a `filters` target so the
+# selection propagates to every chart that sources the master (the single shared
+# OFV master = global reach, matching the Liveboard's cross-tile semantics).
+_TS_FILTER_OP = {"IN": "include", "EQ": "include", "=": "include", "EQUALS": "include",
+                 "NOT_IN": "exclude", "NE": "exclude", "!=": "exclude", "NOT_EQUALS": "exclude"}
+
+def parse_liveboard_filters(lb):
+    """Liveboard page filters → [{col, mode, values, type}]. Defensive about the
+    TML spelling (filters / runtime_filters; column / column_name; operator /
+    type; values / value). Date columns are tagged type='date' so the builder
+    emits a date-range control instead of a list."""
+    out = []
+    raw = lb.get("filters") or lb.get("runtime_filters") or lb.get("filter") or []
+    if isinstance(raw, dict):
+        raw = raw.get("filters") or raw.get("runtime_filters") or [raw]
+    for f in raw:
+        if not isinstance(f, dict):
+            continue
+        col = f.get("column") or f.get("column_name") or f.get("columnName") or f.get("name")
+        if isinstance(col, list):
+            col = col[0] if col else None
+        if not col:
+            continue
+        col = _strip_total(col)
+        op = str(f.get("operator") or f.get("oper") or f.get("type") or "IN").upper()
+        vals = f.get("values")
+        if vals is None:
+            vals = f.get("value")
+        if vals is None and isinstance(f.get("filter_content"), dict):
+            vals = f["filter_content"].get("values")
+        if isinstance(vals, (str, int, float)):
+            vals = [vals]
+        is_date = bool(re.search(r"date|month|year|quarter|week|day|time", col, re.I))
+        out.append({"col": col, "mode": _TS_FILTER_OP.get(op, "include"),
+                    "values": [v for v in (vals or []) if v not in (None, "")],
+                    "type": "date" if is_date else "list"})
+    return out
+
+def liveboard_controls(lb_filters, resolver, master_el, master="OFV"):
+    """Build interactive Sigma controls from Liveboard filters. Returns a list of
+    control elements; each is wired to the master so it reaches every chart that
+    sources the master. Ensures the target column exists on the master element
+    (adds it if a viz didn't already surface it). Dedups by column."""
+    controls, seen = [], set()
+    for f in lb_filters:
+        col = f["col"]
+        if col in seen:
+            continue
+        seen.add(col)
+        e = _resolve(resolver, col)
+        mcol = next((c for c in master_el["columns"] if c.get("name") in (e["friendly"], col)), None)
+        if not mcol:
+            mcol = {"id": "ofv-%d" % len(master_el["columns"]), "name": e["friendly"],
+                    "formula": f"[{master}/{e['friendly']}]"}
+            master_el["columns"].append(mcol)
+        cid = mcol["id"]
+        ctl_id = re.sub(r"[^A-Za-z0-9]", "", col.title()) + "Filter"
+        el = {"id": nid("ctl"), "kind": "control", "controlId": ctl_id, "name": col,
+              "filters": [{"source": {"kind": "table", "elementId": master_el["id"]},
+                           "columnId": cid}]}
+        if f["type"] == "date":
+            # date-range needs a flat `mode` and NO value-list source (the column
+            # comes from the filter binding); a list control on a datetime target
+            # is silently stripped (cross-tool gotcha).
+            el.update({"controlType": "date-range", "mode": "between",
+                       "includeNulls": "when-no-value-is-selected"})
+        else:
+            el.update({"controlType": "list", "mode": f["mode"], "selectionMode": "multiple",
+                       "values": f.get("values") or [],
+                       "source": {"kind": "source",
+                                  "source": {"kind": "table", "elementId": master_el["id"]},
+                                  "columnId": cid}})
+        controls.append(el)
+    return controls
 
 def master_element(specs, resolver, dm_id, denorm_elem, denorm_name="Order Fact View"):
     """Master table fed by the DM denorm view. Plain columns pass through; the

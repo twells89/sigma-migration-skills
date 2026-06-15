@@ -184,7 +184,20 @@ def auto_items(elems):
         row += 11
     return items
 
-def build_layout(spec, tiles=None):
+def controls_band(control_ids, row=1):
+    """Lay out interactive controls (gap C) edge-to-edge in a single full-width
+    band — ThoughtSpot Liveboard filters apply globally, so they sit above the
+    tiles (Sigma's grid has no z-order; floating them over charts would stack).
+    Returns (items, next_row). Each control is ~3 rows tall."""
+    items, n = [], len(control_ids)
+    if not n:
+        return items, row
+    for i, cid in enumerate(control_ids):
+        c0 = 1 + (24 * i // n); c1 = 1 + (24 * (i + 1) // n)
+        items.append([cid, c0, c1, row, row + 3])
+    return items, row + 3
+
+def build_layout(spec, tiles=None, controls=None):
     """Returns (layout_xml, main_page, extra_spec_elements)."""
     pages = spec["pages"]
     data = next((p for p in pages if p.get("name") == "Data"), None)
@@ -195,20 +208,29 @@ def build_layout(spec, tiles=None):
         lines.append(f'<Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="{data["id"]}">')
         lines.append(f'  <LayoutElement elementId="{mid}" gridColumn="1 / 25" gridRow="1 / 21"/>')
         lines.append('</Page>')
+    control_ids = list(controls or [])
+    ctl_items, base_row = controls_band(control_ids)
     if tiles:
         items = tiles_items(tiles, kinds={e["id"]: e.get("kind") for e in main["elements"]})
     else:
         elems = [{"id": e["id"], "kind": e["kind"]} for e in main["elements"]
-                 if e.get("kind") != "container" and not str(e.get("id", "")).startswith("band-")]
+                 if e.get("kind") not in ("container", "control")
+                 and not str(e.get("id", "")).startswith("band-")]
         items = auto_items(elems)
+    if ctl_items:
+        # drop the tiles/charts below the controls band so nothing overlaps it
+        shift = base_row - (min(i[3] for i in items) if items else base_row)
+        if items:
+            items = [[i[0], i[1], i[2], i[3] + shift, i[4] + shift] for i in items]
+        items = ctl_items + items
     title = main.get("name") or spec.get("name") or "Dashboard"
     page, extra = banded_page(main["id"], items, title)
     lines.append(page)
     return "\n".join(lines) + "\n", main, extra
 
-def apply(wb, tiles=None):
+def apply(wb, tiles=None, controls=None):
     spec = json.loads(req("GET", f"/v2/workbooks/{wb}/spec"))
-    xml, main, extra = build_layout(spec, tiles=tiles)
+    xml, main, extra = build_layout(spec, tiles=tiles, controls=controls)
     # idempotent: drop previously-injected band elements, then add this run's
     main["elements"] = [e for e in main["elements"]
                         if not (str(e.get("id", "")).startswith("band-")
@@ -228,18 +250,19 @@ def main():
     ap.add_argument("workbooks", nargs="*", help="specific workbook ids (auto grid; skips the manifest)")
     a = ap.parse_args()
     if a.workbooks:
-        jobs = [(wb, None) for wb in a.workbooks]
+        jobs = [(wb, None, None) for wb in a.workbooks]
     else:
         wd = os.path.abspath(os.path.expanduser(a.workdir or os.environ.get("TS_WORKDIR")
                              or os.path.join(os.getcwd(), "ts-migration")))
         manifest = os.path.join(wd, "migrate_out.json")
         m = json.load(open(manifest))
         results = m.get("results", m)          # new manifest nests under "results"
-        jobs = [(r["workbook"], r.get("tiles")) for r in results.values() if r.get("workbook")]
+        jobs = [(r["workbook"], r.get("tiles"), r.get("controls"))
+                for r in results.values() if r.get("workbook")]
     ok = 0
-    for wb, tiles in jobs:
+    for wb, tiles, controls in jobs:
         try:
-            apply(wb, tiles=tiles); ok += 1
+            apply(wb, tiles=tiles, controls=controls); ok += 1
             print(f"✓ laid out {wb} ({'TML tiles' if tiles else 'auto grid'})")
         except Exception as e:
             print(f"✗ {wb}: {e}")
