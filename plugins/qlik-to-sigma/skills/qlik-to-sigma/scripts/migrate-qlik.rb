@@ -574,21 +574,25 @@ mark('phase5-layout')
 # ---------------------------------------------------------------------------
 unless opts[:dry_run]
   vqa = File.join(WORK, 'visual-qa'); FileUtils.mkdir_p(vqa)
-  live = (Sigma.request(:get, "/v2/workbooks/#{WB_ID}/spec") rescue {})
-  wbspec = live.is_a?(Hash) ? (live['spec'] || live) : {}
+  # Page ids come from the LOCAL spec the builder wrote — deterministic. (The
+  # live GET /spec readback proved flaky inside the pipeline, silently yielding
+  # zero pages; POST preserves these ids so the local copy is authoritative.)
+  wbspec = (JSON.parse(File.read(File.join(WORK, 'wb-spec.json'))) rescue {})
   content_pages = (wbspec['pages'] || []).reject { |p| p['id'].to_s.downcase.include?('data') }
+  tok = (Sigma.auth_token rescue ENV['SIGMA_API_TOKEN'])
   pngs = []
   content_pages.each do |pg|
     out = File.join(vqa, "#{pg['id']}.png")
-    _o, st = Open3.capture2e('python3', File.join(HERE, 'sigma-export-png.py'),
+    _o, st = Open3.capture2e({ 'SIGMA_API_TOKEN' => tok.to_s }, 'python3',
+                             File.join(HERE, 'sigma-export-png.py'),
                              '--workbook', WB_ID, '--page', pg['id'], '--out', out, '--w', '1800', '--h', '1000')
-    st.success? ? pngs << out : (puts "   [warn] visual-QA render failed for page #{pg['id']}")
+    st.success? ? (pngs << out) : (puts "   [warn] visual-QA render failed for page #{pg['id']}")
   end
+  puts "   ✓ rendered #{pngs.size}/#{content_pages.size} full-page PNG(s) for visual QA → #{vqa}"
   if pngs.any?
-    puts "   ✓ rendered #{pngs.size} full-page PNG(s) → #{vqa}"
     puts '   VISUAL QA (mandatory review — do not skip): open each PNG and check vs'
-    puts '   refs/layout-visual-qa.md AND the source Qlik sheet — populated controls, titles'
-    puts '   present, right chart kinds, sensible colors/heights, no overlaps/dead zones.'
+    puts '   refs/layout-visual-qa.md AND the source Qlik sheet capture — populated controls,'
+    puts '   titles present, right chart kinds, sensible colors/heights, no overlaps/dead zones.'
   end
 end
 mark('phase5b-visual-qa')
