@@ -44,6 +44,15 @@ ruby scripts/migrate-tableau.rb --workbook "<name>" \
   --finalize --actuals <workdir>/parity-actuals.json [--allow-missing-tiles N]
 ```
 
+> **Parity is EXACT for warehouse-backed migrations — never blame "drift."** Sigma
+> queries the **same warehouse** the Tableau source reads, so a value gap is a real
+> bug (a missing view filter / NULL bucket, an ungrouped table, a wrong aggregate),
+> NOT data freshness. The drift-tolerance path (`extract-mode`) is **only** valid for
+> `hasExtracts=true` workbooks (frozen `.hyper` snapshots) and must be explicitly
+> flagged. Do not attribute a gap to drift on a live-warehouse source, and do not
+> declare GREEN while a table renders base-row-count detail or a chart shows a
+> NULL-dominant bucket — run `scripts/lib/preflight_lint.rb` on the spec first.
+
 Chains the scripted spine (discover → scan-workbook-gaps → discover-columns →
 find-or-pick-dm → DM build/validate/post → build-charts-from-signals → workbook
 post-and-readback → build-dashboard-layout + put-layout → phase6-parity →
