@@ -262,6 +262,24 @@ def qlik_eval(app, ctx_args, expr):
     return lines[1].strip() if out.returncode == 0 and len(lines) >= 2 else None
 
 
+def _resolve_title(props, app, ctx_args):
+    """A chart title may be a STATIC string or a Qlik string-expression
+    ({qStringExpression:{qExpr:"='Total Revenue = ' & num(Sum(...))"}}). Return a
+    plain string: static as-is, dynamic EVALUATED via the engine to its rendered
+    text (a snapshot — matches what Qlik shows). Without this the dict reached the
+    builder as the element name and the title rendered broken/blank."""
+    for t in [(props.get("qMetaDef") or {}).get("title"), props.get("title")]:
+        if isinstance(t, str) and t.strip():
+            return t
+        if isinstance(t, dict):
+            qexpr = (t.get("qStringExpression") or {}).get("qExpr")
+            if qexpr:
+                val = qlik_eval(app, ctx_args, qexpr)
+                if val not in (None, ""):
+                    return val
+    return None
+
+
 def bucket_expr(dims):
     """The distinct-bucket-count expression Phase 6 compares per chart —
     MUST stay in sync with migrate-qlik.rb's bucket parity (same string)."""
@@ -505,7 +523,7 @@ def main():
                     break
         rec = {
             "id": oid, "vizType": qtype,
-            "title": (props.get("qMetaDef") or {}).get("title") or (props.get("title")),
+            "title": _resolve_title(props, a.app, ctx),
             "sheet": obj_sheet.get(oid),
             "dimensions": [ (dd.get("qDef", {}).get("qFieldDefs") or [dd.get("qLibraryId")]) for dd in qdims ],
             "dimLabels": [ ((dd.get("qDef", {}).get("qFieldLabels") or [None]) or [None])[0] for dd in qdims ],
