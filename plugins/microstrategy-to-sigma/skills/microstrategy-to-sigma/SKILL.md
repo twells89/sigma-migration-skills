@@ -13,6 +13,10 @@ user-invocable: true
 
 # MicroStrategy → Sigma migration
 
+## Preflight the workbook spec before POST (mandatory)
+
+Before POSTing any workbook spec, run `ruby scripts/lib/preflight_lint.rb <spec.json>` — it exits 1 with a precise message on the two migration-killer bugs: a `table` with aggregate columns + dimensions but **no `groupings`** (renders raw detail rows), and a malformed `control` (missing `id`/`controlId`/`controlType` or the flat list value fields `source`/`mode`/`selectionMode`/`values`). Fix every violation first — never POST past it, and **never conclude a feature is "unsupported" from an `Invalid kind` error** (it means the inner fields are wrong). Verified shapes: `sigma-workbooks` `controls.md` / `tables.md`.
+
 ## Phase 0 — Choose where to build (ask first; `--folder-id` is required downstream)
 
 Don't pick the destination folder for the user. `convert.py` requires `--folder-id`,
