@@ -48,27 +48,47 @@ MONTH_NUM = {
   'jul' => 7, 'aug' => 8, 'sep' => 9, 'sept' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12
 }.freeze
 
-# Canonicalize date-like dimension values so monthly buckets compare equal across
-# representations (e.g. Sigma raw SQL "2026-01-01T00:00:00.000" vs Tableau view
-# label "January 2026" both → "2026-01"). Non-date strings pass through.
+# Canonicalize date-like dimension values to a DAY-grain key so buckets compare
+# equal across representations:
+#   Sigma raw SQL "2026-01-04T00:00:00.000"   → "2026-01-04"
+#   Tableau weekly label "February 4, 2024"   → "2024-02-04"
+#   Tableau monthly label "January 2026"      → "2026-01"
+# Weekly grains MUST keep the underlying date value (bead s6fo) — the old
+# collapse-day-1-to-month rule turned the "January 1" WEEK bucket into a month
+# bucket and every weekly chart diverged. Month-label vs first-of-month is
+# reconciled by strict_compare's month-grain fallback, not here.
 def canonicalize_dim(v)
   return v unless v.is_a?(String)
   s = v.strip
-  # ISO datetime, day=1, midnight → month bucket (T or space separator)
-  if (m = s.match(/\A(\d{4})-(\d{2})-01[T ]00:00:00(?:\.0+)?(?:Z|[+-]\d{2}:?\d{2})?\z/))
-    return "#{m[1]}-#{m[2]}"
+  # ISO datetime at midnight → day bucket (T or space separator)
+  if (m = s.match(/\A(\d{4})-(\d{2})-(\d{2})[T ]00:00:00(?:\.0+)?(?:Z|[+-]\d{2}:?\d{2})?\z/))
+    return "#{m[1]}-#{m[2]}-#{m[3]}"
   end
-  # ISO date, first of month → month bucket
-  if (m = s.match(/\A(\d{4})-(\d{2})-01\z/))
-    return "#{m[1]}-#{m[2]}"
+  # ISO date stays a day bucket
+  return s if s.match?(/\A\d{4}-\d{2}-\d{2}\z/)
+  # "February 4, 2024" / "Feb 4, 2024" (Tableau day/week labels)
+  if (m = s.match(/\A([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\z/)) && (mnum = MONTH_NUM[m[1].downcase])
+    return format('%s-%02d-%02d', m[3], mnum, m[2].to_i)
   end
-  # "January 2026" / "Jan 2026"
+  # "January 2026" / "Jan 2026" → month bucket
   if (m = s.match(/\A([A-Za-z]+)\s+(\d{4})\z/)) && (mnum = MONTH_NUM[m[1].downcase])
     return format('%s-%02d', m[2], mnum)
+  end
+  # "2024 Q1" (Tableau quarter label) → first-of-quarter DAY bucket so it
+  # compares equal to Sigma's DateTrunc("quarter") value ("2024-01-01T00:00:00"
+  # canonicalizes to "2024-01-01" above). Added for window-function pivots
+  # (WINPROBE MaxMin: Region × Quarter grid).
+  if (m = s.match(/\A(\d{4})\s+Q([1-4])\z/i))
+    return format('%s-%02d-01', m[1], ((m[2].to_i - 1) * 3) + 1)
   end
   # Already-canonical "YYYY-MM"
   return s if s.match?(/\A\d{4}-\d{2}\z/)
   v
+end
+
+# Truncate a canonical day key to its month bucket (month-grain fallback).
+def month_grain(v)
+  v.is_a?(String) && v.match?(/\A\d{4}-\d{2}-\d{2}\z/) ? v[0, 7] : v
 end
 
 def round_row(row)
@@ -84,15 +104,33 @@ def round_row(row)
 end
 
 def strict_compare(exp, act)
-  exp_set = Set.new(exp.map { |r| r.first(2) })
-  act_set = Set.new(act.map { |r| r.first(2) })
-  if exp_set == act_set
-    { status: 'PASS', only_in_tableau: [], only_in_sigma: [] }
-  else
-    { status: 'DIVERGE',
-      only_in_tableau: (exp_set - act_set).to_a,
-      only_in_sigma:   (act_set - exp_set).to_a }
+  # Compare the FULL tuple width the plan carries (bead s6fo): 3-channel charts
+  # (stacked color / pivot row+col+value / scatter dim+x+y) must compare every
+  # channel — the old first(2) slice compared two dims and ignored the measure.
+  width = [(exp.map(&:size) + act.map(&:size)).max || 2, 2].max
+  exp_set = Set.new(exp.map { |r| r.first(width) })
+  act_set = Set.new(act.map { |r| r.first(width) })
+  return { status: 'PASS', only_in_tableau: [], only_in_sigma: [] } if exp_set == act_set
+
+  # Month-grain fallback — REPRESENTATION mismatches only: a monthly chart's
+  # Tableau label ("January 2026" → "2026-01") vs Sigma's DateTrunc value
+  # ("2026-01-01"). Applies ONLY when one side carries month-form keys and the
+  # other day-form keys — two day-form sides (e.g. weekly buckets shifted a
+  # day) must keep diverging.
+  month_form = ->(set) { set.any? { |r| r[0].is_a?(String) && r[0].match?(/\A\d{4}-\d{2}\z/) } }
+  day_form   = ->(set) { set.any? { |r| r[0].is_a?(String) && r[0].match?(/\A\d{4}-\d{2}-\d{2}\z/) } }
+  if (month_form.call(exp_set) && day_form.call(act_set)) ||
+     (day_form.call(exp_set) && month_form.call(act_set))
+    to_month = ->(set) { Set.new(set.map { |r| [month_grain(r[0]), *r[1..]] }) }
+    if to_month.call(exp_set) == to_month.call(act_set)
+      return { status: 'PASS', only_in_tableau: [], only_in_sigma: [],
+               notes: ['matched at month grain (label vs first-of-month representation)'] }
+    end
   end
+
+  { status: 'DIVERGE',
+    only_in_tableau: (exp_set - act_set).to_a,
+    only_in_sigma:   (act_set - exp_set).to_a }
 end
 
 # Extract-mode: same row count + same dim set + same dim sort. Measure values
