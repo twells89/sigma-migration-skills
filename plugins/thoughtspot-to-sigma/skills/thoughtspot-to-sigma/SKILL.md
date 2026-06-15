@@ -6,6 +6,19 @@ user-invocable: true
 
 # ThoughtSpot → Sigma migration
 
+## Phase 0 — Choose where to build (ask first when no destination given)
+
+Don't silently land the migrated data model + workbook in an auto-picked folder.
+If the user didn't supply a destination (no `SIGMA_FOLDER_ID`), ASK before building:
+
+1. `python3 scripts/pick_destination.py list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
+   an existing **folder**, **My Documents** (when non-null — null for service tokens), or
+   **create a new folder**: `python3 scripts/pick_destination.py create --name "<name>" [--parent <workspace-or-folder-id>]`
+3. Export the chosen id as `SIGMA_FOLDER_ID=<id>`. `folderId` accepts a workspace id or a folder id.
+
+If `SIGMA_FOLDER_ID` is already set, honor it silently — don't ask.
+
 Recreate a ThoughtSpot **model/worksheet** as a Sigma **data model**, and its
 **Liveboards** as Sigma **workbooks**, with parity verified against the live
 warehouse.

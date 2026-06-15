@@ -14,6 +14,19 @@ user-invocable: true
 
 # Looker → Sigma Conversion
 
+## Phase 0 — Choose where to build (ask first when no destination given)
+
+Don't silently land the migrated data model + workbook in an auto-picked folder.
+If the user didn't supply a destination (no `--folder <id>` and no `SIGMA_FOLDER_ID`), ASK before building:
+
+1. `python3 scripts/pick_destination.py list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
+   an existing **folder**, **My Documents** (when non-null — null for service tokens), or
+   **create a new folder**: `python3 scripts/pick_destination.py create --name "<name>" [--parent <workspace-or-folder-id>]`
+3. Pass the chosen id as `--folder <id>`. `folderId` accepts a workspace id or a folder id.
+
+If a destination is already supplied, honor it silently — don't ask.
+
 Convert a Looker LookML semantic model into a Sigma data model, then build Sigma
 workbook(s) that mirror the Looker dashboards (user-defined OR LookML-defined) as
 closely as possible — and verify the numbers match Looker AND the warehouse.

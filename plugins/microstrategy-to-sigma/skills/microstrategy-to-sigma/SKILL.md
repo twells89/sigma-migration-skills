@@ -13,6 +13,19 @@ user-invocable: true
 
 # MicroStrategy → Sigma migration
 
+## Phase 0 — Choose where to build (ask first; `--folder-id` is required downstream)
+
+Don't pick the destination folder for the user. `convert.py` requires `--folder-id`,
+so resolve it WITH the user before building:
+
+1. `python3 scripts/pick_destination.py list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
+   an existing **folder**, **My Documents** (when non-null — null for service tokens), or
+   **create a new folder**: `python3 scripts/pick_destination.py create --name "<name>" [--parent <workspace-or-folder-id>]`
+3. Pass the chosen id as `--folder-id <id>`. `folderId` accepts a workspace id or a folder id.
+
+If the user already named a destination, honor it silently — don't ask.
+
 Extract a MicroStrategy **dossier + its full semantic model** into one
 `bundle.json`, convert it to a Sigma **data model** (table sources + joins +
 metrics) and a matching **workbook**, then **verify row-level parity** against

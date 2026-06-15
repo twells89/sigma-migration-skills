@@ -6,6 +6,19 @@ user-invocable: true
 
 # QuickSight → Sigma
 
+## Phase 0 — Choose where to build (ask first when no destination given)
+
+Don't silently land the migrated data model + workbook in an auto-picked folder.
+If the user didn't supply a destination (no `--folder <id-or-name>`), ASK before building:
+
+1. `ruby scripts/pick-destination.rb list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
+   an existing **folder**, **My Documents** (when non-null — null for service tokens), or
+   **create a new folder**: `ruby scripts/pick-destination.rb create --name "<name>" [--parent <workspace-or-folder-id>]`
+3. Pass the chosen id as `--folder <id>` (the downstream `--fixup` step requires a folderId).
+
+If a destination is already supplied, honor it silently — don't ask.
+
 > Status: **foundation** (converter MCP + browser shipped 2026-05-28).
 > Beads: converter = `beads-sigma-j5e`; CustomSql/DIRECT_QUERY fixup = `beads-sigma-vy4k`.
 > Defers to: `sigma-workbooks` (canonical workbook spec), `sigma-data-models` (DM spec), the `convert_quicksight_to_sigma` MCP tool, and the shared vendor-neutral Sigma-side scripts (`post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `verify-parity.rb`) reused across the migration skills.

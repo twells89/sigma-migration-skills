@@ -6,6 +6,19 @@ user-invocable: true
 
 # Power BI → Sigma
 
+## Phase 0 — Choose where to build (ask first when no destination given)
+
+Don't silently land the migrated data model + workbook in an auto-picked folder.
+If the user didn't supply a destination (no `--folder <id>`), ASK before building:
+
+1. `ruby scripts/pick-destination.rb list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
+   an existing **folder**, **My Documents** (when non-null — null for service tokens), or
+   **create a new folder**: `ruby scripts/pick-destination.rb create --name "<name>" [--parent <workspace-or-folder-id>]`
+3. Pass the chosen id as `--folder <id>`. `folderId` accepts a workspace id or a folder id.
+
+If a destination is already supplied, honor it silently — don't ask.
+
 > Status: **foundation** (validated end-to-end 2026-05-31 on the "Employee Dashboard" workforce report).
 > Beads: build = `beads-sigma-cs2`; converter gaps = `j89` (M-Snowflake path), `tkd` (element names / schemaVersion / folderId).
 > Defers to: `sigma-workbooks` (canonical workbook spec), `sigma-data-models` (DM spec), the `convert_powerbi_to_sigma` MCP tool, and `tableau-to-sigma/scripts/*` (reused verbatim for posting + layout + parity).

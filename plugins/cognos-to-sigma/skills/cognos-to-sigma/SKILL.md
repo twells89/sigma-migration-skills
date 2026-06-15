@@ -11,6 +11,19 @@ user-invocable: true
 
 # Cognos → Sigma migration
 
+## Phase 0 — Choose where to build (ask first when no destination given)
+
+Don't silently land the migrated data model + workbook in My Documents.
+If the user didn't supply a destination (no `--folder <id>`), ASK before building:
+
+1. `node scripts/pick-destination.mjs list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
+   an existing **folder**, **My Documents** (when non-null — null for service tokens), or
+   **create a new folder**: `node scripts/pick-destination.mjs create --name "<name>" [--parent <workspace-or-folder-id>]`
+3. Pass the chosen id as `--folder <id>`. `folderId` accepts a workspace id or a folder id.
+
+If a destination is already supplied, honor it silently — don't ask.
+
 Convert a Cognos **Data Module** into a Sigma **data model**, then convert the Cognos
 **report** that sits on it into a matching Sigma **workbook**. Translate what maps
 cleanly; **flag what doesn't** (runtime macros, running-totals, localization) instead
