@@ -259,6 +259,35 @@ def qlik_sort(c, dim_ids, meas_ids):
                 return meas_ids[idx - ndims], "ascending" if mb["qSortByNumeric"] == 1 else "descending"
     return None
 
+# Qlik measure color schemes -> Sigma `scheme` arrays (low->high). 'dg'/'dc' are
+# Qlik's diverging palettes, 'sg'/'sc' the sequential ones; reverseScheme flips.
+QLIK_MSCHEME = {
+    "dg": ["#a50026", "#f46d43", "#fee090", "#74add1", "#313695"],  # diverging red->blue
+    "dc": ["#a50026", "#f46d43", "#fee090", "#74add1", "#313695"],
+    "sg": ["#ffffcc", "#fd8d3c", "#bd0026"],                        # sequential
+    "sc": ["#ffffcc", "#fd8d3c", "#bd0026"],
+}
+
+def qlik_color(color, dim_ids, mids, el):
+    """Map a Qlik chart color encoding to a Sigma `color` channel, or None.
+    byMeasure -> color:{by:scale} on a DUPLICATE measure column (a column can't
+    be on both yAxis and color); byDimension -> color:{by:category} on the dim."""
+    c = color or {}
+    mode = c.get("mode")
+    if mode == "byMeasure" and mids:
+        scheme = list(QLIK_MSCHEME.get(c.get("measureScheme"), QLIK_MSCHEME["sg"]))
+        if c.get("reverseScheme"): scheme.reverse()
+        base = next((col for col in el["columns"] if col["id"] == mids[0]), None)
+        if not base: return None
+        cid = nid("clr")
+        dup = {"id": cid, "formula": base["formula"], "name": base["name"] + " (color)"}
+        if base.get("format"): dup["format"] = base["format"]
+        el["columns"].append(dup)
+        return {"by": "scale", "column": cid, "scheme": scheme}
+    if mode in ("byDimension", "byExpression") and dim_ids:
+        return {"by": "category", "column": dim_ids[0]}
+    return None
+
 def build_element(c, resolve, warnings):
     """One Qlik chart object -> one Sigma element (or None + warning)."""
     title = c.get("title") or c.get("vizType")
@@ -410,6 +439,8 @@ def build_element(c, resolve, warnings):
     el["yAxis"] = {"columnIds": mids}
     if sort: el["xAxis"]["sort"] = {"by": sort[0], "direction": sort[1]}
     if kind == "bar-chart": el["dataLabel"] = {"labels": "shown"}
+    cc = qlik_color(c.get("color"), dim_ids, mids, el)
+    if cc: el["color"] = cc
     return el
 
 # ---- container-banded layout (layout-playbook.md, verified 2026-06-10) -----

@@ -499,6 +499,9 @@ def main():
             "measureLabels": [ mm.get("qDef", {}).get("qLabel") for mm in qmeas ],
             "measureFmts": [ (mm.get("qDef", {}).get("qNumFormat") or {}).get("qFmt") for mm in qmeas ],
             "sort": sort,
+            # color encoding (byMeasure gradient / byDimension category) so the
+            # builder can reproduce the Qlik chart's color, not default it.
+            "color": props.get("color"),
         }
         # Filter objects (control-targeting wave): a listbox's field lives on
         # qListObjectDef (NOT the hypercube), and an alternate-state object
