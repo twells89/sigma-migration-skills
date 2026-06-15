@@ -116,6 +116,55 @@ def sigma_format_for(value_format_name, value_format):
     return {"kind": "number", "formatString": fs}
 
 
+# ── Looker continuous (by-value) color schemes -> Sigma `scheme` arrays ──────
+# Looker's `color_application.collection_id` names a built-in continuous palette.
+# Sigma's color:{by:scale} takes an explicit `scheme` array (low->high). Map the
+# common Looker collections to representative low->high stops; an unknown
+# collection falls back to a neutral sequential ramp. `reverse` flips it. A
+# `color_application.custom.colors` array (UI-picked custom ramp) wins outright.
+LOOKER_CONT_SCHEME = {
+    "default":            ["#f7fbff", "#6baed6", "#08306b"],  # sequential blue
+    "blues":              ["#f7fbff", "#6baed6", "#08306b"],
+    "sequential":         ["#ffffcc", "#fd8d3c", "#bd0026"],
+    "sequential0":        ["#ffffcc", "#fd8d3c", "#bd0026"],
+    "diverging":          ["#a50026", "#fee090", "#313695"],  # red-yellow-blue
+    "diverging0":         ["#a50026", "#fee090", "#313695"],
+    "legacy_diverging":   ["#a50026", "#fee090", "#313695"],
+}
+LOOKER_CONT_FALLBACK = ["#ffffcc", "#fd8d3c", "#bd0026"]
+
+
+def looker_color_scheme(color):
+    """color_application -> Sigma continuous `scheme` (low->high) for by-measure.
+    Honors a custom ramp + `reverse`; else maps the named collection."""
+    ca = (color or {}).get("colorApplication") or {}
+    custom = ca.get("custom") or {}
+    scheme = None
+    if isinstance(custom.get("colors"), list) and custom["colors"]:
+        scheme = [c for c in custom["colors"] if isinstance(c, str)]
+    if not scheme:
+        key = str(ca.get("collectionId") or ca.get("paletteId") or "").lower()
+        scheme = list(LOOKER_CONT_SCHEME.get(key, LOOKER_CONT_FALLBACK))
+    else:
+        scheme = list(scheme)
+    if ca.get("reverse"):
+        scheme.reverse()
+    return scheme
+
+
+def looker_cat_palette(color):
+    """Explicit categorical palette Looker declared, low->high, or None. Prefers
+    a `colors` array; falls back to the ordered values of `series_colors`."""
+    c = color or {}
+    pal = [x for x in (c.get("palette") or []) if isinstance(x, str)]
+    if pal:
+        return pal
+    sc = c.get("seriesColors") or {}
+    if sc:
+        return [v for v in sc.values() if isinstance(v, str)] or None
+    return None
+
+
 # ── parse view files: classify fields as measure (agg + base col) or dimension ──
 def build_field_index(view_files):
     measures = {}   # "view.field" -> (agg_type, base_display_or_None, sql, filters)
@@ -434,6 +483,59 @@ def main():
                                 f"with no primary_key — used Count() (counts fact rows). Add a PK to "
                                 f"'{v}' for CountDistinct parity.")
 
+    def refline_value_formula(rl, explore):
+        """A Looker reference line's value -> a Sigma refMark `value.formula`
+        string. A literal number is kept as-is; a field/measure ref (`view.field`
+        or `${view.field}`) is translated to the same Sigma formula the tile
+        would use; a bare expr string is passed through. Returns None when there
+        is nothing to anchor the line to (range/band lines)."""
+        v = rl.get("value")
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return str(v)
+        s = str(v).strip()
+        if not s:
+            return None
+        # numeric literal as a string?
+        if re.fullmatch(r"-?\d+(\.\d+)?", s):
+            return s
+        # field reference (view.field or ${view.field}) -> tile formula
+        fm = re.fullmatch(r"\$\{([\w.]+)\}", s) or re.fullmatch(r"([\w]+\.[\w]+)", s)
+        if fm:
+            f = fm.group(1)
+            if f in measures or f in dims:
+                return formula_for(f, explore)
+        return s   # pass an arbitrary expression through untouched
+
+    def looker_refmarks(el):
+        """Looker tile reference_lines -> Sigma refMarks (cartesian charts only).
+        Mirrors qlik_refmarks: value MUST be the wrapped {type:formula,formula}
+        form (a bare number 400s); label.visibility must be 'shown'. Y-anchored
+        value/min/max/average/median lines map to axis 'series'; range/band
+        reference_types have no single-value Sigma equivalent and are warned +
+        skipped rather than emitted wrong."""
+        out = []
+        for rl in (el.get("referenceLines") or []):
+            rtype = rl.get("referenceType") or "line"
+            if rtype == "range" or rl.get("rangeStart") is not None or rl.get("rangeEnd") is not None:
+                warnings.append(f"tile '{el['name']}': reference RANGE/band has no single-value "
+                                "Sigma refMark equivalent — skipped (add a shaded band in the UI)")
+                continue
+            formula = refline_value_formula(rl, el["explore"])
+            if not formula:
+                warnings.append(f"tile '{el['name']}': reference line ({rtype}) has no resolvable "
+                                f"value — skipped")
+                continue
+            rm = {"type": "line", "axis": "series",
+                  "value": {"type": "formula", "formula": formula},
+                  "line": {"color": rl.get("color") or "#ef4444",
+                           "width": int(rl["lineWidth"]) if str(rl.get("lineWidth") or "").strip().isdigit() else 2}}
+            if rl.get("label"):
+                rm["label"] = {"visibility": "shown", "text": rl["label"]}
+            out.append(rm)
+        return out
+
     # ── master columns: every dim col used + every measure base col + filter cols ──
     def need(display, explore):
         nd = master_of(explore)["needed"]
@@ -651,7 +753,11 @@ def main():
                     clr = sid("clr")
                     cols.append({"id": clr, "formula": formula_for(ds[0], ex), "name": col_display(ds[0], ex)})
                     base["color"] = {"by": "category", "column": clr}
+                    pal = looker_cat_palette(el.get("color"))
+                    if pal: base["color"]["colors"] = pal
                 for mf in (ms[:2] or []): _warn_count(mf, el)
+            rm = looker_refmarks(el)
+            if rm: base["refMarks"] = rm
         elif kind in ("bar-chart", "area-chart", "line-chart"):
             cols, ymids = [], []
             xid = sid("x"); xf = ds[0] if ds else (el["fields"][0] if el["fields"] else None)
@@ -669,16 +775,37 @@ def main():
             base["columns"] = cols
             base["xAxis"] = {"columnId": xid}; base["yAxis"] = {"columnIds": ymids}
             # Looker pivot → Sigma series via the color channel (split/stack by the
-            # pivot dimension). One color channel; extra pivots → UI.
+            # pivot dimension). One color channel; extra pivots → UI. Reproduce the
+            # categorical palette Looker declared (series_colors / colors) when present.
             if el["pivots"]:
                 pf = el["pivots"][0]
                 pcid = sid("clr")
                 cols.append({"id": pcid, "formula": formula_for(pf, ex), "name": col_display(pf, ex)})
                 base["color"] = {"by": "category", "column": pcid}
+                pal = looker_cat_palette(el.get("color"))
+                if pal:
+                    base["color"]["colors"] = pal
                 if len(el["pivots"]) > 1:
                     warnings.append(f"tile '{el['name']}': multiple pivots {el['pivots']} — only first set as series; add the rest in Sigma UI")
+            elif ms and (el.get("color") or {}).get("colorApplication"):
+                # No pivot dimension but Looker colors the bars by VALUE (a
+                # continuous color_application on the measure). A column can't be on
+                # both yAxis and color, so DUPLICATE the (first) measure column and
+                # bind color:{by:scale} to the dup with the mapped scheme. Mirrors
+                # the qlik byMeasure path (qlik_color).
+                base_m = next((c for c in cols if c["id"] == ymids[0]), None)
+                if base_m is not None:
+                    dupid = sid("clr")
+                    dup = {"id": dupid, "formula": base_m["formula"],
+                           "name": base_m["name"] + " (color)"}
+                    if base_m.get("format"): dup["format"] = base_m["format"]
+                    cols.append(dup)
+                    base["color"] = {"by": "scale", "column": dupid,
+                                     "scheme": looker_color_scheme(el.get("color"))}
             if el["tileType"] == "looker_donut_multiples":
                 warnings.append(f"tile '{el['name']}': donut_multiples -> single donut-chart (Looker shows N donuts)")
+            rm = looker_refmarks(el)
+            if rm: base["refMarks"] = rm
         elif kind in ("pie-chart", "donut-chart"):
             # donut/pie use value + color (slice category), NOT xAxis/yAxis.
             catf = el["pivots"][0] if el["pivots"] else (ds[0] if ds else (el["fields"][0] if el["fields"] else None))
@@ -694,6 +821,8 @@ def main():
             ]
             base["value"] = {"id": valid}      # donut/pie use value.id (KPI uses value.columnId)
             base["color"] = {"id": catid}
+            pal = looker_cat_palette(el.get("color"))
+            if pal: base["color"]["colors"] = pal
             if catf: field2cid[catf] = catid
             if valf: field2cid[valf] = valid
             if valf: _warn_count(valf, el)

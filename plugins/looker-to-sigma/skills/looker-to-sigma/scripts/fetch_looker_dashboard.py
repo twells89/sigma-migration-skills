@@ -47,11 +47,53 @@ def _query_of(el):
     return rm.get("query") or {}
 
 
+def _vis_config(el, q):
+    """The active vis_config dict (query > result_maker > element)."""
+    for src in (q.get("vis_config"), (el.get("result_maker") or {}).get("vis_config"), el.get("vis_config")):
+        if isinstance(src, dict):
+            return src
+    return {}
+
+
 def _vis_type(el, q):
     for src in (q.get("vis_config"), (el.get("result_maker") or {}).get("vis_config"), el.get("vis_config")):
         if isinstance(src, dict) and src.get("type"):
             return src["type"]
     return el.get("type")  # fallback ("vis"/"text")
+
+
+def _reflines(vc):
+    """vis_config.reference_lines[] -> normalized list (see parse_lookml_dashboard
+    .norm_reflines). Looker keys: reference_type, line_value|value, range_start/
+    range_end, label, color, line_width."""
+    out = []
+    for r in (vc.get("reference_lines") or []):
+        if not isinstance(r, dict):
+            continue
+        out.append({
+            "referenceType": (r.get("reference_type") or "line").lower(),
+            "value": r.get("line_value") if r.get("line_value") is not None else r.get("value"),
+            "rangeStart": r.get("range_start"), "rangeEnd": r.get("range_end"),
+            "label": r.get("label"), "color": r.get("color"),
+            "lineWidth": r.get("line_width"),
+        })
+    return out
+
+
+def _color(vc):
+    """vis_config color knobs -> normalized dict (series_colors / colors /
+    color_application). Mirrors parse_lookml_dashboard.norm_color."""
+    ca = vc.get("color_application") if isinstance(vc.get("color_application"), dict) else {}
+    opts = ca.get("options") if isinstance(ca.get("options"), dict) else {}
+    return {
+        "seriesColors": vc.get("series_colors") if isinstance(vc.get("series_colors"), dict) else {},
+        "palette": [c for c in (vc.get("colors") or []) if isinstance(c, str)],
+        "colorApplication": {
+            "collectionId": ca.get("collection_id"), "paletteId": ca.get("palette_id"),
+            "custom": ca.get("custom") if isinstance(ca.get("custom"), dict) else None,
+            "reverse": bool(opts.get("reverse")), "steps": opts.get("steps"),
+        } if ca else None,
+    }
 
 
 def _dyn(df):
@@ -113,6 +155,7 @@ def normalize(d):
             continue
         if not q and el.get("type") in (None, "text") and not el.get("title"):
             continue
+        vc = _vis_config(el, q)
         elements.append({
             "name": el.get("title") or el.get("title_text") or f"element_{el.get('id')}",
             "tileType": _vis_type(el, q),
@@ -126,6 +169,9 @@ def normalize(d):
             "dynamicFields": _dyn(q.get("dynamic_fields")),
             "noteText": el.get("note_text"), "subtitleText": el.get("subtitle_text"),
             "bodyText": el.get("body_text"),
+            # chart reference lines + color encoding (vis_config) → Sigma refMarks/color
+            "referenceLines": _reflines(vc),
+            "color": _color(vc),
             "layout": comp_by_el.get(el.get("id"), {}),
         })
 

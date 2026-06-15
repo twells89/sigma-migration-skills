@@ -16,6 +16,59 @@ except ImportError:
     sys.exit("PyYAML required: pip install pyyaml")
 
 
+def norm_reflines(viz):
+    """Looker `reference_lines:` (chart viz config) -> normalized list. Each
+    Looker entry is {reference_type, line_value|value|range_start/range_end,
+    label, color, line_width}. We only port single-value lines (reference_type
+    'line'/'min'/'max'/'average'/'median' with a numeric/expr value or a field
+    `value_format`-style anchor); ranges/bands are flagged with show:False so
+    the builder can warn rather than emit a wrong mark. Value can be a literal
+    number, a field ref, or a Looker formula string — kept raw for the builder
+    to wrap as a Sigma formula."""
+    out = []
+    for r in (viz.get("reference_lines") or []):
+        if not isinstance(r, dict):
+            continue
+        rtype = (r.get("reference_type") or "line").lower()
+        val = r.get("line_value")
+        if val is None:
+            val = r.get("value")
+        out.append({
+            "referenceType": rtype,
+            "value": val,                       # number | field ref | expr | None
+            "rangeStart": r.get("range_start"),
+            "rangeEnd": r.get("range_end"),
+            "label": r.get("label"),
+            "color": r.get("color"),
+            "lineWidth": r.get("line_width"),
+        })
+    return out
+
+
+def norm_color(viz):
+    """Looker color encoding (chart viz config) -> normalized dict for the
+    builder. Captures the three Looker color knobs:
+      * series_colors  {seriesName: "#hex"} — explicit per-series colors
+      * colors         ["#hex", ...]        — categorical palette
+      * color_application {collection_id, palette_id, options:{steps,reverse}}
+                                            — continuous / by-value scheme
+    The builder decides by-measure vs by-category from the tile shape; this just
+    surfaces what Looker declared so the palette/scheme can be reproduced."""
+    ca = viz.get("color_application") if isinstance(viz.get("color_application"), dict) else {}
+    opts = ca.get("options") if isinstance(ca.get("options"), dict) else {}
+    return {
+        "seriesColors": viz.get("series_colors") if isinstance(viz.get("series_colors"), dict) else {},
+        "palette": [c for c in (viz.get("colors") or []) if isinstance(c, str)],
+        "colorApplication": {
+            "collectionId": ca.get("collection_id"),
+            "paletteId": ca.get("palette_id"),
+            "custom": ca.get("custom") if isinstance(ca.get("custom"), dict) else None,
+            "reverse": bool(opts.get("reverse")),
+            "steps": opts.get("steps"),
+        } if ca else None,
+    }
+
+
 def norm_element(el):
     return {
         "name": el.get("name") or el.get("title"),
@@ -38,6 +91,10 @@ def norm_element(el):
         # single_value comparison (Sigma KPI spec has no comparison slot → warn)
         "showComparison": bool(el.get("show_comparison")),
         "comparisonType": el.get("comparison_type"),
+        # chart reference lines (vis config) → Sigma refMarks
+        "referenceLines": norm_reflines(el),
+        # color encoding (series_colors / colors / color_application) → Sigma color channel
+        "color": norm_color(el),
         # newspaper grid units (LookML uses `col`; API uses `column` — normalize to col)
         "layout": {
             "row": el.get("row", 0), "col": el.get("col", 0),
