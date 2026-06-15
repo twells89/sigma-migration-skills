@@ -293,6 +293,105 @@ def apply_qs_sorts(el, inner, kind, title, warnings)
   end
 end
 
+# ---- QS ReferenceLines -> Sigma refMarks (B-gap: reference lines) ------------
+# QuickSight reference lines live at ChartConfiguration.ReferenceLines[] on the
+# cartesian visuals (bar/line/area/combo/scatter). Each entry:
+#   { "Status": "ENABLED",
+#     "DataConfiguration": {
+#       "AxisBinding": "PRIMARY_YAXIS",          # PRIMARY_YAXIS|SECONDARY_YAXIS = series; *_XAXIS = axis
+#       "StaticConfiguration": { "Value": 0.45 } # a constant; OR
+#       "DynamicConfiguration": { "Calculation": {"SimpleNumericalAggregation":"AVERAGE"},
+#                                 "MeasureAggregationFunction": {...}, "Column": {...} } },
+#     "LabelConfiguration": { "CustomLabelConfiguration": { "CustomLabel": "Target" },
+#                             "FontColor": "#ef4444" },
+#     "StyleConfiguration": { "Color": "#ef4444", "Pattern": "DASHED" } }
+# Sigma refMarks (verified shape, qlik_refmarks() parity, 2026-06-15): the value
+# MUST be the wrapped { type:"formula", formula:"<expr>" } form (a bare number 400s);
+# label.visibility must be "shown". A static value -> the literal; a dynamic
+# (aggregation over a column) -> the Sigma aggregate formula over the master, so the
+# line tracks the data. X-axis bindings -> axis "axis"; Y/measure bindings -> "series".
+def qs_reference_lines(inner, calc, master_cols, dmel, m, title, warnings)
+  cc = inner['ChartConfiguration'] || {}
+  lines = cc['ReferenceLines']
+  return [] unless lines.is_a?(Array) && !lines.empty?
+  out = []
+  lines.each do |rl|
+    next if rl['Status'].to_s.upcase == 'DISABLED'
+    dc = rl['DataConfiguration'] || {}
+    axis = dc['AxisBinding'].to_s.upcase.include?('XAXIS') ? 'axis' : 'series'
+    formula = nil
+    if (sc = dc['StaticConfiguration']) && !sc['Value'].nil?
+      formula = sc['Value'].to_s
+    elsif (dyn = dc['DynamicConfiguration'])
+      # aggregation over a column -> Agg([Master/Col]); the line follows the data.
+      col = dyn.dig('Column', 'ColumnName') || dyn.dig('MeasureAggregationFunction', 'Column', 'ColumnName')
+      aggk = (dyn.dig('Calculation', 'SimpleNumericalAggregation') ||
+              dyn.dig('MeasureAggregationFunction', 'SimpleNumericalAggregation') || 'AVERAGE').to_s.upcase
+      if col
+        ref = master_ref(col, calc, master_cols, dmel)
+        formula = "#{AGG[aggk] || 'Avg'}([#{m}/#{ref['name']}])"
+      end
+    end
+    if formula.nil? || formula.empty?
+      warnings << { 'visual' => title, 'type' => 'ReferenceLine',
+                    'reason' => 'reference line has neither a static value nor a resolvable dynamic column — skipped' }
+      next
+    end
+    color = rl.dig('StyleConfiguration', 'Color') || rl.dig('LabelConfiguration', 'FontColor') || '#ef4444'
+    rm = { 'type' => 'line', 'axis' => axis,
+           'value' => { 'type' => 'formula', 'formula' => formula },
+           'line' => { 'color' => color, 'width' => 2 } }
+    lbl = rl.dig('LabelConfiguration', 'CustomLabelConfiguration', 'CustomLabel')
+    rm['label'] = { 'visibility' => 'shown', 'text' => lbl } if lbl && !lbl.to_s.empty?
+    out << rm
+  end
+  out
+end
+
+# ---- QS chart color encoding -> Sigma `color` channel (B-gap: by-measure / by-dimension)
+# QuickSight encodes series color two ways inside the aggregated field wells:
+#   * by DIMENSION — a `Colors` well holding a CategoricalDimensionField (the chart is
+#     split into one colored series per dimension value). -> Sigma color:{by:category}
+#     on that dimension's Sigma column (added to the element if not already present).
+#   * by MEASURE — a `ColorScale` (ColorFillType + Colors[] gradient stops) under the
+#     visual's ColorScale/ScalarColors config, coloring marks along a measure's value.
+#     A Sigma column can't sit on both yAxis and color, so (qlik_color() parity) we add
+#     a DUPLICATE of the first measure column and put color:{by:scale, scheme} on it.
+# Returns the color hash (and MUTATES el['columns'] for the by-scale dup / by-category
+# dim) or nil. `wells` is the inner aggregated-field-wells hash; dim_ids/m_ids are the
+# Sigma column ids already built for this element.
+def qs_color(inner, wells, el, dim_ids, m_ids, calc, master_cols, dmel, m)
+  cc = inner['ChartConfiguration'] || {}
+  # by-dimension: a Colors well with a categorical dimension
+  color_roles = (wells['Colors'] || []).map { |f| field_role(f) }.compact
+  cdim = color_roles.find { |r| r[0] == :dim }
+  if cdim
+    # reuse the dim column if it's already on the element, else add it
+    existing = (el['columns'] || []).find { |c| c['name'] == disp(cdim[1]) || c['name'] == cdim[1] }
+    if existing
+      return { 'by' => 'category', 'column' => existing['id'] }
+    end
+    dc, did = dim_col(cdim, calc, master_cols, dmel, m)
+    (el['columns'] ||= []) << dc
+    return { 'by' => 'category', 'column' => did }
+  end
+  # by-measure: a ColorScale gradient (ColorFillType + Colors[] stops). QS nests it
+  # under the aggregated field-wells (Color/ColorScale) OR ChartConfiguration.ColorScale.
+  cs = wells['ColorScale'] || cc['ColorScale']
+  if cs.is_a?(Hash) && !m_ids.empty?
+    stops = (cs['Colors'] || []).map { |st| st.is_a?(Hash) ? st['Color'] : st }.compact
+    scheme = stops.size >= 2 ? stops : ['#ffffcc', '#fd8d3c', '#bd0026']
+    base = (el['columns'] || []).find { |c| c['id'] == m_ids[0] }
+    return nil unless base
+    cid = "clr-#{SecureRandom.hex(4)}"
+    dup = { 'id' => cid, 'formula' => base['formula'], 'name' => "#{base['name']} (color)" }
+    dup['format'] = base['format'] if base['format']
+    (el['columns'] ||= []) << dup
+    return { 'by' => 'scale', 'column' => cid, 'scheme' => scheme }
+  end
+  nil
+end
+
 # Translate a QuickSight TableVisual ConditionalFormatting block into Sigma
 # `conditionalFormats` (D19). Supported QS -> Sigma mappings (verified spec-expressible
 # + round-tripping via /v2/workbooks/spec, 2026-06-06):
@@ -507,6 +606,122 @@ def window_meas?(role, calc)
   calc.key?(name) && qs_window_func?(calc[name])
 end
 
+# ---- C-gap: QuickSight CONTROLS -> Sigma list controls ----------------------
+# QuickSight interactivity lives at the SHEET level as FilterControls + ParameterControls
+# (NOT inside a visual). Until now this builder emitted ZERO control elements — every QS
+# dashboard migrated as a static workbook (filters inlined as constants / element-level).
+# We now reconstruct them as real Sigma `kind:control` list controls so the dropdowns
+# populate and drive the page (the silently-dropped class the control-scope gate exists
+# to kill). Shape mirrors the live-verified qlik-to-sigma builder:
+#   { kind:"control", controlId, name, controlType:"list", mode:"include",
+#     selectionMode:"multiple", values:[],
+#     source:{ kind:"source", source:{kind:"table", elementId:"master"}, columnId },
+#     filters:[{ source:{kind:"table", elementId:"master"}, columnId }] }
+# The double-nested `source` is what POPULATES the dropdown's value list from the master
+# column; `filters` is what makes the control DRIVE the master (and so, via source-closure,
+# every chart that sources the master). Date-typed columns become date-range controls
+# (a list control on a datetime target is silently stripped by the spec API).
+#
+# QS -> Sigma mapping:
+#   * FilterControls (Dropdown/List/...) -> resolve SourceFilterId through FilterGroups to
+#     the filtered Column.ColumnName, target the master column for that name.
+#   * ParameterControls (Dropdown/List/...) bound to a Column-typed parameter -> same.
+#     A ParameterControl bound to a WHAT-IF numeric parameter (no column) has no list-
+#     control equivalent (it feeds a calc-field constant) -> recorded UNBOUND/manual, not
+#     emitted (the value is already inlined by PARAM_DEFAULTS).
+QS_CONTROL_WRAPS = %w[Dropdown List Slider TextField TextArea DateTimePicker RelativeDateTime].freeze
+
+# Every FilterId -> filtered raw ColumnName, indexed across the analysis FilterGroups.
+QS_FILTER_COL = {}
+(defn['FilterGroups'] || []).each do |fg|
+  (fg['Filters'] || []).each do |flt|
+    body = flt.is_a?(Hash) ? flt.values.first : nil
+    next unless body.is_a?(Hash)
+    fid = body['FilterId']
+    col = body.dig('Column', 'ColumnName') || body.dig('ColumnName')
+    QS_FILTER_COL[fid] = col if fid && col
+  end
+end
+
+# Column-typed parameter? (ParameterDeclaration whose default came from a column.) We map
+# a ParameterControl to a column only when the analysis associates it with one; otherwise
+# it's a what-if scalar (inlined as a constant) and gets no list control.
+def qs_control_target_col(wrap, kind, filter_col_map)
+  body = wrap[kind] || {}
+  if (sfid = body['SourceFilterId'])
+    return [filter_col_map[sfid], body, :filter]
+  end
+  # ParameterControl: a Dropdown/List bound to a column surfaces SelectableValues or a
+  # LinkToDataSetColumn { Column: { ColumnName } }. A plain what-if param has neither.
+  col = body.dig('SelectableValues', 'LinkToDataSetColumn', 'ColumnName') ||
+        body.dig('CascadingControlConfiguration', 'SourceControls', 0, 'ColumnToMatch', 'ColumnName')
+  [col, body, :parameter]
+end
+
+# Build ONE Sigma control element for a QS FilterControl/ParameterControl wrap, or nil.
+# Pushes a control-scope CONTRACT row (scope/sourceName/status) or an `unbound` row so the
+# signal is NEVER silently dropped. Dedupes by target column (the same column filtered by
+# two controls is one Sigma control — controlIds are unique).
+def build_qs_control(wrap, master_cols, calc, dmel, scope, unbound, seen_cols, warnings)
+  ctype, body = nil, nil
+  raw_col = nil; src_kind = :filter
+  QS_CONTROL_WRAPS.each do |k|
+    next unless wrap[k].is_a?(Hash)
+    raw_col, body, src_kind = qs_control_target_col(wrap, k, QS_FILTER_COL)
+    ctype = k
+    break
+  end
+  return nil unless body
+  cid_src = body['FilterControlId'] || body['ParameterControlId'] || nid('ctl')
+  label = body.dig('Title') || body['Title'] || raw_col || cid_src
+  sig = "#{src_kind} control #{cid_src.inspect}#{raw_col ? " on #{raw_col}" : ''}"
+  if raw_col.nil? || raw_col.to_s.empty?
+    # what-if scalar parameter control — already inlined as a constant; no list control.
+    warnings << { 'visual' => '(control)', 'type' => 'ParameterControl',
+                  'reason' => "#{sig}: not bound to a dataset column (what-if scalar) — its default is inlined; add a Sigma what-if control by hand if interactivity is needed" }
+    unbound << { 'sourceName' => sig, 'status' => 'manual',
+                 'reason' => 'what-if scalar parameter control has no Sigma list-control equivalent (value inlined as a constant)' }
+    return nil
+  end
+  if seen_cols.key?(raw_col)
+    unbound << { 'sourceName' => sig, 'status' => 'duplicate',
+                 'reason' => "same column as control '#{seen_cols[raw_col]}' — one Sigma control already covers it" }
+    return nil
+  end
+  # surface the target column on the master (master_ref adds it if absent) and target it.
+  ref = master_ref(raw_col, calc, master_cols, dmel)
+  col_id = ref['id']
+  ctl_id = 'qs-' + raw_col.to_s.gsub(/[^A-Za-z0-9]/, '') + '-filter'
+  seen_cols[raw_col] = ctl_id
+  el = { 'id' => nid('ctlel'), 'kind' => 'control', 'controlId' => ctl_id,
+         'name' => label.to_s }
+  is_date = ctype == 'DateTimePicker' || ctype == 'RelativeDateTime' ||
+            raw_col.to_s =~ /(^|_)(date|dt|timestamp)(_|$)/i
+  if is_date
+    # date target: a `list` control on a datetime column is silently stripped by the
+    # spec API, so a date-range control is the faithful shape (needs a flat `mode`).
+    el.merge!('controlType' => 'date-range', 'mode' => 'between',
+              'includeNulls' => 'when-no-value-is-selected',
+              'filters' => [{ 'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => col_id }])
+  else
+    el.merge!('controlType' => 'list', 'mode' => 'include', 'selectionMode' => 'multiple',
+              'values' => [],
+              'source' => { 'kind' => 'source',
+                            'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => col_id },
+              'filters' => [{ 'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => col_id }])
+  end
+  scope << { 'controlId' => ctl_id, 'sourceName' => sig, 'status' => 'wired',
+             'controlType' => el['controlType'], 'scope' => 'page', 'mustReach' => [],
+             'wired' => [{ 'elementId' => 'master', 'columnId' => col_id }] }
+  el
+end
+
+# control-scope + signal accounting (filled in the sheet loop, written as control-scope.json)
+control_scope = []      # CONTRACT rows for control_lint.rb gate (c)
+control_unbound = []     # manual/duplicate/unbound signals (loud, never silent)
+control_seen_cols = {}   # raw col -> ctl_id (dedupe; QS associative = global, like qlik)
+n_control_signals = 0    # QS filter/parameter control objects encountered (sourceFilterSignals)
+
 # MULTI-SHEET -> MULTI-PAGE (the big fidelity fix): every QuickSight SHEET becomes its
 # own Sigma PAGE (page name = sheet name), each page holding only that sheet's visuals.
 # Previously ALL sheets flattened onto a single "page-dash", so the layout step (which
@@ -608,6 +823,12 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         qs_orient = (inner['ChartConfiguration'] || {})['Orientation']
         el['orientation'] = 'horizontal' if qs_orient.to_s.upcase == 'HORIZONTAL'
       end
+      # B-gap COLOR: by-measure (ColorScale dup column) / by-dimension (Colors well).
+      cclr = qs_color(inner, w, el, [did], ycids, calc, master_cols, DMEL, M)
+      el['color'] = cclr if cclr
+      # A-gap REFERENCE LINES -> refMarks (wrapped value:{type:formula}).
+      rms = qs_reference_lines(inner, calc, master_cols, DMEL, M, title, build_warnings)
+      el['refMarks'] = rms unless rms.empty?
     when 'pie-chart', 'donut-chart'
       dims = rol.('Category'); vals = rol.('Values'); (next if dims.empty? || vals.empty?)
       dc, did = dim_col(dims[0], calc, master_cols, DMEL, M); mc2, mid = meas_col(vals[0], calc, master_cols, DMEL, M)
@@ -630,6 +851,10 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       bars.each  { |mv| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; ycids << id }
       lines.each { |mv| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; ycids << { 'columnId' => id, 'type' => 'line' } }
       el = base.merge('columns' => cols, 'xAxis' => { 'columnId' => did }, 'yAxis' => { 'columnIds' => ycids })
+      cclr = qs_color(inner, w, el, [did], [], calc, master_cols, DMEL, M)  # combo: by-dimension only
+      el['color'] = cclr if cclr && cclr['by'] == 'category'
+      rms = qs_reference_lines(inner, calc, master_cols, DMEL, M, title, build_warnings)
+      el['refMarks'] = rms unless rms.empty?
     when 'scatter-chart'
       xs = rol.('XAxis'); ys = rol.('YAxis'); cat = rol.('Category'); sz = rol.('Size')
       (next if xs.empty? || ys.empty?)
@@ -684,6 +909,9 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
           build_warnings << { 'visual' => title, 'type' => 'ScatterBubbleSize', 'reason' => "QuickSight scatter bubble-size ('#{sz[0][1]}') has no Sigma scatter size channel (no point dimension to group on); the measure is projected as a column but bubbles render uniform-size (Sigma limitation)" }
         end
       end
+      # A-gap REFERENCE LINES on scatter (e.g. an x=Margin-Target line).
+      rms = qs_reference_lines(inner, calc, master_cols, DMEL, M, title, build_warnings)
+      el['refMarks'] = rms unless rms.empty?
     when 'table'
       cf_fieldmap = {}   # QS FieldId -> Sigma column id (for D19 conditional formatting)
       if is_fallback
@@ -759,6 +987,19 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     # carry the visual's QS SortConfiguration (CategorySort/RowSort) when present
     apply_qs_sorts(el, inner, kind, title, build_warnings) if el
     elements << el if el
+  end
+  # C-gap: QuickSight sheet-level FilterControls + ParameterControls -> Sigma list
+  # controls. QS selections are GLOBAL on the sheet (and FilterGroups can scope AllSheets),
+  # so a control wired to the master propagates to every chart that sources it.
+  ((sh['FilterControls'] || []) + (sh['ParameterControls'] || [])).each do |wrap|
+    next unless wrap.is_a?(Hash)
+    n_control_signals += 1
+    ctl = build_qs_control(wrap, master_cols, calc, DMEL,
+                           control_scope, control_unbound, control_seen_cols, build_warnings)
+    if ctl
+      elements.unshift(ctl)   # controls render at the top of the page band
+      vis_map[ctl['controlId']] = ctl['id']   # layout step can place it if QS gives coords
+    end
   end
   # one Sigma page per QS sheet (skip a sheet that produced zero elements)
   pid = sheet_idx.zero? ? 'page-dash' : "page-sheet-#{sheet_idx}"
@@ -838,10 +1079,20 @@ map_out = opts[:out].sub(/\.json$/, '') + '.map.json'
 # Map carries: the legacy single dashPageId (= first sheet's page, for back-compat),
 # the per-sheet page list (sheetIndex -> pageId/name) so the layout step lays out EACH
 # page from its OWN sheet's QS layout, and the global visual->element map.
+# controlElementIds: the Sigma element ids of the kind:control elements (per page).
+# QS controls live in SheetControlLayouts, not the visual GridLayout, so the layout step
+# can't place them by QS coords — it LIFTS them into a clean full-width top band instead
+# (Sigma's grid has no z-order; floating a control over a chart renders stacked).
+control_eids_by_page = {}
+dash_pages.each do |pg|
+  ids = (pg['elements'] || []).select { |e| e['kind'] == 'control' }.map { |e| e['id'] }
+  control_eids_by_page[pg['id']] = ids unless ids.empty?
+end
 File.write(map_out, JSON.pretty_generate(
   'dashPageId' => (sheet_pages.first && sheet_pages.first['pageId']) || 'page-dash',
   'masterElementId' => 'master',
   'sheetPages' => sheet_pages.map { |sp| { 'pageId' => sp['pageId'], 'name' => sp['name'], 'sheetIndex' => sp['sheetIndex'] } },
+  'controlElementIds' => control_eids_by_page,
   'visualToElement' => vis_map))
 
 # Persist a machine-readable per-visual warning manifest for any QuickSight visual
@@ -850,6 +1101,26 @@ File.write(map_out, JSON.pretty_generate(
 # "dropped, here's why" rather than a silent omission.
 warn_out = opts[:out].sub(/\.json$/, '') + '.warnings.json'
 File.write(warn_out, JSON.pretty_generate('warnings' => build_warnings))
+
+# control-scope.json — the intended-scope contract sidecar (schema: the CONTRACT block
+# in scripts/lib/control_lint.rb). QuickSight sheet/AllSheets filters are GLOBAL, so every
+# wired control's mustReach = every queryable element on every CONTENT page (Qlik parity).
+# post-and-readback.rb (--type workbook) and assert-phase6-ran.rb gate 7 pick it up from
+# <workdir>/control-scope.json automatically; we write it next to the spec (= the workdir).
+# sourceFilterSignals > 0 with zero spec controls FAILS gate 7 — the silently-dropped class
+# this change exists to kill.
+CTL_QUERYABLE = %w[table pivot-table bar-chart line-chart pie-chart donut-chart
+                   area-chart scatter-chart combo-chart kpi-chart region-map point-map].to_set
+must_reach = dash_pages.flat_map { |pg| pg['elements'] }
+                       .select { |e| CTL_QUERYABLE.include?(e['kind']) }
+                       .map { |e| e['id'] }
+control_scope.each { |sc| sc['mustReach'] = must_reach if sc['status'] == 'wired' }
+scope_out = File.join(File.dirname(File.expand_path(opts[:out])), 'control-scope.json')
+File.write(scope_out, JSON.pretty_generate(
+  'version' => 1, 'source' => 'quicksight', 'sourceFilterSignals' => n_control_signals,
+  'controls' => control_scope, 'unbound' => control_unbound))
+STDERR.puts "control-scope: #{n_control_signals} QS control signal(s) -> #{control_scope.size} wired Sigma control(s)" \
+            "#{control_unbound.empty? ? '' : ", #{control_unbound.size} unbound/manual/duplicate"} → #{scope_out}"
 
 all_elements = sheet_pages.flat_map { |sp| sp['elements'] }
 STDERR.puts "workbook spec: master sources DM element \"#{DMEL}\" (#{dm_el}); #{sheet_pages.size} page(s)/#{all_elements.size} chart elements, #{master_cols.size} master cols#{applied_filters.empty? ? '' : "; #{applied_filters.size} filter(s) applied"} → #{opts[:out]} (+ #{map_out})"

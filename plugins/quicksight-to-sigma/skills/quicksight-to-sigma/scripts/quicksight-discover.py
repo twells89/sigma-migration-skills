@@ -270,6 +270,88 @@ def field_columns(inner):
     return out
 
 
+def visual_reference_lines(inner):
+    """ChartConfiguration.ReferenceLines[] -> a compact signal list (A-gap).
+    Captures axis binding + static value / dynamic aggregation + label so the
+    builder can emit Sigma refMarks faithfully."""
+    cc = inner.get("ChartConfiguration", {}) or {}
+    out = []
+    for rl in (cc.get("ReferenceLines") or []):
+        if str(rl.get("Status", "")).upper() == "DISABLED":
+            continue
+        dc = rl.get("DataConfiguration", {}) or {}
+        axis = "x" if "XAXIS" in str(dc.get("AxisBinding", "")).upper() else "y"
+        rec = {"axis": axis,
+               "label": (rl.get("LabelConfiguration", {})
+                         .get("CustomLabelConfiguration", {}) or {}).get("CustomLabel"),
+               "color": (rl.get("StyleConfiguration", {}) or {}).get("Color")}
+        sc = dc.get("StaticConfiguration") or {}
+        dyn = dc.get("DynamicConfiguration") or {}
+        if sc.get("Value") is not None:
+            rec["value"] = sc["Value"]
+        elif dyn:
+            rec["dynamicColumn"] = (dyn.get("Column", {}) or {}).get("ColumnName") \
+                or (dyn.get("MeasureAggregationFunction", {}).get("Column", {}) or {}).get("ColumnName")
+            rec["aggregation"] = (dyn.get("Calculation", {}) or {}).get("SimpleNumericalAggregation") \
+                or (dyn.get("MeasureAggregationFunction", {}) or {}).get("SimpleNumericalAggregation")
+        out.append(rec)
+    return out
+
+
+def visual_color(inner):
+    """Chart color encoding (B-gap). by-dimension = a Colors well holding a
+    categorical field; by-measure = a ColorScale gradient (Colors[] stops)."""
+    cc = inner.get("ChartConfiguration", {}) or {}
+    wells = cc.get("FieldWells", {}) or {}
+    agg = next((v for v in wells.values() if isinstance(v, dict)), wells)
+    color_fields = agg.get("Colors") or []
+    for f in color_fields:
+        if isinstance(f, dict) and ("CategoricalDimensionField" in f or "DateDimensionField" in f):
+            cdf = f.get("CategoricalDimensionField") or f.get("DateDimensionField") or {}
+            return {"by": "dimension", "column": (cdf.get("Column", {}) or {}).get("ColumnName")}
+    cs = agg.get("ColorScale") or cc.get("ColorScale")
+    if isinstance(cs, dict):
+        stops = [s.get("Color") if isinstance(s, dict) else s for s in (cs.get("Colors") or [])]
+        return {"by": "measure", "scheme": [c for c in stops if c]}
+    return None
+
+
+def sheet_controls(sh):
+    """QuickSight sheet FilterControls + ParameterControls (C-gap). Each becomes
+    a Sigma list control; the builder resolves the target column through the
+    analysis FilterGroups (FilterControl.SourceFilterId)."""
+    out = []
+    for kind, wraps in (("filter", sh.get("FilterControls") or []),
+                        ("parameter", sh.get("ParameterControls") or [])):
+        for w in wraps:
+            if not isinstance(w, dict):
+                continue
+            wtype, body = next(iter(w.items()), (None, {}))
+            body = body or {}
+            out.append({"kind": kind, "controlType": wtype,
+                        "controlId": body.get("FilterControlId") or body.get("ParameterControlId"),
+                        "title": body.get("Title"),
+                        "sourceFilterId": body.get("SourceFilterId"),
+                        "sourceParameterName": body.get("SourceParameterName")})
+    return out
+
+
+def filter_group_columns(defn):
+    """FilterId -> filtered ColumnName across the analysis FilterGroups, so a
+    FilterControl's SourceFilterId resolves to the column the control drives."""
+    out = {}
+    for fg in (defn.get("FilterGroups") or []):
+        for flt in (fg.get("Filters") or []):
+            if not isinstance(flt, dict):
+                continue
+            body = next(iter(flt.values()), {}) or {}
+            fid = body.get("FilterId")
+            col = (body.get("Column", {}) or {}).get("ColumnName") or body.get("ColumnName")
+            if fid and col:
+                out[fid] = col
+    return out
+
+
 def load_fixtures(fdir):
     """Read describe-shaped JSONs from a dir: one analysis/dashboard definition
     (top-level "Definition") + one or more datasets (top-level "DataSet")."""
@@ -357,6 +439,7 @@ def discover_one(out, cache, fixture_dir=None, analysis_id=None, dashboard_id=No
             src_meta.append({"dataSourceId": sid, "name": None, "type": "UNKNOWN", "error": str(e)[:120]})
 
     # 4. signals: per-sheet visuals + calc fields + params
+    fg_cols = filter_group_columns(defn)
     sheets = []
     for sh in defn.get("Sheets", []):
         vis = []
@@ -364,9 +447,27 @@ def discover_one(out, cache, fixture_dir=None, analysis_id=None, dashboard_id=No
             (vtype, inner), = v.items()
             t = inner.get("Title", {})
             title = (t.get("FormatText") or {}).get("PlainText") if isinstance(t, dict) else None
-            vis.append({"type": vtype, "visualId": inner.get("VisualId"),
-                        "title": title, "columns": field_columns(inner)})
-        sheets.append({"sheetId": sh.get("SheetId"), "name": sh.get("Name"), "visuals": vis})
+            rec = {"type": vtype, "visualId": inner.get("VisualId"),
+                   "title": title, "columns": field_columns(inner)}
+            # chart-fidelity signals: reference lines (A), color encoding (B)
+            refs = visual_reference_lines(inner)
+            if refs:
+                rec["referenceLines"] = refs
+            color = visual_color(inner)
+            if color:
+                rec["color"] = color
+            vis.append(rec)
+        # interactive controls (C): resolve each control's target column now so the
+        # signal is self-contained (the builder still resolves independently from
+        # analysis.json, but signals.json carries the resolved column for visibility).
+        ctls = sheet_controls(sh)
+        for c in ctls:
+            if c.get("sourceFilterId"):
+                c["targetColumn"] = fg_cols.get(c["sourceFilterId"])
+        srec = {"sheetId": sh.get("SheetId"), "name": sh.get("Name"), "visuals": vis}
+        if ctls:
+            srec["controls"] = ctls
+        sheets.append(srec)
 
     calc = [{"name": c.get("Name"), "expression": c.get("Expression"), "dataset": c.get("DataSetIdentifier")}
             for c in defn.get("CalculatedFields", [])]

@@ -177,6 +177,29 @@ pages_xml = []
 sidecar = {}   # pageId -> container/header spec elements (put-layout.rb injects)
 total_placed = 0
 
+# Sigma control elements per page (built from QS sheet FilterControls/ParameterControls).
+# They have no QS visual-grid coords, so we LIFT them into a clean full-width band at the
+# top of the page (qlik-to-sigma parity): the chart bands keep their QS geometry below.
+control_eids = map['controlElementIds'] || {}
+
+# Prepend a controls band: tile the page's control eids edge-to-edge across the full grid
+# at the top (rows 1..3), then shift all chart items DOWN by that band's height so nothing
+# overlaps. Returns the augmented `placed`.
+def lift_controls(placed, ctl_ids)
+  return placed if ctl_ids.nil? || ctl_ids.empty?
+  band_h = 3
+  shift = placed.map { |i| i[3] }.min.to_i
+  shift = 1 if shift.zero?
+  charts = placed.map { |eid, c0, c1, r0, r1| [eid, c0, c1, r0 - shift + 1 + band_h, r1 - shift + 1 + band_h] }
+  n = ctl_ids.size
+  ctl_band = ctl_ids.each_with_index.map do |eid, j|
+    c0 = 1 + (24 * j / n.to_f).round
+    c1 = 1 + (24 * (j + 1) / n.to_f).round
+    [eid, c0, c1, 1, 1 + band_h]
+  end
+  ctl_band + charts
+end
+
 if sheet_pages && !sheet_pages.empty?
   sheet_pages.each do |sp|
     idx = sp['sheetIndex']
@@ -184,6 +207,7 @@ if sheet_pages && !sheet_pages.empty?
     # element ids that belong to THIS sheet = the elements for this sheet's visuals
     eids_for_sheet = (sheet['Visuals'] || []).map { |v| _t, inner = v.first; v2e[inner['VisualId']] }.compact.to_set
     placed, src = layout_sheet(sheet, v2e, eids_for_sheet)
+    placed = lift_controls(placed, control_eids[sp['pageId']])
     total_placed += placed.size
     next if placed.empty?
     # Container-banded page (layout-playbook.md): header band with the QS sheet
@@ -199,6 +223,7 @@ else
   # legacy single-page path (old map without sheetPages)
   all_eids = v2e.values.to_set
   placed, src = layout_sheet(sheets[0] || {}, v2e, all_eids)
+  placed = lift_controls(placed, control_eids[map['dashPageId']])
   total_placed += placed.size
   xml, extra = banded_page(map['dashPageId'], placed, title: (sheets[0] || {})['Name'] || 'Dashboard')
   pages_xml << xml
