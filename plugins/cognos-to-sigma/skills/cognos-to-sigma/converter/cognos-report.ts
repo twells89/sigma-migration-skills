@@ -57,6 +57,18 @@ interface WbElement {
   latitude?: { id: string }; longitude?: { id: string }; size?: { id: string };            // point-map / scatter
   region?: { id: string; regionType: string }; geography?: { id: string };                 // region-map / geography-map
   visibleAsSource?: boolean;                                                                // hidden grouped source (scatter)
+  refMarks?: WbRefMark[];                                                                    // reference / baseline lines
+  dataLabel?: { labels: string };                                                            // value labels (bar)
+}
+// A Sigma reference line. `value` MUST be the wrapped {type:formula,formula:"…"}
+// form — a bare number 400s at POST. label.visibility must be 'shown' (not
+// 'hidden') or it strips the label (matches qlik_refmarks, build-sigma-workbook.py).
+interface WbRefMark {
+  type: 'line';
+  axis: 'axis' | 'series';
+  value: { type: 'formula'; formula: string };
+  line?: { color?: string; width?: number };
+  label?: { visibility: 'shown'; text: string };
 }
 interface WbPage { id: string; name: string; elements: WbElement[]; }
 export interface CognosReportResult {
@@ -502,6 +514,91 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   const isMapViz = (t: string) => /tiledmap|choropleth|\bmap\b/.test(t);
   const chartSource = dmSource;
 
+  // Cognos/RAVE2 sequential & diverging palette names → Sigma `scheme` arrays
+  // (low→high). Mirrors qlik_color()'s scheme handling (build-sigma-workbook.py):
+  // a by-MEASURE color needs an explicit low→high array, not a palette id.
+  const COGNOS_SCHEME: Record<string, string[]> = {
+    // sequential (single-hue ramps)
+    blue: ['#deebf7', '#9ecae1', '#3182bd'], blues: ['#deebf7', '#9ecae1', '#3182bd'],
+    green: ['#e5f5e0', '#a1d99b', '#31a354'], greens: ['#e5f5e0', '#a1d99b', '#31a354'],
+    orange: ['#fee6ce', '#fdae6b', '#e6550d'], oranges: ['#fee6ce', '#fdae6b', '#e6550d'],
+    red: ['#fee0d2', '#fc9272', '#de2d26'], reds: ['#fee0d2', '#fc9272', '#de2d26'],
+    purple: ['#efedf5', '#bcbddc', '#756bb1'], heat: ['#ffffcc', '#fd8d3c', '#bd0026'],
+    sequential: ['#ffffcc', '#fd8d3c', '#bd0026'],
+    // diverging
+    diverging: ['#a50026', '#f46d43', '#fee090', '#74add1', '#313695'],
+    redblue: ['#a50026', '#f46d43', '#fee090', '#74add1', '#313695'],
+    redgreen: ['#d73027', '#fee08b', '#1a9850'],
+  };
+  const SEQ_DEFAULT = COGNOS_SCHEME.sequential;
+  // Resolve a Cognos color/palette signal to a Sigma scheme. Reads any palette
+  // name the viz exposes (vizPropertyValues `*palette*`/`*scheme*` props, or a
+  // refPaletteDefinition) → scheme array; falls back to the sequential default.
+  const schemeFromSignal = (sig?: string): string[] => {
+    const key = String(sig || '').toLowerCase().replace(/[^a-z]/g, '');
+    for (const k of Object.keys(COGNOS_SCHEME)) if (key.includes(k)) return [...COGNOS_SCHEME[k]];
+    return [...SEQ_DEFAULT];
+  };
+  // Pull a viz-level palette/scheme name out of a <vizControl>'s property values
+  // (vizPropertyValues > vizProperty*Value name="…palette…"/"…scheme…") so a
+  // by-measure color reproduces the source palette when the viz exposes one.
+  const vizColorSignal = (V: any): string | undefined => {
+    for (const pv of findAll(V, 'vizPropertyValues')) {
+      for (const [, v] of Object.entries(pv)) {
+        for (const p of arr(v)) {
+          const nm = String(p?.['@_name'] || '');
+          if (/palette|colou?r.?scheme|colou?rmodel/i.test(nm)) {
+            const val = txt(p);
+            if (val) return val;
+          }
+        }
+      }
+    }
+    // refPaletteDefinition / refPalette attribute on a color slot or the viz
+    const pal = (findAll(V, 'vcSlotData').map((s: any) => s['@_refPaletteDefinition'] || s['@_refPalette']).find(Boolean))
+      || V['@_refPaletteDefinition'] || V['@_refPalette'];
+    return pal ? String(pal) : undefined;
+  };
+
+  // RAVE2 reference lines / baselines → Sigma refMarks. Cognos expresses these as
+  // <baseline> (a.k.a. <vizBaseline>) nodes carrying either a static @_value (or
+  // numeric text) or a @_refDataItem (a data-driven baseline = a measure ref), plus
+  // optional @_label and @_color. X-axis baselines (refAxis="category"/"x") → Sigma
+  // axis 'axis'; value/Y baselines → 'series'. value is wrapped {type:formula,…}
+  // (a bare number 400s) and label.visibility is 'shown' — matches qlik_refmarks().
+  const buildRefMarks = (V: any, q: Query, vizName: string): WbRefMark[] => {
+    const nodes = [...findAll(V, 'baseline'), ...findAll(V, 'vizBaseline')];
+    const out: WbRefMark[] = [];
+    for (const b of nodes) {
+      if (String(b['@_visible'] ?? b['@_show'] ?? 'true').toLowerCase() === 'false') continue;
+      const onX = /^(category|categories|x|item|itemaxis)$/i.test(String(b['@_refAxis'] || b['@_axis'] || ''));
+      const axis: WbRefMark['axis'] = onX ? 'axis' : 'series';
+      let formula = '';
+      const di = b['@_refDataItem'] ? q.items.get(b['@_refDataItem']) : undefined;
+      if (di) {
+        // data-driven baseline (e.g. "average of Revenue") → aggregated measure ref
+        const { formula: f, warns } = translate(di.expression, q);
+        warns.forEach((w) => warnings.push(`"${vizName}.baseline ${b['@_refDataItem']}": ${w}`));
+        formula = /^\s*(Sum|Avg|Min|Max|Count|CountDistinct|Median)\s*\(/.test(f) ? f : `Avg(${f})`;
+      } else {
+        const v = b['@_value'] ?? b['@_position'] ?? txt(b.value) ?? txt(b);
+        if (v != null && String(v).trim() !== '' && /^-?[\d.]+$/.test(String(v).trim())) formula = String(v).trim();
+      }
+      if (!formula) {
+        warnings.push(`chart "${vizName}": a reference line / baseline had no static value or data-item measure — skipped (re-add it in the workbook).`);
+        continue;
+      }
+      const rm: WbRefMark = {
+        type: 'line', axis, value: { type: 'formula', formula },
+        line: { color: String(b['@_color'] || b['@_lineColor'] || '#ef4444'), width: 2 },
+      };
+      const label = b['@_label'] || b['@_text'] || (di ? sigmaDisplayName(di.name) : undefined);
+      if (label) rm.label = { visibility: 'shown', text: String(label) };
+      out.push(rm);
+    }
+    return out;
+  };
+
   for (const V of findAll(report, 'vizControl')) {
     const vizType = String(V['@_type'] || '').toLowerCase();
     const vizName = V['@_name'] || 'Chart';
@@ -641,6 +738,8 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
         el.color = { by: 'category', column: sDim.id };
         if (szId) { const sSz = raw(szId); scols.push(sSz); el.size = { id: sSz.id }; }
         el.columns = scols; el.order = scols.map((c) => c.id);
+        const sRefMarks = buildRefMarks(V, q, vizName);   // e.g. a target line at y=<value>
+        if (sRefMarks.length) el.refMarks = sRefMarks;
         pageEls.push(src);
         pageEls.push(el);
         continue;   // self-contained: skip the shared el.columns=cols assignment below
@@ -649,6 +748,8 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       if (xId) el.xAxis = { columnId: xId };
       if (yId) el.yAxis = { columnIds: [yId] };
       if (dId) el.color = { by: 'category', column: dId };
+      const sRefMarks = buildRefMarks(V, q, vizName);
+      if (sRefMarks.length) el.refMarks = sRefMarks;
     } else {
       // cartesian: bar / line / area / combo
       const xId = addCol(cats[0], false, true);
@@ -660,8 +761,30 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       const yIds = [...vals, ...sizes].map((v) => addCol(v, true)).filter(Boolean) as string[];
       if (yIds.length) el.yAxis = { columnIds: yIds };
       else warnings.push(`chart "${vizName}" (${kind}) resolved no measure for the value axis — add a measure in the workbook.`);
-      const cId = addCol(series[0] || colorSlot[0], false);
-      if (cId) el.color = { by: 'category', column: cId };
+      // COLOR encoding. A `series` slot is always categorical (split-by). A `color`
+      // slot can be EITHER: a dimension (by:category) OR a measure (rollupMethod set
+      // ⇒ by:scale, a continuous color ramp). Cognos drives the cartesian color by
+      // measure far more than the old by:'category'-always path admitted. A measure
+      // can't sit on both yAxis and color, so — like qlik_color() — duplicate it into
+      // a dedicated color column and read the source palette into a low→high scheme.
+      const colorE = colorSlot[0];
+      const colorIsMeasure = !series[0] && !!colorE && !!colorE.rollup && !!q.items.get(colorE.ref);
+      if (colorIsMeasure) {
+        const baseId = addCol(colorE, true);                 // the measure (may already be a yAxis col)
+        const base = cols.find((c) => c.id === baseId);
+        if (base) {
+          const dupId = sigmaShortId();
+          const dup: WbColumn = { id: dupId, name: `${base.name} (color)`, formula: base.formula };
+          if (base.format) dup.format = base.format;
+          cols.push(dup);
+          el.color = { by: 'scale', column: dupId, scheme: schemeFromSignal(vizColorSignal(V)) };
+        }
+      } else {
+        const cId = addCol(series[0] || colorE, false);
+        if (cId) el.color = { by: 'category', column: cId };
+      }
+      const refMarks = buildRefMarks(V, q, vizName);
+      if (refMarks.length) el.refMarks = refMarks;
       if (kind === 'bar-chart') {
         el.stacking = /stacked/.test(vizType) ? 'stacked' : 'none';
         if (/\bbar\b/.test(vizType) && !/column/.test(vizType)) el.orientation = 'horizontal'; // Cognos "bar" = horizontal
@@ -696,6 +819,8 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     columns: pageEls.reduce((n, e) => n + (e.columns?.length || 0), 0),
     filters: pageEls.reduce((n, e) => n + (e.filters?.length || 0), 0),
     controls: controls.size,
+    refMarks: pageEls.reduce((n, e) => n + (e.refMarks?.length || 0), 0),
+    scaleColors: pageEls.filter((e) => e.color?.by === 'scale').length,
   };
   return {
     workbook: { name: reportName, schemaVersion: 1, pages, controls: controlEls },
