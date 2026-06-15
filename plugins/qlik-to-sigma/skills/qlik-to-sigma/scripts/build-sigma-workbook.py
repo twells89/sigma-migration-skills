@@ -288,6 +288,29 @@ def qlik_color(color, dim_ids, mids, el):
         return {"by": "category", "column": dim_ids[0]}
     return None
 
+def qlik_refmarks(c):
+    """Qlik reference lines -> Sigma refMarks. X-axis lines -> axis 'axis',
+    measure/Y lines -> 'series'. value MUST be the wrapped {type:formula,...}
+    form (a bare number 400s); label.visibility must be 'shown'. Verified
+    2026-06-15."""
+    rl = c.get("refLines") or {}
+    out = []
+    for axis, key in (("axis", "x"), ("series", "y")):
+        for r in (rl.get(key) or []):
+            if r.get("show") is False:
+                continue
+            val = r.get("value")
+            formula = str(val) if isinstance(val, (int, float)) else (r.get("expr") or "")
+            if not formula:
+                continue
+            rm = {"type": "line", "axis": axis,
+                  "value": {"type": "formula", "formula": formula},
+                  "line": {"color": r.get("color") or "#ef4444", "width": 2}}
+            if r.get("label"):
+                rm["label"] = {"visibility": "shown", "text": r["label"]}
+            out.append(rm)
+    return out
+
 def build_element(c, resolve, warnings):
     """One Qlik chart object -> one Sigma element (or None + warning)."""
     title = c.get("title") or c.get("vizType")
@@ -429,6 +452,8 @@ def build_element(c, resolve, warnings):
             if len(mids) >= 3:
                 s_sz = _raw(mids[2]); scols.append(s_sz); sc["size"] = {"id": s_sz["id"]}
             sc["columns"] = scols
+            rm = qlik_refmarks(c)
+            if rm: sc["refMarks"] = rm   # e.g. a Margin Target line at x=0.45
             return sc
         # <2 measures or no dim: fall back to a plain dim-on-x cartesian
         el["xAxis"] = {"columnId": dim_ids[0] if dim_ids else mids[0]}
@@ -441,6 +466,8 @@ def build_element(c, resolve, warnings):
     if kind == "bar-chart": el["dataLabel"] = {"labels": "shown"}
     cc = qlik_color(c.get("color"), dim_ids, mids, el)
     if cc: el["color"] = cc
+    rm = qlik_refmarks(c)
+    if rm: el["refMarks"] = rm
     return el
 
 # ---- container-banded layout (layout-playbook.md, verified 2026-06-10) -----

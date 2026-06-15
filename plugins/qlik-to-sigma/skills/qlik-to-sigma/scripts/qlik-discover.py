@@ -127,6 +127,21 @@ def qlik(*args, parse_json=True):
         return None
 
 
+def _reflines(refline):
+    """Normalize a Qlik object's refLine config -> {x:[...], y:[...]} of
+    {show,label,color,value,expr}. refLinesX = X-axis lines, refLines = Y/measure."""
+    def conv(arr):
+        out = []
+        for r in (arr or []):
+            e = r.get("refLineExpr") or {}
+            out.append({"show": r.get("show", True),
+                        "label": r.get("label") or e.get("label"),
+                        "color": r.get("color") or (r.get("paletteColor") or {}).get("color"),
+                        "value": e.get("value"), "expr": e.get("label")})
+        return out
+    return {"x": conv(refline.get("refLinesX")), "y": conv(refline.get("refLines"))}
+
+
 def awrite(path, obj):
     """Atomic JSON write — orchestrators poll for these files from a
     concurrent lane and must never observe a half-written artifact."""
@@ -502,6 +517,11 @@ def main():
             # color encoding (byMeasure gradient / byDimension category) so the
             # builder can reproduce the Qlik chart's color, not default it.
             "color": props.get("color"),
+            # reference lines (e.g. a "Margin Target" at x=0.45). refLinesX sit on
+            # the X axis, refLines on the measure/Y axis. The builder emits Sigma
+            # refMarks from these. value comes from refLineExpr.value (a constant)
+            # or refLineExpr.label (an expression string).
+            "refLines": _reflines(props.get("refLine") or {}),
         }
         # Filter objects (control-targeting wave): a listbox's field lives on
         # qListObjectDef (NOT the hypercube), and an alternate-state object
