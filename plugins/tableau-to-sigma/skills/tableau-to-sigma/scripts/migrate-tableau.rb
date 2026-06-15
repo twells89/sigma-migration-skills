@@ -1274,6 +1274,30 @@ end
 mark('phase5-layout')
 
 # ---------------------------------------------------------------------------
+# Phase 5b — Visual QA: render each content page to a full-page PNG so the
+# layout can be reviewed against refs/layout-visual-qa.md AND compared to the
+# source Tableau dashboard — the cross-converter visual-QA gate. Page ids come
+# from the LOCAL wb-spec.json (deterministic; the live /spec readback is flaky
+# and returns YAML); token via get-token.sh inside sigma_run!. Non-fatal — a
+# transient export failure must not sink a green migration; the REVIEW is the gate.
+# ---------------------------------------------------------------------------
+hdr('5b', 'Visual QA')
+vqa = File.join(WORK, 'visual-qa'); FileUtils.mkdir_p(vqa)
+wbspec_local = (JSON.parse(File.read(wb_spec_path)) rescue {})
+content_pages = (wbspec_local['pages'] || []).reject { |p| p['id'].to_s.downcase.include?('data') }
+rendered = 0
+content_pages.each do |pg|
+  out = File.join(vqa, "#{pg['id']}.png")
+  _o, st = sigma_run!(['python3', File.join(HERE, 'sigma-export-png.py'),
+                       '--workbook', wb_id, '--page', pg['id'], '--out', out, '--w', '1800', '--h', '1000'],
+                      allow_fail: true)
+  st.success? ? (rendered += 1) : line("WARN: visual-QA render failed for page #{pg['id']}")
+end
+line "rendered #{rendered}/#{content_pages.size} full-page PNG(s) → #{vqa}"
+line 'VISUAL QA (review, do not skip): open each PNG; check vs refs/layout-visual-qa.md AND the source Tableau dashboard — titles, right chart kinds, colors, no overlaps/dead zones.' if rendered.positive?
+mark('phase5b-visual-qa')
+
+# ---------------------------------------------------------------------------
 # Phase 6 — Parity, PASS 1 of 2. Structural hard signals first (live /columns
 # type=error re-check after the layout PUT + per-chart compile check), then
 # phase6-parity.rb pass 1 builds the parity plan and emits the per-chart MCP
