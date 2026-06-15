@@ -45,6 +45,7 @@ Env (live mode): SIGMA_BASE_URL + SIGMA_API_TOKEN.
 import json, os, re, sys, time, argparse, urllib.request
 
 MASTER_ID, MASTER = "m-master", "Master"
+_SCATTER_SRC = []   # hidden grouped source tables emitted for scatter-charts (added to the Data page)
 KEEP_UNMATCHED = os.environ.get("QLIK_KEEP_UNMATCHED", "") == "1"
 ROW_SCALE = 2          # min row-scale; Qlik rows are ~3x shorter than Sigma's
 KPI_MIN_ROWS = 5       # Sigma kpi-chart clips its title below ~5 grid rows
@@ -366,7 +367,45 @@ def build_element(c, resolve, warnings):
         y = [mids[0]] + [{"columnId": m, "type": "line"} for m in mids[1:]]
         el["xAxis"] = {"columnId": dim_ids[0]}; el["yAxis"] = {"columnIds": y}
         return el
-    # bar / line / scatter
+    if kind == "scatter-chart":
+        # A Qlik scatterplot is measure-vs-measure with the dimension as the POINT
+        # identity (Qlik measure order = x, y, size). Sigma's scatter axis is a
+        # GROUPING axis: putting an aggregate (Sum(...)) directly on xAxis makes it
+        # evaluate per-row and every point collapses to one x — the spec POSTs but
+        # renders wrong (bead ry0n; verified 2026-06-15 — 64 rep points vs 1).
+        # Correct, UI-verified shape: bind the scatter to a hidden grouped SOURCE
+        # table (one row per point dim) and reference the grouped columns with raw
+        # refs; the dim stays on color:{by:category} so points don't merge.
+        if len(mids) >= 2 and dim_ids:
+            cname = {col["id"]: col["name"] for col in el["columns"]}
+            src_id = el["id"] + "-src"
+            src_name = "Scatter Source " + re.sub(r"[^A-Za-z0-9]", "", str(c["id"]))[-6:]
+            grp_id = src_id + "-g"
+            src = {"id": src_id, "kind": "table", "name": src_name,
+                   "source": {"elementId": MASTER_ID, "kind": "table"},
+                   "columns": el["columns"],
+                   "groupings": [{"id": grp_id, "groupBy": dim_ids, "calculations": mids}],
+                   "visibleAsSource": False}
+            if el.get("filters"): src["filters"] = el["filters"]   # carry null-suppression
+            _SCATTER_SRC.append(src)
+            def _raw(colid):
+                return {"id": el["id"] + "-" + colid, "formula": f"[{src_name}/{cname[colid]}]",
+                        "name": cname[colid]}
+            s_dim, s_x, s_y = _raw(dim_ids[0]), _raw(mids[0]), _raw(mids[1])
+            scols = [s_dim, s_x, s_y]
+            sc = {"id": el["id"], "kind": "scatter-chart", "name": title,
+                  "source": {"elementId": src_id, "kind": "table", "groupingId": grp_id},
+                  "xAxis": {"columnId": s_x["id"]}, "yAxis": {"columnIds": [s_y["id"]]},
+                  "color": {"by": "category", "column": s_dim["id"]}}
+            if len(mids) >= 3:
+                s_sz = _raw(mids[2]); scols.append(s_sz); sc["size"] = {"id": s_sz["id"]}
+            sc["columns"] = scols
+            return sc
+        # <2 measures or no dim: fall back to a plain dim-on-x cartesian
+        el["xAxis"] = {"columnId": dim_ids[0] if dim_ids else mids[0]}
+        el["yAxis"] = {"columnIds": mids}
+        return el
+    # bar / line
     el["xAxis"] = {"columnId": dim_ids[0]}
     el["yAxis"] = {"columnIds": mids}
     if sort: el["xAxis"]["sort"] = {"by": sort[0], "direction": sort[1]}
@@ -658,6 +697,13 @@ def main():
         xml, extra = auto_layout(pid, [{"id": e["id"], "kind": e["kind"]} for e in elems])
         pages.append({"id": pid, "name": "Overview", "elements": elems + extra})
         layout_pages.append(xml)
+
+    # Scatter charts emit a hidden grouped SOURCE table (one row per point dim);
+    # park them on the Data page next to the master (visibleAsSource:False, so
+    # they need no layout slot). build_element appended them to _SCATTER_SRC.
+    if _SCATTER_SRC:
+        data_page = next((p for p in pages if p["id"] == "page-data"), pages[0])
+        data_page["elements"].extend(_SCATTER_SRC)
 
     spec = {"name": a.name, "schemaVersion": 1, "pages": pages}
     if a.folder: spec["folderId"] = a.folder
