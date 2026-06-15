@@ -133,6 +133,7 @@ which calc translation, which layout) — not orchestration.
 | `scripts/build-dashboard-layout.rb` | **MANDATORY in Phase 5d** (dashboard-fidelity mode) — auto-build the Sigma layout XML from the parsed Tableau zone tree (`dashboard-layout.json`) + the workbook readback IDs (`wb-ids.json`). Positions each chart at the grid cell derived from its zone's x/y/w/h%. Without this step, the workbook PUTs without a top-level layout and Sigma renders elements as a single-column stack — see `assert-phase6-ran.rb` gate 4 (beads-sigma-bw3). |
 | `scripts/build-story-pages.rb` | **Story workbooks only** — when `parse-twb-layout.rb` wrote `story-plan.json`, emit one Sigma page per story point: pass 1 (`--spec`/`--out`) appends caption-named pages (annotation text atop + cloned elements with fresh ids/controlIds) to the workbook spec pre-POST; pass 2 (`--wb-ids`/`--layout-out`) emits the banded per-page layout + container sidecar post-readback. See `refs/story-points.md`. |
 | `scripts/export-chart-png.rb` | Phase 6d (visual): export PNG screenshots of every chart in the converted Sigma workbook via `/v2/workbooks/{wb}/export` → `/v2/query/{q}/download`. Catches visual regressions CSV value parity can miss (silently-dropped log scale, missing data labels, wrong chart kind, palette drift). Output: per-element PNGs + `_manifest.json`. Pair with the Tableau MCP `get-view-image` to side-by-side compare source vs target. **Mandatory gate: Read each PNG and check it against `refs/layout-visual-qa.md`, then loop-fix-and-re-render until clean — never declare done on HTTP 200.** |
+| `scripts/pick-destination.rb` | **Phase 0b:** list build destinations (`list` → workspaces + editable folders + My Documents) and create folders (`create --name [--parent]`). Drives the "where should this land?" prompt when no `--folder`/`SIGMA_FOLDER_ID` is given. `folderId` accepts a workspace id (workspace root) or a folder id. Shared across the migration skills. |
 | `scripts/find-or-pick-dm.rb` | Phase 1.5: scan existing DMs in the org and recommend reuse when one already covers the workbook's columns. Score = 0.7·column-overlap + 0.2·table-overlap + 0.1·metric-overlap. Parallel-fetches DM specs (~2s for 50 DMs). Output: `dm-match.json` with ranked candidates + recommendation. Non-destructive. Reuse skips Phase 2 + 3 entirely. `--auto-pick` flag (with tie-window safety) skips the user-confirm step when there's a clear winner. |
 | `scripts/inspect-dm-shape.rb` | Phase 1.5b (MANDATORY when reusing): inspect the reused DM's element graph and emit a denormalization plan classifying every column as `fact` (direct ref) or `dim` (needs Lookup). Output: `dm-denorm-plan.json` with the exact Lookup formula per dim column. Eliminates the 2–3 min spec-rework loop when the reused DM has separate dim elements (a non-pre-denormalized DM shape). |
 | `scripts/scan-customer-style.rb` | Phase 0c: sample N recent workbooks in the customer's Sigma org and aggregate style signals (color palettes, number-format strings, layout grids, chart-kind mix, dataLabel preference, element naming case, density). Lets the converter emit specs that match house conventions instead of generic defaults. |
@@ -262,6 +263,32 @@ Categories emitted:
 
 Share the markdown report with the customer up front to set expectations.
 Save the JSON for the subagent.
+
+## Phase 0b — Choose where to build (MANDATORY when no destination given)
+
+Never silently dump the migrated data model + workbook into an auto-picked
+folder. If the user did **not** supply a destination (no `--folder <id>` on
+`migrate-tableau.rb` and no `SIGMA_FOLDER_ID`), ASK first:
+
+1. List candidates:
+   ```bash
+   ruby scripts/pick-destination.rb list
+   # -> { "workspaces":[{id,name}], "folders":[{id,name,parentId,parentName}], "myDocuments": <id|null> }
+   ```
+2. Present the options to the user and let them pick ONE:
+   - a **workspace** (content lands in the workspace root — pass its `id` as the folder)
+   - an existing **folder** (use its `id`; `parentName` shows its workspace)
+   - **My Documents** (only when `myDocuments` is non-null — null for service-account tokens)
+   - **create a new folder** (optionally inside a chosen workspace/folder):
+     ```bash
+     ruby scripts/pick-destination.rb create --name "<name>" [--parent <workspace-or-folder-id>]
+     # -> { "id", "name", "parentId" }
+     ```
+3. Pass the chosen id to the migration as `--folder <id>` — it flows into both
+   the DM and workbook POSTs.
+
+`folderId` accepts a workspace id (lands in the root) **or** a folder id. If the
+user already passed `--folder` / `SIGMA_FOLDER_ID`, honor it silently — do NOT ask.
 
 > **Data blending:** when the scanner writes `blend-plan.json`, route each
 > blend BEFORE Phase 2 using its `route` field — (a) `same-warehouse-repoint`
