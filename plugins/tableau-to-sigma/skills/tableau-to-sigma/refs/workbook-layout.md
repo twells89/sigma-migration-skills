@@ -413,7 +413,7 @@ If you need an explicit one-series-per-category breakdown instead (e.g., for sta
 }
 ```
 
-`stacking` values: `"none"` (default, grouped), `"stacked"` (absolute), `"100"` (100% stacked).
+`stacking` values: `"none"` (default, grouped), `"stacked"` (absolute), `"normalized"` (100% stacked). Live-verified 2026-06-15 — `"100"` / `"percent"` are **rejected** (`Invalid value: string`); the 100%-stacked value is `"normalized"`.
 
 ### Area chart
 
@@ -745,7 +745,7 @@ the chart editor after publish.
 
 | Property | Set via spec? | How to apply post-publish |
 |---|---|---|
-| Bar chart orientation (horizontal vs vertical) | No | Chart editor → Properties → Chart type → Horizontal icon |
+| Bar chart orientation (horizontal vs vertical) | **Yes** — `"orientation": "horizontal"` on the `bar-chart` (omit for the default vertical) | n/a — set in spec |
 | Trellis (small multiples / panel charts) on any chart kind | No | Chart editor → Trellis panel → drag dimension to Trellis row / column / by-series |
 | Axis label rotation (0°, 45°, 90°) | No | Chart editor → Format → X-axis → Label rotation |
 | Series color | No (not yet) | Chart editor → Properties → Color |
@@ -753,7 +753,7 @@ the chart editor after publish.
 | Font size / axis title | No | Chart editor → Format tab |
 | Text element alignment (center / right) | **Yes (since 2026-06-11)** | Inline HTML in `body`: `<p style="text-align: center">…</p>` (also `right`/`left`). Round-trips through GET/PUT — live-verified 2026-06-11. Combines with `<span>` color/font-size styling. Pre-fix UI-set alignment did not serialize; re-apply once via spec or UI and it sticks. |
 
-**`"orientation": "horizontal"` is silently accepted but ignored.** Do not include it — it does nothing.
+**`"orientation": "horizontal"` makes a horizontal bar chart and round-trips through GET** (live-verified 2026-06-15). The enum accepts `"horizontal"` only — omit the field entirely for the default vertical orientation (`"orientation": "vertical"` is rejected).
 
 **Series `color` on `yAxis` entries is silently accepted but not persisted.** PUT succeeds without error but GET strips the field. Expected shape for when this is wired up:
 ```json
@@ -1207,13 +1207,25 @@ Sum(If([p_date_dimension] = "Month", [Sales], Null))
 }
 ```
 
-### slider — DO NOT use this `controlType` value
+### slider — single-handle numeric control
 
-> **Verified 2026-05-24 against `sigma-workbook-spec-findings/verify/controls-invalid-kinds.rb`.** POST with `controlType: slider` is rejected with HTTP 400 `Invalid kind: "control"`. **This type does not exist.** Build a single-value slider as a `number-range` control with `mode: <=` or `mode: >=` and a single-element `values` array. See the `sigma-workbooks` skill's `reference/specification/controls.md` (Slider section) for the canonical pattern, and note that `values` on `number-range` does not reliably round-trip — it reads back as null on GET even though the published workbook respects it.
+> **Corrected 2026-06-15.** The earlier note that `controlType: slider` "does not exist" was **wrong** — it came from a probe that omitted the required `mode` field, so the `Invalid kind: "control"` rejection was misread as "unsupported type." `slider` is a valid `controlType` (it is in the OpenAPI enum, builds in the UI, and POSTs cleanly). A single-handle slider carries **flat top-level** `low`/`high` (track bounds), a `mode` comparator (`<=` / `>=` / `=` / `<` / `>` — which rows the handle keeps), and a **scalar** `value` (handle position). Live-verified by reading back a UI-built slider **and** a successful POST.
+
+```json
+{
+  "kind": "control", "controlId": "slider-sales", "name": "Sales",
+  "controlType": "slider",
+  "low": 0, "high": 100000, "mode": "<=", "value": 33755,
+  "includeNulls": "when-no-value-is-selected",
+  "filters": [{"source": {"kind": "warehouse-table", "connectionId": "<id>", "path": [...]}, "columnId": "SALES"}]
+}
+```
+
+> A nested `value: {low, high}` object is rejected with `Invalid kind: control`; the fields are flat. The most common mistake is omitting `mode` — the element is rejected without it even when `low`/`high`/`value` are present.
 
 ### range-slider — range with two handles
 
-> **Behavior flipped between 2026-05-22 (rejected) and 2026-05-24 (accepted).** Pinned by `sigma-workbook-spec-findings/verify/controls-invalid-kinds.rb` — that script will surface any future regression. Treat as supported-but-fragile; the canonical `number-range` form is still the safer choice.
+> **Live-verified 2026-06-15.** A two-handle `range-slider` carries flat `low`/`high` (the band) and an optional `max`; all round-trip through GET (`max` auto-derives from `high` if omitted). A valid, first-class alternative to `number-range` for a bounded numeric band.
 
 ```json
 {
