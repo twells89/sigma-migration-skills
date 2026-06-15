@@ -16,11 +16,16 @@ declaring the migration done.
 
 ## Mandatory loop (run after the workbook is POSTed, before you call it done)
 
-1. **Render every page** to PNG at a realistic width:
+1. **Render the FULL Sigma page** (the whole dashboard, one image — not per-element) at a realistic width:
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
-   (Plugins that ship their own renderer — `export-chart-png.rb`, `compare.py` — may use it;
-   the contract is identical: `POST /v2/workbooks/{id}/export` → poll `/v2/query/{q}/download`.)
-2. **Read each PNG** and check it against the rubric below.
+   (Contract: `POST /v2/workbooks/{id}/export` → poll `/v2/query/{q}/download`.)
+1b. **Render the FULL SOURCE dashboard** as ONE image and compare full-dashboard ↔ full-dashboard:
+   Tableau MCP `get-view-image` on the **dashboard view** (not each worksheet); PowerBI page export;
+   etc. Place the two full images side by side. **Compare dashboard-to-dashboard, never element-by-element**
+   — per-element screenshots (e.g. `export-chart-png.rb`) miss layout/relationship defects (overlaps,
+   dead zones, a control stranded outside its chart, wrong relative sizing) and are NOT a substitute for
+   the full-page comparison. Use per-element PNGs only as a drill-down after a full-page mismatch.
+2. **Read both full PNGs** and check the Sigma render against the source AND the rubric below.
 3. **Fix** any failure (re-band, resize, move a control into its chart's container, shorten a
    map title) by editing the spec — for large multi-page workbooks use
    `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit element files → push) — then
