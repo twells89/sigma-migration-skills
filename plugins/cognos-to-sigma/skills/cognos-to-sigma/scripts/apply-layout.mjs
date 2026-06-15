@@ -179,3 +179,39 @@ if (!a['skip-layout-lint'] && rb.json) {
   console.error('layout lint: clean');
 }
 console.error(`container-banded layout applied (${pageBlocks.length} page block(s))`);
+
+// Visual-QA gate — render each CONTENT page to a FULL-PAGE PNG so the layout can
+// be reviewed against refs/layout-visual-qa.md (matching qlik/tableau Phase 5b).
+// NON-FATAL: a transient export failure must not sink a green migration — the
+// REVIEW is the gate. Page ids come from the post-PUT readback spec (rb.json) we
+// already hold: those are the AUTHORITATIVE posted ids (the Cognos POST reassigns
+// page/element ids, so the local pre-POST spec would carry stale ids — and this
+// readback is the same JSON the layout gate above already depends on, not the
+// flaky-YAML /spec case). The Sigma token is passed explicitly to the python
+// child via env (inherited SIGMA_API_TOKEN; same one the api() helper uses).
+// --skip-visual-qa bypasses.
+if (!a['skip-visual-qa'] && rb.json) {
+  const contentPages = (rb.json.pages || []).filter((p) => {
+    const tag = `${p.id || ''} ${p.name || ''}`.toLowerCase();
+    return p.id && !tag.includes('data');
+  });
+  const vqaDir = join(tmpdir(), `cognos-visual-qa-${a.workbook}`);
+  mkdirSync(vqaDir, { recursive: true });
+  const tok = process.env.SIGMA_API_TOKEN || '';
+  let rendered = 0;
+  for (const p of contentPages) {
+    const out = join(vqaDir, `${p.id}.png`);
+    const png = spawnSync('python3',
+      [join(HERE, 'sigma-export-png.py'), '--workbook', a.workbook, '--page', p.id,
+        '--out', out, '--w', '1800', '--h', '1000'],
+      { encoding: 'utf8', env: { ...process.env, SIGMA_API_TOKEN: tok } });
+    if (png.status === 0) { rendered++; }
+    else { console.error(`   [warn] visual-QA render failed for page ${p.id} (exit ${png.status})${png.stderr ? `: ${png.stderr.trim().slice(0, 200)}` : ''}`); }
+  }
+  console.error(`visual QA: rendered ${rendered}/${contentPages.length} full-page PNG(s) → ${vqaDir}`);
+  if (rendered > 0) {
+    console.error('VISUAL QA (mandatory review — do not skip): open each PNG and check vs');
+    console.error('refs/layout-visual-qa.md — populated controls, titles present, right chart');
+    console.error('kinds, sensible colors/heights, no overlaps/dead zones.');
+  }
+}

@@ -486,6 +486,39 @@ run!(['ruby', File.join(HERE, 'build-quicksight-layout.rb'),
 run!(['ruby', File.join(HERE, 'put-layout.rb'), '--workbook', wb_id, '--layout', layout])
 puts "   layout applied to workbook #{wb_id}"
 
+# ---------------------------------------------------------------------------
+# Phase 5b — Visual QA: render each CONTENT page to a FULL-PAGE PNG so the
+# layout can be reviewed against refs/layout-visual-qa.md AND compared to the
+# source QuickSight sheet — matching the other migration skills' visual-QA gate
+# (tableau/qlik Phase 5b). Render is NON-FATAL (a transient export failure must
+# not sink a green migration); the REVIEW is the gate, not the render.
+# ---------------------------------------------------------------------------
+require 'sigma_rest' # exposes Sigma.auth_token (override → SIGMA_API_TOKEN → refresh)
+vqa = File.join(WORK, 'visual-qa')
+FileUtils.mkdir_p(vqa)
+# Page ids come from the LOCAL spec the builder wrote (<WORK>/wb-spec.json) —
+# deterministic. The live GET /spec readback proved flaky in the pipeline
+# (returns YAML / silently zero pages); POST preserves these ids, so the local
+# copy is authoritative. Exclude any id containing "data" (hidden data pages).
+wbspec = (JSON.parse(File.read(wb_spec)) rescue {})
+content_pages = (wbspec['pages'] || []).reject { |p| p['id'].to_s.downcase.include?('data') }
+tok = (Sigma.auth_token rescue ENV['SIGMA_API_TOKEN'])
+pngs = []
+content_pages.each do |pg|
+  out = File.join(vqa, "#{pg['id']}.png")
+  _o, st = Open3.capture2e({ 'SIGMA_API_TOKEN' => tok.to_s }, 'python3',
+                           File.join(HERE, 'sigma-export-png.py'),
+                           '--workbook', wb_id, '--page', pg['id'], '--out', out,
+                           '--w', '1800', '--h', '1000')
+  st.success? ? (pngs << out) : (puts "   [warn] visual-QA render failed for page #{pg['id']}")
+end
+puts "   rendered #{pngs.size}/#{content_pages.size} full-page PNG(s) for visual QA → #{vqa}"
+if pngs.any?
+  puts '   VISUAL QA (mandatory review — do not skip): open each PNG and check vs'
+  puts '   refs/layout-visual-qa.md AND the source QuickSight sheet — populated controls,'
+  puts '   titles present, right chart kinds, sensible colors/heights, no overlaps/dead zones.'
+end
+
 end # resume_parity skip of phases 1-5
 
 # ---------------------------------------------------------------------------

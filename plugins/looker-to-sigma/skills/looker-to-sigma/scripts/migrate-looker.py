@@ -737,6 +737,37 @@ console.error('stats:', JSON.stringify(res.stats));
     for c in errs[:6]:
         print(f"     [{c.get('elementId')}] {c.get('label')}: {c.get('formula')}")
 
+    # ── Phase 4c — Visual QA: render each content page to a FULL-PAGE PNG ─────
+    # so the layout (applied inline by build_workbook.py and POSTed above) can be
+    # reviewed against refs/layout-visual-qa.md AND the source Looker dashboard —
+    # matching the other migration skills' visual-QA gate. Page ids come from the
+    # LOCAL wb-spec.json (deterministic; POST preserves these ids) — the live GET
+    # /spec readback proved flaky inside the pipeline. SIGMA_API_TOKEN is passed
+    # explicitly in the child env. Render is NON-FATAL (a transient export
+    # failure must not sink a green migration); the REVIEW is the gate.
+    hdr(4, TOTAL, "Visual QA (4c)")
+    vqa = os.path.join(wd, "visual-qa")
+    os.makedirs(vqa, exist_ok=True)
+    content_pages = [pg for pg in (wspec.get("pages") or [])
+                     if "data" not in str(pg.get("id")).lower()]
+    rendered = 0
+    for pg in content_pages:
+        out = os.path.join(vqa, f"{pg['id']}.png")
+        rc, _ = run(["python3", os.path.join(HERE, "sigma-export-png.py"),
+                     "--workbook", wb, "--page", pg["id"], "--out", out,
+                     "--w", "1800", "--h", "1000"],
+                    env={"SIGMA_API_TOKEN": os.environ.get("SIGMA_API_TOKEN", "")},
+                    check=False)
+        if rc == 0:
+            rendered += 1
+        else:
+            print(f"   WARN: visual-QA render failed for page {pg['id']}")
+    print(f"   rendered {rendered}/{len(content_pages)} full-page PNG(s) → {vqa}")
+    if rendered:
+        print("   VISUAL QA (review, do not skip): open each PNG; check vs "
+              "refs/layout-visual-qa.md AND the source Looker dashboard — titles, "
+              "right chart kinds, colors, no overlaps/dead zones.")
+
     # ── Phase 5 — SOURCE-FRESHNESS preflight (read BEFORE any side-by-side) ───
     hdr(5, TOTAL, "Source freshness (preflight — before parity)")
     mh, mr = parse_csv(export_csv(wb, "m-master"))
