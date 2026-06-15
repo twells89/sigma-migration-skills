@@ -1005,12 +1005,47 @@ puts "   workbookId = #{wb_id}"
 hdr(5, TOTAL, 'Layout')
 run!(['ruby', File.join(HERE, 'put-layout.rb'), '--workbook', wb_id, '--layout', layout], env: ENV.to_h)
 puts "   layout applied to workbook #{wb_id}"
+require 'sigma_rest'
+
+# ---------------------------------------------------------------------------
+# Phase 5b — Visual QA: auto-render each content page to a FULL-PAGE PNG so the
+# layout can be reviewed against refs/layout-visual-qa.md AND compared to the
+# source PBI page captures (SKILL.md Phase 5e/5f gate). Matches qlik/tableau
+# Phase 5b. NON-FATAL — a transient export failure must not sink a green
+# migration; the REVIEW (reading each PNG) is the actual gate. Page ids come
+# from the LOCAL spec the builder wrote (deterministic; POST preserves them) —
+# the live GET /spec readback has proven flaky mid-pipeline.
+# ---------------------------------------------------------------------------
+begin
+  vqa = File.join(WORK, 'visual-qa')
+  FileUtils.mkdir_p(vqa)
+  local_spec = (JSON.parse(File.read(wb_spec)) rescue {})
+  content_pages_qa = (local_spec['pages'] || []).reject { |p| p['id'].to_s.downcase.include?('data') }
+  tok = (Sigma.auth_token rescue ENV['SIGMA_API_TOKEN'])
+  pngs = []
+  content_pages_qa.each do |pg|
+    out = File.join(vqa, "#{pg['id']}.png")
+    _o, st = Open3.capture2e({ 'SIGMA_API_TOKEN' => tok.to_s }, PY,
+                             File.join(HERE, 'sigma-export-png.py'),
+                             '--workbook', wb_id, '--page', pg['id'], '--out', out,
+                             '--w', '1800', '--h', '1000')
+    st.success? ? (pngs << out) : (puts "   [warn] visual-QA render failed for page #{pg['id']}")
+  end
+  puts "   rendered #{pngs.size}/#{content_pages_qa.size} full-page PNG(s) for visual QA -> #{vqa}"
+  if pngs.any?
+    puts '   VISUAL QA (mandatory review — do not skip): open each PNG and check vs'
+    puts '   refs/layout-visual-qa.md AND the source PBI page captures (export-pbi-pages.py) —'
+    puts '   no overlaps/stacking, no clipped titles, controls in their own band, right chart'
+    puts '   kinds/colors, even heights. See assert-visual-compare.rb for the source-vs-target gate.'
+  end
+rescue StandardError => e
+  puts "   [warn] visual-QA render skipped: #{e.message[0, 120]}"
+end
 
 # ---------------------------------------------------------------------------
 # Phase 6 — Parity (freshness banner FIRST, then formula guard + warehouse compare)
 # ---------------------------------------------------------------------------
 hdr(6, TOTAL, 'Parity')
-require 'sigma_rest'
 require 'date'
 
 # ---- join the NON-BLOCKING Phase-1.5 freshness lane (launched pre-Convert) --

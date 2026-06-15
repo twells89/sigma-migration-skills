@@ -215,6 +215,126 @@ def _proj_format(proj):
     return fmt if isinstance(fmt, str) and fmt else None
 
 
+def _literal(prop):
+    """Unwrap a PBI property's literal value: {expr:{Literal:{Value:"'x'"}}} -> "x".
+    Numeric literals come through as "400D"/"0.45L" — strip the type suffix."""
+    if not isinstance(prop, dict):
+        return None
+    v = (prop.get("expr") or {}).get("Literal", {}).get("Value")
+    if v is None:
+        return None
+    s = str(v).strip()
+    if s.startswith("'") and s.endswith("'"):
+        return s[1:-1]
+    # numeric literal with a trailing type tag (D=double, L=long, M=decimal)
+    m = __import__("re").fullmatch(r"(-?\d+(?:\.\d+)?)[DLMF]?", s)
+    return m.group(1) if m else s
+
+
+def _color_literal(prop):
+    """A PBI color property is either a flat literal ('#RRGGBB') or a themed
+    solid color {solid:{color:{expr:{Literal:{Value:"'#...'"}}}}}. Return the hex
+    string or None."""
+    if not isinstance(prop, dict):
+        return None
+    direct = _literal(prop)
+    if direct and str(direct).startswith("#"):
+        return direct
+    solid = (prop.get("solid") or {}).get("color")
+    return _color_literal(solid) if solid else None
+
+
+# bead (A) reference lines: PBI analytics-pane lines live in the visual's
+# `objects` under axis-scoped keys. Each is a list of instances; each instance's
+# `properties` carries {value, displayName, lineColor, show, ...}. A `value`
+# literal -> a constant Sigma refMark; a measure-bound line (no flat value) is
+# flagged via expr (the builder formula-wraps it). axis maps to Sigma's
+# refMarks.axis: y-axis lines -> 'series', x-axis lines -> 'axis'.
+REFLINE_OBJECT_AXIS = {
+    "y1AxisReferenceLine": "series", "yAxisReferenceLine": "series",
+    "y2AxisReferenceLine": "series2",
+    "xAxisReferenceLine": "axis",
+    "referenceLine": "series",          # generic (cartesian) constant line
+}
+
+
+def _reference_lines(visual):
+    """PBI analytics-pane constant lines -> [{axis, value|expr, label, color, show}].
+    Best-effort: PBIR records each line as objects.<key>[].properties with a
+    `value` literal (constant) and optional displayName/lineColor."""
+    out = []
+    objs = visual.get("objects", {})
+    for key, axis in REFLINE_OBJECT_AXIS.items():
+        for item in objs.get(key, []):
+            props = item.get("properties", {}) if isinstance(item, dict) else {}
+            show = _literal(props.get("show", {}))
+            if str(show).lower() == "false":
+                continue
+            value = _literal(props.get("value", {}))
+            label = _literal(props.get("displayName", {})) or _literal(props.get("text", {}))
+            color = _color_literal(props.get("lineColor", {})) or _color_literal(props.get("color", {}))
+            if value is None:
+                continue   # measure-bound / styling-only line — skip (no constant to plot)
+            out.append({"axis": axis, "value": value,
+                        "label": label, "color": color})
+    return out
+
+
+def _trend_line(visual):
+    """PBI 'Trend line' analytics toggle (objects.trend show:true) -> {model}.
+    PBI only offers a linear trend; Sigma's trendlines[].model = 'linear'."""
+    for item in visual.get("objects", {}).get("trend", []):
+        props = item.get("properties", {}) if isinstance(item, dict) else {}
+        show = _literal(props.get("show", {}))
+        if str(show).lower() == "true":
+            return {"model": "linear"}
+    return None
+
+
+def _measure_color(visual):
+    """bead (B) by-measure color: PBI 'Color saturation' / conditional fill-by-value
+    on a bar/column/combo. PBIR encodes it under objects.dataPoint[].properties.fill
+    as a fillRule whose gradient stops bind a measure (FieldDef/Aggregation), OR a
+    flat colorSaturation. Returns {queryRef, scheme[], reverse} or None — the builder
+    duplicates that measure onto a color:{by:scale} channel.
+
+    We don't reproduce PBI's exact stops; we map to a 3-stop sequential scheme
+    (low->high) and let the agent tune in Sigma. The signal we need is just WHICH
+    measure drives the saturation."""
+    objs = visual.get("objects", {})
+    for item in objs.get("dataPoint", []) + objs.get("colorSaturation", []):
+        props = item.get("properties", {}) if isinstance(item, dict) else {}
+        fill = props.get("fill") or props.get("fillRule") or props.get("colorSaturation") or {}
+        # the fillRule carries the driving measure under a FieldDef/Aggregation
+        rule = (fill.get("fillRule") if isinstance(fill, dict) else None) or fill
+        qr = _fillrule_measure(rule)
+        if qr:
+            stops = (rule.get("linearGradient2") or rule.get("linearGradient3") or {}) if isinstance(rule, dict) else {}
+            lo = _color_literal((stops.get("min") or {}).get("color", {})) if isinstance(stops, dict) else None
+            hi = _color_literal((stops.get("max") or {}).get("color", {})) if isinstance(stops, dict) else None
+            scheme = [c for c in (lo, hi) if c] or ["#ffffcc", "#fd8d3c", "#bd0026"]
+            return {"queryRef": qr, "scheme": scheme, "reverse": False}
+    return None
+
+
+def _fillrule_measure(rule):
+    """The queryRef of the measure a fillRule's gradient binds, or None."""
+    if not isinstance(rule, dict):
+        return None
+    # gradient stops nest the field under .min/.mid/.max .value, OR the rule
+    # carries a top-level Aggregation/Measure under .field.
+    for grad_key in ("linearGradient2", "linearGradient3"):
+        grad = rule.get(grad_key)
+        if isinstance(grad, dict):
+            for stop in ("min", "mid", "max"):
+                fld = (grad.get(stop) or {}).get("value") or (grad.get(stop) or {}).get("field")
+                qr = _expr_queryref(fld) if fld else None
+                if qr:
+                    return qr
+    fld = rule.get("field") or rule.get("expr")
+    return _expr_queryref(fld) if fld else None
+
+
 def extract(pbir_dir):
     defn = os.path.join(pbir_dir, "definition")
     if not os.path.isdir(defn):
@@ -264,6 +384,14 @@ def extract(pbir_dir):
                 "data_labels": _obj_flag(visual, "labels"),
                 # bead ry0n: PBI legend toggle (objects.legend show) — true/false/None
                 "legend": _obj_flag(visual, "legend"),
+                # bead (A) reference lines: PBI analytics-pane constant lines ->
+                # Sigma refMarks (wrapped value, label.visibility:'shown').
+                "ref_lines": _reference_lines(visual),
+                # bead (A) trend line: PBI 'Trend line' analytics toggle.
+                "trend_line": _trend_line(visual),
+                # bead (B) by-measure color: 'Color saturation' / FX fill-by-value
+                # -> Sigma color:{by:scale, column:<dup measure>, scheme}.
+                "measure_color": _measure_color(visual),
             }
             if rec["sigma_kind"] == "text":
                 rec["text"] = _textbox_body(visual)

@@ -385,6 +385,70 @@ def measure_formula(fs)
   end
 end
 
+# bead (A) reference lines: PBI analytics-pane constant lines (rec['ref_lines'],
+# captured by extract-pbir._reference_lines) -> Sigma `refMarks`. VERIFIED shape
+# (ported from build-charts-from-signals.rb + qlik-to-sigma qlik_refmarks,
+# 2026-06-15): `value` MUST be the wrapped object form ({type:formula,formula} —
+# a bare number 400s; value.type:column is rejected too, so a column threshold
+# goes through `formula`), and `label.visibility` MUST be 'shown' (the docs'
+# bare-number/string forms are rejected by the live API). axis is carried from
+# the PBI axis ('series' for y-axis lines, 'axis' for x). Only emitted for the
+# cartesian kinds Sigma supports refMarks on.
+def build_ref_marks(rec)
+  Array(rec['ref_lines']).map do |rl|
+    val = rl['value']
+    # constant numbers go through verbatim; anything else is treated as a Sigma
+    # formula (a measure-bound threshold the agent can refine).
+    formula = val.to_s
+    next nil if formula.strip.empty?
+    rm = { 'type' => 'line', 'axis' => (rl['axis'] || 'series'),
+           'value' => { 'type' => 'formula', 'formula' => formula } }
+    line = {}
+    line['color'] = rl['color'] if rl['color']
+    rm['line'] = line.merge('width' => 2) unless line.empty?
+    label = { 'visibility' => 'shown' }
+    label['text'] = rl['label'] if rl['label'] && !rl['label'].to_s.empty?
+    rm['label'] = label
+    rm
+  end.compact
+end
+
+# bead (A) trend line: PBI 'Trend line' analytics toggle -> Sigma trendlines[].
+# The verified shape (build-charts-from-signals.rb) keys the trendline to a
+# value column id with model + shown label/value. PBI offers only a linear trend.
+def build_trendlines(rec, ycids)
+  return [] unless rec['trend_line'] && ycids && !ycids.empty?
+  model = (rec['trend_line']['model'] || 'linear').to_s
+  ycids.map do |cid|
+    real = cid.is_a?(Hash) ? cid['columnId'] : cid   # combo: {columnId,type} form
+    { 'columnId' => real, 'model' => model,
+      'label' => { 'visibility' => 'shown' }, 'value' => { 'visibility' => 'shown' } }
+  end
+end
+
+# bead (B) by-measure color: PBI 'Color saturation' / FX fill-by-value
+# (rec['measure_color'] = {queryRef, scheme[], reverse}) -> Sigma
+# color:{by:scale, column:<dup measure>, scheme}. Ported from qlik-to-sigma's
+# qlik_color: a Sigma column can't be on BOTH yAxis and color, so the driving
+# measure is DUPLICATED into a new (hidden) column referenced by the scale.
+# Mutates `cols` (appends the dup column) and returns the color hash, or nil.
+def measure_color_channel(rec, fields, master, vfmts, eid, cols, ycids)
+  mc = rec['measure_color']
+  return nil unless mc && mc['queryRef'] && ycids && !ycids.empty?
+  fs = field_spec(mc['queryRef'], fields, master)
+  scheme = Array(mc['scheme']).dup
+  scheme = ['#ffffcc', '#fd8d3c', '#bd0026'] if scheme.empty?
+  scheme.reverse! if mc['reverse']
+  base_cid = ycids.first.is_a?(Hash) ? ycids.first['columnId'] : ycids.first
+  base = cols.find { |c| c['id'] == base_cid }
+  cid = "#{eid}-clr"
+  dup = { 'id' => cid, 'name' => "#{qr_leaf(mc['queryRef'], 'Value')} (color)",
+          'formula' => (base ? base['formula'] : measure_formula(fs)), 'hidden' => true }
+  apply_fmt(dup, mc['queryRef'], fields, vfmts)
+  cols << dup
+  { 'by' => 'scale', 'column' => cid, 'scheme' => scheme }
+end
+
 # Deterministic, collision-free short id from a PBIR visual id. PBIR visual ids
 # often share a long common prefix (e.g. a1b2c3d4e5f60001 / ...0002), so a naive
 # prefix-truncate collides. Take a stable suffix of the sanitized id plus a short
@@ -802,7 +866,17 @@ def build_element(rec, fields, masters, extra_data = [])
       cols << { 'id' => scid, 'formula' => sfs['ref'], 'name' => qr_leaf(series, 'Series') }
       qr_cids[series] = scid
       el['color'] = { 'by' => 'category', 'column' => scid }
+    else
+      # bead (B) by-measure color: only when PBI did NOT bind a categorical
+      # Series/Legend (that wins — a column can't be on color twice).
+      cc = measure_color_channel(rec, fields, master, vfmts, eid, cols, ycids)
+      el['color'] = cc if cc
     end
+    # bead (A) reference lines / trend line -> Sigma refMarks / trendlines.
+    rms = build_ref_marks(rec)
+    el['refMarks'] = rms unless rms.empty?
+    tls = build_trendlines(rec, ycids)
+    el['trendlines'] = tls unless tls.empty?
   when 'combo-chart'
     # bead 6v5u: PBI lineClustered/StackedColumnComboChart -> Sigma combo. Roles:
     # Category (x), Y (columns -> primary/left axis), Y2 (lines -> secondary/right
@@ -837,6 +911,14 @@ def build_element(rec, fields, masters, extra_data = [])
     end
     el['xAxis'] = { 'columnId' => dcid }
     el['yAxis'] = { 'columnIds' => ycids }
+    # bead (B) by-measure color on the combo's primary bars.
+    cc = measure_color_channel(rec, fields, master, vfmts, eid, cols, ycids)
+    el['color'] = cc if cc
+    # bead (A) reference lines / trend line.
+    rms = build_ref_marks(rec)
+    el['refMarks'] = rms unless rms.empty?
+    tls = build_trendlines(rec, ycids)
+    el['trendlines'] = tls unless tls.empty?
   when 'scatter-chart'
     # bead 14w(b): scatter -> xAxis (measure), yAxis (measure), point category for
     # color/detail. PBI scatter binds X + Y (both measures) and a Category/Details.
@@ -919,6 +1001,9 @@ def build_element(rec, fields, masters, extra_data = [])
     # PBI legend.show=false -> hide the Sigma legend (the detail-on-color split
     # otherwise surfaces a legend PBI did not show).
     el['legend'] = { 'visibility' => 'hidden' } if rec['legend'] == false
+    # bead (A) reference lines on a scatter (e.g. a margin-target line at x=0.45).
+    rms = build_ref_marks(rec)
+    el['refMarks'] = rms unless rms.empty?
   when 'pie-chart', 'donut-chart'
     dim = (b['Category'] || b['Legend'] || []).first
     val = (b['Values'] || b['Y'] || []).first
