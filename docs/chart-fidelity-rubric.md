@@ -59,20 +59,24 @@ converter) and synthesize into the status matrix. Re-run after any builder chang
    zones get more rows — not equal heights), and emits a sheet/page **title header**
    element.
 
-## Current status (2026-06-15)
+## Current status (updated 2026-06-15)
 
 ✅ HANDLED · ⚠️ PARTIAL · ❌ MISSING
 
 | Dim | tableau | powerbi | looker | quicksight | thoughtspot | cognos | mstr | qlik |
 |---|---|---|---|---|---|---|---|---|
-| 1 Scatter no-collapse | ⚠️ no size | ✅ | ❌ | ❌ | ⚠️ | ⚠️ | ❌ | ✅ |
+| 1 Scatter no-collapse | ⚠️ no size | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | 2 Colors (by-measure) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 3 Reference lines | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 4 Dynamic titles | ✅ | ⚠️ | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ✅ |
 | 5 Controls w/ source | ✅ | ✅ | ✅ | ❌ | ❌ | ⚠️ | ✅ | ✅ |
-| 6 Visual-QA auto-gate | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | ❌ | ⚠️ | ✅ |
+| 6 Visual-QA auto-gate | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ✅ |
 | 7 Spec-shape | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 8 Layout fidelity | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ✅ |
+
+**Progress log:**
+- **2026-06-15 — P2 scatter collapse fixed** in looker/quicksight/thoughtspot/cognos (grouped-source port; **looker live-proven** — 5 distinct points rendered), + `verify-parity` numeric-string coercion so scatters don't false-DIVERGE. Remaining: `+size` on tableau; scatter emission on mstr (roadmap).
+- **2026-06-15 — P1 visual-QA gate wired** in tableau/looker/quicksight/cognos orchestrators (qlik already had it; **looker live-proven** — renders N/N). Remaining: powerbi/thoughtspot auto-invoke their existing gate; mstr.
 
 **Reference implementation:** `qlik-to-sigma` (all 8) and `powerbi-to-sigma` (scatter,
 controls, layout) are the patterns to port from.
