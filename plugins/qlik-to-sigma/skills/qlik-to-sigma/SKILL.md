@@ -259,14 +259,19 @@ side-by-side):
    dim-value-without-facts surfaces **even when every shared cell matches**.
    (Known shape: Qlik shows dimension values with zero fact rows — e.g. a store with
    no orders — that a fact-grain LEFT JOIN can never emit; that's data shape, not a bug.)
-4. **Control lint (gate 7)** — `scripts/lib/control_lint.rb` (shared, vendored
+4. **Layout lint (gate 6)** — `scripts/lib/layout_lint.rb` (shared, vendored
+   byte-identical) runs against the LIVE spec readback: no raw-id element display
+   names, no controls orphaned outside containers on a banded page, no generic
+   Sigma auto-page title in the header band. RED here blocks GREEN. Bypass with
+   `--skip-layout-lint`. (Verified clean against shipped Qlik migrations.)
+5. **Control lint (gate 7)** — `scripts/lib/control_lint.rb` (shared, vendored
    byte-identical) runs against the LIVE spec readback + the builder's
    `control-scope.json` sidecar: no dead controls, no ghost targets, full reach
    (incl. the Qlik `mustReach` global-scope assertions), and source-signal
    coverage (filterpanes/listboxes in the app but zero controls = RED).
    Optional runtime proof: `ruby scripts/probe-controls.rb --workbook-id <wb>`
    (flip test via export `parameters`; MCP can NOT set a control value).
-GREEN = all columns resolve + no DIVERGENT KPI + control lint clean. Bucket
+GREEN = all columns resolve + no DIVERGENT KPI + layout lint clean + control lint clean. Bucket
 mismatches WARN loudly with the likely cause. (First run matched to the cent;
 staleness-explained deltas don't block.)
 
@@ -303,6 +308,7 @@ A workbook that POSTs 200 and passes numeric/bucket parity can still be visually
 | `scripts/sigma-export-png.py` | 5.5 | Render a workbook page/element to PNG via the export API for visual inspection against `refs/layout-visual-qa.md` (the Visual QA gate). |
 | `scripts/build-sigma-dm.py` | 3 | Author + POST the Sigma data model FROM THE PIPELINE ARTIFACTS (converter-out + reconcile + denorm): repointed star + relationships + denorm SQL element + metrics. `--dry-run` for offline. **Proven (generalized 2026-06-10).** |
 | `scripts/build-sigma-workbook.py` | 4 | Author + POST the workbook FROM DISCOVERY (charts.json + layout.json): one page per Qlik sheet, cell-grid layout, sorts, formats, null-suppression filters. `--dry-run` for offline. **Proven (generalized 2026-06-10).** |
+| `scripts/lib/layout_lint.rb` | 5 | **Shared layout-quality lint (gate 6)** — raw-id display names / orphan controls outside containers / generic header-band title; vendored byte-identical across plugins; run automatically by `migrate-qlik.rb` Phase 6 (`--skip-layout-lint` to bypass). |
 | `scripts/lib/control_lint.rb` | 5 | **Shared control-wiring lint (gate 7)** — dead controls / ghost targets / reach / `control-scope.json` coverage; vendored byte-identical across plugins; run automatically by `migrate-qlik.rb` Phase 6e. |
 | `scripts/probe-controls.rb` | 5 | **Shared flip test** — runtime proof a control filters: export an in-closure element with/without `parameters:{controlId: value}`; cross-page exports prove Qlik's global scope. |
 | `refs/control-parity.md` | 5 | The control-parity contract: lint + sidecar schema + the MCP/export-API answer (export `parameters` is the only way to set a control value). |

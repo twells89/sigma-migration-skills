@@ -128,6 +128,7 @@ OptionParser.new do |o|
   o.on('--yes')               {     opts[:yes]      = true }
   o.on('--from-discovery DIR'){ |v| opts[:from]     = File.expand_path(v) }
   o.on('--dry-run')           {     opts[:dry_run]  = true }
+  o.on('--skip-layout-lint')  {     opts[:skip_layout_lint] = true }
 end.parse!
 
 abort 'missing --app (or --from-discovery)' unless opts[:app] || opts[:from]
@@ -715,12 +716,36 @@ parity_ok = err_cols.empty? && entries.size.positive? && divergent.zero?
 # source-signal coverage check (filterpanes/listboxes in the app but zero
 # controls in the spec = the silently-dropped class this gate exists to
 # kill). RED here blocks GREEN exactly like a parity failure.
-puts
-puts '   ── CONTROL LINT (gate 7: every filterpane/listbox a WORKING control) ──'
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
+require 'layout_lint'
 require 'control_lint'
 live = Sigma.request(:get, "/v2/workbooks/#{WB_ID}/spec") rescue {}
 live_spec = live.is_a?(Hash) ? (live['spec'] || live) : {}
+
+# 6d — layout-quality lint, gate 6 (scripts/lib/layout_lint.rb, shared —
+# vendored byte-identical across the migration plugins). Flags raw-id element
+# display names, controls orphaned outside containers on a banded page, and
+# generic Sigma auto-page titles in the header band. RED here blocks GREEN like
+# a parity or control failure. --skip-layout-lint bypasses. Verified clean
+# against shipped Qlik migrations (Retail Orders, Exec Overview, Shipping Perf).
+puts
+puts '   ── LAYOUT LINT (gate 6: titles / orphan controls / header band) ──'
+if opts[:skip_layout_lint]
+  puts '     [SKIP] --skip-layout-lint'
+  layout_ok = true
+else
+  layout_violations = LayoutLint.lint(live_spec)
+  if layout_violations.empty?
+    puts '     [OK] layout lint clean'
+  else
+    puts "     [FAIL] #{layout_violations.size} layout-lint violation(s):"
+    layout_violations.each { |v| puts "       - #{v}" }
+  end
+  layout_ok = layout_violations.empty?
+end
+
+puts
+puts '   ── CONTROL LINT (gate 7: every filterpane/listbox a WORKING control) ──'
 ctl_scope = (JSON.parse(File.read(File.join(WORK, 'control-scope.json'))) rescue nil)
 ctl_violations = ControlLint.lint(live_spec, scope: ctl_scope)
 ctl_rows = ControlLint.controls_report(live_spec)
@@ -745,10 +770,12 @@ puts "workbookId  : #{WB_ID}"
 puts "PARITY      : #{parity_ok ? 'GREEN' : 'RED'} — #{entries.size} cols resolve (#{err_cols.size} error), " \
      "KPIs: #{kpi_results.count('MATCH')} match / #{kpi_results.count('STALE-EXPLAINED')} stale-explained / #{divergent} divergent, " \
      "#{bucket_warns} bucket warning(s)"
+puts "LAYOUT      : #{layout_ok ? 'GREEN' : 'RED'} — gate 6 layout lint" \
+     "#{(defined?(layout_violations) && layout_violations && layout_violations.any?) ? ", #{layout_violations.size} violation(s)" : (opts[:skip_layout_lint] ? ' (skipped)' : '')}"
 puts "CONTROLS    : #{control_ok ? 'GREEN' : 'RED'} — gate 7 control lint, #{ctl_rows.size} control(s) checked" \
      "#{ctl_violations.any? ? ", #{ctl_violations.size} violation(s)" : ''}"
 puts "freshness   : Qlik last reload #{app_meta['lastReloadTime'] || '?'} (#{stale_days} days ago)" if stale_days
 puts "warnings    : #{conv_warnings.size} converter, #{(wb_res['warnings'] || []).size} workbook-build" if conv_warnings.any? || (wb_res['warnings'] || []).any?
 puts '======================================='
 phase_summary
-exit(parity_ok && control_ok ? 0 : 3)
+exit(parity_ok && layout_ok && control_ok ? 0 : 3)
