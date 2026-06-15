@@ -487,6 +487,56 @@ def infer_csv_agg(header)
   end
 end
 
+# ---- By-MEASURE (continuous) color channel --------------------------------
+# Tableau column-instance references carry an aggregation prefix + a type
+# suffix: `[federated.X].[sum:NET_REVENUE:qk]` is a continuous MEASURE
+# (prefix in MEASURE_PREFIXES, `:qk` quantitative-key), whereas
+# `[none:REGION:nk]` is a discrete dimension. A measure on Tableau's Color
+# shelf is a *continuous* color ramp — the Sigma equivalent is
+# `color:{by:scale, column:<measure col>, scheme:[...]}` (mirrors qlik_color's
+# byMeasure branch in qlik-to-sigma). A Sigma column can't be on both yAxis and
+# color, so the caller adds a DUPLICATE measure column for the color scale.
+MEASURE_REF_PREFIXES = %w[sum avg min max count countd cntd median stdev stdevp var varp attr usr].freeze
+
+# Sequential low->high ramp — Qlik's QLIK_MSCHEME 'sg'/'sc' sequential palette,
+# a sensible default for a continuous measure color (white-yellow -> orange ->
+# deep red). The agent can re-pick a diverging scheme in the Sigma editor.
+MEASURE_COLOR_SCHEME = %w[#ffffcc #fd8d3c #bd0026].freeze
+
+# Is this channel encoding a continuous MEASURE (vs a discrete dimension)?
+# Reads the column-instance ref's agg/type tokens. Conservative: only true when
+# the ref clearly carries a measure aggregation prefix or a quantitative key.
+def channel_is_measure?(channel)
+  return false unless channel
+  ref = (channel['column'] || channel['field']).to_s
+  return false if ref.empty?
+  spec = ref[/\[([^\[\]]*)\]\s*\z/, 1] || ref     # last bracket segment
+  if (m = spec.match(/\A([a-z]+):.*?:([a-z]+)\z/i))
+    pref = m[1].downcase
+    return true  if MEASURE_REF_PREFIXES.include?(pref)
+    return false if pref == 'none'
+  end
+  spec =~ /:qk\]?\z/i ? true : false             # quantitative-key suffix
+end
+
+# Resolve a measure-color channel to a master column + Sigma aggregator.
+# Returns { 'name', 'formula', 'agg' } (formula = aggregated master ref), or nil
+# when the channel isn't a measure / can't be resolved.
+def color_measure_field(channel, meta, mmap)
+  return nil unless channel_is_measure?(channel)
+  ref = (channel['column'] || channel['field']).to_s
+  guid = guid_from_text(ref)
+  cap = (guid && (meta['columns_by_guid'] || {})[guid]&.dig('caption')) ||
+        ref.sub(/^\[[^\]]+\]\./, '').gsub(/^\[|\]$/, '')
+           .sub(/^[a-z]+:/i, '').sub(/:[a-z]+$/i, '')
+  return nil if cap.to_s.strip.empty?
+  spec = ref[/\[([^\[\]]*)\]\s*\z/, 1] || ref
+  pref = (spec.match(/\A([a-z]+):/i) || [])[1].to_s.downcase
+  agg = SHELF_AGG_FOR_PREFIX[pref] || SIGMA_AGG[infer_csv_agg(cap) || 'Sum'] || 'Sum'
+  m = map_column(cap, mmap) || { 'name' => cap }
+  { 'name' => m['name'], 'formula' => render_agg(agg, "[Master/#{m['name']}]"), 'agg' => agg }
+end
+
 # ---- Load inputs ----
 layout = JSON.parse(File.read(opts[:layout]))
 mmap   = JSON.parse(File.read(opts[:mmap]))
@@ -1858,6 +1908,18 @@ layout.each do |dash|
                         'formula' => color_dim['formula'] || "[Master/#{color_dim['name']}]" }
     end
 
+    # By-MEASURE (continuous) color: a measure on Tableau's Color shelf is a
+    # color RAMP, not a categorical series. When the 3-channel dim path above
+    # did NOT claim a color dim and channels.color resolves to a measure, emit
+    # color:{by:scale} on a DUPLICATE measure column (a column can't sit on both
+    # yAxis and color) — mirrors qlik_color's byMeasure branch. The duplicate
+    # column object is built in the finalize block once the y-measure exists.
+    color_scale = nil
+    if color_dim.nil?
+      cs = color_measure_field(z.dig('channels', 'color'), meta, mmap)
+      color_scale = cs if cs
+    end
+
     # ---- Two-stage aggregation (FIXED LOD / grain-aware average) ------------
     # See the parse_fixed_lod block comment. Both cases retarget the chart at a
     # hidden helper element; every downstream block that wraps the column
@@ -2024,20 +2086,33 @@ layout.each do |dash|
         a = SIGMA_AGG[infer_csv_agg(hdr) || 'Sum'] || 'Sum'
         render_agg(a, "[Master/#{mm['name']}]")
       end
+      # SIZE channel: a measure on Tableau's Size shelf scales each bubble.
+      # Sigma's scatter size is size:{id:<col>} — the column must be a grouped
+      # CALCULATION on the same hidden source (one value per point dim), exactly
+      # like x/y (mirrors qlik_color's scatter size branch). Resolve the size
+      # measure from channels.size; skip when it's a dimension or unresolvable.
+      size_field = color_measure_field(z.dig('channels', 'size'), meta, mmap)
       src_id   = "#{el_id}-src"
       src_name = "#{cap} Source"
       gd = "#{src_id}-d"
       gx = "#{src_id}-x"
       gy = "#{src_id}-y"
+      gz = "#{src_id}-z"
+      src_columns = [
+        { 'id' => gd, 'name' => dim['name'], 'formula' => dim['formula'] || "[Master/#{dim['name']}]" },
+        { 'id' => gx, 'name' => x_pair[0]['name'], 'formula' => agg_for.call(x_pair[0], x_pair[1]) },
+        { 'id' => gy, 'name' => y_pair[0]['name'], 'formula' => agg_for.call(y_pair[0], y_pair[1]) }
+      ]
+      src_calcs = [gx, gy]
+      if size_field
+        src_columns << { 'id' => gz, 'name' => size_field['name'], 'formula' => size_field['formula'] }
+        src_calcs << gz
+      end
       data_elements << {
         'id' => src_id, 'kind' => 'table', 'name' => src_name,
         'source' => { 'kind' => 'table', 'elementId' => opts[:master_id] },
-        'columns' => [
-          { 'id' => gd, 'name' => dim['name'], 'formula' => dim['formula'] || "[Master/#{dim['name']}]" },
-          { 'id' => gx, 'name' => x_pair[0]['name'], 'formula' => agg_for.call(x_pair[0], x_pair[1]) },
-          { 'id' => gy, 'name' => y_pair[0]['name'], 'formula' => agg_for.call(y_pair[0], y_pair[1]) }
-        ],
-        'groupings' => [{ 'id' => "#{src_id}-g", 'groupBy' => [gd], 'calculations' => [gx, gy] }],
+        'columns' => src_columns,
+        'groupings' => [{ 'id' => "#{src_id}-g", 'groupBy' => [gd], 'calculations' => src_calcs }],
         'visibleAsSource' => false
       }
       money_fmt = { 'kind' => 'number', 'formatString' => '$,.0f', 'currencySymbol' => '$' }
@@ -2054,6 +2129,14 @@ layout.each do |dash|
         'yAxis' => { 'columnIds' => ["y-#{el_id}"] },
         'color' => { 'by' => 'category', 'column' => "c-#{el_id}" }
       }
+      if size_field
+        element['columns'] << { 'id' => "sz-#{el_id}", 'name' => size_field['name'],
+                                'formula' => "[#{src_name}/#{size_field['name']}]",
+                                'format' => num_fmt.call(size_field['name']) }
+        element['size'] = { 'id' => "sz-#{el_id}" }
+        warnings << "'#{cap}' scatter size shelf carries measure '#{size_field['name']}' — emitted size:{id} " \
+                    'over a grouped calculation on the hidden source (one value per point)'
+      end
       unless rows.any? { |r| r[0].nil? || r[0].to_s.strip.empty? }
         element['columns'] << { 'id' => "nn-c-#{el_id}", 'name' => "#{dim['name']} Not Null",
                                 'formula' => "IsNotNull([#{src_name}/#{dim['name']}])" }
@@ -2064,7 +2147,7 @@ layout.each do |dash|
       element['_worksheet'] = cap
       element['_dashboard'] = dash['dashboard']
       elements << element
-      warnings << "'#{cap}' scatter pre-aggregated via hidden grouped source '#{src_name}' (x=#{x_pair[0]['name']}, y=#{y_pair[0]['name']}, detail=#{dim['name']}) — raw refs on axes, color=detail (PBI ry0n design)"
+      warnings << "'#{cap}' scatter pre-aggregated via hidden grouped source '#{src_name}' (x=#{x_pair[0]['name']}, y=#{y_pair[0]['name']}, detail=#{dim['name']}#{size_field ? ", size=#{size_field['name']}" : ''}) — raw refs on axes, color=detail (PBI ry0n design)"
       next
     end
 
@@ -2108,6 +2191,18 @@ layout.each do |dash|
     if color_col_obj && !%w[pie-chart donut-chart table pivot-table].include?(kind)
       element['columns'] << color_col_obj
       element['color'] = { 'by' => 'category', 'column' => color_col_obj['id'] }
+    elsif color_scale && %w[bar-chart line-chart area-chart combo-chart].include?(kind)
+      # By-measure color ramp: add a DUPLICATE measure column (Sigma forbids a
+      # column on both yAxis and color) and point color:{by:scale} at it.
+      clr_id = "clr-#{el_id}"
+      clr_col = { 'id' => clr_id, 'name' => "#{color_scale['name']} (color)",
+                  'formula' => color_scale['formula'] }
+      clr_col['format'] = meas_col_obj['format'] if color_scale['name'] == meas['name'] && meas_col_obj['format']
+      element['columns'] << clr_col
+      element['color'] = { 'by' => 'scale', 'column' => clr_id, 'scheme' => MEASURE_COLOR_SCHEME.dup }
+      warnings << "'#{cap}' color shelf carries the measure '#{color_scale['name']}' (continuous) — emitted " \
+                  "color:{by:scale} on a duplicate measure column with a sequential scheme; re-pick a diverging " \
+                  'palette in the Sigma editor if Tableau used one'
     end
 
     # Null-dim exclusion (Tableau↔Sigma join-semantics parity): Sigma DM
@@ -2340,7 +2435,7 @@ layout.each do |dash|
     # If channels.color is set, that's a multi-series signal. Emit a TODO note
     # so the agent can fan-out the yAxis with one If() per category. We don't
     # auto-fan because we don't have a reliable categorical-values list here.
-    if z.dig('channels', 'color', 'column') && color_col_obj.nil? && kind != 'pie-chart'
+    if z.dig('channels', 'color', 'column') && color_col_obj.nil? && color_scale.nil? && kind != 'pie-chart'
       warnings << "'#{cap}' has a color channel on #{z['channels']['color']['column']} — chart is single-series; agent should fan-out yAxis with one If() per category (see refs/workbook-layout.md \"Multi-series chart patterns\")"
     end
 
