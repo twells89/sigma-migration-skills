@@ -393,6 +393,13 @@ QS_FALLBACK = {
   'RadarChartVisual'    => 'table'
 }.freeze
 build_warnings = []
+# Hidden GROUPED source tables emitted for scatter-charts (one row per point dim),
+# appended to the Data page next to the master. See the scatter branch below
+# (ported from the live-verified qlik-to-sigma builder, bead ry0n): Sigma's scatter
+# axis is a GROUPING axis, so an aggregate (Sum(...)) over the UNGROUPED master
+# collapses every point to one x. The scatter must instead bind to a hidden grouped
+# source whose groupBy is the point dimension.
+scatter_sources = []
 
 master_cols = {}   # colname(raw or calc) -> {id, formula, name}
 def fmt_for(name)
@@ -627,17 +634,55 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       xs = rol.('XAxis'); ys = rol.('YAxis'); cat = rol.('Category'); sz = rol.('Size')
       (next if xs.empty? || ys.empty?)
       xc, xid = meas_col(xs[0], calc, master_cols, DMEL, M); yc, yid = meas_col(ys[0], calc, master_cols, DMEL, M)
-      el = base.merge('columns' => [xc, yc], 'xAxis' => { 'columnId' => xid }, 'yAxis' => { 'columnIds' => [yid] })
       if cat.any?
-        dc, did = dim_col(cat[0], calc, master_cols, DMEL, M); el['columns'] << dc; el['color'] = { 'by' => 'category', 'column' => did }
-      end
-      # D8: QuickSight scatter Size (bubble radius). Sigma scatter has no verified spec
-      # size/radius channel (mirrors bar/line shape: xAxis+yAxis+color only), so we PROJECT
-      # the size measure as a column (data migrates + available in the element) and record a
-      # warning that bubble-sizing itself is a Sigma UI-only/limitation, not data loss.
-      if sz.any?
-        szc, _szid = meas_col(sz[0], calc, master_cols, DMEL, M); el['columns'] << szc
-        build_warnings << { 'visual' => title, 'type' => 'ScatterBubbleSize', 'reason' => "QuickSight scatter bubble-size ('#{sz[0][1]}') has no Sigma scatter size channel; the measure is projected as a column but bubbles render uniform-size (Sigma limitation)" }
+        # A QuickSight scatter is measure-vs-measure with the Category field as the POINT
+        # identity. Sigma's scatter axis is a GROUPING axis: an aggregate (Sum(...)) over
+        # the UNGROUPED master evaluates per-row and every point collapses to one x — the
+        # spec POSTs but renders wrong (bead ry0n; ported from the live-verified
+        # qlik-to-sigma builder, 2026-06-15). Correct shape: bind the scatter to a HIDDEN
+        # GROUPED source table (one row per point dim) and reference its grouped columns
+        # with raw refs; the dim stays on color:{by:category} so points don't merge.
+        dc, did = dim_col(cat[0], calc, master_cols, DMEL, M)
+        gcols = [dc, xc, yc]          # group dim + x + y (+ size); columns live on the source
+        gcids = [xid, yid]            # aggregated calculations (size appended below)
+        szc = nil
+        if sz.any?
+          szc, szid = meas_col(sz[0], calc, master_cols, DMEL, M)
+          gcols << szc; gcids << szid
+        end
+        src_id = "#{eid}-src"; src_name = "Scatter Source #{eid[-6..-1]}"
+        grp_id = "#{src_id}-g"
+        scatter_sources << { 'id' => src_id, 'kind' => 'table', 'name' => src_name,
+                             'visibleAsSource' => false,
+                             'source' => { 'elementId' => 'master', 'kind' => 'table' },
+                             'columns' => gcols,
+                             'groupings' => [{ 'id' => grp_id, 'groupBy' => [did], 'calculations' => gcids }] }
+        # RAW (non-aggregating) refs into the grouped source, one per channel.
+        raw = lambda do |col|
+          { 'id' => "#{eid}-#{col['id']}", 'formula' => "[#{src_name}/#{col['name']}]", 'name' => col['name'] }
+        end
+        s_dim = raw.(dc); s_x = raw.(xc); s_y = raw.(yc)
+        scols = [s_dim, s_x, s_y]
+        el = base.merge('source' => { 'elementId' => src_id, 'kind' => 'table', 'groupingId' => grp_id },
+                        'xAxis' => { 'columnId' => s_x['id'] }, 'yAxis' => { 'columnIds' => [s_y['id']] },
+                        'color' => { 'by' => 'category', 'column' => s_dim['id'] })
+        # D8 (now a real channel): QuickSight scatter Size becomes a Sigma scatter
+        # size:{id} channel over the grouped source's size aggregate.
+        if szc
+          s_sz = raw.(szc); scols << s_sz; el['size'] = { 'id' => s_sz['id'] }
+        end
+        el['columns'] = scols
+      else
+        # No point dimension: keep the prior measure-vs-measure-on-master behavior
+        # (a single ungrouped scatter point is still the faithful migration here).
+        el = base.merge('columns' => [xc, yc], 'xAxis' => { 'columnId' => xid }, 'yAxis' => { 'columnIds' => [yid] })
+        # D8: QuickSight scatter Size (bubble radius) with no grouping. Sigma scatter has no
+        # verified ungrouped size channel, so we PROJECT the size measure as a column (data
+        # migrates) and record a warning that bubble-sizing renders uniform.
+        if sz.any?
+          szc, _szid = meas_col(sz[0], calc, master_cols, DMEL, M); el['columns'] << szc
+          build_warnings << { 'visual' => title, 'type' => 'ScatterBubbleSize', 'reason' => "QuickSight scatter bubble-size ('#{sz[0][1]}') has no Sigma scatter size channel (no point dimension to group on); the measure is projected as a column but bubbles render uniform-size (Sigma limitation)" }
+        end
       end
     when 'table'
       cf_fieldmap = {}   # QS FieldId -> Sigma column id (for D19 conditional formatting)
@@ -778,9 +823,14 @@ if dash_pages.empty?
   sheet_pages = [{ 'pageId' => 'page-dash', 'name' => (an['Name'] || 'Dashboard'), 'sheetIndex' => 0, 'elements' => [] }]
 end
 
+# Scatter charts emit a hidden GROUPED source table (one row per point dim). Park
+# them on the Data page next to the master (visibleAsSource:false, so they need no
+# layout slot) — they're sourced by the scatter element via {elementId, groupingId}.
+data_elements = [master] + scatter_sources
+
 spec = { 'name' => (an['Name'] || 'QuickSight Migration') + ' (from QuickSight)',
          'schemaVersion' => 1,
-         'pages' => [{ 'id' => 'page-data', 'name' => 'Data', 'elements' => [master] }] + dash_pages }
+         'pages' => [{ 'id' => 'page-data', 'name' => 'Data', 'elements' => data_elements }] + dash_pages }
 spec['folderId'] = opts[:folder] if opts[:folder]
 
 File.write(opts[:out], JSON.pretty_generate(spec))

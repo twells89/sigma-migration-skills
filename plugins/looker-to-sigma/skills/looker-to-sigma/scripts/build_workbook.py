@@ -478,6 +478,8 @@ def main():
     # Looker pixel heights and axis labels render.
     ROW_SCALE = 2
     elements, layout_items = [], []
+    scatter_srcs = []   # hidden grouped SOURCE tables for measure-vs-measure scatters
+                        # (one row per point dim); parked on the Data page, no layout slot
 
     # API-created dashboards that were never arranged in the Looker UI have
     # layout components with NULL row/column/width/height — auto-flow those
@@ -587,24 +589,69 @@ def main():
                 warnings.append(f"tile '{el['name']}': Looker show_comparison ({el.get('comparisonType')}) — "
                                 f"Sigma KPI spec has no comparison/delta slot; add a second KPI side-by-side or set it in the UI")
         elif kind == "scatter-chart":
-            # both axes are measures; the (optional) dimension becomes the color split
+            # both axes are measures; the (optional) dimension becomes the point split.
             xf = ms[0] if ms else None
             yf = ms[1] if len(ms) > 1 else None
-            xid, yid, cols = sid("x"), sid("y"), []
-            xcol = {"id": xid, "formula": formula_for(xf, ex) if xf else "Count()",
-                    "name": disp(leaf(xf)) if xf else "X"}
-            ycol = {"id": yid, "formula": formula_for(yf, ex) if yf else "Count()",
-                    "name": disp(leaf(yf)) if yf else "Y"}
-            if xf: apply_fmt(xcol, xf)
-            if yf: apply_fmt(ycol, yf)
-            cols.append(xcol); cols.append(ycol)
-            base["columns"] = cols
-            base["xAxis"] = {"columnId": xid}; base["yAxis"] = {"columnIds": [yid]}
-            if ds:
-                clr = sid("clr")
-                cols.append({"id": clr, "formula": formula_for(ds[0], ex), "name": col_display(ds[0], ex)})
-                base["color"] = {"by": "category", "column": clr}
-            for mf in (ms[:2] or []): _warn_count(mf, el)
+            sf = ms[2] if len(ms) > 2 else None     # optional size measure
+            if ds and xf and yf:
+                # Sigma's scatter axis is a GROUPING axis: putting an aggregate
+                # (Sum(...)) directly on xAxis makes it evaluate per source row and
+                # every point collapses to one x — the spec POSTs but renders wrong
+                # (proven on qlik; bead ry0n). Correct shape: bind the scatter to a
+                # hidden grouped SOURCE table (one row per point dim) and reference
+                # the grouped columns with RAW refs; the dim stays on
+                # color:{by:category} so points don't merge.
+                src_id = eid + "-src"
+                src_name = master_of(ex)["name"] + " Scatter " + eid[-6:]
+                grp_id = src_id + "-g"
+                dimid, sxid, syid = sid("d"), sid("x"), sid("y")
+                dim_col = {"id": dimid, "formula": formula_for(ds[0], ex), "name": col_display(ds[0], ex)}
+                src_xcol = apply_fmt({"id": sxid, "formula": formula_for(xf, ex), "name": disp(leaf(xf))}, xf)
+                src_ycol = apply_fmt({"id": syid, "formula": formula_for(yf, ex), "name": disp(leaf(yf))}, yf)
+                src_cols = [dim_col, src_xcol, src_ycol]
+                calc_ids = [sxid, syid]
+                src_sz = None
+                if sf:
+                    szid = sid("s")
+                    src_sz = apply_fmt({"id": szid, "formula": formula_for(sf, ex), "name": disp(leaf(sf))}, sf)
+                    src_cols.append(src_sz); calc_ids.append(szid)
+                scatter_srcs.append({
+                    "id": src_id, "kind": "table", "name": src_name,
+                    "source": {"elementId": master_of(ex)["id"], "kind": "table"},
+                    "columns": src_cols,
+                    "groupings": [{"id": grp_id, "groupBy": [dimid], "calculations": calc_ids}],
+                    "visibleAsSource": False,
+                })
+                # scatter element: RAW refs to the grouped source's columns
+                def _raw(col):
+                    return {"id": sid("c"), "formula": f"[{src_name}/{col['name']}]", "name": col["name"]}
+                r_dim, r_x, r_y = _raw(dim_col), _raw(src_xcol), _raw(src_ycol)
+                scols = [r_dim, r_x, r_y]
+                base["source"] = {"elementId": src_id, "kind": "table", "groupingId": grp_id}
+                base["xAxis"] = {"columnId": r_x["id"]}; base["yAxis"] = {"columnIds": [r_y["id"]]}
+                base["color"] = {"by": "category", "column": r_dim["id"]}
+                if src_sz is not None:
+                    r_sz = _raw(src_sz); scols.append(r_sz); base["size"] = {"id": r_sz["id"]}
+                base["columns"] = scols
+                for mf in [m for m in (xf, yf, sf) if m]: _warn_count(mf, el)
+            else:
+                # no point dimension (or <2 measures): a single aggregate point is
+                # correct, so keep the ungrouped measure-vs-measure shape.
+                xid, yid, cols = sid("x"), sid("y"), []
+                xcol = {"id": xid, "formula": formula_for(xf, ex) if xf else "Count()",
+                        "name": disp(leaf(xf)) if xf else "X"}
+                ycol = {"id": yid, "formula": formula_for(yf, ex) if yf else "Count()",
+                        "name": disp(leaf(yf)) if yf else "Y"}
+                if xf: apply_fmt(xcol, xf)
+                if yf: apply_fmt(ycol, yf)
+                cols.append(xcol); cols.append(ycol)
+                base["columns"] = cols
+                base["xAxis"] = {"columnId": xid}; base["yAxis"] = {"columnIds": [yid]}
+                if ds:
+                    clr = sid("clr")
+                    cols.append({"id": clr, "formula": formula_for(ds[0], ex), "name": col_display(ds[0], ex)})
+                    base["color"] = {"by": "category", "column": clr}
+                for mf in (ms[:2] or []): _warn_count(mf, el)
         elif kind in ("bar-chart", "area-chart", "line-chart"):
             cols, ymids = [], []
             xid = sid("x"); xf = ds[0] if ds else (el["fields"][0] if el["fields"] else None)
@@ -997,7 +1044,9 @@ def main():
                      "formula": f"[{master_of(ex)['name']}/{d}]"}
                     for d in master_of(ex)["needed"]],
     } for (ex, _lset), sc in scope_tables.items()]
-    spec["pages"][0]["elements"] = master_elements + scope_elements
+    # scatter grouped sources (one row per point dim) live on the Data page next
+    # to the masters — visibleAsSource:False, so they need no layout slot.
+    spec["pages"][0]["elements"] = master_elements + scope_elements + scatter_srcs
 
     open(a.out, "w").write(json.dumps(spec, indent=2))
     # intended-scope contract for the control-coverage lint — MUST be the

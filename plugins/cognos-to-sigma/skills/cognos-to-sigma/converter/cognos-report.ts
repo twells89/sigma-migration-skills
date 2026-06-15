@@ -54,8 +54,9 @@ interface WbElement {
   yAxis?: { columnIds: string[] };
   value?: { id?: string; columnId?: string };                                              // pie/donut {id} · kpi {columnId}
   color?: any; stacking?: string; orientation?: string;                                    // bar styling
-  latitude?: { id: string }; longitude?: { id: string }; size?: { id: string };            // point-map
+  latitude?: { id: string }; longitude?: { id: string }; size?: { id: string };            // point-map / scatter
   region?: { id: string; regionType: string }; geography?: { id: string };                 // region-map / geography-map
+  visibleAsSource?: boolean;                                                                // hidden grouped source (scatter)
 }
 interface WbPage { id: string; name: string; elements: WbElement[]; }
 export interface CognosReportResult {
@@ -603,12 +604,51 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       if (colorId) el.color = { id: colorId };
       if (valId) el.value = { id: valId };
     } else if (kind === 'scatter-chart') {
-      const xId = addCol(xs[0] || cats[0], false);
-      const yId = addCol(ys[0] || vals[0] || sizes[0], true);
+      // A Cognos bubble/scatter is measure-vs-measure with the series/color slot as
+      // the POINT identity. Sigma's scatter axes are a GROUPING axis: putting an
+      // aggregate directly on xAxis evaluates it per source row and every point
+      // collapses to the DM grain (verified Qlik-side, bead ry0n). Correct,
+      // UI-verified shape: bind the scatter to a hidden grouped SOURCE table (one
+      // row per point dim) and reference the grouped columns with RAW refs; the dim
+      // stays on color:{by:category} so points don't merge.
+      const dimSlot = series[0] || colorSlot[0];
+      const xId = addCol(xs[0] || cats[0], true);                  // x measure (Sum-wrapped per point)
+      const yId = addCol(ys[0] || vals[0] || sizes[0], true);      // y measure
+      const dId = dimSlot ? addCol(dimSlot, false) : undefined;    // point identity (category)
+      const szId = sizes[0] && sizes[0] !== (ys[0] || vals[0]) ? addCol(sizes[0], true) : undefined;
+      if (xId && yId && dId) {
+        // hidden grouped source: one row per dim, x/y(/size) aggregated.
+        const grpId = sigmaShortId();
+        const srcName = `${vizName} (scatter source)`;
+        const src: WbElement = {
+          id: sigmaShortId(), kind: 'table', name: srcName, source: chartSource(q),
+          columns: cols, order: cols.map((c) => c.id),
+          groupings: [{ id: grpId, groupBy: [dId], calculations: szId ? [xId, yId, szId] : [xId, yId] }],
+          visibleAsSource: false,
+        };
+        applyQueryFilters(src, q);   // carry detail filters onto the source grain
+        // scatter element: raw refs back to the grouped source columns by display name.
+        const byId = new Map(cols.map((c) => [c.id, c]));
+        const raw = (srcColId: string) => {
+          const sc = byId.get(srcColId)!;
+          return { id: sigmaShortId(), name: sc.name, formula: `[${srcName}/${sc.name}]` };
+        };
+        const sDim = raw(dId), sX = raw(xId), sY = raw(yId);
+        const scols: WbColumn[] = [sDim, sX, sY];
+        el.source = { kind: 'table', elementId: src.id, groupingId: grpId };
+        el.xAxis = { columnId: sX.id };
+        el.yAxis = { columnIds: [sY.id] };
+        el.color = { by: 'category', column: sDim.id };
+        if (szId) { const sSz = raw(szId); scols.push(sSz); el.size = { id: sSz.id }; }
+        el.columns = scols; el.order = scols.map((c) => c.id);
+        pageEls.push(src);
+        pageEls.push(el);
+        continue;   // self-contained: skip the shared el.columns=cols assignment below
+      }
+      // <2 measures or no category dim: fall back to a plain ungrouped scatter.
       if (xId) el.xAxis = { columnId: xId };
       if (yId) el.yAxis = { columnIds: [yId] };
-      const cId = addCol(series[0] || colorSlot[0], false);
-      if (cId) el.color = { by: 'category', column: cId };
+      if (dId) el.color = { by: 'category', column: dId };
     } else {
       // cartesian: bar / line / area / combo
       const xId = addCol(cats[0], false, true);

@@ -28,6 +28,23 @@ def sigma_display_name(s):
 def nid(p="el"):
     return p + "-" + "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8))
 
+# Hidden grouped SOURCE tables emitted for scatter/bubble charts. A measure-vs-
+# measure scatter sourced directly off the shared denorm master ("m-ofv") with
+# NO grouping over-plots/collapses (every row becomes a point). The correct,
+# live-verified shape (qlik-to-sigma build-sigma-workbook.py, bead ry0n) is to
+# bind the scatter to a hidden grouped source (one row per point dim). These get
+# parked on whatever page carries the master (visibleAsSource:False → no layout
+# slot). drain_scatter_sources() empties this onto that page after element build.
+_SCATTER_SRC = []
+
+def drain_scatter_sources():
+    """Pop the hidden grouped scatter-source tables accumulated by _element_core.
+    Call after building every element, then extend the master's page with the
+    result (they must live on the SAME page as the m-ofv master they source)."""
+    out = list(_SCATTER_SRC)
+    _SCATTER_SRC.clear()
+    return out
+
 _CUR = {"USD": "$", "CAD": "$", "AUD": "$", "NZD": "$", "EUR": "€", "GBP": "£",
         "JPY": "¥", "CNY": "¥", "INR": "₹", "KRW": "₩", "BRL": "R$"}
 
@@ -282,14 +299,19 @@ def sigma_element(spec, resolver, master="OFV"):
     # Show value labels on bar/pie/donut (Sigma defaults them OFF). Lines stay clean.
     if el.get("kind") in ("bar-chart", "pie-chart", "donut-chart"):
         el["dataLabel"] = {"labels": "shown"}
+    # A grouped scatter sources a hidden grouped table (not the master), so its
+    # search-query filters must be applied to that SOURCE (pre-grouping, master
+    # grain) — a [OFV/…] ref on the scatter element itself would not resolve.
+    grp = el.get("source", {}).get("groupingId")
+    ftarget = next((s for s in _SCATTER_SRC if s["id"] == el["source"].get("elementId")), el) if grp else el
     for f in spec.get("filters", []):
         e = _resolve(resolver, f["col"])
-        existing = next((c for c in el["columns"] if c.get("name") == f["col"]), None)
+        existing = next((c for c in ftarget["columns"] if c.get("name") == f["col"]), None)
         if existing:
             col_id = existing["id"]
         else:
-            col_id = nid("f"); el["columns"].append({"id": col_id, "formula": f"[{master}/{e['friendly']}]", "name": f["col"]})
-        el.setdefault("filters", []).append({"id": nid(), "columnId": col_id, "kind": "list",
+            col_id = nid("f"); ftarget["columns"].append({"id": col_id, "formula": f"[{master}/{e['friendly']}]", "name": f["col"]})
+        ftarget.setdefault("filters", []).append({"id": nid(), "columnId": col_id, "kind": "list",
                                              "mode": f["mode"], "values": f["values"]})
     _apply_sorts(el, spec)
     return el
@@ -389,18 +411,53 @@ def _element_core(spec, resolver, master="OFV"):
             mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))}); mids.append(mid)
         return {"id": nid(), "kind": "table", "name": name, "source": src, "columns": cols,
                 "groupings": [{"id": nid(), "groupBy": dids, "calculations": mids}]}
-    # Scatter / bubble — plot two measures (x vs y) with an optional category color.
-    # Falls through to the default axis chart when there aren't two measures.
+    # Scatter / bubble — measure-vs-measure with the dimension as the POINT
+    # identity (ThoughtSpot measure order = x, y, size). Sigma's scatter axis is
+    # a GROUPING axis: putting an aggregate (Sum(...)) straight on xAxis makes it
+    # evaluate per source row, so every point collapses to one x (or over-plots).
+    # Correct, UI-verified shape (qlik bead ry0n): bind the scatter to a hidden
+    # grouped SOURCE table (one row per point dim) sourced off the shared master,
+    # reference the grouped columns with RAW refs, and keep the dim on
+    # color:{by:category} so distinct points don't merge. BUBBLE's 3rd measure →
+    # size:{id}. With no point dim, fall through to the plain axis scatter.
+    if chart in ("SCATTER", "BUBBLE") and len(meas) >= 2 and dims:
+        eid = nid()
+        src_name = "Scatter Source " + re.sub(r'[^A-Za-z0-9]', '', eid)[-6:]
+        src_id = eid + "-src"; grp_id = eid + "-g"
+        # grouped source columns (live on the hidden table): dim + measures over master
+        sdc = nid("c"); sxc = nid("c"); syc = nid("c")
+        scols = [{"id": sdc, "formula": dref(dims[0]), "name": dims[0]},
+                 {"id": sxc, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))},
+                 {"id": syc, "formula": mref(meas[1]), "name": meas[1], "format": _fmt(_resolve(resolver, meas[1]))}]
+        scalc = [sxc, syc]
+        size_meas = None
+        if chart == "BUBBLE" and len(meas) >= 3:
+            ssz = nid("c"); size_meas = meas[2]
+            scols.append({"id": ssz, "formula": mref(meas[2]), "name": meas[2],
+                          "format": _fmt(_resolve(resolver, meas[2]))})
+            scalc.append(ssz)
+        _SCATTER_SRC.append({"id": src_id, "kind": "table", "name": src_name, "source": src,
+                             "columns": scols, "visibleAsSource": False,
+                             "groupings": [{"id": grp_id, "groupBy": [sdc], "calculations": scalc}]})
+        # scatter element: RAW refs into the grouped source, sourced by groupingId
+        def _raw(col):
+            return {"id": nid("c"), "formula": f"[{src_name}/{col['name']}]", "name": col["name"]}
+        r_dim, r_x, r_y = _raw(scols[0]), _raw(scols[1]), _raw(scols[2])
+        cols = [r_dim, r_x, r_y]
+        el = {"id": eid, "kind": "scatter-chart", "name": name,
+              "source": {"elementId": src_id, "kind": "table", "groupingId": grp_id},
+              "columns": cols, "xAxis": {"columnId": r_x["id"]}, "yAxis": {"columnIds": [r_y["id"]]},
+              "color": {"by": "category", "column": r_dim["id"]}}
+        if size_meas is not None:
+            r_sz = _raw(scols[3]); cols.append(r_sz); el["size"] = {"id": r_sz["id"]}
+        return el
     if chart in ("SCATTER", "BUBBLE") and len(meas) >= 2:
+        # no point dimension: plain measure-vs-measure cartesian off the master
         xc = nid("c"); yc = nid("c")
         cols = [{"id": xc, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))},
                 {"id": yc, "formula": mref(meas[1]), "name": meas[1], "format": _fmt(_resolve(resolver, meas[1]))}]
-        el = {"id": nid(), "kind": "scatter-chart", "name": name, "source": src, "columns": cols,
-              "xAxis": {"columnId": xc}, "yAxis": {"columnIds": [yc]}}
-        if dims:
-            dc = nid("c"); cols.append({"id": dc, "formula": dref(dims[0]), "name": dims[0]})
-            el["color"] = {"by": "category", "column": dc}
-        return el
+        return {"id": nid(), "kind": "scatter-chart", "name": name, "source": src, "columns": cols,
+                "xAxis": {"columnId": xc}, "yAxis": {"columnIds": [yc]}}
     # Combo (column + line) — first measure as bars, remaining measures as line series.
     if chart in ("LINE_COLUMN", "LINE_STACKED_COLUMN") and dims and len(meas) >= 2:
         xc = nid("c"); cols = [{"id": xc, "formula": dref(dims[0]), "name": dims[0]}]; ycids = []

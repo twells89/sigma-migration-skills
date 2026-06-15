@@ -174,8 +174,11 @@ def migrate_liveboard(lb_doc, dm, denorm_id, denorm_name, resolver, prefix, fall
     specs = [ps for _, ps in viz_specs]
     master = ts_common.master_element(specs, resolver, dm, denorm_id, denorm_name)
     elements = [ts_common.sigma_element(s, resolver) for s in specs]
+    # Hidden grouped scatter-source tables must live on the SAME page as the
+    # m-ofv master they source (visibleAsSource:False → no layout slot needed).
+    data_elems = [master] + ts_common.drain_scatter_sources()
     spec = {"name": f"{prefix}{display} (from ThoughtSpot)", "folderId": folder, "schemaVersion": 1,
-            "pages": [{"id": "p-data", "name": "Data", "elements": [master]},
+            "pages": [{"id": "p-data", "name": "Data", "elements": data_elems},
                       {"id": "p-main", "name": display[:40], "elements": elements}]}
     wb = post_workbook(spec, wd)
     tiles = lb_tiles(lb, viz_specs, elements)
@@ -237,9 +240,11 @@ def migrate_answer(ans_id, dm, denorm_id, denorm_name, resolver, prefix, folder,
     display = ans.get("name") or ("Answer " + ans_id[:8])
     spec_v = ts_common.parse_ts_viz({"answer": ans}, resolver)
     master = ts_common.master_element([spec_v], resolver, dm, denorm_id, denorm_name)
+    main_el = ts_common.sigma_element(spec_v, resolver)
+    data_elems = [master] + ts_common.drain_scatter_sources()  # park any hidden scatter source by the master
     spec = {"name": f"{prefix}{display} (from ThoughtSpot)", "folderId": folder, "schemaVersion": 1,
-            "pages": [{"id": "p-data", "name": "Data", "elements": [master]},
-                      {"id": "p-main", "name": display[:40], "elements": [ts_common.sigma_element(spec_v, resolver)]}]}
+            "pages": [{"id": "p-data", "name": "Data", "elements": data_elems},
+                      {"id": "p-main", "name": display[:40], "elements": [main_el]}]}
     wb = post_workbook(spec, wd)
     apply_layouts.apply(wb)
     return wb, display
