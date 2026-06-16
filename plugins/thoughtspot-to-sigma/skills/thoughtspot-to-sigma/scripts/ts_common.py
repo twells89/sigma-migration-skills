@@ -740,6 +740,14 @@ def _element_core(spec, resolver, master="OFV"):
         agg = TS_AGG_TO_SIGMA.get((mt or {}).get("agg") or "SUM", "Sum")
         return f"{agg}([{master}/{_resolve(resolver, b)['friendly']}])"
 
+    def mfmt(b):
+        # Format follows the underlying measure: a period-shifted/growth measure
+        # (sales(this year), Growth of sales) inherits the base measure's format so
+        # the KPI/series shows the same currency/decimals as the plain measure.
+        mt = mtypes.get(b) or {}
+        base = mt["base"] if mt.get("kind") in ("timeshift", "growth") and mt.get("base") else b
+        return _fmt(_resolve(resolver, base))
+
     color_dim = spec.get("color_dim")
     if color_dim and chart not in ("PIE", "DONUT", "PIVOT_TABLE", "PIVOT", "TABLE", "ADVANCED_COLUMN"):
         dims = [d for d in dims if d != color_dim]    # x-dims only; color added below
@@ -766,11 +774,11 @@ def _element_core(spec, resolver, master="OFV"):
                     "value": {"columnId": c}}
         return {"id": nid(), "kind": "kpi-chart", "name": name, "source": src,
                 "columns": [{"id": c, "formula": mref(meas[0]), "name": meas[0],
-                             "format": _fmt(_resolve(resolver, meas[0]))}], "value": {"columnId": c}}
+                             "format": mfmt(meas[0])}], "value": {"columnId": c}}
     if chart in ("PIE", "DONUT"):
         cid = nid("c"); vid = nid("v")
         cols = [{"id": cid, "formula": dref(dims[0]), "name": dims[0]},
-                {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))}]
+                {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": mfmt(meas[0])}]
         # ThoughtSpot renders pies as donuts → use the donut-chart kind (the hole is
         # inherent to the kind; holeValue is only an optional center-label column ref).
         return {"id": nid(), "kind": "donut-chart", "name": name, "source": src, "columns": cols,
@@ -781,7 +789,7 @@ def _element_core(spec, resolver, master="OFV"):
                 {"id": cidd, "formula": dref(dims[1]), "name": dims[1]}]
         mids = []
         for m in meas:
-            mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))}); mids.append(mid)
+            mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": mfmt(m)}); mids.append(mid)
         return {"id": nid(), "kind": "pivot-table", "name": name, "source": src, "columns": cols,
                 "rowsBy": [{"id": rid}], "columnsBy": [{"id": cidd}], "values": mids}
     if chart in ("TABLE", "ADVANCED_COLUMN"):
@@ -789,7 +797,7 @@ def _element_core(spec, resolver, master="OFV"):
         for d in dims:
             did = nid("d"); cols.append({"id": did, "formula": dref(d), "name": d}); dids.append(did)
         for m in meas:
-            mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))})
+            mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": mfmt(m)})
             mids.append(mid); midbyname[m] = mid; midbyname[_strip_total(m)] = mid
         cfs = spec.get("conditional_formats") or []
         if cfs and dids and mids:
@@ -821,14 +829,14 @@ def _element_core(spec, resolver, master="OFV"):
         # grouped source columns (live on the hidden table): dim + measures over master
         sdc = nid("c"); sxc = nid("c"); syc = nid("c")
         scols = [{"id": sdc, "formula": dref(dims[0]), "name": dims[0]},
-                 {"id": sxc, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))},
-                 {"id": syc, "formula": mref(meas[1]), "name": meas[1], "format": _fmt(_resolve(resolver, meas[1]))}]
+                 {"id": sxc, "formula": mref(meas[0]), "name": meas[0], "format": mfmt(meas[0])},
+                 {"id": syc, "formula": mref(meas[1]), "name": meas[1], "format": mfmt(meas[1])}]
         scalc = [sxc, syc]
         size_meas = None
         if chart == "BUBBLE" and len(meas) >= 3:
             ssz = nid("c"); size_meas = meas[2]
             scols.append({"id": ssz, "formula": mref(meas[2]), "name": meas[2],
-                          "format": _fmt(_resolve(resolver, meas[2]))})
+                          "format": mfmt(meas[2])})
             scalc.append(ssz)
         _SCATTER_SRC.append({"id": src_id, "kind": "table", "name": src_name, "source": src,
                              "columns": scols, "visibleAsSource": False,
@@ -848,15 +856,15 @@ def _element_core(spec, resolver, master="OFV"):
     if chart in ("SCATTER", "BUBBLE") and len(meas) >= 2:
         # no point dimension: plain measure-vs-measure cartesian off the master
         xc = nid("c"); yc = nid("c")
-        cols = [{"id": xc, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))},
-                {"id": yc, "formula": mref(meas[1]), "name": meas[1], "format": _fmt(_resolve(resolver, meas[1]))}]
+        cols = [{"id": xc, "formula": mref(meas[0]), "name": meas[0], "format": mfmt(meas[0])},
+                {"id": yc, "formula": mref(meas[1]), "name": meas[1], "format": mfmt(meas[1])}]
         return {"id": nid(), "kind": "scatter-chart", "name": name, "source": src, "columns": cols,
                 "xAxis": {"columnId": xc}, "yAxis": {"columnIds": [yc]}}
     # Combo (column + line) — first measure as bars, remaining measures as line series.
     if chart in ("LINE_COLUMN", "LINE_STACKED_COLUMN") and dims and len(meas) >= 2:
         xc = nid("c"); cols = [{"id": xc, "formula": dref(dims[0]), "name": dims[0]}]; ycids = []
         for i, m in enumerate(meas):
-            y = nid("c"); cols.append({"id": y, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))})
+            y = nid("c"); cols.append({"id": y, "formula": mref(m), "name": m, "format": mfmt(m)})
             ycids.append(y if i == 0 else {"columnId": y, "type": "line"})
         return {"id": nid(), "kind": "combo-chart", "name": name, "source": src, "columns": cols,
                 "xAxis": {"columnId": xc}, "yAxis": {"columnIds": ycids}}
@@ -865,7 +873,7 @@ def _element_core(spec, resolver, master="OFV"):
     if chart in ("GEO_AREA", "GEO_BUBBLE") and dims and meas:
         gid = nid("c"); vid = nid("c")
         cols = [{"id": gid, "formula": dref(dims[0]), "name": dims[0]},
-                {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))}]
+                {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": mfmt(meas[0])}]
         return {"id": nid(), "kind": "region-map", "name": name, "source": src, "columns": cols,
                 "region": {"id": gid, "regionType": _region_type(dims[0])}}
     # ThoughtSpot chart types with NO faithful Sigma equivalent (Sigma has no
@@ -878,12 +886,12 @@ def _element_core(spec, resolver, master="OFV"):
     if chart in _NO_SIGMA_EQUIV:
         cols = [{"id": nid("c"), "formula": dref(d), "name": d} for d in dims]
         cols += [{"id": nid("c"), "formula": mref(m), "name": m,
-                  "format": _fmt(_resolve(resolver, m))} for m in meas]
+                  "format": mfmt(m)} for m in meas]
         return {"id": nid(), "kind": "table", "source": src, "columns": cols,
                 "name": f"{name} [{chart} → table: no Sigma chart equivalent]"}
     x = nid("x"); cols = [{"id": x, "formula": dref(dims[0]), "name": dims[0]}]; ymids = []
     for m in meas:
-        y = nid("y"); cols.append({"id": y, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))}); ymids.append(y)
+        y = nid("y"); cols.append({"id": y, "formula": mref(m), "name": m, "format": mfmt(m)}); ymids.append(y)
     el = {"id": nid(), "kind": KIND.get(chart, "bar-chart"), "name": name, "source": src,
           "columns": cols, "xAxis": {"columnId": x}, "yAxis": {"columnIds": ymids}}
     if color_dim:
