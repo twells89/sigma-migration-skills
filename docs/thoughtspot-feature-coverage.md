@@ -43,6 +43,10 @@ equivalent → sensible down-convert **and the migration flags it**) · ❌ gap
 | Distinct count | `unique count(customer)` | ✅ (was ❌ POST-fail) | **FIXED** thoughtspot.ts space-syntax normalize; live `CountDistinct([Customer Key])` → 26 |
 | Conditional aggregate | `sum_if(returned=1, rev)` | ✅ | arg-swap correct, parity |
 | Window (cumulative_sum/rank/moving_avg) | `cumulative_sum(rev)` | 🟡 (was ❌ silent) | **FIXED** — now emits a warning (Sigma window fns don't resolve in DM elements; recompute in a workbook grouped element) |
+| Relative time-intel (`'this year'`/`'last year'`/`'last N quarters'`) + `vs` | `[date].'this year'`, `sales(last year) vs (this year)` | ✅ (was ❌ unhandled) | **FIXED #126** — today-anchored `Year()`/`DateAdd()` boolean filter; period-shifted measures → `SumIf`; `vs` → two-series chart. Live: full 16-viz "Sample Retail - Sales Performance" migrates, Sales Last Year=$183,096,071 exact. `growth of`/waterfall flagged (ordered window) |
+| Date buckets `Month(date)`/`Week(date)` | line/area time axis | ✅ #123 | `DateTrunc` calc col; proven single + multi-table |
+| Year filter `[date].YYYY` | `[date].2021` | ✅ #124 | `Year()` list filter |
+| Bare `top`/`bottom` | `top [sales] by [product]` | ✅ #125 | defaults to 10 (TS default) |
 | **RLS** (rls_rules) | row-level security rule | 🟡 (was ❌ silent-drop) | **FIXED** thoughtspot.ts now DETECTS + warns with the rule text + remediation; full auto-port (user-attr + DM filter) via apply_sigma_rls.py is a follow-up |
 
 ## Interactivity / formatting
