@@ -79,6 +79,17 @@ in team2 has a target line so it's unvalidated against real TML; controls/colors
 live-validated against real Liveboards (PerfTracking/UserAdoption) + the migrated sample.)
 
 **Progress log:**
+- **2026-06-16 — thoughtspot kitchen-sink feature stress test.** Built TS content
+  exercising every feature (24 chart types, 11 formula classes + RLS, all interactivity)
+  and migrated each live. Found + FIXED 6 real gaps (all re-validated): (1) single-quote
+  string literals corrupted `'Bulk'`→`[Bulk]` in EVERY `if`/`in` calc — `tsWrapColumnRefs`;
+  (2) control on an un-surfaced column 400'd the whole workbook — `liveboard_controls`
+  denorm-qualified ref; (3) `unique count(` space syntax hard-failed the DM POST; (4) 10
+  exotic charts silently became bar — now flagged degrade-to-table; (5) window fns + (6)
+  RLS rules silently dropped — now warn (+ `result.security[]`). Live proof: calc parity
+  (Distinct Custs=26, Cat Flag Yes:10/No:15), interactive wb ab4d2020 (2 controls incl the
+  fixed un-surfaced date filter). Full matrix: docs/thoughtspot-feature-coverage.md. dim-4
+  dynamic-title interpolation remains the only TS ⚠️.
 - **2026-06-15 — thoughtspot #119 MERGED + live-validated.** Fixed a crash in
   `parse_measure_color` (real TML `columnProperties` entries aren't always dicts) that
   would break migrating any CF Liveboard; verified clean parse on PerfTracking (10 vizzes)

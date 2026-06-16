@@ -200,6 +200,8 @@ def parse_ts_viz(v, resolver=None):
     color = next((d for d in (ax.get("color") or []) if d in dims), None)
     if color:
         dims = [d for d in dims if d != color] + [color]    # color dim LAST
+    if has_cf_rule(a):
+        flagged.append({"name": a.get("name", ""), "fn": "conditional formatting"})
     m = re.search(r"\btop\s+(\d+)\b", a.get("search_query", "") or "", re.I)
     return {"name": a.get("name", "Viz"), "chart": ctype, "dims": dims, "measures": measures,
             "filters": parse_filters(a.get("search_query", "")), "sorts": parse_sorts(a),
@@ -327,6 +329,27 @@ def parse_measure_color(a, measures):
     # team2 Liveboards (Sample Retail, Performance Tracking) 2026-06-15.
     return None
 
+def has_cf_rule(a):
+    """True if the viz carries ThoughtSpot per-cell CONDITIONAL FORMATTING
+    ({rule:[{range:{min,max}, color, plotAsBand}]}, or a client_state columnProperty
+    conditionalFormatting). Sigma's `conditionalFormats` exist only on
+    pivot-table/input-table — NOT the `kind:table` a TS table maps to — so we can't
+    attach it without changing the element kind. Flag it (flag-not-drop) so the
+    migration surfaces the loss instead of silently dropping the cell coloring."""
+    cf = a.get("conditional_formatting")
+    if isinstance(cf, dict) and cf.get("rule"):
+        return True
+    for cs in _client_states(a):
+        if not isinstance(cs, dict):
+            continue
+        for cp in (cs.get("columnProperties") or []):
+            if not isinstance(cp, dict):
+                continue
+            prop = cp.get("columnProperty") if isinstance(cp.get("columnProperty"), dict) else {}
+            if cp.get("conditionalFormatting") or prop.get("conditionalFormatting"):
+                return True
+    return False
+
 def parse_sorts(a):
     """Carry the answer's sorts: (1) `sort by [Col] descending` tokens in the
     search query; (2) sortInfo entries in the table/chart client_state(_v2)
@@ -377,6 +400,11 @@ KIND = {"KPI": "kpi-chart", "COLUMN": "bar-chart", "BAR": "bar-chart", "LINE": "
         "STACKED_COLUMN": "bar-chart", "STACKED_BAR": "bar-chart",
         "AREA": "area-chart", "STACKED_AREA": "area-chart",
         "ADVANCED_COLUMN": "table", "TABLE": "table"}
+
+# ThoughtSpot chart types Sigma cannot faithfully reproduce → flagged degrade to
+# table (see _element_core). Keep in sync with the assessment's unsupported list.
+_NO_SIGMA_EQUIV = {"WATERFALL", "FUNNEL", "TREEMAP", "HEATMAP", "HISTOGRAM", "GAUGE",
+                   "SANKEY", "PARETO", "CANDLESTICK", "SPIDER_WEB", "RADAR"}
 
 def _region_type(name):
     # Infer a Sigma region-map regionType from the geo dimension's name. Sigma's
@@ -649,6 +677,19 @@ def _element_core(spec, resolver, master="OFV"):
                 {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": _fmt(_resolve(resolver, meas[0]))}]
         return {"id": nid(), "kind": "region-map", "name": name, "source": src, "columns": cols,
                 "region": {"id": gid, "regionType": _region_type(dims[0])}}
+    # ThoughtSpot chart types with NO faithful Sigma equivalent (Sigma has no
+    # treemap/gauge/waterfall/funnel/sankey/histogram/candlestick/radar — verified
+    # against sigma-workbooks/reference/specification/charts.md). Silently coercing
+    # them to a bar-chart MISREPRESENTS the data (a funnel/gauge/sankey is not a
+    # bar), so down-convert to a TABLE (data preserved + readable) and FLAG it in
+    # the name — same flag-not-drop posture as window formulas — so the assessment
+    # surfaces it instead of shipping a misleading chart.
+    if chart in _NO_SIGMA_EQUIV:
+        cols = [{"id": nid("c"), "formula": dref(d), "name": d} for d in dims]
+        cols += [{"id": nid("c"), "formula": mref(m), "name": m,
+                  "format": _fmt(_resolve(resolver, m))} for m in meas]
+        return {"id": nid(), "kind": "table", "source": src, "columns": cols,
+                "name": f"{name} [{chart} → table: no Sigma chart equivalent]"}
     x = nid("x"); cols = [{"id": x, "formula": dref(dims[0]), "name": dims[0]}]; ymids = []
     for m in meas:
         y = nid("y"); cols.append({"id": y, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))}); ymids.append(y)
@@ -705,7 +746,7 @@ def parse_liveboard_filters(lb):
                     "type": "date" if is_date else "list"})
     return out
 
-def liveboard_controls(lb_filters, resolver, master_el, master="OFV"):
+def liveboard_controls(lb_filters, resolver, master_el, master="OFV", denorm_name="Order Fact View"):
     """Build interactive Sigma controls from Liveboard filters. Returns a list of
     control elements; each is wired to the master so it reaches every chart that
     sources the master. Ensures the target column exists on the master element
@@ -719,8 +760,13 @@ def liveboard_controls(lb_filters, resolver, master_el, master="OFV"):
         e = _resolve(resolver, col)
         mcol = next((c for c in master_el["columns"] if c.get("name") in (e["friendly"], col)), None)
         if not mcol:
+            # The master element is fed by the denorm VIEW, so a column it doesn't
+            # yet surface must reference that view's column — `[<denorm view>/<ofv col>]`,
+            # exactly like master_element.add_base (NOT `[OFV/<friendly>]`, which makes
+            # the master reference itself and 400s the whole workbook: "Dependency not
+            # found"). Any Liveboard filter on an un-surfaced column hit this.
             mcol = {"id": "ofv-%d" % len(master_el["columns"]), "name": e["friendly"],
-                    "formula": f"[{master}/{e['friendly']}]"}
+                    "formula": f"[{denorm_name}/{e['ofv']}]"}
             master_el["columns"].append(mcol)
         cid = mcol["id"]
         ctl_id = re.sub(r"[^A-Za-z0-9]", "", col.title()) + "Filter"

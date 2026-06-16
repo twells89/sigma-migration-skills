@@ -289,7 +289,9 @@ region, quarter all match to the cent). Per-run ids land in `<workdir>/migrate_o
 
 Row/column security is **never silently dropped and never silently ported** — and it is handled by the **skill**, not baked into the converted model. The converter (`convert_thoughtspot_to_sigma`) only **detects and reports** security in `result.security[]`; it does **not** inject it into the data-model spec (a stateless converter can't create Sigma user attributes or assign members, so an injected `CurrentUserAttributeText` filter would fail-closed to 0 rows). This skill provisions + applies it after the model is posted.
 
-**What is detected for ThoughtSpot:** `rls_rules` on tables (`ts_username` to `CurrentUserEmail()`, `ts_groups` to `CurrentUserInTeam`), multiple rules OR-combined.
+**What is detected for ThoughtSpot:** `rls_rules` on the model/worksheet or per table (`ts_username` to `CurrentUserEmail()`, `ts_groups` to `CurrentUserInTeam`), multiple rules OR-combined. The converter emits each as a `result.security[]` entry `{kind:'rls', name, expression, table?}`.
+
+> ⚠️ The `rls_rules` TML shape + the `ts_username`/`ts_groups` mapping are validated against a **synthetic** rule (no Liveboard in the team2 trial uses RLS). Treat the auto-mapping as best-effort and use **Customize** to review each rule against the real source before applying.
 
 **Flow (only runs when `result.security` is non-empty — zero overhead otherwise):**
 1. **Convert + post** the data model as usual. Capture the `dataModelId` and the converter's `result.security[]` (write it to `security.json`).

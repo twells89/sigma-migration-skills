@@ -232,7 +232,7 @@ def migrate_liveboard(lb_doc, dm, denorm_id, denorm_name, resolver, prefix, fall
         s["filters"] = [vf for vf in s.get("filters", []) if vf["col"] not in controlled]
     master = ts_common.master_element(specs, resolver, dm, denorm_id, denorm_name)
     elements = [ts_common.sigma_element(s, resolver) for s in specs]
-    controls = ts_common.liveboard_controls(lb_filters, resolver, master)
+    controls = ts_common.liveboard_controls(lb_filters, resolver, master, denorm_name=denorm_name)
     # Hidden grouped scatter-source tables must live on the SAME page as the
     # m-ofv master they source (visibleAsSource:False → no layout slot needed).
     data_elems = [master] + ts_common.drain_scatter_sources()
