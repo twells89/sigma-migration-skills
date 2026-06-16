@@ -212,7 +212,14 @@ def parse_ts_viz(v, resolver=None):
     color = next((d for d in (ax.get("color") or []) if d in dims), None)
     if color:
         dims = [d for d in dims if d != color] + [color]    # color dim LAST
-    if has_cf_rule(a):
+    cond_formats = parse_conditional_formats(a)
+    if cond_formats and ctype not in ("TABLE", "ADVANCED_COLUMN"):
+        # mappable CF but the host isn't a table — Sigma conditionalFormats only ride
+        # pivot/input tables, so we can't attach it to a chart → flag instead.
+        flagged.append({"name": a.get("name", ""), "fn": "conditional formatting"})
+        cond_formats = []
+    elif not cond_formats and has_cf_rule(a):
+        # CF present but it's a gradient/data-bar variant we don't map → flag.
         flagged.append({"name": a.get("name", ""), "fn": "conditional formatting"})
     # A ThoughtSpot title with a `{{token}}` (a filter/parameter reference) is a
     # DYNAMIC title. A Sigma element `name` is a plain string in the spec — there's
@@ -240,7 +247,7 @@ def parse_ts_viz(v, resolver=None):
     return {"name": a.get("name", "Viz"), "chart": ctype, "dims": dims, "measures": measures,
             "filters": filters, "sorts": parse_sorts(a),
             "mtypes": mtypes, "row_formulas": row_formulas, "flagged": flagged,
-            "color_dim": color, "topn": topn, "date_col": date_col,
+            "color_dim": color, "topn": topn, "date_col": date_col, "conditional_formats": cond_formats,
             "refmarks": parse_refmarks(a, measures, dims),
             "measure_color": parse_measure_color(a, measures),
             "af_names": sorted(af.keys())}
@@ -383,6 +390,48 @@ def has_cf_rule(a):
             if cp.get("conditionalFormatting") or prop.get("conditionalFormatting"):
                 return True
     return False
+
+# ThoughtSpot CF operator → Sigma conditionalFormats `condition`.
+_TS_CF_OP = {"LESS_THAN": "<", "GREATER_THAN": ">", "LESS_THAN_EQUAL": "<=", "LESS_THAN_OR_EQUAL": "<=",
+             "GREATER_THAN_EQUAL": ">=", "GREATER_THAN_OR_EQUAL": ">=", "EQUAL": "=", "EQUALS": "=",
+             "NOT_EQUAL": "!=", "NOT_EQUALS": "!=", "BETWEEN": "Between", "NOT_BETWEEN": "NotBetween"}
+
+def _cf_num(v):
+    try:
+        return float(v) if v not in (None, "") and "." in str(v) else int(v)
+    except (TypeError, ValueError):
+        return v
+
+def parse_conditional_formats(a):
+    """Real TS per-cell conditional formatting lives in client_state columnProperties:
+    `columnProperty.conditionalFormatting.rows[] = {operator, value, solidBackgroundAttrs:{color}}`.
+    Map SOLID-background threshold rules → [{col, condition, value, color}] (the col is the
+    measure display name, paren/Total-stripped). Gradient/data-bar rows return nothing (the
+    caller flags those). Sigma carries these as conditionalFormats on a pivot-table."""
+    out = []
+    for cs in _client_states(a):
+        if not isinstance(cs, dict):
+            continue
+        for cp in (cs.get("columnProperties") or []):
+            if not isinstance(cp, dict):
+                continue
+            col = _strip_total(cp.get("columnId") or "")
+            prop = cp.get("columnProperty") if isinstance(cp.get("columnProperty"), dict) else {}
+            cf = prop.get("conditionalFormatting") or cp.get("conditionalFormatting") or {}
+            for row in (cf.get("rows") or []):
+                if not isinstance(row, dict):
+                    continue
+                op = _TS_CF_OP.get(str(row.get("operator", "")).upper())
+                color = ((row.get("solidBackgroundAttrs") or {}).get("color")
+                         or (row.get("solidColorAttrs") or {}).get("color"))
+                if not (op and color and col):
+                    continue                      # gradient / data-bar / unmapped → skip (flagged)
+                if op in ("Between", "NotBetween"):
+                    val = [_cf_num(row.get("min", row.get("value"))), _cf_num(row.get("max"))]
+                else:
+                    val = _cf_num(row.get("value"))
+                out.append({"col": col, "condition": op, "value": val, "color": color})
+    return out
 
 def parse_sorts(a):
     """Carry the answer's sorts: (1) `sort by [Col] descending` tokens in the
@@ -736,11 +785,24 @@ def _element_core(spec, resolver, master="OFV"):
         return {"id": nid(), "kind": "pivot-table", "name": name, "source": src, "columns": cols,
                 "rowsBy": [{"id": rid}], "columnsBy": [{"id": cidd}], "values": mids}
     if chart in ("TABLE", "ADVANCED_COLUMN"):
-        dids, cols, mids = [], [], []
+        dids, cols, mids, midbyname = [], [], [], {}
         for d in dims:
             did = nid("d"); cols.append({"id": did, "formula": dref(d), "name": d}); dids.append(did)
         for m in meas:
-            mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))}); mids.append(mid)
+            mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": _fmt(_resolve(resolver, m))})
+            mids.append(mid); midbyname[m] = mid; midbyname[_strip_total(m)] = mid
+        cfs = spec.get("conditional_formats") or []
+        if cfs and dids and mids:
+            # Sigma conditionalFormats ride only pivot-table/input-table — emit the CF
+            # table as a pivot (rows=dims, values=measures) to carry the cell coloring.
+            cfmt = []
+            for r in cfs:
+                tgt = midbyname.get(r["col"]) or midbyname.get(_strip_total(r["col"])) or mids[0]
+                cfmt.append({"type": "single", "columnIds": [tgt], "condition": r["condition"],
+                             "value": r["value"], "style": {"backgroundColor": r["color"]}})
+            if cfmt:
+                return {"id": nid(), "kind": "pivot-table", "name": name, "source": src, "columns": cols,
+                        "rowsBy": [{"id": d} for d in dids], "values": mids, "conditionalFormats": cfmt}
         return {"id": nid(), "kind": "table", "name": name, "source": src, "columns": cols,
                 "groupings": [{"id": nid(), "groupBy": dids, "calculations": mids}]}
     # Scatter / bubble — measure-vs-measure with the dimension as the POINT

@@ -26,7 +26,7 @@ equivalent → sensible down-convert **and the migration flags it**) · ❌ gap
 | GEO_BUBBLE | region-map | 🟡 | choropleth not bubbles; point-map needs lat/long TS doesn't supply for a region name — region-map is the faithful degrade |
 | PIVOT_TABLE | pivot-table | ✅ | wb ee2e9596 |
 | TABLE / ADVANCED_COLUMN | table | ✅ | wb ee2e9596 |
-| WATERFALL, FUNNEL, TREEMAP, HEATMAP, HISTOGRAM, GAUGE, SANKEY, PARETO, CANDLESTICK, SPIDER_WEB | table **+ `[<TYPE> → table: no Sigma chart equivalent]`** | 🟡 (was ❌ silent bar) | **FIXED** ts_common.py `_NO_SIGMA_EQUIV` + `_element_core`; unit-tested all 10 → flagged table |
+| WATERFALL, FUNNEL, TREEMAP, HEATMAP, HISTOGRAM, GAUGE, SANKEY, PARETO, CANDLESTICK, SPIDER_WEB | table **+ `[<TYPE> → table: no Sigma chart equivalent]`** | 🟡 (was ❌ silent bar) | **FIXED** ts_common.py `_NO_SIGMA_EQUIV` + `_element_core`; flagged table. NOTE: Sigma the product HAS waterfall in the UI, but it is **not in the workbook spec API kind enum** (verified: `waterfall`/`waterfall-chart` → "Invalid kind"), so the spec-based converter can't emit it. Revisit when Sigma adds it to the spec |
 
 ## Calculations / formulas (live value-parity)
 
@@ -59,7 +59,7 @@ equivalent → sensible down-convert **and the migration flags it**) · ❌ gap
 | Sorting | ✅ | xAxis.sort carries |
 | Number / currency / percent format | ✅ | `$`/`%`/thousands render |
 | Colors (by-category + by-measure) | ✅ | category legend + measure gradient |
-| Conditional formatting | 🟡 (was ❌ silent-drop) | **FIXED** — now FLAGGED (`[FLAGGED: conditional formatting not converted]`); Sigma conditionalFormats exist only on pivot/input tables, not the `kind:table` TS tables map to — full map is a follow-up |
+| Conditional formatting | ✅ (was ❌ silent-drop) | **MAPPED** — TS `client_state` `conditionalFormatting.rows[]` (operator/value/solidBackground) → Sigma `conditionalFormats` (`type:single`, condition, value, `style.backgroundColor`). The host table is emitted as a `pivot-table` (CF only rides pivot/input tables). Live-verified coloring renders. Gradient/data-bar variants still flagged |
 | Dynamic / expression title | 🟡 (flagged) | a `{{token}}` title is now FLAGGED (`[FLAGGED: dynamic title not converted]`) — Sigma element titles are plain strings in the spec, no title-templating; flag-not-drop so the literal isn't shipped silently |
 
 ## Gaps found → fixed this round
