@@ -435,6 +435,33 @@ def _fmt(entry):
 def _resolve(resolver, base):
     return resolver.get(base) or {"measure": True, "ofv": base, "friendly": re.sub(r'[()]', '', base).strip()}
 
+# ── ThoughtSpot date buckets (Month(date)/Week(date)/…) → Sigma DateTrunc ─────
+# A TS Liveboard time axis is a bucketed date column — `Month(date)`, `Week(date)`,
+# `Quarter(date)`, `Year(date)`, etc. (also the `.monthly`/`.weekly` search tokens
+# resolve to these in answer_columns). Sigma has no such pseudo-column, so we
+# materialize a DateTrunc("<grain>", <date col>) calc column on the master and
+# reference THAT. Without this the bucket name falls through as an unknown column
+# and the workbook POST 400s ("dependency not found: …/month(date)").
+_DATE_BUCKET_RE = re.compile(
+    r'^\s*(month|week|quarter|year|day|hour|monthly|weekly|quarterly|yearly|daily)\s*\(\s*([^)]+?)\s*\)\s*$', re.I)
+_BUCKET_GRAIN = {"month": "month", "monthly": "month", "week": "week", "weekly": "week",
+                 "quarter": "quarter", "quarterly": "quarter", "year": "year", "yearly": "year",
+                 "day": "day", "daily": "day", "hour": "hour"}
+
+def date_bucket(name):
+    """'Month(date)' → ('month','date'); None for non-bucket names."""
+    m = _DATE_BUCKET_RE.match(name or "")
+    if not m:
+        return None
+    g = _BUCKET_GRAIN.get(m.group(1).lower())
+    return (g, m.group(2).strip()) if g else None
+
+def _bucket_friendly(name):
+    """Paren-free master-column name for a date bucket (parens collide with Sigma
+    function-call syntax in a column ref). 'Month(date)' → 'Month of date'."""
+    b = date_bucket(name)
+    return f"{b[0].title()} of {re.sub(r'[()]', '', b[1]).strip()}" if b else None
+
 # Sigma refMark axes: a measure/Y threshold → "series"; a dimension/X line →
 # "axis". value MUST be the wrapped {type:formula, formula} form (a bare number
 # 400s) and label.visibility must be "shown" (qlik-to-sigma qlik_refmarks, bead-
@@ -557,7 +584,7 @@ def _element_core(spec, resolver, master="OFV"):
     name, chart, dims, meas = spec["name"], spec["chart"], spec["dims"], spec["measures"]
     src = {"elementId": "m-ofv", "kind": "table"}
     mtypes = spec.get("mtypes") or {}
-    dref = lambda b: f"[{master}/{_resolve(resolver, b)['friendly']}]"
+    dref = lambda b: f"[{master}/{_bucket_friendly(b) or _resolve(resolver, b)['friendly']}]"
 
     def mref(b):
         mt = mtypes.get(b)
@@ -827,11 +854,24 @@ def master_element(specs, resolver, dm_id, denorm_elem, denorm_name="Order Fact 
             return materialize(name, mf.get(name, ""))
         return add_base(name)
 
+    def add_bucket(name):
+        g, inner = date_bucket(name)
+        fr = _bucket_friendly(name)
+        if fr in seen:
+            return fr
+        seen[fr] = 1
+        ie = _resolve(resolver, inner)
+        cols.append({"id": "ofv-%d" % len(cols), "name": fr,
+                     "formula": f'DateTrunc("{g}", [{denorm_name}/{ie["ofv"]}])'})
+        return fr
+
     for s in specs:
         mtypes, rfs = s.get("mtypes") or {}, s.get("row_formulas") or {}
         for base in s.get("dims", []) + s["measures"] + [f["col"] for f in s.get("filters", [])]:
             mt = mtypes.get(base)
-            if base in rfs:                                  # row-level formula dim
+            if date_bucket(base):                            # Month(date)/Week(date)/… → DateTrunc
+                add_bucket(base)
+            elif base in rfs:                                # row-level formula dim
                 materialize(base, rfs[base])
             elif mt and mt.get("kind") == "window":          # flagged: surface the raw measure
                 inner = window_inner_ref(mt.get("expr"))
