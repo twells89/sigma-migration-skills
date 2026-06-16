@@ -202,6 +202,13 @@ def parse_ts_viz(v, resolver=None):
         dims = [d for d in dims if d != color] + [color]    # color dim LAST
     if has_cf_rule(a):
         flagged.append({"name": a.get("name", ""), "fn": "conditional formatting"})
+    # A ThoughtSpot title with a `{{token}}` (a filter/parameter reference) is a
+    # DYNAMIC title. A Sigma element `name` is a plain string in the spec — there's
+    # no title-templating — so it would render the literal `{{token}}`. Flag it
+    # (flag-not-drop) so the migration surfaces that the title won't update live,
+    # rather than shipping a confusing literal.
+    if re.search(r"\{\{.*?\}\}", a.get("name", "") or ""):
+        flagged.append({"name": a.get("name", ""), "fn": "dynamic title"})
     m = re.search(r"\btop\s+(\d+)\b", a.get("search_query", "") or "", re.I)
     return {"name": a.get("name", "Viz"), "chart": ctype, "dims": dims, "measures": measures,
             "filters": parse_filters(a.get("search_query", "")), "sorts": parse_sorts(a),

@@ -56,7 +56,7 @@ equivalent → sensible down-convert **and the migration flags it**) · ❌ gap
 | Number / currency / percent format | ✅ | `$`/`%`/thousands render |
 | Colors (by-category + by-measure) | ✅ | category legend + measure gradient |
 | Conditional formatting | 🟡 (was ❌ silent-drop) | **FIXED** — now FLAGGED (`[FLAGGED: conditional formatting not converted]`); Sigma conditionalFormats exist only on pivot/input tables, not the `kind:table` TS tables map to — full map is a follow-up |
-| Dynamic / expression title | 🟡 | passes through as literal string (no `{{token}}` interpolation); graceful, never blank — low-priority follow-up |
+| Dynamic / expression title | 🟡 (flagged) | a `{{token}}` title is now FLAGGED (`[FLAGGED: dynamic title not converted]`) — Sigma element titles are plain strings in the spec, no title-templating; flag-not-drop so the literal isn't shipped silently |
 
 ## Gaps found → fixed this round
 
