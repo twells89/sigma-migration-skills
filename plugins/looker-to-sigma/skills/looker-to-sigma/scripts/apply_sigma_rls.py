@@ -135,12 +135,54 @@ def rls_spec_snippet(attr, field, element_id):
     }
 
 
+def _derived_display(col):
+    """The label Sigma shows for a column: explicit `name`, else derived from a
+    lookup formula — [A/view/Field] -> 'Field (view)', [A/Field] -> 'Field'."""
+    if col.get("name"):
+        return col["name"]
+    f = (col.get("formula") or "").strip()
+    m = __import__("re").match(r"^\[([^\]]+)\]$", f)
+    if not m:
+        return None
+    parts = m.group(1).split("/")
+    if len(parts) >= 3:
+        return f"{parts[-1]} ({parts[-2]})"
+    return parts[-1]
+
+
+def _resolve_field_operand(element, field):
+    """Return the formula operand that actually RESOLVES for `field` on this
+    element. A relationship-lookup column's DERIVED display ('Region (customer_dim)')
+    is NOT a valid literal column reference — the bracket form errors. Its own
+    formula ([Order Fact/customer_dim/Region]) is the working operand, so reuse it.
+    Plain/native columns fall back to their display in brackets."""
+    target = _norm(field)
+    for c in (element.get("columns") or []):
+        if not isinstance(c, dict):
+            continue
+        if _norm(_derived_display(c)) == target:
+            f = (c.get("formula") or "").strip()
+            if f.startswith("[") and "/" in f:        # relationship lookup — reuse its ref
+                return f
+            return f"[{c.get('name') or field}]"
+    return f"[{field}]"
+
+
 def apply_to_dm(dm_id, element_id, calc, filt):
     """PATCH the calc column + filter into the DM element's spec (GET → mutate → PUT)."""
     spec = api("GET", f"/v2/dataModels/{dm_id}/spec")
     if not isinstance(spec, dict):
         # spec endpoints can return YAML; we can't safely mutate that here.
         sys.exit("DM spec came back non-JSON (YAML) — cannot auto-PATCH; apply the snippet by hand.")
+    # Re-resolve the RHS field ref against the live element so a relationship-lookup
+    # column (derived display 'Field (view)') compiles instead of erroring.
+    el = _resolve_element(spec, element_id, None)
+    if el:
+        m = __import__("re").search(r"=\s*(\[[^\]]+\])\s*$", calc.get("formula", ""))
+        if m:
+            operand = _resolve_field_operand(el, m.group(1)[1:-1])
+            if operand != m.group(1):
+                calc["formula"] = calc["formula"][:m.start(1)] + operand
     # The spec shape nests elements under the model; search for the element by id.
     found = _inject(spec, element_id, calc, filt)
     if not found:

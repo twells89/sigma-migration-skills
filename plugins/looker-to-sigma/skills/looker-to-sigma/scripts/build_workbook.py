@@ -295,9 +295,17 @@ def main():
         return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
     def dm_el_for(explore):
-        for e in dm_elements:
-            if e.get("name") and _norm(e["name"]) == _norm(explore):
-                return e
+        # Prefer the DENORMALIZED explore element ("<Explore> View") — it carries
+        # every joined dimension as a native flat column, so the workbook master
+        # is a single "data table with every field" rather than the base fact +
+        # relationship lookups (which leave KPIs reading a thinner element and
+        # force every joined ref through a relationship traversal). Fall back to a
+        # bare-name match, then the orchestrator-passed denorm id.
+        n = _norm(explore)
+        for cand in (n + "view", n):
+            for e in dm_elements:
+                if e.get("name") and _norm(e["name"]) == cand:
+                    return e
         return {"id": a.element_id, "name": a.dm_element_name}
 
     masters = {}   # explore -> {"id","name","dm_el","needed":{display: colId}}
@@ -305,10 +313,15 @@ def main():
         ex = explore or next(iter(masters), None)
         if ex not in masters:
             n = len(masters)
+            dme = dm_el_for(ex)
             masters[ex] = {
                 "id": "m-master" if n == 0 else f"m-master-{n + 1}",
                 "name": a.master_name if n == 0 else f"{a.master_name} {n + 1}",
-                "dm_el": dm_el_for(ex),
+                "dm_el": dme,
+                # A denormalized "<Explore> View" element exposes joined columns
+                # FLAT ('<Field> (<view>)'); the base fact element only reaches
+                # them through a relationship traversal. master_ref keys off this.
+                "denorm": (dme.get("name") or "").endswith(" View"),
                 "needed": {},
             }
             if n == 1:
@@ -317,13 +330,14 @@ def main():
         return masters[ex]
 
     def master_ref(display, explore):
-        """Master-column formula for a display name. Joined-view columns
-        ('Field (view)') traverse the DM relationship named after the join:
-        [<dmEl>/<view>/<Field>] — the '<Field> (<view>)' flat form only exists
-        on denormalized elements."""
-        dme_name = master_of(explore)["dm_el"]["name"]
+        """Master-column formula for a display name. On a DENORMALIZED element the
+        joined column exists FLAT as '<Field> (<view>)', so reference it directly
+        ([<dmEl>/<Field> (<view>)]). On the base fact element it is only reachable
+        through the DM relationship named after the join ([<dmEl>/<view>/<Field>])."""
+        mst = master_of(explore)
+        dme_name = mst["dm_el"]["name"]
         m = re.match(r"^(.*) \((\w+)\)$", display or "")
-        if m:
+        if m and not mst["denorm"]:
             return f"[{dme_name}/{m.group(2)}/{m.group(1)}]"
         return f"[{dme_name}/{display}]"
 
@@ -624,6 +638,30 @@ def main():
         if not kind:
             warnings.append(f"tile '{el['name']}' type '{el['tileType']}' has no Sigma mapping — skipped")
             continue
+        # ── merged-results tile (Looker merge_result_id) ──────────────────────
+        # Discovery captured the full merge; we render the PRIMARY source here.
+        # Secondary sources need a Sigma join (cross-explore) — flag them loudly
+        # with the exact join keys so the tile is never silently partial.
+        mrg = el.get("merge")
+        if mrg and mrg.get("sourceQueries"):
+            sec = [s for s in mrg["sourceQueries"] if not s.get("isPrimary")]
+            if mrg.get("error"):
+                warnings.append(f"⚠⚠ tile '{el['name']}': merged-results query could not be "
+                                f"fetched ({mrg['error']}) — rendered from its primary query only; "
+                                "verify the merged columns in Sigma.")
+            elif sec:
+                joins = "; ".join(
+                    f"{s.get('explore') or '?'} on " +
+                    ", ".join(f"{mf['sourceField']}={mf['refField']}" for mf in (s.get("mergeFields") or [])
+                              if mf.get("sourceField"))
+                    for s in sec)
+                secfields = ", ".join(f for s in sec for f in (s.get("fields") or []))
+                warnings.append(
+                    f"⚠⚠ tile '{el['name']}' is a Looker MERGED-RESULTS tile ({len(mrg['sourceQueries'])} "
+                    f"sources). Rendered from the PRIMARY explore '{el.get('explore')}'. Secondary source(s) "
+                    f"[{joins}] are NOT auto-joined yet — add a Sigma join/relationship on those keys and "
+                    f"surface the merged field(s) [{secfields}]. (Cross-explore merge auto-build is the "
+                    "documented next step; the data shown is primary-only, never a silent partial blend.)")
         ex = el["explore"]
         ms = [f for f in el["fields"] if is_measure(f)]
         ds = [f for f in el["fields"] if not is_measure(f)]
@@ -951,11 +989,19 @@ def main():
 
     scope_tables = {}      # (explore, listen-set) -> {"id","name","explore","needed":{}}
 
+    all_filters = frozenset(filter_names)
+
     def scope_for(ex, lset):
         """The hidden scope table for a tile partition — or None when the tile
-        can stay on the master (single uniform listen-set per explore, or a
-        tile that listens to nothing and is therefore never targeted)."""
-        if len(explore_lsets[ex]) == 1 or not lset:
+        can stay on the master Data table. A tile stays on the master when it
+        listens to EVERY dashboard filter (the controls all target the master, so
+        a private scope would behave identically — this is what keeps KPIs and
+        other full-listeners "built off the data table on the data tab"), when the
+        explore has a single uniform listen-set, or when it listens to nothing.
+        Only a SUBSET-listener (e.g. a breakdown chart that ignores its own
+        grouping dimension's filter) needs its own scope so the filters it does
+        NOT listen to never reach it."""
+        if len(explore_lsets[ex]) == 1 or not lset or lset == all_filters:
             return None
         key = (ex, lset)
         if key not in scope_tables:

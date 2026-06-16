@@ -47,6 +47,42 @@ def _query_of(el):
     return rm.get("query") or {}
 
 
+def _merge_of(el):
+    """Merged-results tile → normalized merge block, else None. A Looker merge
+    (`merge_result_id`) joins 2+ explore queries client-side on shared field
+    values; the FIRST source is primary. We fetch the merge query + each source
+    query so the converter can rebuild it as a Sigma join (or, until that lands,
+    render the primary source and flag the rest — never silently drop columns)."""
+    mid = el.get("merge_result_id")
+    if not mid:
+        return None
+    try:
+        mq = get(f"/merge_queries/{urllib.parse.quote(str(mid), safe='')}")
+    except Exception as e:                     # don't fail the whole dashboard pull
+        return {"id": str(mid), "error": f"could not fetch merge_query: {e}", "sourceQueries": []}
+    srcs = []
+    for i, sq in enumerate(mq.get("source_queries") or []):
+        qid = sq.get("query_id")
+        qd = {}
+        if qid is not None:
+            try:
+                qd = get(f"/queries/{urllib.parse.quote(str(qid), safe='')}")
+            except Exception:
+                qd = {}
+        srcs.append({
+            "name": sq.get("name") or f"source_{i + 1}",
+            "isPrimary": i == 0,
+            "model": qd.get("model"), "explore": qd.get("view"),
+            "fields": qd.get("fields") or [],
+            "pivots": qd.get("pivots") or [],
+            # merge_fields map this source's join field to the primary's join field
+            "mergeFields": [{"sourceField": mf.get("source_field_name"),
+                             "refField": mf.get("field_name")}
+                            for mf in (sq.get("merge_fields") or [])],
+        })
+    return {"id": str(mid), "sourceQueries": srcs}
+
+
 def _vis_config(el, q):
     """The active vis_config dict (query > result_maker > element)."""
     for src in (q.get("vis_config"), (el.get("result_maker") or {}).get("vis_config"), el.get("vis_config")):
@@ -155,10 +191,20 @@ def normalize(d):
             continue
         if not q and el.get("type") in (None, "text") and not el.get("title"):
             continue
+        # Merged-results tile: a `merge_result_id` joins multiple explore queries.
+        # `q` (result_maker.query) is the PRIMARY source only, so render from it but
+        # attach the full merge so the builder can join (or flag) the others.
+        merge = _merge_of(el)
+        if merge and merge.get("sourceQueries"):
+            prim = next((s for s in merge["sourceQueries"] if s.get("isPrimary")), merge["sourceQueries"][0])
+            if not q:                                   # fall back to the primary source query
+                q = {"model": prim.get("model"), "view": prim.get("explore"),
+                     "fields": prim.get("fields") or [], "pivots": prim.get("pivots") or []}
         vc = _vis_config(el, q)
         elements.append({
             "name": el.get("title") or el.get("title_text") or f"element_{el.get('id')}",
             "tileType": _vis_type(el, q),
+            "merge": merge,
             "model": q.get("model"), "explore": q.get("view"),
             "fields": q.get("fields") or [],
             "pivots": q.get("pivots") or [],
