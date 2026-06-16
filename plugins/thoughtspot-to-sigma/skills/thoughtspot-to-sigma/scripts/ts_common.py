@@ -310,11 +310,21 @@ def parse_measure_color(a, measures):
     # client_state per-column color → single-hue scale on that measure
     for cs in _client_states(a):
         for cp in (cs.get("columnProperties") or []) if isinstance(cs, dict) else []:
-            prop = cp.get("columnProperty") or {}
+            if not isinstance(cp, dict):   # real TML: columnProperties entries are not always objects
+                continue
+            prop = cp.get("columnProperty")
+            prop = prop if isinstance(prop, dict) else {}
             hue = prop.get("color") or prop.get("columnColor")
             col = _strip_total(cp.get("columnId") or "")
             if hue and col in measure_set:
                 return {"col": col, "scheme": ["#ffffff", hue]}
+    # NOTE: a real TS `conditional_formatting` rule has the shape
+    # {rule:[{range:{min,max}, color, plotAsBand}]} — that is per-value CONDITIONAL
+    # FORMATTING (color a value band), NOT a measure gradient or a reference line.
+    # We intentionally do NOT map it to color:{by:scale} or a refMark (that would be
+    # semantically wrong); it falls through to None / no-op until a genuine gradient
+    # (a list of {color} stops) or reference line is present. Verified against live
+    # team2 Liveboards (Sample Retail, Performance Tracking) 2026-06-15.
     return None
 
 def parse_sorts(a):
