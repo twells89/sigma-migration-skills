@@ -400,6 +400,10 @@ def parse_filters(search_query):
         col, op = m.group(1), m.group(2)
         vals = [v.title() if v.islower() else v for v in re.findall(r"'([^']*)'", m.group(3))]
         out.append({"col": col, "mode": "include" if op == "=" else "exclude", "values": vals})
+    # ThoughtSpot date-scope token `[date].2021` = a calendar-year filter. (The
+    # relative tokens `.'this year'`/`.'last 4 quarters'` are NOT handled here.)
+    for m in re.finditer(r"\[([^\]]+)\]\s*\.\s*(\d{4})\b", search_query):
+        out.append({"col": m.group(1), "mode": "include", "values": [int(m.group(2))], "year": True})
     return out
 
 _NUM = lambda fs: {"kind": "number", "formatString": fs}
@@ -541,6 +545,17 @@ def sigma_element(spec, resolver, master="OFV"):
     ftarget = next((s for s in _SCATTER_SRC if s["id"] == el["source"].get("elementId")), el) if grp else el
     for f in spec.get("filters", []):
         e = _resolve(resolver, f["col"])
+        if f.get("year"):
+            # `[date].2021` → filter on a Year(<date>) calc column (a list filter on a
+            # datetime column is silently dropped; Year() yields a clean integer match).
+            yname = f"Year of {e['friendly']}"
+            existing = next((c for c in ftarget["columns"] if c.get("name") == yname), None)
+            col_id = existing["id"] if existing else nid("f")
+            if not existing:
+                ftarget["columns"].append({"id": col_id, "formula": f"Year([{master}/{e['friendly']}])", "name": yname})
+            ftarget.setdefault("filters", []).append({"id": nid(), "columnId": col_id, "kind": "list",
+                                                 "mode": "include", "values": f["values"]})
+            continue
         existing = next((c for c in ftarget["columns"] if c.get("name") == f["col"]), None)
         if existing:
             col_id = existing["id"]
