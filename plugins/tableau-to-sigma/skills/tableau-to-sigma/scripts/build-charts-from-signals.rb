@@ -683,6 +683,18 @@ def translate_tableau_tc(formula)
     hints << 'TOTAL(AVG(x))→Avg(x) (non-grouping context)'; changed = true
   end
 
+  # RANK_UNIQUE(expr[, 'asc'|'desc']) → RowNumber(). Tableau RANK_UNIQUE assigns
+  # a UNIQUE 1..N rank (no ties); Sigma RowNumber() does the same but FOLLOWS the
+  # element's sort, so it is exact only when the element is sorted by the ranked
+  # expression in the matching direction (mirrors the RUNNING_*/INDEX viz-formula
+  # contract). Must precede the bare RANK( rewrite — though `\bRANK\(` can't match
+  # `RANK_UNIQUE(` (the underscore), handle it explicitly so it stops falling
+  # through to "untranslatable" (the EDNA top-N idiom: RANK_UNIQUE(SUM(x)) <= 25).
+  if s.gsub!(/\bRANK_UNIQUE\s*\(\s*((?:[^,()]|\([^()]*\)|\([^()]*\([^()]*\)[^()]*\))+?)\s*(?:,\s*'(?:asc|desc)'\s*)?\)/, 'RowNumber()')
+    hints << 'RANK_UNIQUE(expr)→RowNumber() — unique rank; VERIFY the element is sorted by the ranked expr (RowNumber follows the viz sort). For a top-N filter (RANK_UNIQUE(...)<=N) prefer a Sigma Top-N filter.'
+    changed = true
+  end
+
   # RANK([col], 'desc') / RANK([col]) / RANK_DENSE / RANK_PERCENTILE.
   # Tableau's RANK family defaults to DESCENDING; Sigma's defaults ascending —
   # the no-direction form must emit an explicit "desc" (WINPROBE-validated:
