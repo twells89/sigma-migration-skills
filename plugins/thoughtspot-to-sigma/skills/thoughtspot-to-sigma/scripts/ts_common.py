@@ -209,11 +209,15 @@ def parse_ts_viz(v, resolver=None):
     # rather than shipping a confusing literal.
     if re.search(r"\{\{.*?\}\}", a.get("name", "") or ""):
         flagged.append({"name": a.get("name", ""), "fn": "dynamic title"})
-    m = re.search(r"\btop\s+(\d+)\b", a.get("search_query", "") or "", re.I)
+    # `top N` / `bottom N` → that count; a BARE `top`/`bottom` (no number) defaults
+    # to 10 in ThoughtSpot (verified live: `[sales] by [product] top` → 10 rows).
+    sq = a.get("search_query", "") or ""
+    mtop = re.search(r"\btop\s+(\d+)\b", sq, re.I)
+    topn = int(mtop.group(1)) if mtop else (10 if re.search(r"\btop\b", sq, re.I) else None)
     return {"name": a.get("name", "Viz"), "chart": ctype, "dims": dims, "measures": measures,
             "filters": parse_filters(a.get("search_query", "")), "sorts": parse_sorts(a),
             "mtypes": mtypes, "row_formulas": row_formulas, "flagged": flagged,
-            "color_dim": color, "topn": int(m.group(1)) if m else None,
+            "color_dim": color, "topn": topn,
             "refmarks": parse_refmarks(a, measures, dims),
             "measure_color": parse_measure_color(a, measures),
             "af_names": sorted(af.keys())}
