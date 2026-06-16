@@ -3202,6 +3202,9 @@ elsif opts[:pages_mode] == :dashboard
   dash_order = layout.map { |d| d['dashboard'] }
   by_dash = elements.group_by { |e| e['_dashboard'] }
   pages = []
+  seen_el_ids = {}   # element id → true; a worksheet reused on N dashboards
+                     # yields N element copies sharing one id → "Duplicate id"
+                     # on POST. Namespace the 2nd+ occurrence per page.
   dash_order.each do |dash_name|
     els = by_dash[dash_name]
     next if els.nil? || els.empty?
@@ -3243,6 +3246,22 @@ elsif opts[:pages_mode] == :dashboard
         f = col['formula'].to_s
         ctl_rewrites.each { |from, to| f = f.gsub("[#{from}]", "[#{to}]") }
         col['formula'] = f
+      end
+    end
+    # Namespace element ids that already appeared on a prior page (a worksheet
+    # placed on multiple dashboards). The element id is the stem of its column
+    # ids (x-<id>/y-<id>/g-<id>) and grouping refs, so gsub the stem across the
+    # element's own JSON to rewrite id + column ids + grouping refs in lock-step
+    # (formulas reference [Master/..]/[ctl-..], never the element id, so they're
+    # untouched).
+    els.map! do |el|
+      stem = el['id']
+      if stem && seen_el_ids[stem]
+        ns = "#{stem}-#{d_slug[0..20]}"
+        JSON.parse(el.to_json.gsub(stem, ns))
+      else
+        seen_el_ids[stem] = true if stem
+        el
       end
     end
     pages << { 'name' => dash_name, 'elements' => page_extras + els }
