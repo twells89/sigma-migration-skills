@@ -163,7 +163,10 @@ module MechanicalSpecs
       });
       const bare = out.model || out.sigmaDataModel || out;
       writeFileSync(#{raw_out.to_json}, JSON.stringify(bare, null, 2));
-      writeFileSync(#{meta_out.to_json}, JSON.stringify({ model: bare, warnings: out.warnings || [], stats: out.stats || {} }, null, 2));
+      // Capture out.security too — detected RLS/CLS rules (architecture B:
+      // reported, not injected). Dropping it here is how RLS silently
+      // vanished from the orchestrated path; the orchestrator now gates on it.
+      writeFileSync(#{meta_out.to_json}, JSON.stringify({ model: bare, warnings: out.warnings || [], stats: out.stats || {}, security: out.security || [] }, null, 2));
     JS
     o, e, st = Open3.capture3('node', shim)
     raise "converter failed: #{e}#{o}" unless st.success?

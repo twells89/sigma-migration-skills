@@ -542,6 +542,35 @@ if mechanical
   line "mechanical converter: #{st['elements']} element(s), #{st['columns']} column(s), " \
        "#{st['metrics']} metric(s), #{st['relationships']} relationship(s); #{(conv['warnings'] || []).size} warning(s)"
 
+  # ---- RLS gate (never silently drop) -------------------------------------
+  # The converter detects row-level security (USERNAME/USERATTRIBUTE/ISMEMBEROF
+  # calcs) and reports it in conv['security'] (architecture B: reported, not
+  # injected). Persist it to security.json and surface a LOUD, un-missable
+  # checkpoint — RLS is provisioned + applied by scripts/apply_sigma_rls.py, NOT
+  # by this converter. Also surface the cross-element warnings (an RLS calc over
+  # a joined-dim column that needs manual placement on the owning element), so
+  # those can't hide inside the warnings count either.
+  rls_rules = conv['security'] || []
+  rls_xelem = (conv['warnings'] || []).grep(/row-level security but references a related-table/)
+  $rls_pending = rls_rules.any? || rls_xelem.any?
+  if $rls_pending
+    sec_path = File.join(WORK, 'security.json')
+    File.write(sec_path, JSON.pretty_generate(rls_rules))
+    line ''
+    line '🔐 ROW-LEVEL SECURITY DETECTED — NOT yet applied to the Sigma model'
+    rls_rules.each do |r|
+      nm = r.dig('rls', 'name') || r['source']
+      attrs = (r.dig('rls', 'userAttributes') || []).join(', ')
+      line "   • #{nm}#{attrs.empty? ? '' : "  (user attribute(s): #{attrs})"}"
+    end
+    rls_xelem.each { |w| line "   • #{w[0, 150]}" }
+    line "   wrote #{sec_path} (#{rls_rules.size} emit-ready rule(s); #{rls_xelem.size} cross-element rule(s) need manual placement)"
+    line '   PROVISION + APPLY before this model is safe to share:'
+    line "     python3 scripts/apply_sigma_rls.py --from-security #{sec_path} --dm-id <dataModelId>            # plan"
+    line "     python3 scripts/apply_sigma_rls.py --from-security #{sec_path} --dm-id <dataModelId> --provision --apply"
+    line ''
+  end
+
   # Mechanical DM fixup NOW (so dropped calcs feed the checkpoint): resolve
   # raw-table-name prefixes + GUID sibling refs, and DROP calc columns that
   # still cannot resolve (unknown functions / unresolved refs).
@@ -1360,6 +1389,10 @@ puts '================ RESULT (pass 1 — parity PENDING) ================'
 puts "dataModelId : #{dm_id}#{reuse_dm_id ? '  (REUSED existing DM)' : ''}"
 puts "workbookId  : #{wb_id}"
 puts "structural  : PASS (#{total_cols} cols resolve, #{chart_els.size} charts compile)"
+if $rls_pending
+  puts "RLS         : DETECTED, NOT APPLIED — see #{File.join(WORK, 'security.json')}; provision + apply"
+  puts '              via scripts/apply_sigma_rls.py before sharing (the model returns ALL rows until then)'
+end
 puts 'PARITY      : PENDING — the pooled collector filled parity-actuals.json for every'
 puts '              exportable chart; run the REMAINING mcp-v2 queries printed above'
 puts "              (if any), merge into #{File.join(WORK, 'parity-actuals.json')}, then:"

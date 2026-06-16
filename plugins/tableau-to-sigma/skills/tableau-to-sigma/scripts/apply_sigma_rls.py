@@ -297,7 +297,26 @@ def main():
     ap.add_argument("--apply", action="store_true", help="PATCH the RLS calc col + filter into the DM element spec")
     ap.add_argument("--from-security", help="path to a converter result.security[] JSON (batch RLS+CLS apply)")
     ap.add_argument("--provision", action="store_true", help="create missing user attributes / teams (with --from-security)")
+    ap.add_argument("--print-plan", action="store_true", help="OFFLINE: parse --from-security and print the rules + attributes/teams to provision (no API, no --dm-id)")
     a = ap.parse_args()
+
+    # Offline review: parse a security.json and print what WOULD be provisioned +
+    # applied, with no API call (no token / --dm-id needed). Lets you sanity-check
+    # the converter's RLS output (and is the CI-portable test entrypoint).
+    if a.from_security and a.print_plan:
+        raw = json.load(open(a.from_security))
+        security = raw.get("security", raw) if isinstance(raw, dict) else raw
+        attrs, teams, n_email = set(), set(), 0
+        print(f"RLS/CLS plan from {a.from_security}: {len(security)} rule(s)")
+        for r in security:
+            rls = r.get("rls", {})
+            for x in (rls.get("userAttributes") or []): attrs.add(x)
+            for t in (rls.get("teams") or []): teams.add(t)
+            if rls.get("usesCurrentUserEmail"): n_email += 1
+            print(f"  • {rls.get('name') or r.get('source')} → element '{r.get('elementName')}': {rls.get('formula','')[:90]}")
+        print(f"provision: {len(attrs)} user attribute(s) {sorted(attrs)}; {len(teams)} team(s) {sorted(teams)}; "
+              f"{n_email} rule(s) use CurrentUserEmail (no provisioning)")
+        return
 
     # Batch mode: ingest a converter's result.security[] and provision + apply all rules.
     if a.from_security:

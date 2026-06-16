@@ -70,6 +70,7 @@ jobs:
           set -uo pipefail
           tests=(
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-param-swap-translation.rb
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-rls-wiring.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-dax-restructure.rb
           )
           fail=0
