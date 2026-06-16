@@ -1065,7 +1065,49 @@ end
 #
 # We accept the slightly-loose form Tableau uses (`Case` token-case insensitive,
 # bracket refs for parameter and for dim columns, mixed quoted strings).
-def translate_case_on_param(formula, param_captions)
+# Remap the RESULT side of a param Switch/If branch (a column ref, sibling calc,
+# or string literal) onto the canonical Sigma `[Master/<name>]` form the
+# validator accepts. UUID refs resolve via columns_by_guid → caption → master
+# map; bare [Name] refs map by caption. Control refs ([ctl-...]) and string
+# literals pass through untouched. Mirrors translate_dim_calc's master_ref so
+# parameter-driven calcs resolve the same way plain dim calcs already do
+# (without this, branch refs stayed as raw Tableau UUIDs / sibling-calc names
+# and validate-spec rejected them as "bare ref … not a sibling column").
+# A param-driven Switch compares the CONTROL value to each case literal. Sigma
+# list/segmented controls are text-typed, so a bare-number case literal (from a
+# Tableau `WHEN 1`) makes Sigma reject the Switch: "Argument N invalid … Expected
+# text; received number." Quote bare numeric case literals so they match the
+# text control. Leave already-quoted strings and non-numeric tokens untouched.
+def coerce_case_literal(v)
+  s = v.to_s.strip
+  return s if s.start_with?('"') || s.start_with?("'")
+  return "\"#{s}\"" if s =~ /\A-?\d+(?:\.\d+)?\z/
+  s
+end
+
+def remap_param_branch(expr, mmap, columns_by_guid)
+  return expr if mmap.nil?
+  s = expr.gsub(/\[([0-9a-f\-]{36})\]/i) do
+    info = (columns_by_guid || {})[Regexp.last_match(1)]
+    info && info['caption'] ? "[#{info['caption'].strip}]" : Regexp.last_match(0)
+  end
+  s.gsub(/\[([^\/\]]+)\]/) do
+    inner = Regexp.last_match(1).strip
+    if inner.start_with?('ctl-') || inner.include?('/')
+      Regexp.last_match(0)
+    else
+      m = map_column(inner, mmap)
+      # Use the master-map's LOGICAL name (bare, e.g. "Region") — the same form
+      # the chart's grouping passthrough columns use and that the master source
+      # resolves. A relationship-suffixed label like "Region (STORE_DIM)" is NOT
+      # a master-map key and Sigma rejects it ("Dependency not found"); the
+      # parentheses also break formula parsing.
+      "[Master/#{m ? m['name'] : inner}]"
+    end
+  end
+end
+
+def translate_case_on_param(formula, param_captions, mmap = nil, columns_by_guid = {})
   return nil unless formula =~ /\bCASE\b/i
   # Strip newlines + collapse spaces
   s = formula.gsub(/\s+/, ' ').strip
@@ -1088,15 +1130,17 @@ def translate_case_on_param(formula, param_captions)
   end
   return nil unless param_caption
   parts = [param_control_ref(param_caption)]
-  pairs.each { |when_val, then_val| parts << when_val; parts << then_val }
-  parts << else_expr if else_expr
+  # when_val = match literal (1, "Region", …) → keep; then_val = result column
+  # ref → remap onto [Master/…].
+  pairs.each { |when_val, then_val| parts << coerce_case_literal(when_val); parts << remap_param_branch(then_val, mmap, columns_by_guid) }
+  parts << remap_param_branch(else_expr, mmap, columns_by_guid) if else_expr
   "Switch(#{parts.join(', ')})"
 end
 
 # Translate IF/ELSEIF chains on a parameter ref:
 #   IF [Param] = "A" THEN x ELSEIF [Param] = "B" THEN y ELSE z END
 # → Switch([Param], "A", x, "B", y, z)
-def translate_if_chain_on_param(formula, param_captions)
+def translate_if_chain_on_param(formula, param_captions, mmap = nil, columns_by_guid = {})
   s = formula.gsub(/\s+/, ' ').strip
   return nil unless s =~ /\bIF\b.*\bEND\b/i
   return nil unless param_captions.any? { |cap| s.include?("[#{cap}]") }
@@ -1120,10 +1164,10 @@ def translate_if_chain_on_param(formula, param_captions)
     return nil unless p_cap == param_caption
     val = cm[2]
     val = val.gsub("'", '"') if val.start_with?("'")
-    cases << val << result
+    cases << coerce_case_literal(val) << remap_param_branch(result, mmap, columns_by_guid)
   end
   parts = [param_control_ref(param_caption)] + cases
-  parts << else_expr if else_expr
+  parts << remap_param_branch(else_expr, mmap, columns_by_guid) if else_expr
   "Switch(#{parts.join(', ')})"
 end
 
@@ -2616,20 +2660,53 @@ layout.each do |dash|
               c['name'].to_s.gsub(/^\[|\]$/, '').casecmp?(window_calc_name)
 
       # Try parameter-driven translations first (CASE / IF chain on param).
-      translated = translate_case_on_param(formula, param_caps) ||
-                   translate_if_chain_on_param(formula, param_caps)
+      # Pass mmap + the GUID→caption map so the Switch branch result refs are
+      # remapped onto [Master/…] (else they leak raw Tableau UUIDs / sibling
+      # calc names that validate-spec rejects as non-sibling).
+      cbg = meta['columns_by_guid'] || {}
+      translated = translate_case_on_param(formula, param_caps, mmap, cbg) ||
+                   translate_if_chain_on_param(formula, param_caps, mmap, cbg)
       if translated
-        # Drop the calc onto the chart element as an inline calc column. The
-        # column id is derived from the calc name (strip brackets) so it's
-        # stable across re-runs.
         calc_name = c['name'].to_s.gsub(/^\[|\]$/, '')
-        calc_id   = "calc-#{calc_name.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
-        element['columns'] << {
-          'id'      => calc_id,
-          'name'    => calc_name,
-          'formula' => translated
-        }
-        warnings << "'#{cap}' parameter-driven calc #{c['name']} → translated to Switch: #{translated[0..120]}"
+        # Sigma resolves a STANDALONE `[Master/X]` passthrough column against the
+        # source, but a `[Master/X]` nested inside a Switch() does NOT resolve
+        # unless X is a materialized SIBLING column of this element. So: for each
+        # distinct `[Master/X]` branch ref, add a hidden passthrough sibling
+        # column named X (formula `[Master/X]`, which resolves standalone), then
+        # rewrite the Switch to reference the sibling `[X]`. Without this the
+        # Switch compiles to type "error" (branch refs unresolved).
+        branch_refs = translated.scan(/\[Master\/([^\]]+)\]/).flatten.uniq
+        existing_names = (element['columns'] || []).map { |c2| c2['name'] }.compact
+        branch_refs.each do |bname|
+          next if existing_names.include?(bname)
+          bid = "swcol-#{bname.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+          element['columns'] << { 'id' => bid, 'name' => bname,
+                                  'formula' => "[Master/#{bname}]" }
+          existing_names << bname
+        end
+        switch_sibling = translated.gsub(/\[Master\/([^\]]+)\]/) { "[#{Regexp.last_match(1)}]" }
+
+        # The mechanical pass emits the worksheet dimension as a passthrough
+        # column ([Master/<calc>]) and the chart GROUPS BY it. That passthrough
+        # resolves to the DM's own (static, param-frozen) copy of the calc, so
+        # the workbook control drives nothing. Rewrite the passthrough column(s)
+        # in place to the control-driven Switch (over the materialized siblings)
+        # so the grouping itself does the swap; only append a standalone calc
+        # column if no passthrough exists.
+        master_ref = "[Master/#{calc_name}]"
+        rewired = 0
+        (element['columns'] || []).each do |col|
+          next unless col['formula'].to_s.strip == master_ref
+          col['formula'] = switch_sibling
+          col.delete('column')
+          rewired += 1
+        end
+        if rewired.zero?
+          calc_id = "calc-#{calc_name.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+          element['columns'] << { 'id' => calc_id, 'name' => calc_name, 'formula' => switch_sibling }
+        end
+        warnings << "'#{cap}' parameter-driven calc #{c['name']} → control-driven Switch over " \
+                    "#{branch_refs.size} materialized branch col(s) (#{rewired} grouping rewired): #{switch_sibling[0..90]}"
         next
       end
 
@@ -2811,9 +2888,18 @@ if opts[:auto_controls]
   referenced_caps = (meta['worksheets'] || {}).values
     .flat_map { |w| (w['calculations'] || []).flat_map { |c| c['parameter_refs'] || [] } }
     .uniq
+  # A parameter is typically declared once in the workbook metadata AND again in
+  # every worksheet's datasource-dependencies that references it, so
+  # meta['parameters'] commonly carries many duplicates of the same caption
+  # (EDNA: ~600 declarations for ~38 params). Emitting one control per
+  # declaration produces colliding element/control ids → "Duplicate id" on POST.
+  # Dedup by caption so each parameter yields exactly one control.
+  seen_param_caps = {}
   (meta['parameters'] || []).each_with_index do |p, i|
     cap = p['caption'].to_s.strip
     next if cap.empty?
+    next if seen_param_caps[cap.downcase]
+    seen_param_caps[cap.downcase] = true
     unless referenced_caps.include?(cap)
       warnings << "parameter '#{cap}' is defined in Tableau but not referenced by any worksheet calc — skipped auto-control (orphan parameter)"
       next
@@ -3116,11 +3202,20 @@ elsif opts[:pages_mode] == :dashboard
       'body' => %(# <span style="color: #FFFFFF">#{dash_name}</span>)
     }]
     ctl_rewrites = {}
+    param_control_ids = param_controls.map { |c| c['controlId'] }
     (param_controls + auto_controls).each do |c|
       # Quick-filter zones apply per-dashboard: skip pages whose zone tree
       # doesn't carry the filter (empty scope = shared-view default, all pages).
       sd = c['_scope_dashboards']
       next if sd.is_a?(Array) && sd.any? && !sd.include?(dash_name)
+      # Parameter controls drive charts through FORMULA refs (a Switch/If reads
+      # the control id), not filter targets. Only emit one on a page where some
+      # element formula actually references it — otherwise it's a "dead control"
+      # (a user changes it and nothing reacts) that fails the control lint.
+      if param_control_ids.include?(c['controlId'])
+        used = els.any? { |el| (el['columns'] || []).any? { |col| col['formula'].to_s.include?("[#{c['controlId']}]") } }
+        next unless used
+      end
       dup = JSON.parse(c.to_json)
       dup.delete('_scope_dashboards')
       original_cid = dup['controlId']

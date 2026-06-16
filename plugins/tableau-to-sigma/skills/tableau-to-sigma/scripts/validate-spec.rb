@@ -48,8 +48,19 @@ end
 
 errors = []
 all_element_names = []
+# Control-id tokens are legitimate bare refs inside Sigma formulas (a
+# parameter-driven Switch references its control by controlId, not a column).
+# Collect them so the sibling-ref check below doesn't false-flag them as
+# "not a sibling column".
+control_ids = Set.new rescue nil
+control_ids ||= []
 spec.fetch('pages', []).each do |page|
-  page.fetch('elements', []).each { |el| all_element_names << el['name'] if el['name'] }
+  page.fetch('elements', []).each do |el|
+    all_element_names << el['name'] if el['name']
+    if el['kind'] == 'control' && el['controlId']
+      control_ids.respond_to?(:add) ? control_ids.add(el['controlId']) : (control_ids << el['controlId'])
+    end
+  end
 end
 all_known_prefixes = (all_element_names + external_names).to_set rescue (all_element_names + external_names)
 require 'set' rescue nil
@@ -116,7 +127,8 @@ spec.fetch('pages', []).each do |page|
                       "(known: #{(own_prefixes + all_known_set).to_a.sort.join(', ')})"
           end
         else
-          unless sibling_names.include?(ref)
+          is_control = control_ids.include?(ref) || ref.start_with?('ctl-')
+          unless sibling_names.include?(ref) || is_control
             errors << "#{name}.#{col['name']}: bare ref [#{ref}] not a sibling column"
           end
         end
