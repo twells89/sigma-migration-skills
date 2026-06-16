@@ -178,6 +178,18 @@ def parse_ts_viz(v, resolver=None):
                 break
         if hit:
             continue
+        mts = _TIMESHIFT_RE.match(c)                   # e.g. "sales(this year)" / "sales(last year)"
+        if mts:
+            base = re.sub(r'^(Total|Average|Min|Max)\s+', '', mts.group(1).strip(), flags=re.I)
+            measures.append(c)
+            mtypes[c] = {"kind": "timeshift", "base": base, "period": _timeshift_period(mts.group(2))}
+            continue
+        mg = _GROWTH_RE.match(c)                        # e.g. "Growth of Total sales" — ordered window
+        if mg:
+            measures.append(c)
+            mtypes[c] = {"kind": "growth", "base": re.sub(r'^Total\s+', '', mg.group(1).strip(), flags=re.I)}
+            flagged.append({"name": a.get("name", ""), "fn": "period-over-period growth"})
+            continue
         ent = (resolver or {}).get(c)
         if ent and ent.get("is_formula"):             # bare model formula (e.g. Order Count)
             add_formula_col(c, mf.get(c, ""))
@@ -214,10 +226,21 @@ def parse_ts_viz(v, resolver=None):
     sq = a.get("search_query", "") or ""
     mtop = re.search(r"\btop\s+(\d+)\b", sq, re.I)
     topn = int(mtop.group(1)) if mtop else (10 if re.search(r"\btop\b", sq, re.I) else None)
+    # The viz's date column = the one carrying a date-scope dot token (`[date].'this
+    # year'`, `[date].2021`, `[date].monthly`…). Used to build SumIf conditions for
+    # period-shifted measures.
+    dcm = re.search(r"\[([^\]]+)\]\s*\.\s*('|\d{4}\b|month|week|day|year|quarter|hour|daily|monthly|weekly|yearly|quarterly|this|last|next)", sq, re.I)
+    date_col = dcm.group(1) if dcm else None
+    # When the viz has period-shifted MEASURES (sales(this year)/(last year) — a `vs`
+    # comparison), the relative-date tokens are bound to those measures, NOT the whole
+    # viz. Applying them as element filters would AND contradictory years → "No data".
+    filters = parse_filters(sq)
+    if any((mtypes.get(m) or {}).get("kind") == "timeshift" for m in measures):
+        filters = [f for f in filters if f.get("kind") != "reldate"]
     return {"name": a.get("name", "Viz"), "chart": ctype, "dims": dims, "measures": measures,
-            "filters": parse_filters(a.get("search_query", "")), "sorts": parse_sorts(a),
+            "filters": filters, "sorts": parse_sorts(a),
             "mtypes": mtypes, "row_formulas": row_formulas, "flagged": flagged,
-            "color_dim": color, "topn": topn,
+            "color_dim": color, "topn": topn, "date_col": date_col,
             "refmarks": parse_refmarks(a, measures, dims),
             "measure_color": parse_measure_color(a, measures),
             "af_names": sorted(af.keys())}
@@ -404,10 +427,14 @@ def parse_filters(search_query):
         col, op = m.group(1), m.group(2)
         vals = [v.title() if v.islower() else v for v in re.findall(r"'([^']*)'", m.group(3))]
         out.append({"col": col, "mode": "include" if op == "=" else "exclude", "values": vals})
-    # ThoughtSpot date-scope token `[date].2021` = a calendar-year filter. (The
-    # relative tokens `.'this year'`/`.'last 4 quarters'` are NOT handled here.)
+    # ThoughtSpot date-scope token `[date].2021` = a calendar-year filter.
     for m in re.finditer(r"\[([^\]]+)\]\s*\.\s*(\d{4})\b", search_query):
         out.append({"col": m.group(1), "mode": "include", "values": [int(m.group(2))], "year": True})
+    # Relative date scopes `[date].'this year'` / `'last year'` / `'last 4 quarters'`
+    # → a today-anchored boolean filter (built in sigma_element where the date ref
+    # is known). Unrecognized scopes carry rel=… and get flagged there.
+    for m in _RELDATE_TOKEN_RE.finditer(search_query):
+        out.append({"col": m.group(1), "kind": "reldate", "rel": m.group(2).strip()})
     return out
 
 _NUM = lambda fs: {"kind": "number", "formatString": fs}
@@ -469,6 +496,32 @@ def _bucket_friendly(name):
     function-call syntax in a column ref). 'Month(date)' → 'Month of date'."""
     b = date_bucket(name)
     return f"{b[0].title()} of {re.sub(r'[()]', '', b[1]).strip()}" if b else None
+
+# ── ThoughtSpot relative time-intelligence (search-query tokens) ──────────────
+# TS time scopes are anchored to TODAY (verified live team2 2026-06-16: 'this
+# year'=2026): `[date].'this year'`/'last year'/'last N quarters|months|...' is a
+# rolling window; a measure can also be period-shifted in answer_columns
+# (`sales(this year)` / `sales(last year)`). We translate a scope to a boolean
+# Year()/DateAdd() condition over the date column — applied as an element filter,
+# or wrapped into a SumIf for a shifted measure. `Growth of X` (period-over-period)
+# needs an ordered window we can't express on a chart element → flagged.
+_RELDATE_TOKEN_RE = re.compile(r"\[([^\]]+)\]\s*\.\s*'\s*((?:this|last|next|prior|previous)\b[^']*?)\s*'", re.I)
+_TIMESHIFT_RE = re.compile(r"^(.*?)\s*\(\s*(this year|last year|prior year|previous year)\s*\)\s*$", re.I)
+_GROWTH_RE = re.compile(r"^\s*growth\s+of\s+(.+?)\s*$", re.I)
+
+def reldate_condition(rel, dateref):
+    """A TS relative-date scope → a Sigma boolean over a date column ref, anchored
+    to Today(). None if unrecognized (caller flags it)."""
+    r = re.sub(r"\s+", " ", (rel or "").lower().strip())
+    if r == "this year":                       return f"Year({dateref}) = Year(Today())"
+    if r in ("last year", "prior year", "previous year"): return f"Year({dateref}) = Year(Today()) - 1"
+    if r == "next year":                       return f"Year({dateref}) = Year(Today()) + 1"
+    m = re.match(r"last (\d+) (year|quarter|month|week|day)s?$", r)
+    if m:                                       return f'{dateref} >= DateAdd("{m.group(2)}", -{m.group(1)}, Today())'
+    return None
+
+def _timeshift_period(p):
+    return "this" if "this" in (p or "").lower() else "last"
 
 # Sigma refMark axes: a measure/Y threshold → "series"; a dimension/X line →
 # "axis". value MUST be the wrapped {type:formula, formula} form (a bare number
@@ -549,6 +602,21 @@ def sigma_element(spec, resolver, master="OFV"):
     ftarget = next((s for s in _SCATTER_SRC if s["id"] == el["source"].get("elementId")), el) if grp else el
     for f in spec.get("filters", []):
         e = _resolve(resolver, f["col"])
+        if f.get("kind") == "reldate":
+            # `[date].'this year'` / `'last 4 quarters'` → a today-anchored boolean
+            # calc column + a filter to true (Year()/DateAdd over the date column).
+            cond = reldate_condition(f["rel"], f"[{master}/{e['friendly']}]")
+            if not cond:
+                el["name"] = el["name"] + f" [FLAGGED: date scope '{f['rel']}' not converted]"
+                continue
+            cname = f"{f['rel'].title()} ({e['friendly']})"
+            existing = next((c for c in ftarget["columns"] if c.get("name") == cname), None)
+            col_id = existing["id"] if existing else nid("f")
+            if not existing:
+                ftarget["columns"].append({"id": col_id, "formula": cond, "name": cname})
+            ftarget.setdefault("filters", []).append({"id": nid(), "columnId": col_id, "kind": "list",
+                                                 "mode": "include", "values": [True]})
+            continue
         if f.get("year"):
             # `[date].2021` → filter on a Year(<date>) calc column (a list filter on a
             # datetime column is silently dropped; Year() yields a clean integer match).
@@ -607,6 +675,14 @@ def _element_core(spec, resolver, master="OFV"):
 
     def mref(b):
         mt = mtypes.get(b)
+        if mt and mt.get("kind") == "timeshift":      # sales(this year) / sales(last year)
+            baseref = f"[{master}/{_resolve(resolver, mt['base'])['friendly']}]"
+            dcol = spec.get("date_col") or "date"
+            dateref = f"[{master}/{_resolve(resolver, dcol)['friendly']}]"
+            yr = "Year(Today())" if mt["period"] == "this" else "Year(Today()) - 1"
+            return f"SumIf({baseref}, Year({dateref}) = {yr})"
+        if mt and mt.get("kind") == "growth":         # period-over-period (flagged): show base agg
+            return f"Sum([{master}/{_resolve(resolver, mt['base'])['friendly']}])"
         if mt and mt.get("kind") == "aggregate":      # answer/model aggregate formula
             return ts_expr_to_sigma(mt["expr"], lambda n: dref(n))
         if mt and mt.get("kind") == "window":         # FLAGGED: inner raw aggregate fallback
@@ -892,6 +968,10 @@ def master_element(specs, resolver, dm_id, denorm_elem, denorm_name="Order Fact 
                 add_bucket(base)
             elif base in rfs:                                # row-level formula dim
                 materialize(base, rfs[base])
+            elif mt and mt.get("kind") in ("timeshift", "growth"):  # SumIf base over a date scope
+                ensure(mt["base"])
+                if s.get("date_col"):
+                    ensure(s["date_col"])
             elif mt and mt.get("kind") == "window":          # flagged: surface the raw measure
                 inner = window_inner_ref(mt.get("expr"))
                 ensure(inner) if inner else None
