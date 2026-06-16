@@ -55,3 +55,27 @@ jobs:
           done < <(git ls-files '*.sh')
           echo "checked: $(git ls-files '*.rb' | wc -l) rb, $(git ls-files '*.py' | wc -l) py, $(git ls-files '*.sh' | wc -l) sh"
           exit $fail
+
+  unit-tests:
+    name: offline unit/regression tests (creds-free)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run offline test-*.rb suites
+        # EXPLICIT allow-list — only tests that need NO Tableau/Sigma creds or
+        # network. Do NOT add test-calc-discovery.rb (needs a Tableau token);
+        # keep this workflow creds-free. New offline test-*.rb → add its path here.
+        run: |
+          set -uo pipefail
+          tests=(
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-param-swap-translation.rb
+            plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-dax-restructure.rb
+          )
+          fail=0
+          for t in "${tests[@]}"; do
+            echo "::group::$t"
+            if ruby "$t"; then echo "OK $t"; else echo "::error file=$t::test failed"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
