@@ -57,7 +57,15 @@ def ts_format_to_sigma(pattern, currency_iso=None):
         return None
     pct = "%" in (pattern or "")
     core = (pattern or "").replace("%", "")
-    decimals = len(core.split(".")[1]) if "." in core else (2 if currency_iso else 0)
+    # Honor the pattern's decimal count when a pattern is given — `#,##0` → 0 dp
+    # (whole-dollar currency `$26,308,613`), `#,##0.00` → 2 dp. Only default to 2 dp
+    # when currency is set with NO pattern at all.
+    if "." in core:
+        decimals = len(core.split(".")[1])
+    elif pattern:
+        decimals = 0
+    else:
+        decimals = 2 if currency_iso else 0
     grp = "," if (not pattern or "," in core or currency_iso) else ""
     if currency_iso and not pct:
         sym = _CUR.get(currency_iso.upper(), currency_iso.upper() + " ")
