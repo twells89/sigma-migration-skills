@@ -263,6 +263,17 @@ def qs_visual_title(inner, vtype)
   (inner.is_a?(Hash) ? inner['VisualId'] : nil) || vtype
 end
 
+# QS BarsArrangement -> Sigma bar `stacking`. Sigma defaults bars to STACKED, so an
+# unspecified or CLUSTERED QS arrangement must be set to 'none' to render side-by-side
+# (the QS spec + screenshot show clustered bars — RCA).
+def qs_bars_stacking(inner)
+  case inner.dig('ChartConfiguration', 'BarsArrangement').to_s.upcase
+  when 'STACKED' then 'stacked'
+  when 'STACKED_PERCENT' then 'normalized'
+  else 'none'
+  end
+end
+
 def field_role(f)
   if (mf = f['NumericalMeasureField'])
     [:meas, mf['Column']['ColumnName'], (mf.dig('AggregationFunction', 'SimpleNumericalAggregation') || 'SUM')]
@@ -1102,6 +1113,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       if kind == 'bar-chart'
         qs_orient = (inner['ChartConfiguration'] || {})['Orientation']
         el['orientation'] = 'horizontal' if qs_orient.to_s.upcase == 'HORIZONTAL'
+        el['stacking'] = qs_bars_stacking(inner)   # CLUSTERED -> unstacked (Sigma defaults to stacked)
       end
       # B-gap COLOR: by-measure (ColorScale dup column) / by-dimension (Colors well).
       cclr = qs_color(inner, w, el, [did], ycids, calc, mc_, dmel_, m_)
@@ -1136,6 +1148,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       # bars-only QS combo (e.g. Arine "Weekly Tasks": Tasks Closed + Generated) would show a
       # spurious line. Emit bar-chart when there are no line series.
       el['kind'] = 'bar-chart' if lines.empty?
+      el['stacking'] = qs_bars_stacking(inner)   # QS BarsArrangement: CLUSTERED -> unstacked
       cclr = qs_color(inner, w, el, [did], [], calc, mc_, dmel_, m_)  # combo: by-dimension only
       el['color'] = cclr if cclr && cclr['by'] == 'category'
       rms = qs_reference_lines(inner, calc, mc_, dmel_, m_, title, build_warnings)
