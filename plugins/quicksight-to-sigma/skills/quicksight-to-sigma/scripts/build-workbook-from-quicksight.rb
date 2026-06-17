@@ -148,7 +148,10 @@ dm_el_obj =
 abort 'no DM elements in readback' unless dm_el_obj
 dm_el = dm_el_obj['id']
 DMEL = dm_el_obj['name'] || 'Custom SQL'   # DM element name — master refs cols as [DMEL/Col]
-M = opts[:mname] || 'Orders'               # master element name (used in [M/Col] refs from charts)
+# Master element name (used in [M/Col] refs from charts). Default to the DM element's
+# own name — not the fixture leftover 'Orders', which is wrong for any non-Orders
+# dashboard and confused the Arine healthcare migration (RCA #10, bead 3goo.13).
+M = opts[:mname] || DMEL
 
 def nid(p = 'el'); "#{p}-" + SecureRandom.hex(5); end
 NUM = ->(fs) { { 'kind' => 'number', 'formatString' => fs } }
@@ -188,6 +191,24 @@ end
 
 calc = {}
 (defn['CalculatedFields'] || []).each { |c| calc[c['Name']] = c['Expression'] }
+
+# A QS visual title may be plain (`Title.FormatText.PlainText`) OR rich text
+# (`Title.FormatText.RichText` = `<visual-title>Weekly Tasks</visual-title>` / inline
+# styling spans). The builder previously read PlainText only, so every rich-text title
+# fell back to the raw VisualId GUID as the element name (RCA #8, bead 3goo.8). Parse
+# both, strip tags, unescape entities.
+def qs_visual_title(inner, vtype)
+  ft = (inner['Title'] || {})['FormatText'] || {}
+  raw = ft['PlainText'] || ft['RichText']
+  if raw && !raw.to_s.strip.empty?
+    s = raw.gsub(/<[^>]+>/, '')
+    { '&amp;' => '&', '&lt;' => '<', '&gt;' => '>', '&nbsp;' => ' ',
+      '&#39;' => "'", '&quot;' => '"', " " => ' ' }.each { |k, val| s = s.gsub(k, val) }
+    s = s.strip
+    return s unless s.empty?
+  end
+  (inner.is_a?(Hash) ? inner['VisualId'] : nil) || vtype
+end
 
 def field_role(f)
   if (mf = f['NumericalMeasureField'])
@@ -823,7 +844,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
   elements = []
   (sh['Visuals'] || []).each do |v|
     vtype, inner = v.first
-    title = (inner.dig('Title', 'FormatText', 'PlainText') || (inner.is_a?(Hash) ? inner['VisualId'] : nil) || vtype)
+    title = qs_visual_title(inner, vtype)
     kind = KIND[vtype]
     is_fallback = false
     unless kind
