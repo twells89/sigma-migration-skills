@@ -524,22 +524,39 @@ run!(['python3', File.join(HERE, 'gen-denorm-sql.py'),
       '--reconcile', reconcile, '--database', opts[:database], '--schema', opts[:schema],
       '--connection', opts[:conn], '--out', denorm_out])
 
+# Resolve the reuse denorm element UP FRONT so an unsuitable reuse DM falls back
+# to building fresh instead of binding the workbook to the wrong element. The
+# Qlik workbook is built against ONE denormalized all-columns element — the
+# custom-SQL element (build-sigma-dm.py names it so Sigma auto-labels it
+# "Custom SQL"). A reused DM that lacks it (a star-shaped or non-Qlik-origin DM,
+# even if it covers the same tables) has no safe single element to bind to, so we
+# DON'T reuse it — `els.first` there would silently pick a dimension element.
+reuse_denorm_eid = nil
+reuse_star_count = 0
 if opts[:reuse_dm] && !opts[:dry_run]
-  # REUSE path — skip the DM POST and read back the existing DM's denorm element.
-  # The Qlik denorm element is the custom-SQL element (build-sigma-dm.py names it
-  # so Sigma auto-labels it "Custom SQL"); fall back to the first element.
   require 'sigma_rest'
-  reuse_id = opts[:reuse_dm]
-  els = (Sigma.request(:get, "/v2/dataModels/#{reuse_id}/elements")['entries'] rescue []) || []
-  persisted = els.find { |e| e['name'] == 'Custom SQL' } || els.first || {}
-  denorm_eid = persisted['elementId'] || persisted['id']
-  abort "FATAL: reuse DM #{reuse_id} has no readable elements" unless denorm_eid
-  dm_res = { 'dataModelId' => reuse_id, 'denormElementId' => denorm_eid,
+  els = (Sigma.request(:get, "/v2/dataModels/#{opts[:reuse_dm]}/elements")['entries'] rescue []) || []
+  cs = els.find { |e| e['name'] == 'Custom SQL' }
+  eid = cs && (cs['elementId'] || cs['id'])
+  if eid
+    reuse_denorm_eid = eid
+    reuse_star_count = [els.size - 1, 0].max
+  else
+    puts "   WARNING: reuse DM #{opts[:reuse_dm]} has no 'Custom SQL' denorm element " \
+         "(elements: #{els.map { |e| e['name'] }.compact.join(', ')}) — not a Qlik-shaped " \
+         "DM; building a fresh DM instead"
+    opts[:reuse_dm] = nil
+  end
+end
+
+if reuse_denorm_eid
+  # REUSE path — skip the DM POST and build against the existing denorm element.
+  dm_res = { 'dataModelId' => opts[:reuse_dm], 'denormElementId' => reuse_denorm_eid,
              'folderId' => (opts[:folder] || prep[:folder_id]),
-             'starElements' => [els.size - 1, 0].max, 'metricsKept' => nil,
+             'starElements' => reuse_star_count, 'metricsKept' => nil,
              'metricsDropped' => [], 'reused' => true }
-  DM_ID = reuse_id
-  puts "   REUSING DM #{DM_ID}  ·  denorm element '#{persisted['name']}' (#{denorm_eid})  — convert + POST skipped"
+  DM_ID = opts[:reuse_dm]
+  puts "   REUSING DM #{DM_ID}  ·  denorm element 'Custom SQL' (#{reuse_denorm_eid})  — convert + POST skipped"
 else
   dm_cmd = ['python3', File.join(HERE, 'build-sigma-dm.py'),
             '--converter-out', conv_out_path, '--reconcile', reconcile,
