@@ -468,6 +468,7 @@ build = ['ruby', File.join(HERE, 'build-workbook-from-quicksight.rb'),
          '--analysis', File.join(WORK, 'analysis.json'),
          '--dm-readback', dm_readback, '--out', wb_spec]
 build += ['--dm-spec', dm_spec] if File.exist?(dm_spec)
+build += ['--discover-dir', WORK]   # datasets/*.json -> boolean-flag predicate rewrite (RCA #3)
 build += ['--folder-id', opts[:folder]] if opts[:folder]
 filters = File.join(WORK, 'dm-filters.json')
 build += ['--filters', filters] if File.exist?(filters)

@@ -38,6 +38,7 @@ OptionParser.new do |o|
   o.on('--filters F') { |v| opts[:filters] = v }
   o.on('--folder-id ID') { |v| opts[:folder] = v }
   o.on('--master-name NAME') { |v| opts[:mname] = v }
+  o.on('--discover-dir D') { |v| opts[:discover] = v }   # datasets/*.json -> BOOLEAN_COLS (RCA #3)
   o.on('--out F') { |v| opts[:out] = v }
 end.parse!
 %i[an rb out].each { |k| abort "missing --#{k}" unless opts[k] }
@@ -60,6 +61,24 @@ rb = JSON.parse(File.read(opts[:rb]))
 dm_id = rb['dataModelId']
 
 def disp(raw); raw.to_s.gsub(/[_.]/, ' ').split.map { |w| w[0..0].upcase + w[1..-1].to_s.downcase }.join(' '); end
+
+# Boolean columns (display names), derived from the discovery datasets' PhysicalTable
+# InputColumns where Type==BOOLEAN. QS OutputColumns coerce booleans to INTEGER, so a
+# calc-field predicate `{FLAG}=1` would emit `[Flag] = 1` and throw at query time on the
+# real boolean column. qs_expr_to_sigma uses this set to rewrite the predicate to the
+# bare boolean (RCA #3, bead 3goo.3). Empty (no --discover-dir) => no rewrite, no change.
+BOOLEAN_COLS = Set.new
+if opts[:discover]
+  Dir[File.join(opts[:discover], 'datasets', '*.json')].sort.each do |f|
+    j = JSON.parse(File.read(f)) rescue next
+    ds = j['DataSet'] || j
+    (ds['PhysicalTableMap'] || {}).each_value do |pt|
+      rt = pt['RelationalTable'] || pt['CustomSql'] || {}
+      (rt['InputColumns'] || []).each { |c| BOOLEAN_COLS << disp(c['Name']) if c['Type'].to_s.upcase == 'BOOLEAN' }
+    end
+  end
+  STDERR.puts "boolean-cols: #{BOOLEAN_COLS.size} BOOLEAN column(s) detected from discovery datasets" unless BOOLEAN_COLS.empty?
+end
 
 # ---- derive the columns the dashboard actually references (raw col names) ----
 def visual_cols(inner)
@@ -194,6 +213,21 @@ def qs_expr_to_sigma(expr, dmel, params = {})
    %w[percentOfTotal PercentOfTotal], %w[count Count], %w[sum Sum], %w[avg Avg],
    %w[min Min], %w[max Max]].each do |qs, sig|
     s = s.gsub(/(?<![A-Za-z0-9_.\/])#{Regexp.escape(qs)}\s*\(/i, "#{sig}(")
+  end
+  # Boolean-flag predicates: a warehouse BOOLEAN column compared `= 1`/`= 0` (QS's idiom
+  # for a flag it coerced to INTEGER) throws at query time in Sigma. Rewrite to the bare
+  # boolean / Not() for columns known boolean (RCA #3, bead 3goo.3).
+  if defined?(BOOLEAN_COLS) && !BOOLEAN_COLS.empty?
+    s = s.gsub(/\[([^\]]+)\]\s*(=|!=)\s*(1|0|true|false)\b/i) do
+      ref = Regexp.last_match(1); op = Regexp.last_match(2); val = Regexp.last_match(3).downcase
+      if BOOLEAN_COLS.include?(ref.split('/').last)
+        truthy = %w[1 true].include?(val)
+        truthy = !truthy if op == '!='
+        truthy ? "[#{ref}]" : "Not([#{ref}])"
+      else
+        Regexp.last_match(0)
+      end
+    end
   end
   s = s.gsub(/'([^']*)'/) { "\"#{Regexp.last_match(1)}\"" }
   s
@@ -658,8 +692,25 @@ def date_dim_col(role, calc, mc, dmel, m)
      'format' => { 'kind' => 'datetime', 'formatString' => fmt } }, id]
 end
 
+# A calc field whose translated expression is ALREADY a top-level aggregate
+# (distinct_countIf/sum/etc.) must be emitted DIRECTLY as the chart measure over the
+# master's base columns — wrapping it in the well's aggregation (Sum([m/<calc>])) yields
+# an invalid nested aggregate (RCA #10, bead 3goo.10).
+AGG_EXPR = /\A\s*(CountDistinctIf|CountDistinct|CountIf|Count|SumIf|Sum|AvgIf|Avg|MinIf|Min|MaxIf|Max|Median|StdDev\w*|Variance\w*)\s*\(/
+
 def meas_col(role, calc, mc, dmel, m)
-  _, col, agg = role; ref = master_ref(col, calc, mc, dmel); id = nid('m')
+  _, col, agg = role
+  if calc.key?(col) && !qs_window_func?(calc[col])
+    expr = qs_expr_to_sigma(calc[col], m, defined?(PARAM_DEFAULTS) ? PARAM_DEFAULTS : {})
+    if expr =~ AGG_EXPR
+      # land each base column the aggregate references on the master, then emit the
+      # aggregate itself as the measure (refs resolve to the master via the `m` prefix).
+      calc[col].scan(/\{([^}]+)\}/).flatten.each { |bc| master_ref(bc.strip, calc, mc, dmel) }
+      id = nid('m')
+      return [{ 'id' => id, 'formula' => expr, 'name' => col, 'format' => NUM.(fmt_for(col)) }, id]
+    end
+  end
+  ref = master_ref(col, calc, mc, dmel); id = nid('m')
   # a neutralized window calc field can't be aggregated as a live formula either
   if ref['_window']
     return [{ 'id' => id, 'formula' => 'Null', 'name' => ref['name'],
