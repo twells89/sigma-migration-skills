@@ -110,6 +110,10 @@ unhandled features between them**.
 
 ---
 
+{{dup_dashboards}}
+
+---
+
 ## 8. Per-report complexity
 
 {{complexity_table}}

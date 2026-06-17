@@ -107,12 +107,21 @@ def scan_dashboard(did):
              "custom_viz": 0, "liquid": 0, "cross_filtering": 0}
     n_tiles = 0
     n_auto = n_manual = n_unhandled = 0
+    sources = set()   # model::explore tokens the tiles query (the dashboard's data grain)
+    fields = set()    # LookML fields referenced (filter dimensions)
 
     for el in els:
         etype = el.get("type")
         q = _query_of(el)
         if not q and etype in (None, "text") and not (el.get("title") or el.get("note_text")):
             continue
+        m, v = q.get("model"), q.get("view")
+        if m and v:
+            sources.add(f"{m}::{v}")
+        elif v:
+            sources.add(v)
+        for fl in (q.get("filters") or {}):
+            fields.add(fl)
         vt = _vis_type(el, q)
         b = bucket_viz(vt)
         if b is None:   # button / divider / image — not a chart, skip entirely
@@ -148,11 +157,16 @@ def scan_dashboard(did):
     # flag explicit cross_filtering when a dashboard sets it. The filter COUNT is the
     # migration signal.
     n_filters = len(filters)
+    for f in filters:
+        dim = f.get("dimension")
+        if dim:
+            fields.add(dim)
 
     return {
         "tiles": n_tiles, "filters": n_filters, "viz_types": viz_types,
         "features": feats, "n_auto": n_auto, "n_manual": n_manual,
         "n_unhandled": n_unhandled,
+        "sources": sorted(sources), "fields": sorted(fields),
     }
 
 
@@ -288,13 +302,15 @@ def main():
             "runs": u["runs"], "queries": u["queries"],
             "tiles": 0, "filters": 0, "viz_types": {}, "features": {},
             "n_auto": 0, "n_hint": 0, "n_manual": 0, "n_unhandled": 0,
+            "sources": [], "fields": [],
         }
         if not a.no_deep:
             sc = scan_dashboard(did)
             if sc:
                 row.update({k: sc[k] for k in
                             ("tiles", "filters", "viz_types", "features",
-                             "n_auto", "n_manual", "n_unhandled")})
+                             "n_auto", "n_manual", "n_unhandled",
+                             "sources", "fields")})
         c, s = score(row["runs"], row["queries"], row["n_auto"], row["n_hint"],
                      row["n_manual"], row["n_unhandled"], row["tiles"])
         row["cost"], row["score"] = c, s
@@ -321,6 +337,25 @@ def main():
             feat_totals[k] = feat_totals.get(k, 0) + int(v)
         for k, v in (r.get("viz_types") or {}).items():
             viz_totals[k] = viz_totals.get(k, 0) + int(v)
+
+    # ---- duplicate / consolidation candidates ----
+    # Shared, tool-neutral detector: flags dashboards that look like the same
+    # report rebuilt (shared explore + overlapping fields/viz + near-identical
+    # name) so the estate migrates ONCE instead of N times. Only signals actually
+    # captured are passed — never fabricated (sources/fields/viz are empty under
+    # --no-deep, so the detector falls back to name+usage and stays conservative).
+    import importlib.util
+    _dd_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dup-dashboards.py")
+    _spec = importlib.util.spec_from_file_location("dup_dashboards", _dd_path)
+    _dd = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_dd)
+    duplicate_dashboards = _dd.detect([
+        {"id": r["id"], "name": r["name"],
+         "sources": r.get("sources") or [],
+         "fields": r.get("fields") or [],
+         "viz": list((r.get("viz_types") or {}).keys()),
+         "usage": (r.get("runs") or 0) or None}
+        for r in rows])
 
     inv = {
         "instance": {
@@ -364,6 +399,7 @@ def main():
         "viz_mix": [{"type": k, "n": v}
                     for k, v in sorted(viz_totals.items(), key=lambda kv: -kv[1])],
         "ownership": ownership,
+        "duplicate_dashboards": duplicate_dashboards,
         "shortlist": rows,
         # back-compat top-level counts
         "dashboards": len(dash), "models": len(models),
@@ -385,11 +421,15 @@ def main():
         md.append(f"| {i} | {r['name']} | {r['kind']} | {r['runs']} | {r['tiles']} | "
                   f"**{r['tag']}** | {r['score']} | "
                   f"{r['n_auto']}/{r['n_manual']}/{r['n_unhandled']} |")
+    md.append("\n" + _dd.render_md(duplicate_dashboards))
     open(os.path.join(out, "readout.md"), "w").write("\n".join(md) + "\n")
 
+    _ds = duplicate_dashboards["summary"]
     print(f"dashboards={len(dash)} ({n_udd} UDD/{n_lookml} LookML) models={len(models)} "
           f"explores={n_explores} connections={len(connections)} "
-          f"active_users={totals['active_users']} -> {out}/inventory.json + readout.md"
+          f"active_users={totals['active_users']} "
+          f"dup_groups={_ds['duplicate_groups']}(avoid {_ds['conversions_avoided']}) "
+          f"-> {out}/inventory.json + readout.md"
           + ("  (run without --no-deep for per-dashboard complexity)" if a.no_deep else ""))
 
 

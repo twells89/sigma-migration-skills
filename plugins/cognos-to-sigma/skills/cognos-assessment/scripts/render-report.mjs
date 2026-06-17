@@ -104,6 +104,34 @@ const gapRows = R.gap_histogram.map((g) => {
   </tr>`;
 }).join('');
 
+// ---- duplicate / consolidation candidates ----
+// Built by score-coverage.mjs via the shared dup-dashboards.py detector. Render
+// only when real groups exist; embed the detector's own HTML fragment so the
+// section stays byte-consistent with the other assessments.
+const dup = cov.duplicate_dashboards;
+const dupGroups = dup?.groups || [];
+const dupSummary = dup?.summary;
+const dupSection = (dup && dupGroups.length)
+  ? `<section>
+  <div class="section-head"><span class="section-num">DUP</span><h2 class="section-title">Duplicate &amp; consolidation candidates</h2><span class="section-aside">${dupSummary.duplicate_groups} group${dupSummary.duplicate_groups === 1 ? '' : 's'} · avoids ${dupSummary.conversions_avoided} migration${dupSummary.conversions_avoided === 1 ? '' : 's'}</span></div>
+  <p class="section-lede">Reports that look like the same report rebuilt — they share a data module and overlap in data items / chart kinds (and often a near-identical name). Migrate the most-used copy <strong>once</strong> and retire the rest, rather than converting all ${dupSummary.dashboards_in_groups} separately. Conservative: only genuine rebuilds are grouped, not coincidental name collisions.</p>
+  ${dupGroups.map((grp, i) => {
+    const d = grp.drivers;
+    const cls = grp.recommendation === 'consolidate' ? 'risk-red' : 'risk-amber';
+    const members = grp.members.map((m) => {
+      const u = m.usage == null ? '' : ` <span class="muted">· ${num(m.usage)} views</span>`;
+      return `<div class="cluster-member"><strong>${h(m.name)}</strong> <code>${h(String(m.id))}</code>${u}</div>`;
+    }).join('');
+    const shared = d.shared_sources && d.shared_sources.length ? d.shared_sources.map((s) => `<code>${h(s)}</code>`).join(' ') : '—';
+    return `<div class="stat ${grp.recommendation === 'consolidate' ? 'stat-warn' : 'stat-blue'}" style="margin-bottom:12px;">
+      <div class="stat-l"><span class="risk-chip ${cls}"><span class="risk-dot"></span>Group ${i + 1} — ${h(grp.recommendation)}</span></div>
+      <div class="stat-sub" style="margin:6px 0 8px;">Field overlap ≥${Math.round((d.min_field_overlap || 0) * 100)}% · shared sources: ${shared} · avoids ${grp.conversions_avoided} migration${grp.conversions_avoided === 1 ? '' : 's'}</div>
+      ${members}
+    </div>`;
+  }).join('')}
+</section>`
+  : '';
+
 // ---- wave plan ----
 const waveBlock = (n, title, desc, members, cls) => {
   if (!members.length) return '';
@@ -251,6 +279,8 @@ const html = `<!DOCTYPE html>
   <p class="section-lede">Every feature that needs a human — named to the artifact, with the specific reason and the remediation. Amber = brief manual setup in Sigma; red = no clean analog, needs a decision before conversion. Identifying these up front means no surprises mid-migration.</p>
   ${R.gap_histogram.length ? `<table class="data"><thead><tr><th>Gap</th><th class="al-right">Count</th><th>Artifacts</th><th>Remediation</th></tr></thead><tbody>${gapRows}</tbody></table>` : '<p class="note">No manual or needs-review gaps detected — the entire estate converts cleanly.</p>'}
 </section>
+
+${dupSection}
 
 <section>
   <div class="section-head"><span class="section-num">05</span><h2 class="section-title">Effort &amp; wave plan</h2><span class="section-aside">3 waves · modules before dependent reports</span></div>

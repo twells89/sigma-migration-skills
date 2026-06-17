@@ -454,6 +454,37 @@ def main():
                 entry["pbir_error"] = "getDefinition failed or returned no parts"
             inv["reports"].append(entry)
 
+    # Duplicate / consolidation candidates — flag reports that are the same
+    # dashboard rebuilt (shared semantic model / warehouse source + overlapping
+    # visual set + near-identical name), so the estate migrates ONCE instead of
+    # N times. Shared, tool-neutral detector (importlib because the filename has
+    # a hyphen). Only signals actually present in the inventory are fed in:
+    #   sources = the report's semantic model name + its warehouse sources
+    #             (datasets/models/warehouse tables the report reads)
+    #   viz     = the report's visual-kind tokens
+    # `fields` and per-report `usage` are NOT exposed by the PBIR inventory, so
+    # they are deliberately omitted (never fabricated).
+    import importlib.util
+    _dd_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dup-dashboards.py")
+    _spec = importlib.util.spec_from_file_location("dup_dashboards", _dd_path)
+    _dd = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_dd)
+    _models_by_id = {m["id"]: m for m in inv["semantic_models"]}
+    _norm_dash = []
+    for rep in inv["reports"]:
+        m = _models_by_id.get(rep.get("dataset_id")) or {}
+        sources = []
+        if m.get("name"):
+            sources.append(m["name"])
+        sources += (m.get("warehouse_sources") or [])
+        d = {"id": rep.get("id"), "name": rep.get("name")}
+        if sources:
+            d["sources"] = sources
+        viz = list((rep.get("visual_kinds") or {}).keys())
+        if viz:
+            d["viz"] = viz
+        _norm_dash.append(d)
+    inv["duplicate_dashboards"] = _dd.detect(_norm_dash)
+
     open(os.path.join(args.out, "inventory.json"), "w").write(json.dumps(inv, indent=2))
     eo = inv["environment_overview"]
     print(f"\nWROTE {os.path.join(args.out, 'inventory.json')}", file=sys.stderr)
@@ -462,6 +493,11 @@ def main():
           f"dashboards={eo['dashboards']}  dataflows={eo['dataflows']}  "
           f"lakehouses={eo['lakehouses']}", file=sys.stderr)
     print(f"  models scanned for TMSL: {models_scanned}", file=sys.stderr)
+    _ds = inv["duplicate_dashboards"]["summary"]
+    if _ds["duplicate_groups"]:
+        print(f"  duplicate/consolidation: {_ds['duplicate_groups']} group(s) across "
+              f"{_ds['dashboards_in_groups']} reports — avoids {_ds['conversions_avoided']} "
+              f"redundant migration(s)", file=sys.stderr)
 
 
 if __name__ == "__main__":

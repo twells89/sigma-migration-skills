@@ -249,6 +249,24 @@ def main():
     models_used = sorted({m for p in exportable for m in p["models"]})
     print(f"\nModels referenced by exportable Liveboards: {len(models_used)}")
 
+    # Duplicate / consolidation candidates — flag Liveboards that are the same
+    # report rebuilt (shared model + overlapping chart set + near-identical name),
+    # so the estate migrates ONCE instead of N times. Shared, tool-neutral detector.
+    import importlib.util
+    _dd_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dup-dashboards.py")
+    _spec = importlib.util.spec_from_file_location("dup_dashboards", _dd_path)
+    _dd = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_dd)
+    duplicate_dashboards = _dd.detect([
+        {"id": p["id"], "name": p["name"], "sources": p.get("models") or [],
+         "viz": list((p.get("chart_types") or {}).keys()),
+         "fields": (p.get("models") or []) + list((p.get("chart_types") or {}).keys()),
+         "usage": p.get("views")} for p in profiles])
+    _ds = duplicate_dashboards["summary"]
+    if _ds["duplicate_groups"]:
+        print(f"\nDUPLICATE/CONSOLIDATION: {_ds['duplicate_groups']} group(s) across "
+              f"{_ds['dashboards_in_groups']} Liveboards — consolidating avoids "
+              f"{_ds['conversions_avoided']} redundant migration(s).")
+
     # Ownership / concentration by author (across Liveboards).
     owners = {}
     for p in profiles:
@@ -289,6 +307,7 @@ def main():
         "chart_types": all_types,
         "unsupported_chart_types": unsup,
         "models_used": models_used,
+        "duplicate_dashboards": duplicate_dashboards,
         "usage_available": bool(usage),
         "usage_note": usage_note,
         "total_views": total_views,

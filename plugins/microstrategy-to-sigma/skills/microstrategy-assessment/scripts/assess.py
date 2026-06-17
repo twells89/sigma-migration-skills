@@ -96,12 +96,17 @@ def assess_dossier(s, doc):
         tag = 'moderate'
     else:
         tag = 'migrate-first'
+    # dataset names (the dossier's source cubes/reports) — used as the
+    # duplicate-detector `sources` signal; fall back to id when unnamed.
+    dataset_names = [ds.get('name') or ds.get('id')
+                     for ds in d.get('datasets') or [] if ds.get('name') or ds.get('id')]
     return {
         'id': doc['id'],
         'name': d.get('name', doc.get('name')),
         'chapters': len(d.get('chapters') or []),
         'pages': n_pages,
         'datasets': len(d.get('datasets') or []),
+        'dataset_names': dataset_names,
         'visualizations': sum(hist.values()),
         'viz_types': dict(hist),
         'unmapped_viz_types': unmapped,
@@ -146,6 +151,25 @@ def main():
             dossiers.append(a)
             viz_hist.update(a['viz_types'])
 
+    # Duplicate / consolidation candidates — flag dossiers that are the same
+    # report rebuilt (shared dataset + overlapping viz set + near-identical
+    # name) so the estate migrates ONCE instead of N times. Shared, tool-neutral
+    # detector; hyphenated filename → load via importlib. Only present signals
+    # are passed (sources = dataset names, viz = per-dossier viz-type keys);
+    # MicroStrategy's quick-search exposes no per-dossier field list or hit
+    # count, so `fields`/`usage` are intentionally omitted (flag-not-fake).
+    import importlib.util
+    _dd_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'dup-dashboards.py')
+    _spec = importlib.util.spec_from_file_location('dup_dashboards', _dd_path)
+    _dd = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_dd)
+    duplicate_dashboards = _dd.detect([
+        {'id': d['id'], 'name': d['name'],
+         'sources': d.get('dataset_names') or [],
+         'viz': list((d.get('viz_types') or {}).keys())}
+        for d in dossiers])
+
     inventory = {
         'project': {'id': s.project_id,
                     'name': project['name'] if project else None},
@@ -164,6 +188,7 @@ def main():
         'dossiers': dossiers,
         'plain_documents': plain_documents,
         'reports': [{'id': r['id'], 'name': r.get('name')} for r in reports],
+        'duplicate_dashboards': duplicate_dashboards,
     }
 
     os.makedirs(args.out, exist_ok=True)
@@ -195,6 +220,8 @@ def main():
     L += ['', '_Tags: migrate-first = grid/kpi-only, no panel stacks; '
           'moderate = selectors / free-form fields / chart mix; '
           'needs-review = panel stacks or unmapped viz types._', '']
+    # Consolidation section (shared duplicate-dashboard detector).
+    L += ['', _dd.render_md(duplicate_dashboards).rstrip(), '']
     md_path = os.path.join(args.out, 'readout.md')
     open(md_path, 'w').write('\n'.join(L))
 
@@ -202,6 +229,11 @@ def main():
     print(f"reports={len(reports)} documents={len(documents)} "
           f"dossiers={len(dossiers)} datasources={len(ds)}")
     print(f"viz histogram: {dict(viz_hist)}")
+    _ds = duplicate_dashboards['summary']
+    if _ds['duplicate_groups']:
+        print(f"duplicate/consolidation: {_ds['duplicate_groups']} group(s) across "
+              f"{_ds['dashboards_in_groups']} dossiers — avoids "
+              f"{_ds['conversions_avoided']} redundant migration(s)")
     print(f"wrote {inv_path} and {md_path}")
 
 

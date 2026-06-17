@@ -141,6 +141,25 @@ def main():
         "n_with_duration":len(rl_durations),
     }
 
+    # ---- duplicate / consolidation candidates ----
+    # Flag apps that look like the same report rebuilt (near-identical name +
+    # overlapping chart set), so the estate migrates ONCE instead of N times.
+    # Shared, tool-neutral detector (hyphenated filename -> load via importlib).
+    # The Qlik "dashboard" unit is the APP (one app = many sheets); a clone of an
+    # app is the high-value signal. We only emit signals we actually captured:
+    # name + usage are always present; viz (chart kinds) only with --deep.
+    # Per-app data connections / field names are NOT enumerated by this scan, so
+    # `sources`/`fields` are intentionally omitted (never fabricated) and the
+    # detector re-weights onto the signals it has.
+    import importlib.util
+    _dd_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),"dup-dashboards.py")
+    _spec=importlib.util.spec_from_file_location("dup_dashboards",_dd_path)
+    _dd=importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_dd)
+    duplicate_dashboards=_dd.detect([
+        {"id":r["id"],"name":r["name"],
+         "viz":list((r.get("viz_types") or {}).keys()),
+         "usage":r.get("views")} for r in rows])
+
     import datetime
     inv={
         "tenant":{
@@ -163,6 +182,7 @@ def main():
         },
         "reload_activity":reload_activity,
         "ownership":ownership,
+        "duplicate_dashboards":duplicate_dashboards,
         "shortlist":rows,
         # back-compat top-level counts
         "apps":len(apps),"spaces":len(spaces),

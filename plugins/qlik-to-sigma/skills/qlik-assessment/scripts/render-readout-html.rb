@@ -36,6 +36,7 @@ env    = inventory['environment_overview'] || {}
 dsrc   = inventory['data_sources'] || {}
 reload = inventory['reload_activity'] || {}
 ownership = inventory['ownership'] || []
+dups   = inventory['duplicate_dashboards'] || {}
 shortlist = inventory['shortlist'] || []
 
 tenant_name = tenant['name'] || inventory['tenant'].is_a?(String) ? (tenant['name'] || inventory['tenant']) : 'unknown'
@@ -45,6 +46,9 @@ generated_at = tenant['generated_at'] || Time.now.strftime('%Y-%m-%d')
 formatted_date = Date.parse(generated_at).strftime('%B %d, %Y') rescue generated_at
 
 has_shortlist = !shortlist.empty?
+dup_summary = dups['summary'] || {}
+dup_groups  = dups['groups'] || []
+has_dups    = !dup_groups.empty?
 has_complexity = shortlist.any? { |r| (r['n_auto'].to_i + r['n_manual'].to_i + r['n_unhandled'].to_i) > 0 || (r['measure_buckets'] || {}).any? }
 
 # Usage
@@ -830,9 +834,54 @@ if has_shortlist
   html += effort_html
 end
 
+# Section: Duplicate / consolidation candidates (always shown — name + viz +
+# usage based; the shared dup-dashboards detector populated inventory.json).
+dup_num = has_shortlist ? '08' : '06'
+if has_dups
+  group_blocks = dup_groups.each_with_index.map do |grp, i|
+    drv = grp['drivers'] || {}
+    rec = (grp['recommendation'] || 'review').to_s
+    rec_cls = rec == 'consolidate' ? 'tag-warn' : 'tag-blue'
+    shared = (drv['shared_sources'] || [])
+    shared_txt = shared.empty? ? '—' : shared.join(', ')
+    members = (grp['members'] || []).map do |m|
+      u = m['usage'].nil? ? '' : %( <span class="muted">· #{num(m['usage'])} views</span>)
+      %(<li>#{h(m['name'])} <code>#{h(m['id'].to_s)}</code>#{u}</li>)
+    end.join
+    %(<div class="dup-group">
+        <div class="dup-group-head">
+          <span class="tag #{rec_cls}">#{rec.upcase}</span>
+          <span class="muted">Group #{i + 1} · name overlap-pooled · field overlap ≥#{((drv['min_field_overlap'] || 0).to_f * 100).round}% · shared sources: #{h(shared_txt)} · avoids #{grp['conversions_avoided']} migration#{grp['conversions_avoided'] == 1 ? '' : 's'}</span>
+        </div>
+        <ul class="dup-members">#{members}</ul>
+      </div>)
+  end.join
+  html += <<~HTML
+  <section>
+    <div class="section-head">
+      <span class="section-num">#{dup_num}</span>
+      <h2 class="section-title">Duplicate &amp; consolidation candidates</h2>
+      <span class="section-aside">#{dup_summary['duplicate_groups']} group#{dup_summary['duplicate_groups'] == 1 ? '' : 's'} · avoids #{dup_summary['conversions_avoided']} migration#{dup_summary['conversions_avoided'] == 1 ? '' : 's'}</span>
+    </div>
+    <p class="section-lede">Apps that look like the same report rebuilt — near-identical names plus an overlapping chart set. Each group is one report to migrate <strong>once</strong> (keep the most-used app as the survivor) instead of N times. Detection uses app name and, where <code>--deep</code> ran, chart-type overlap; per-app data sources and field names are not enumerated by this scan, so they don't factor in.</p>
+    <div class="callout"><strong>#{dup_summary['duplicate_groups']} group#{dup_summary['duplicate_groups'] == 1 ? '' : 's'}</strong> spanning <strong>#{dup_summary['dashboards_in_groups']} app#{dup_summary['dashboards_in_groups'] == 1 ? '' : 's'}</strong> — consolidating before you migrate avoids <strong>#{dup_summary['conversions_avoided']}</strong> redundant conversion#{dup_summary['conversions_avoided'] == 1 ? '' : 's'}.</div>
+    #{group_blocks}
+  </section>
+
+  <style>
+    .dup-group { margin: 14px 0; padding: 12px 16px; border-left: 3px solid var(--mute); background: rgba(0,0,0,0.015); border-radius: 4px; }
+    .dup-group-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+    .dup-members { margin: 8px 0 0 0; padding-left: 18px; font-size: 14px; }
+    .dup-members li { margin: 2px 0; }
+    .dup-members code { font-size: 12px; color: var(--mute); }
+  </style>
+
+  HTML
+end
+
 # Privacy + next steps
-priv_num = has_shortlist ? '08' : '06'
-next_num = has_shortlist ? '09' : '07'
+priv_num = has_shortlist ? (has_dups ? '09' : '08') : (has_dups ? '07' : '06')
+next_num = has_shortlist ? (has_dups ? '10' : '09') : (has_dups ? '08' : '07')
 
 html += <<~HTML
 <section class="section-tight">

@@ -520,6 +520,34 @@ if has_shortlist && File.exist?(token_model_path)
   end
 end
 
+# ---------- duplicate / consolidation candidates ----------
+# Shell out to the shared, tool-neutral detector for the HTML fragment. Prefer
+# the normalized list written by quicksight-inventory.py; embed only if the scan
+# actually found overlapping analyses (flag-not-fake).
+dup_html = ''
+dup_doc = inventory['duplicate_dashboards']
+dup_norm_path = File.join(opts[:out], 'dup-normalized.json')
+if dup_doc && (dup_doc['summary'] || {})['duplicate_groups'].to_i.positive? && File.exist?(dup_norm_path)
+  dd_script = File.join(__dir__, 'dup-dashboards.py')
+  frag_path = File.join(opts[:out], 'dup-frag.html')
+  system('python3', dd_script, '--in', dup_norm_path,
+         '--out', File.join(opts[:out], 'dup-groups.json'), '--html', frag_path)
+  if File.exist?(frag_path)
+    frag = File.read(frag_path)
+    dup_html = <<~HTML
+      <section>
+        <div class="section-head">
+          <span class="section-num">DUP</span>
+          <h2 class="section-title">Duplicate / consolidation candidates</h2>
+          <span class="section-aside">migrate once, not N times</span>
+        </div>
+        <p class="section-lede">These analyses look like the same report rebuilt — shared datasets, overlapping visuals, near-identical names. Consolidating them before migration means you build each in Sigma once and retire the redundant copies.</p>
+        #{frag}
+      </section>
+    HTML
+  end
+end
+
 # ---------- assemble HTML ----------
 html = <<~HTML
 <!DOCTYPE html>
@@ -937,6 +965,8 @@ if has_shortlist
   HTML
   html += effort_html
 end
+
+html += dup_html
 
 priv_num = has_shortlist ? '08' : '06'
 next_num = has_shortlist ? '09' : '07'

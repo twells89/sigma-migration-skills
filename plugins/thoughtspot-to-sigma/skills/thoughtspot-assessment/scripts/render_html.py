@@ -21,6 +21,19 @@ n_models = len({m for p in profs for m in p.get("models", [])})
 def esc(s): return html.escape(str(s))
 def tier(p): return "EASY" if not p["unsupported"] and p["complexity"] < 20 else "REVIEW"
 
+# Duplicate / consolidation candidates — render from the stored result (scan.py),
+# falling back to computing it here so older assessment.json files still get it.
+import importlib.util as _ilu
+_dd_spec = _ilu.spec_from_file_location(
+    "dup_dashboards", os.path.join(os.path.dirname(os.path.abspath(__file__)), "dup-dashboards.py"))
+_dd = _ilu.module_from_spec(_dd_spec); _dd_spec.loader.exec_module(_dd)
+_dups = d.get("duplicate_dashboards") or _dd.detect([
+    {"id": p.get("id"), "name": p.get("name"), "sources": p.get("models") or [],
+     "viz": list((p.get("chart_types") or {}).keys()),
+     "fields": (p.get("models") or []) + list((p.get("chart_types") or {}).keys()),
+     "usage": p.get("views")} for p in d["profiles"]])
+dup_html = _dd.render_html(_dups)
+
 def rows(group, collapse_sw=False):
     out, seen = [], False
     for p in sorted(group, key=lambda p: p["complexity"]):
@@ -102,6 +115,8 @@ code{{background:#eef0f4;padding:1px 5px;border-radius:4px;font-size:12px}}
 <h2>Chart-type coverage — {sup_viz}/{total_viz} viz supported ({d['coverage']:.1f}%)</h2>
 {bars}
 <div class=note>⬛ supported by the thoughtspot-to-sigma pipeline today · 🟧 needs an element-builder or redesign (PIVOT_TABLE, WATERFALL, FUNNEL, SCATTER, TREEMAP, GEO_AREA, BUBBLE, LINE_STACKED_COLUMN). Sigma supports most of these natively — they just need mapping work.</div>
+
+{dup_html}
 
 <div class=note>Methodology: inventory via ThoughtSpot REST v2 metadata/search; per-Liveboard profile from exported TML. Complexity is a relative effort proxy, not a time estimate. This is a trial instance — most Liveboards are ThoughtSpot demo/sample content.</div>
 </body></html>"""

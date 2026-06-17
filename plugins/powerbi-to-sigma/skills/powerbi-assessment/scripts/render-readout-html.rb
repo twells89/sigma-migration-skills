@@ -19,6 +19,7 @@ require 'optparse'
 require 'cgi'
 require 'date'
 require 'set'
+require 'open3'
 
 opts = {}
 OptionParser.new do |p|
@@ -515,6 +516,27 @@ if has_shortlist && File.exist?(token_model_path)
   end
 end
 
+# ---------- Duplicate / consolidation candidates ----------
+# The detector result is computed by fabric-inventory.py and stored in
+# inventory.json. Render the HTML fragment via the shared (Python) detector so
+# every assessment renders this section identically; degrade silently if it is
+# absent (older inventory) or python3 is unavailable.
+dup_html = ''
+dup_summary = nil
+if inventory['duplicate_dashboards']
+  dup_summary = inventory['duplicate_dashboards']['summary']
+  dd_script = File.join(__dir__, 'dup-dashboards.py')
+  if File.exist?(dd_script)
+    begin
+      frag, status = Open3.capture2('python3', dd_script,
+        '--render', '--html-stdout', '--in', inv_path)
+      dup_html = frag if status.success? && !frag.to_s.strip.empty?
+    rescue StandardError
+      dup_html = ''
+    end
+  end
+end
+
 # ---------- HTML document ----------
 html = <<~HTML
 <!DOCTYPE html>
@@ -931,8 +953,37 @@ if has_shortlist
   html += effort_html
 end
 
-priv_num = has_shortlist ? '08' : '06'
-next_num = has_shortlist ? '09' : '07'
+# Duplicate / consolidation candidates — wrap the shared detector's fragment in
+# the house section scaffold (strip its self-contained <section>/<h2> wrapper so
+# headers aren't doubled and the numbered badge matches the rest of the readout).
+dup_num = has_shortlist ? '08' : '06'
+if !dup_html.empty? && dup_summary
+  inner = dup_html.sub(%r{\A\s*<section[^>]*>}, '').sub(%r{</section>\s*\z}, '')
+  inner = inner.sub(%r{<h2>[^<]*</h2>}, '')   # drop the fragment's own <h2>; the section-head supplies it
+  groups = dup_summary['duplicate_groups'].to_i
+  in_groups = dup_summary['dashboards_in_groups'].to_i
+  avoided = dup_summary['conversions_avoided'].to_i
+  aside = groups.positive? ? "#{groups} group#{groups == 1 ? '' : 's'} · avoids #{avoided} migration#{avoided == 1 ? '' : 's'}" : 'none found'
+  lede = groups.positive? ?
+    "These reports look like the same dashboard rebuilt — shared semantic model or warehouse source, overlapping visuals, near-identical names. Migrate the survivor once and retire the rest instead of converting each copy." :
+    'No two reports overlap enough on data source, visuals, and name to be the same dashboard rebuilt — nothing to consolidate.'
+  html += <<~HTML
+
+<section>
+  <div class="section-head">
+    <span class="section-num">#{dup_num}</span>
+    <h2 class="section-title">Duplicate &amp; consolidation candidates</h2>
+    <span class="section-aside">#{h(aside)}</span>
+  </div>
+  <p class="section-lede">#{lede}</p>
+  #{inner}
+</section>
+  HTML
+end
+
+priv_base = has_shortlist ? 9 : 7
+priv_num = format('%02d', priv_base)
+next_num = format('%02d', priv_base + 1)
 
 html += <<~HTML
 

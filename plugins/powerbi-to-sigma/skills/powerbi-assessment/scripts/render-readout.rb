@@ -10,6 +10,7 @@
 
 require 'json'
 require 'optparse'
+require 'open3'
 
 opts = {}
 OptionParser.new do |p|
@@ -153,6 +154,24 @@ total_unhandled = complexity.values.sum { |r| r['n_unhandled'].to_i }
 n_workbooks_with_unhandled = complexity.values.count { |r| r['n_unhandled'].to_i.positive? }
 recommended_pilot_n = top5.size
 
+# Duplicate / consolidation candidates — the detector result is computed by
+# fabric-inventory.py and stored in inventory.json; render the Markdown block via
+# the shared (Python) detector (--md-stdout prints the block to stdout). Degrade
+# silently if absent or python3 missing.
+dup_dashboards_md = ''
+if inventory['duplicate_dashboards']
+  dd_script = File.join(__dir__, 'dup-dashboards.py')
+  if File.exist?(dd_script)
+    begin
+      md, status = Open3.capture2('python3', dd_script,
+        '--render', '--md-stdout', '--in', File.join(opts[:out], 'inventory.json'))
+      dup_dashboards_md = md.strip if status.success? && !md.to_s.strip.empty?
+    rescue StandardError
+      dup_dashboards_md = ''
+    end
+  end
+end
+
 # -------- apply --------------------------------------------------------------
 out = tpl.dup
 out = section_block(out, 'limited_mode_banner', limited_mode)
@@ -192,7 +211,8 @@ repl = {
   '{{n_workbooks_with_unhandled}}' => n_workbooks_with_unhandled.to_s,
   '{{n_needs_scout}}' => n_needs_scout.to_s,
   '{{n_retire}}'      => n_retire.to_s,
-  '{{recommended_pilot_n}}' => recommended_pilot_n.to_s
+  '{{recommended_pilot_n}}' => recommended_pilot_n.to_s,
+  '{{dup_dashboards}}' => (dup_dashboards_md.empty? ? '### Duplicate / consolidation candidates' + "\n\n_Consolidation scan not available (older inventory)._" : dup_dashboards_md)
 }
 repl.each { |k, v| out.gsub!(k, v.to_s) }
 

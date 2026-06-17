@@ -170,6 +170,19 @@ repl = {
 }
 repl.each { |k, v| out.gsub!(k, v.to_s) }
 
+# Duplicate / consolidation candidates — append the shared detector's Markdown
+# block when the inventory scan found overlapping analyses (flag-not-fake).
+dup_doc = inventory['duplicate_dashboards']
+dup_norm_path = File.join(opts[:out], 'dup-normalized.json')
+if dup_doc && (dup_doc['summary'] || {})['duplicate_groups'].to_i.positive? && File.exist?(dup_norm_path)
+  dd_script = File.join(__dir__, 'dup-dashboards.py')
+  # --md writes the Markdown block to stderr (alongside a one-line summary, which
+  # we drop). Capture stderr; discard stdout (the groups JSON, already on disk).
+  md = `python3 #{dd_script.inspect} --in #{dup_norm_path.inspect} --out #{File.join(opts[:out], 'dup-groups.json').inspect} --md 2>&1 1>/dev/null`
+  md = md.lines.reject { |l| l.start_with?('[dup-dashboards]') }.join
+  out += "\n\n" + md unless md.strip.empty?
+end
+
 readout_path = File.join(opts[:out], 'readout.md')
 File.write(readout_path, out)
 puts "wrote #{readout_path}"

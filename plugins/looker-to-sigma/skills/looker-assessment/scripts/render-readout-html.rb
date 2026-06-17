@@ -48,6 +48,13 @@ formatted_date = Date.parse(generated_at).strftime('%B %d, %Y') rescue generated
 has_shortlist = !shortlist.empty?
 has_complexity = shortlist.any? { |r| r['tiles'].to_i.positive? }
 
+# Duplicate / consolidation candidates (computed by the shared dup-dashboards.py
+# detector in looker-inventory.py; this just renders the result it left behind).
+dups        = inventory['duplicate_dashboards'] || {}
+dup_groups  = dups['groups'] || []
+dup_summary = dups['summary'] || {}
+has_dups    = !dup_groups.empty?
+
 # Usage
 total_runs = shortlist.sum { |r| r['runs'].to_i }
 cold_dash  = shortlist.select { |r| r['runs'].to_i.zero? && r['queries'].to_i.zero? }
@@ -478,6 +485,14 @@ html = <<~HTML
   .callout code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px;
                   font-size: 12px; }
 
+  .dup-groups { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+  .dup-group { border: 1px solid var(--mute-soft); border-left: 3px solid var(--warn);
+               border-radius: 6px; padding: 12px 16px; }
+  .dup-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .dup-members { margin: 8px 0 0; padding-left: 20px; font-size: 13px; }
+  .dup-members li { margin: 3px 0; }
+  .dup-members code { background: rgba(0,0,0,0.05); padding: 1px 5px; border-radius: 3px; }
+
   code { font-family: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px;
          background: var(--line-soft); padding: 1px 6px; border-radius: 4px; }
 
@@ -733,6 +748,43 @@ if has_shortlist
   </section>
 
   HTML
+
+  if has_dups
+    dup_cards = dup_groups.each_with_index.map do |g, i|
+      d = g['drivers'] || {}
+      consolidate = g['recommendation'] == 'consolidate'
+      rec_cls  = consolidate ? 'tag-warn' : 'tag-gray'
+      rec_txt  = consolidate ? 'Consolidate' : 'Review'
+      shared   = (d['shared_sources'] || [])
+      members  = (g['members'] || []).map do |m|
+        u = m['usage'].nil? ? '' : %( <span class="muted">· #{num(m['usage'])} runs</span>)
+        %(<li>#{h(m['name'])} <code>#{h(m['id'])}</code>#{u}</li>)
+      end.join
+      %(<div class="dup-group">
+        <div class="dup-group-head">
+          <strong>Group #{i + 1}</strong>
+          <span class="tag #{rec_cls}">#{rec_txt}</span>
+          <span class="section-aside">field overlap ≥#{((d['min_field_overlap'] || 0).to_f * 100).round}% · avoids #{g['conversions_avoided']} migration#{g['conversions_avoided'] == 1 ? '' : 's'}#{shared.empty? ? '' : " · shared: #{h(shared.join(', '))}"}</span>
+        </div>
+        <ul class="dup-members">#{members}</ul>
+      </div>)
+    end.join
+
+    html += <<~HTML
+    <section>
+      <div class="section-head">
+        <span class="section-num">06</span>
+        <h2 class="section-title">Duplicate &amp; consolidation candidates</h2>
+        <span class="section-aside">#{dup_summary['duplicate_groups']} group#{dup_summary['duplicate_groups'] == 1 ? '' : 's'} · avoids #{dup_summary['conversions_avoided']} migration#{dup_summary['conversions_avoided'] == 1 ? '' : 's'}</span>
+      </div>
+      <p class="section-lede">These dashboards look like the same report rebuilt — they share an explore and overlap heavily on fields, vis types, and naming. Migrating each one separately recreates that redundancy in Sigma. Consolidating to a single Sigma workbook (the most-used member is the natural survivor) means you build it <strong>once</strong> and retire the rest, cutting #{dup_summary['conversions_avoided']} redundant conversion#{dup_summary['conversions_avoided'] == 1 ? '' : 's'} from the migration.</p>
+      <div class="dup-groups">#{dup_cards}</div>
+      <p class="note"><strong>Consolidate</strong> = near-identical fields and a shared source (a confident merge). <strong>Review</strong> = strong but partial overlap — confirm the variants are truly redundant before merging. Grouping is deliberately conservative: only dashboards sharing a data source or near-identical name are pooled, so coincidental field overlap across unrelated reports is not flagged.</p>
+    </section>
+
+    HTML
+  end
+
   html += effort_html
 end
 

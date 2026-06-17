@@ -280,6 +280,37 @@ def main():
 
     inv["datasets"] = list(seen_datasets.values())
 
+    # --- duplicate / consolidation candidates -------------------------------
+    # Flag analyses that are the same report rebuilt (shared dataset + overlapping
+    # visual set + near-identical name) so the estate migrates ONCE instead of N
+    # times. Shared, tool-neutral detector (the hyphenated filename blocks a normal
+    # import). Only signals actually captured by the inventory are passed —
+    # QuickSight inventory has dataset references + visual kinds, but no per-analysis
+    # column refs and no view counts on this surface, so `fields` reuses the
+    # source/viz proxy and `usage` is omitted.
+    import importlib.util
+    _dd_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dup-dashboards.py")
+    _spec = importlib.util.spec_from_file_location("dup_dashboards", _dd_path)
+    _dd = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_dd)
+
+    def _ds_name(ds_id):
+        return (seen_datasets.get(ds_id) or {}).get("name") or ds_id
+
+    normalized = []
+    for a in inv["analyses"]:
+        sources = [_ds_name(i) for i in (a.get("dataset_ids") or []) if i]
+        viz = list((a.get("visual_kinds") or {}).keys())
+        normalized.append({
+            "id": a["id"], "name": a["name"],
+            "sources": sources,
+            "viz": viz,
+            "fields": sources + viz,
+        })
+    inv["duplicate_dashboards"] = _dd.detect(normalized)
+    with open(os.path.join(out, "dup-normalized.json"), "w") as fh:
+        json.dump(normalized, fh, indent=2)
+
     with open(os.path.join(out, "inventory.json"), "w") as fh:
         json.dump(inv, fh, indent=2)
 
@@ -288,6 +319,10 @@ def main():
     print(f"  analyses={eo['analyses']} dashboards={eo['dashboards']} "
           f"datasets={eo['datasets']} data_sources={eo['data_sources']}", file=sys.stderr)
     print(f"  edition={inv['account']['edition']}  analyses scanned for definition: {scanned}",
+          file=sys.stderr)
+    _ds = inv["duplicate_dashboards"]["summary"]
+    print(f"  duplicate/consolidation: {_ds['duplicate_groups']} group(s) across "
+          f"{_ds['dashboards_in_groups']} analyses ({_ds['conversions_avoided']} avoidable)",
           file=sys.stderr)
     if inv["account"]["enterprise"] is False:
         print("  WARNING: definition API rejected — this looks like a Standard-edition "

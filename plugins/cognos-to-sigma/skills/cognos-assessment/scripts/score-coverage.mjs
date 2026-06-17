@@ -19,7 +19,11 @@
  * Writes <out>/coverage.json. Read-only.
  */
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ---- args ----
 const args = process.argv.slice(2);
@@ -261,7 +265,25 @@ function scoreReport(text, name) {
   for (let i = 0; i < nDrill; i++) add('drill-through', 'manual', 'a drill-through definition',
     'Re-implement as a Sigma action (cross-element navigation / open-link); not auto-converted.');
 
-  return finalize({ type: 'report', name, gaps, nAuto, nHint, nManual, nUnhandled });
+  // ---- duplicate-detection signals (sources / fields / viz) for dup-dashboards.py ----
+  // sources = the package / data module a report reads (modelPath) + the model
+  // namespace(s) referenced in data-item expressions (e.g. [C].[C_Fred_Data_Module]).
+  const sources = new Set();
+  for (const m of text.matchAll(/<modelPath[^>]*>([\s\S]*?)<\/modelPath>/gi)) {
+    for (const mm of m[1].matchAll(/(?:module|package|model)\[@name='([^']+)'\]/gi)) sources.add(mm[1]);
+  }
+  for (const m of text.matchAll(/\[[A-Za-z0-9_]+\]\.\[([A-Za-z0-9_]+)\]\.\[/g)) sources.add(m[1]);
+  // fields = the data-item names the report surfaces (named once per definition).
+  const fields = new Set();
+  for (const m of text.matchAll(/<dataItem[^>]*\bname="([^"]+)"/gi)) fields.add(m[1]);
+  // viz = native chart-kind tokens (RAVE2), normalized to the converter's labels.
+  const viz = new Set();
+  for (const m of text.matchAll(/com\.ibm\.vis\.([A-Za-z0-9]+)\b/gi)) viz.add(m[1].toLowerCase());
+
+  return finalize({
+    type: 'report', name, gaps, nAuto, nHint, nManual, nUnhandled,
+    signals: { sources: [...sources], fields: [...fields], viz: [...viz] },
+  });
 }
 
 function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -277,11 +299,13 @@ function finalize(r) {
   else if (r.nManual + r.nUnhandled === 0) tag = 'migrate-first';
   else if (score >= 10) tag = 'easy-win';
   else tag = 'moderate';
-  return {
+  const out = {
     id: r.name, type: r.type, name: r.name,
     n_features: nFeatures, n_auto: r.nAuto, n_hint: r.nHint, n_manual: r.nManual, n_unhandled: r.nUnhandled,
     complexity, gaps: r.gaps, value, cost, score, tag,
   };
+  if (r.signals) out._dup_signals = r.signals;   // internal: fed to dup-dashboards.py, not rendered per-artifact
+  return out;
 }
 
 // ============================================================================
@@ -344,6 +368,46 @@ const rollup = {
   by_tag: byTag,
 };
 
-const out = { rollup, artifacts };
+// ---- duplicate / consolidation detection (shared, tool-neutral detector) ----
+// Flag reports that are the same report rebuilt (shared data module + overlapping
+// data items + near-identical name) so the estate migrates ONCE, not N times.
+// Shells out to dup-dashboards.py (byte-identical across all assessments); a
+// python3 failure must NEVER fail the assessment — dedup is purely additive.
+let duplicateDashboards = null;
+try {
+  const dashboards = artifacts
+    .filter((a) => a.type === 'report' && a._dup_signals)
+    .map((a) => {
+      const s = a._dup_signals;
+      const d = { id: a.id, name: a.name };          // only id+name required; rest omitted when absent
+      if (s.sources && s.sources.length) d.sources = s.sources;
+      if (s.fields && s.fields.length) d.fields = s.fields;
+      if (s.viz && s.viz.length) d.viz = s.viz;
+      // usage (run/view counts) NOT exposed by the Cognos REST surface — omit, never fake.
+      return d;
+    });
+  if (dashboards.length >= 2) {
+    const normPath = join(outDir, 'dup-dashboards.input.json');
+    const groupsPath = join(outDir, 'dup-groups.json');
+    const fragPath = join(outDir, 'dup-frag.html');
+    writeFileSync(normPath, JSON.stringify(dashboards, null, 2));
+    execFileSync('python3', [join(__dirname, 'dup-dashboards.py'),
+      '--in', normPath, '--out', groupsPath, '--html', fragPath], { stdio: ['ignore', 'ignore', 'inherit'] });
+    const result = JSON.parse(readFileSync(groupsPath, 'utf8'));
+    const html = existsSync(fragPath) ? readFileSync(fragPath, 'utf8') : null;
+    duplicateDashboards = { ...result, html };
+  }
+} catch (e) {
+  console.error(`[score-coverage] duplicate detection skipped: ${e && e.message ? e.message : e}`);
+}
+
+// Drop the internal dedup signals before persisting (they are not part of the readout).
+const cleanArtifacts = artifacts.map(({ _dup_signals, ...rest }) => rest);
+
+const out = { rollup, artifacts: cleanArtifacts };
+if (duplicateDashboards) out.duplicate_dashboards = duplicateDashboards;
 writeFileSync(join(outDir, 'coverage.json'), JSON.stringify(out, null, 2));
-console.log(`scored ${artifacts.length} artifacts (${rollup.n_modules} modules, ${rollup.n_reports} reports) — ${pctAuto}% auto-migratable -> ${join(outDir, 'coverage.json')}`);
+const dupMsg = duplicateDashboards
+  ? ` — ${duplicateDashboards.summary.duplicate_groups} duplicate group(s), ${duplicateDashboards.summary.conversions_avoided} conversion(s) avoidable`
+  : '';
+console.log(`scored ${artifacts.length} artifacts (${rollup.n_modules} modules, ${rollup.n_reports} reports) — ${pctAuto}% auto-migratable${dupMsg} -> ${join(outDir, 'coverage.json')}`);
