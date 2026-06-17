@@ -158,12 +158,12 @@ def layout_sheet(sheet, v2e, eids_for_sheet)
     end
   end
 
-  # collision guard: collapse to stacked full-width rows if any pair overlaps
-  if placed.combination(2).any? { |a, b| collides?(a, b) }
-    STDERR.puts "layout: collisions on sheet \"#{sheet['Name']}\" -> collapsing #{placed.size} elements to stacked rows"
-    row = 1; row_h = 12
-    placed = placed.map { |eid, _c0, _c1, _r0, _r1| r0 = row; row += row_h; [eid, 1, SIG + 1, r0, r0 + row_h] }
-  end
+  # NOTE: do NOT crudely collapse to full-width stacked rows on any overlap (RCA #7,
+  # bead 3goo.7). The px->grid rounding of a FreeFormLayout produces spurious overlaps;
+  # collapsing here destroyed the entire geometry (KPI row, pie row, etc.) and forced
+  # the whole dashboard into a single stacked column. banded_page() downstream clusters
+  # items into row-bands and runs decollide_bands(), which preserves collision-free bands
+  # exactly and only tiles WITHIN a band that genuinely overlaps — the right granularity.
   [placed, cfg.keys.first || 'flow-fallback']
 end
 
