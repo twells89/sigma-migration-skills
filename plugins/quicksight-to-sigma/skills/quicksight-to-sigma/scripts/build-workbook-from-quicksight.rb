@@ -185,6 +185,16 @@ def qs_expr_to_sigma(expr, dmel, params = {})
   s = s.gsub(/\{([^}]+)\}/) { "[#{dmel}/#{disp(Regexp.last_match(1).strip)}]" }
   s = s.gsub('<>', '!=')
   s = s.gsub(/\bifelse\s*\(/i, 'If(')
+  # QS aggregate/scalar function names -> Sigma. Substituted column refs ([dmel/Col]) are
+  # already in place, so this only rewrites function-call heads. Longest-first so
+  # distinct_countIf matches before distinct_count and *If before the base. The negative
+  # lookbehind + required '(' avoids touching identifiers/column names (RCA #9/#10).
+  [%w[distinct_countIf CountDistinctIf], %w[distinct_count CountDistinct],
+   %w[countIf CountIf], %w[sumIf SumIf], %w[avgIf AvgIf], %w[minIf MinIf], %w[maxIf MaxIf],
+   %w[percentOfTotal PercentOfTotal], %w[count Count], %w[sum Sum], %w[avg Avg],
+   %w[min Min], %w[max Max]].each do |qs, sig|
+    s = s.gsub(/(?<![A-Za-z0-9_.\/])#{Regexp.escape(qs)}\s*\(/i, "#{sig}(")
+  end
   s = s.gsub(/'([^']*)'/) { "\"#{Regexp.last_match(1)}\"" }
   s
 end
@@ -527,7 +537,41 @@ build_warnings = []
 # source whose groupBy is the point dimension.
 scatter_sources = []
 
-master_cols = {}   # colname(raw or calc) -> {id, formula, name}
+master_cols = {}   # colname(raw or calc) -> {id, formula, name}  (PRIMARY master's columns)
+
+# ---- Multi-master routing (RCA #4, bead 3goo.4) ----------------------------
+# A QS analysis can bind visuals to DIFFERENT datasets -> different DM elements. The old
+# single-master design pointed EVERY visual at one master, so a visual on a second dataset
+# got broken column refs AND contaminated the master with that dataset's calc fields.
+# We register one Sigma master per DM element and route each visual to the master whose DM
+# element COVERS its columns. A SINGLE-dataset analysis (the common case) routes every
+# visual to the primary master, so its output is byte-identical to the prior behavior.
+rb_label_set = ->(el) { ((el['columnLabels'] || []) + (el['columns'] || []).map { |c| c['name'] }).compact.to_set }
+MASTERS = {}   # dm_el_id -> { sid, name, dmel, dm_el_id, cols(hash), labels(Set) }
+MASTERS[dm_el] = { sid: 'master', name: M, dmel: DMEL, dm_el_id: dm_el,
+                   cols: master_cols, labels: rb_label_set.call(dm_el_obj) }
+PRIMARY_MASTER = MASTERS[dm_el]
+visual_needed_disp = lambda do |inner|
+  raw = visual_cols(inner)
+  resolved = raw.flat_map { |n| calc.key?(n) ? calc[n].to_s.scan(/\{([^}]+)\}/).flatten.map(&:strip) : [n] }
+  resolved.map { |c| disp(c) }.to_set
+end
+route_master = lambda do |inner|
+  needed = visual_needed_disp.call(inner)
+  prim_cover = (needed & PRIMARY_MASTER[:labels]).size
+  return PRIMARY_MASTER if needed.empty? || prim_cover == needed.size
+  # not fully covered by the primary -> pick the DM element that covers it best (tie-break
+  # on FEWER columns so the focused element wins over a denormalized superset)
+  cand = rb_els.map { |e| [(needed & rb_label_set.call(e)).size, -((e['columnLabels'] || []).size), e] }
+               .max_by { |cover, negn, _e| [cover, negn] }
+  return PRIMARY_MASTER if cand.nil? || cand[0] <= prim_cover   # nothing covers it better -> stay primary
+  e = cand[2]
+  MASTERS[e['id']] ||= { sid: "ms-#{SecureRandom.hex(4)}", name: e['name'] || 'Data',
+                         dmel: e['name'] || 'Custom SQL', dm_el_id: e['id'],
+                         cols: {}, labels: rb_label_set.call(e) }
+  MASTERS[e['id']]
+end
+
 def fmt_for(name)
   case name
   when /margin|pct|percent|ratio|rate/i then '.1%'
@@ -878,7 +922,10 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     fw = (inner['ChartConfiguration'] || {})['FieldWells'] || {}
     w = fw.values.find { |x| x.is_a?(Hash) } || fw
     rol = ->(key) { (w[key] || []).map { |f| field_role(f) }.compact }
-    base = { 'id' => eid, 'kind' => kind, 'name' => title, 'source' => { 'elementId' => 'master', 'kind' => 'table' } }
+    # route this visual to the master whose DM element covers its columns (RCA #4)
+    mr = route_master.call(inner)
+    mc_ = mr[:cols]; dmel_ = mr[:dmel]; m_ = mr[:name]; mid_ = mr[:sid]
+    base = { 'id' => eid, 'kind' => kind, 'name' => title, 'source' => { 'elementId' => mid_, 'kind' => 'table' } }
     # value labels on bar/pie/donut (Sigma defaults them OFF); lines stay clean
     base['dataLabel'] = { 'labels' => 'shown' } if %w[bar-chart pie-chart donut-chart].include?(kind)
     el = nil
@@ -887,7 +934,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     when 'kpi-chart'
       # KPI + Gauge both surface a single value
       vals = rol.('Values'); (next if vals.empty?)
-      c, cid = meas_col(vals[0], calc, master_cols, DMEL, M)
+      c, cid = meas_col(vals[0], calc, mc_, dmel_, m_)
       el = base.merge('columns' => [c.merge('name' => title)], 'value' => { 'columnId' => cid })
     when 'bar-chart', 'line-chart', 'area-chart'
       # funnel/treemap land here too: their dim is in Category/Groups, measure in Values/Sizes
@@ -920,12 +967,12 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       # is truncated to that grain so the x-axis aggregates by month/quarter/year instead
       # of plotting raw datetime (otherwise the line is spiky/per-row).
       dc, did = if dims[0][3]
-                  date_dim_col(dims[0], calc, master_cols, DMEL, M)
+                  date_dim_col(dims[0], calc, mc_, dmel_, m_)
                 else
-                  dim_col(dims[0], calc, master_cols, DMEL, M)
+                  dim_col(dims[0], calc, mc_, dmel_, m_)
                 end
       cols = [dc]; ycids = []
-      vals.each { |mv| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; ycids << id }
+      vals.each { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; ycids << id }
       el = base.merge('columns' => cols, 'xAxis' => { 'columnId' => did }, 'yAxis' => { 'columnIds' => ycids })
       # D20: honor QuickSight BarChartVisual Orientation. HORIZONTAL -> Sigma
       # orientation:"horizontal"; VERTICAL (default) is expressed by OMITTING the field
@@ -935,14 +982,14 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         el['orientation'] = 'horizontal' if qs_orient.to_s.upcase == 'HORIZONTAL'
       end
       # B-gap COLOR: by-measure (ColorScale dup column) / by-dimension (Colors well).
-      cclr = qs_color(inner, w, el, [did], ycids, calc, master_cols, DMEL, M)
+      cclr = qs_color(inner, w, el, [did], ycids, calc, mc_, dmel_, m_)
       el['color'] = cclr if cclr
       # A-gap REFERENCE LINES -> refMarks (wrapped value:{type:formula}).
-      rms = qs_reference_lines(inner, calc, master_cols, DMEL, M, title, build_warnings)
+      rms = qs_reference_lines(inner, calc, mc_, dmel_, m_, title, build_warnings)
       el['refMarks'] = rms unless rms.empty?
     when 'pie-chart', 'donut-chart'
       dims = rol.('Category'); vals = rol.('Values'); (next if dims.empty? || vals.empty?)
-      dc, did = dim_col(dims[0], calc, master_cols, DMEL, M); mc2, mid = meas_col(vals[0], calc, master_cols, DMEL, M)
+      dc, did = dim_col(dims[0], calc, mc_, dmel_, m_); mc2, mid = meas_col(vals[0], calc, mc_, dmel_, m_)
       el = base.merge('columns' => [dc, mc2], 'color' => { 'id' => did }, 'value' => { 'id' => mid })
     when 'combo-chart'
       dims = rol.('Category'); bars = rol.('BarValues'); lines = rol.('LineValues')
@@ -958,18 +1005,18 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         next
       end
       (next if dims.empty? || (bars.empty? && lines.empty?))
-      dc, did = dim_col(dims[0], calc, master_cols, DMEL, M); cols = [dc]; ycids = []
-      bars.each  { |mv| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; ycids << id }
-      lines.each { |mv| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; ycids << { 'columnId' => id, 'type' => 'line' } }
+      dc, did = dim_col(dims[0], calc, mc_, dmel_, m_); cols = [dc]; ycids = []
+      bars.each  { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; ycids << id }
+      lines.each { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; ycids << { 'columnId' => id, 'type' => 'line' } }
       el = base.merge('columns' => cols, 'xAxis' => { 'columnId' => did }, 'yAxis' => { 'columnIds' => ycids })
-      cclr = qs_color(inner, w, el, [did], [], calc, master_cols, DMEL, M)  # combo: by-dimension only
+      cclr = qs_color(inner, w, el, [did], [], calc, mc_, dmel_, m_)  # combo: by-dimension only
       el['color'] = cclr if cclr && cclr['by'] == 'category'
-      rms = qs_reference_lines(inner, calc, master_cols, DMEL, M, title, build_warnings)
+      rms = qs_reference_lines(inner, calc, mc_, dmel_, m_, title, build_warnings)
       el['refMarks'] = rms unless rms.empty?
     when 'scatter-chart'
       xs = rol.('XAxis'); ys = rol.('YAxis'); cat = rol.('Category'); sz = rol.('Size')
       (next if xs.empty? || ys.empty?)
-      xc, xid = meas_col(xs[0], calc, master_cols, DMEL, M); yc, yid = meas_col(ys[0], calc, master_cols, DMEL, M)
+      xc, xid = meas_col(xs[0], calc, mc_, dmel_, m_); yc, yid = meas_col(ys[0], calc, mc_, dmel_, m_)
       if cat.any?
         # A QuickSight scatter is measure-vs-measure with the Category field as the POINT
         # identity. Sigma's scatter axis is a GROUPING axis: an aggregate (Sum(...)) over
@@ -978,19 +1025,19 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         # qlik-to-sigma builder, 2026-06-15). Correct shape: bind the scatter to a HIDDEN
         # GROUPED source table (one row per point dim) and reference its grouped columns
         # with raw refs; the dim stays on color:{by:category} so points don't merge.
-        dc, did = dim_col(cat[0], calc, master_cols, DMEL, M)
+        dc, did = dim_col(cat[0], calc, mc_, dmel_, m_)
         gcols = [dc, xc, yc]          # group dim + x + y (+ size); columns live on the source
         gcids = [xid, yid]            # aggregated calculations (size appended below)
         szc = nil
         if sz.any?
-          szc, szid = meas_col(sz[0], calc, master_cols, DMEL, M)
+          szc, szid = meas_col(sz[0], calc, mc_, dmel_, m_)
           gcols << szc; gcids << szid
         end
         src_id = "#{eid}-src"; src_name = "Scatter Source #{eid[-6..-1]}"
         grp_id = "#{src_id}-g"
         scatter_sources << { 'id' => src_id, 'kind' => 'table', 'name' => src_name,
                              'visibleAsSource' => false,
-                             'source' => { 'elementId' => 'master', 'kind' => 'table' },
+                             'source' => { 'elementId' => mid_, 'kind' => 'table' },
                              'columns' => gcols,
                              'groupings' => [{ 'id' => grp_id, 'groupBy' => [did], 'calculations' => gcids }] }
         # RAW (non-aggregating) refs into the grouped source, one per channel.
@@ -1016,12 +1063,12 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         # verified ungrouped size channel, so we PROJECT the size measure as a column (data
         # migrates) and record a warning that bubble-sizing renders uniform.
         if sz.any?
-          szc, _szid = meas_col(sz[0], calc, master_cols, DMEL, M); el['columns'] << szc
+          szc, _szid = meas_col(sz[0], calc, mc_, dmel_, m_); el['columns'] << szc
           build_warnings << { 'visual' => title, 'type' => 'ScatterBubbleSize', 'reason' => "QuickSight scatter bubble-size ('#{sz[0][1]}') has no Sigma scatter size channel (no point dimension to group on); the measure is projected as a column but bubbles render uniform-size (Sigma limitation)" }
         end
       end
       # A-gap REFERENCE LINES on scatter (e.g. an x=Margin-Target line).
-      rms = qs_reference_lines(inner, calc, master_cols, DMEL, M, title, build_warnings)
+      rms = qs_reference_lines(inner, calc, mc_, dmel_, m_, title, build_warnings)
       el['refMarks'] = rms unless rms.empty?
     when 'table'
       cf_fieldmap = {}   # QS FieldId -> Sigma column id (for D19 conditional formatting)
@@ -1045,8 +1092,8 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         raw_vals = keep_idx.map { |i| raw_vals[i] }
       end
       cols = []; gids = []; cids = []
-      dims.each_with_index { |d, i| c, id = dim_col(d, calc, master_cols, DMEL, M); cols << c; gids << id; (fi = field_id(raw_dims[i])) && (cf_fieldmap[fi] = id) }
-      vals.each_with_index { |mv, i| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; cids << id; (fi = field_id(raw_vals[i])) && (cf_fieldmap[fi] = id) }
+      dims.each_with_index { |d, i| c, id = dim_col(d, calc, mc_, dmel_, m_); cols << c; gids << id; (fi = field_id(raw_dims[i])) && (cf_fieldmap[fi] = id) }
+      vals.each_with_index { |mv, i| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; cids << id; (fi = field_id(raw_vals[i])) && (cf_fieldmap[fi] = id) }
       (next if cols.empty?)
       el = base.merge('columns' => cols)
       el['groupings'] = [{ 'id' => nid('g'), 'groupBy' => gids, 'calculations' => cids }] unless gids.empty?
@@ -1061,9 +1108,9 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       end
     when 'pivot-table'
       rows = rol.('Rows'); pcols = rol.('Columns'); vals = rol.('Values'); cols = []; rids = []; coids = []; vids = []
-      rows.each  { |d| c, id = dim_col(d, calc, master_cols, DMEL, M); cols << c; rids << id }
-      pcols.each { |d| c, id = dim_col(d, calc, master_cols, DMEL, M); cols << c; coids << id }
-      vals.each  { |mv| c, id = meas_col(mv, calc, master_cols, DMEL, M); cols << c; vids << id }
+      rows.each  { |d| c, id = dim_col(d, calc, mc_, dmel_, m_); cols << c; rids << id }
+      pcols.each { |d| c, id = dim_col(d, calc, mc_, dmel_, m_); cols << c; coids << id }
+      vals.each  { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; vids << id }
       (next if rids.empty? || vids.empty?)
       el = base.merge('columns' => cols, 'rowsBy' => rids.map { |i| { 'id' => i } }, 'values' => vids)
       el['columnsBy'] = coids.map { |i| { 'id' => i } } unless coids.empty?
@@ -1078,19 +1125,19 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       cols = []
       if pair
         # real lat/long -> point-map
-        latc, latid = meas_col([:meas, pair[0][1], 'AVERAGE'], calc, master_cols, DMEL, M)
-        lonc, lonid = meas_col([:meas, pair[1][1], 'AVERAGE'], calc, master_cols, DMEL, M)
+        latc, latid = meas_col([:meas, pair[0][1], 'AVERAGE'], calc, mc_, dmel_, m_)
+        lonc, lonid = meas_col([:meas, pair[1][1], 'AVERAGE'], calc, mc_, dmel_, m_)
         # carry lat/long as dimension-style refs (no aggregation) for the point geometry
         latc = { 'id' => latid, 'formula' => latc['formula'].sub(/^Avg\(/, '').sub(/\)$/, ''), 'name' => latc['name'] }
         lonc = { 'id' => lonid, 'formula' => lonc['formula'].sub(/^Avg\(/, '').sub(/\)$/, ''), 'name' => lonc['name'] }
         cols << latc << lonc
-        vals.each { |mv| c, _ = meas_col(mv, calc, master_cols, DMEL, M); cols << c }
+        vals.each { |mv| c, _ = meas_col(mv, calc, mc_, dmel_, m_); cols << c }
         el = base.merge('kind' => 'point-map', 'columns' => cols,
                         'latitude' => { 'id' => latid }, 'longitude' => { 'id' => lonid })
       else
         # geo NAME (state/city/country/zip) -> region-map
-        dc, did = dim_col(geo[0], calc, master_cols, DMEL, M); cols << dc
-        vals.each { |mv| c, _ = meas_col(mv, calc, master_cols, DMEL, M); cols << c }
+        dc, did = dim_col(geo[0], calc, mc_, dmel_, m_); cols << dc
+        vals.each { |mv| c, _ = meas_col(mv, calc, mc_, dmel_, m_); cols << c }
         el = base.merge('kind' => 'region-map', 'columns' => cols,
                         'region' => { 'id' => did, 'regionType' => region_type_for(geo[0][1]) })
       end
@@ -1098,7 +1145,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     # carry the visual's QS SortConfiguration (CategorySort/RowSort) when present
     apply_qs_sorts(el, inner, kind, title, build_warnings) if el
     # RCA #1 / bead 3goo.1: apply this visual's scoped QS FilterGroups as element filters
-    apply_visual_filters(el, inner['VisualId'], calc, master_cols, DMEL, M) if el
+    apply_visual_filters(el, inner['VisualId'], calc, mc_, dmel_, m_) if el
     elements << el if el
   end
   # C-gap: QuickSight sheet-level FilterControls + ParameterControls -> Sigma list
@@ -1188,10 +1235,27 @@ if dash_pages.empty?
   sheet_pages = [{ 'pageId' => 'page-dash', 'name' => (an['Name'] || 'Dashboard'), 'sheetIndex' => 0, 'elements' => [] }]
 end
 
+# Multi-master (RCA #4): any SECONDARY master that a visual routed to (non-empty cols)
+# becomes its own hidden Data-page table sourcing its DM element. The primary `master`
+# above carries the dm-filters; secondaries are plain passthrough masters.
+secondary_masters = MASTERS.values.reject { |mm| mm[:sid] == 'master' || mm[:cols].empty? }.map do |mm|
+  mm[:cols].each_value { |c| c.delete('_window'); c.delete('description') if c['formula'] != 'Null' }
+  { 'id' => mm[:sid], 'name' => mm[:name], 'kind' => 'table', 'visibleAsSource' => false,
+    'source' => { 'dataModelId' => dm_id, 'elementId' => mm[:dm_el_id], 'kind' => 'data-model' },
+    'columns' => mm[:cols].values }
+end
+STDERR.puts "multi-master: routed visuals across #{1 + secondary_masters.size} master(s) (#{secondary_masters.map { |s| s['name'] }.join(', ')})" unless secondary_masters.empty?
+# QS sheet controls are global; this builder wires them to the PRIMARY master only, so
+# charts on a SECONDARY master are not yet driven by the page controls — surface it loud.
+unless secondary_masters.empty?
+  build_warnings << { 'visual' => '(controls)', 'type' => 'MultiMasterControlScope',
+                      'reason' => "page controls filter the primary master only; #{secondary_masters.size} secondary master(s) (#{secondary_masters.map { |s| s['name'] }.join(', ')}) are NOT yet driven by the controls — re-author cross-master control targets in Sigma if needed" }
+end
+
 # Scatter charts emit a hidden GROUPED source table (one row per point dim). Park
 # them on the Data page next to the master (visibleAsSource:false, so they need no
 # layout slot) — they're sourced by the scatter element via {elementId, groupingId}.
-data_elements = [master] + scatter_sources
+data_elements = [master] + secondary_masters + scatter_sources
 
 spec = { 'name' => (an['Name'] || 'QuickSight Migration') + ' (from QuickSight)',
          'schemaVersion' => 1,
