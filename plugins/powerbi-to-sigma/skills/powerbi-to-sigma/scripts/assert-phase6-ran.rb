@@ -107,64 +107,72 @@ OptionParser.new do |p|
   p.on('--control-scope PATH')       { |v| opts[:control_scope] = v }
   p.on('--min-layout-elements N', Integer) { |v| opts[:min_layout_elements] = v }
   p.on('--allow-missing-tiles N', Integer, 'tolerate N unmatched dashboard zones in the tile census') { |v| opts[:allow_missing_tiles] = v }
+  p.on('--skip-parity-gate REASON', 'waive gate 1 (Phase 6 DAX parity) — REQUIRED reason string. Use ONLY when DAX parity is genuinely unavailable (e.g. no Power BI workspace/dataset access). The reason MUST be named in your migration report.') { |v| opts[:skip_parity] = v }
 end.parse!
 abort('--workdir (or --tableau) required') unless opts[:tab]
 
 summary_path = File.join(opts[:tab], 'parity-final.json')
 
-unless File.exist?(summary_path)
-  warn "[FAIL] Phase 6 skipped — #{summary_path} does not exist."
-  warn "       Run: ruby scripts/phase6-parity.rb --tableau #{opts[:tab]} --workbook-id <id>"
-  warn "       then collect actuals via mcp__sigma-mcp-v2__query and re-run with --finalize."
-  warn "       See SKILL.md Phase 6. This is the hard gate (beads-sigma-4pm)."
-  exit 1
-end
-
-begin
-  summary = JSON.parse(File.read(summary_path))
-rescue JSON::ParserError => e
-  warn "[FAIL] #{summary_path} is malformed JSON: #{e.message}"
-  exit 3
-end
-
-total = summary['charts_total'].to_i
-passed = summary['charts_pass'].to_i
-status = summary['status'].to_s
-mode = summary['mode'].to_s
-
-if total <= 0
-  warn "[FAIL] parity-final.json reports charts_total=#{total} — no charts were verified."
-  warn "       This usually means auto-parity-plan.rb matched zero Tableau views."
-  warn "       Phase 6 must verify at least one chart to declare GREEN."
-  exit 2
-end
-
-if mode == 'extract' && !opts[:allow_extract]
-  warn "[FAIL] parity ran in extract-mode but --allow-extract was not passed."
-  warn "       Extract-mode permits up to ±#{((summary['extract_tol'] || 0.30) * 100).to_i}% drift —"
-  warn "       only acceptable when the source Tableau workbook has hasExtracts=true."
-  exit 2
-end
-
-pass_rate = passed.to_f / total
-# status=PASS requires 100% — when the caller explicitly accepts a lower
-# pass-rate (--min-pass-rate, for honest NAMED divergences like LOD
-# placeholders / cross-grain semantics), the rate is the gate, not the status.
-rate_gate_only = opts[:min_pass_rate] < 1.0
-if (rate_gate_only ? pass_rate < opts[:min_pass_rate] : (status != 'PASS' || pass_rate < opts[:min_pass_rate]))
-  warn "[FAIL] parity status=#{status} pass-rate=#{(pass_rate * 100).round(1)}% (#{passed}/#{total})"
-  warn "       Required: #{rate_gate_only ? '' : 'status=PASS and '}pass-rate >= #{(opts[:min_pass_rate] * 100).to_i}%"
-  if (fail_names = summary['fail_names']) && !fail_names.empty?
-    warn "       Failing charts: #{fail_names.join(', ')}"
-  end
-  exit 2
-end
-
-if rate_gate_only && status != 'PASS'
-  puts "[OK] gate 1/7: Phase 6 ran — #{passed}/#{total} charts PASS (>= #{(opts[:min_pass_rate] * 100).to_i}% accepted); " \
-       "DIVERGING (accepted, must be NAMED in the report): #{(summary['fail_names'] || []).join(', ')}"
+if opts[:skip_parity]
+  puts "[SKIP] gate 1/7: Phase 6 DAX parity WAIVED via --skip-parity-gate (#{opts[:skip_parity]})."
+  puts "       This waiver MUST be named in the migration report — the workbook was NOT numerically verified vs Power BI."
 else
-  puts "[OK] gate 1/7: Phase 6 ran cleanly — #{passed}/#{total} charts PASS (mode=#{mode}, status=#{status})"
+  unless File.exist?(summary_path)
+    warn "[FAIL] Phase 6 skipped — #{summary_path} does not exist."
+    warn "       Run: ruby scripts/phase6-parity.rb --tableau #{opts[:tab]} --workbook-id <id>"
+    warn "       then collect actuals via mcp__sigma-mcp-v2__query and re-run with --finalize."
+    warn "       See SKILL.md Phase 6. This is the hard gate (beads-sigma-4pm)."
+    warn "       If PBI parity is genuinely unavailable (no workspace/dataset access), waive"
+    warn "       with --skip-parity-gate \"<reason>\" and name it in the report."
+    exit 1
+  end
+
+  begin
+    summary = JSON.parse(File.read(summary_path))
+  rescue JSON::ParserError => e
+    warn "[FAIL] #{summary_path} is malformed JSON: #{e.message}"
+    exit 3
+  end
+
+  total = summary['charts_total'].to_i
+  passed = summary['charts_pass'].to_i
+  status = summary['status'].to_s
+  mode = summary['mode'].to_s
+
+  if total <= 0
+    warn "[FAIL] parity-final.json reports charts_total=#{total} — no charts were verified."
+    warn "       This usually means auto-parity-plan.rb matched zero Tableau views."
+    warn "       Phase 6 must verify at least one chart to declare GREEN."
+    exit 2
+  end
+
+  if mode == 'extract' && !opts[:allow_extract]
+    warn "[FAIL] parity ran in extract-mode but --allow-extract was not passed."
+    warn "       Extract-mode permits up to ±#{((summary['extract_tol'] || 0.30) * 100).to_i}% drift —"
+    warn "       only acceptable when the source Tableau workbook has hasExtracts=true."
+    exit 2
+  end
+
+  pass_rate = passed.to_f / total
+  # status=PASS requires 100% — when the caller explicitly accepts a lower
+  # pass-rate (--min-pass-rate, for honest NAMED divergences like LOD
+  # placeholders / cross-grain semantics), the rate is the gate, not the status.
+  rate_gate_only = opts[:min_pass_rate] < 1.0
+  if (rate_gate_only ? pass_rate < opts[:min_pass_rate] : (status != 'PASS' || pass_rate < opts[:min_pass_rate]))
+    warn "[FAIL] parity status=#{status} pass-rate=#{(pass_rate * 100).round(1)}% (#{passed}/#{total})"
+    warn "       Required: #{rate_gate_only ? '' : 'status=PASS and '}pass-rate >= #{(opts[:min_pass_rate] * 100).to_i}%"
+    if (fail_names = summary['fail_names']) && !fail_names.empty?
+      warn "       Failing charts: #{fail_names.join(', ')}"
+    end
+    exit 2
+  end
+
+  if rate_gate_only && status != 'PASS'
+    puts "[OK] gate 1/7: Phase 6 ran — #{passed}/#{total} charts PASS (>= #{(opts[:min_pass_rate] * 100).to_i}% accepted); " \
+         "DIVERGING (accepted, must be NAMED in the report): #{(summary['fail_names'] || []).join(', ')}"
+  else
+    puts "[OK] gate 1/7: Phase 6 ran cleanly — #{passed}/#{total} charts PASS (mode=#{mode}, status=#{status})"
+  end
 end
 
 # ---------------------------------------------------------------------------
@@ -378,7 +386,7 @@ end
 # charts and parity still reports PASS (every chart it knows about passes —
 # it just doesn't know about the dropped one).
 # ---------------------------------------------------------------------------
-census = summary['tile_census']
+census = summary && summary['tile_census']  # summary is nil when gate 1 was waived
 if census.nil?
   puts "[SKIP] gate 5/7: no tile_census in parity-final.json (converter did not emit one — re-run phase6 finalize with the dashboard zone tree available to enable)"
 else

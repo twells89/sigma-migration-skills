@@ -1065,6 +1065,14 @@ build += ['--folder-id', wb_folder] if wb_folder
 # workbook against this DM (see SKILL.md). Never worse than the proven agent path.
 begin
   build_log = run_wb!(build)
+  # Validate the WORKBOOK spec before POST — previously only the DM spec was
+  # validated, so workbook-shape defects (source-less "[]" elements, dangling
+  # grouping refs, missing kind) went straight to the API. The DM readback gives
+  # the cross-ref context (master/DM element names + ids).
+  dm_ctx = File.join(WORK, 'dm-context.json')
+  File.write(dm_ctx, JSON.generate(dm_rb))
+  run_wb!(['ruby', File.join(HERE, 'validate-spec.rb'), '--type', 'workbook',
+           '--dm-context', dm_ctx, wb_spec])
   wb_readback = File.join(WORK, 'wb-readback.json')
   rb_log = run_wb!(['ruby', File.join(HERE, 'post-and-readback.rb'), '--type', 'workbook',
                     '--spec', wb_spec, '--out', wb_readback, '--workdir', WORK], env: ENV.to_h)

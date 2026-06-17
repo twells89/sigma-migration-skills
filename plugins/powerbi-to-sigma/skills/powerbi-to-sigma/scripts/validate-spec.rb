@@ -49,7 +49,14 @@ end
 errors = []
 all_element_names = []
 spec.fetch('pages', []).each do |page|
-  page.fetch('elements', []).each { |el| all_element_names << el['name'] if el['name'] }
+  page.fetch('elements', []).each do |el|
+    all_element_names << el['name'] if el['name']
+    # Workbook formulas reference a master/source element by its ELEMENT ID
+    # (e.g. [master-4e5cfb1f/Sales]), not its display name — so the element id is
+    # itself a valid cross-ref prefix. Without this the prefix check false-flags
+    # every chart that sources a master (it only knew the names).
+    all_element_names << el['id'] if el['id']
+  end
 end
 all_known_prefixes = (all_element_names + external_names).to_set rescue (all_element_names + external_names)
 require 'set' rescue nil
@@ -64,12 +71,26 @@ spec.fetch('pages', []).each do |page|
     cols = (el['columns'] || []) + (el['metrics'] || [])
     sibling_names = Set.new(cols.map { |c| c['name'] }.compact)
 
+    # E-01: every element must carry a `kind`. A missing kind is silently
+    # coerced to '' below and slips past all the equality checks, then the API
+    # rejects the POST with `Missing "kind" field`. Catch it here.
+    errors << "#{name}: element missing required `kind` field" if (el['kind'] || '').to_s.strip.empty?
+
     src = el['source'] || {}
     own_prefixes = Set.new
     if src['kind'] == 'warehouse-table' && src['path']
       own_prefixes << src['path'].last
     end
-    own_prefixes << 'Custom SQL' if src['kind'] == 'sql'
+    # E-02: a SQL source element must carry a non-empty `statement`. The common
+    # mistake is using the key `sql` (API rejects with `source.statement:
+    # Invalid string: undefined`).
+    if src['kind'] == 'sql'
+      own_prefixes << 'Custom SQL'
+      if src['statement'].to_s.strip.empty?
+        hint = src.key?('sql') ? ' (found a `sql` key — Sigma expects `statement`)' : ''
+        errors << "#{name}: sql source element has empty/missing `statement`#{hint}"
+      end
+    end
     # bead 1t6c: a master sourcing a DM element (kind: data-model) carries
     # pass-through column formulas like [EMPLOYEES/Department] whose prefix is the
     # DM element's source-table name — that lives INSIDE the data model, not this
@@ -121,7 +142,12 @@ spec.fetch('pages', []).each do |page|
           # fuzzy-matches case/underscore variants. So a bare ref that isn't a
           # named sibling is still valid here; don't flag it (Bug E: SQL-output
           # columns are intentionally nameless, binding to their alias).
-          if src['kind'] != 'sql' && !sibling_names.include?(ref)
+          #
+          # Scope to DM specs only: in a WORKBOOK, a chart legitimately carries
+          # cross-element measure refs ([DM Element.Measure]) that resolve against
+          # the data model / master scope this validator can't see — flagging them
+          # as "not a sibling" false-positives every real generated workbook.
+          if opts[:type] == 'datamodel' && src['kind'] != 'sql' && !sibling_names.include?(ref)
             errors << "#{name}.#{col['name']}: bare ref [#{ref}] not a sibling column"
           end
         end
@@ -232,6 +258,24 @@ spec.fetch('pages', []).each do |page|
           errors << "#{name}: pivot-table #{key} entries use {id: ...}, not {columnId: ...} (got #{bad.inspect})"
         elsif bad
           errors << "#{name}: pivot-table #{key} entry missing id key (got #{bad.inspect})"
+        end
+      end
+    end
+
+    # E-09: a grouping's calculations[] must reference column IDs that still
+    # exist on the element. When a column is removed (e.g. an error-typed
+    # DateLookback col) but its grouping entry is left behind, the API rejects
+    # with `groupings[N].calculations[M]: Column or folder not found`.
+    valid_col_ids = Set.new(cols.map { |c| c['id'] }.compact)
+    (el['groupings'] || []).each_with_index do |grp, gi|
+      next unless grp.is_a?(Hash)
+      calcs = grp['calculations'].is_a?(Array) ? grp['calculations'] : []
+      calcs.each do |calc|
+        cid = calc.is_a?(Hash) ? (calc['columnId'] || calc['id']) : calc
+        next if cid.nil? || cid.to_s.empty?
+        unless valid_col_ids.include?(cid)
+          errors << "#{name}: groupings[#{gi}].calculations references columnId \"#{cid}\" " \
+                    "not present in this element's columns[] (dangling ref — column likely removed)"
         end
       end
     end

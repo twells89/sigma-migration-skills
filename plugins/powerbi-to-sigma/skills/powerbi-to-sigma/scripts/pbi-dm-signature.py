@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--bim", required=True); ap.add_argument("--out", required=True)
     a = ap.parse_args()
     model = json.load(open(a.bim)); mdl = model.get("model", model)
-    tables, cols, measures = [], [], []
+    tables, cols, measures, promoted = [], [], [], []
     for t in mdl.get("tables", []):
         name = t.get("name", "")
         # skip auto date tables / calc tables (no warehouse source)
@@ -52,6 +52,12 @@ def main():
         fqn = _fqn(m_expr)
         if fqn:
             tables.append(fqn.upper())
+        # E-04: Table.PromoteHeaders in the M-query means the warehouse table was
+        # loaded with AUTO-GENERATED column names (C1, C2, ...) and the semantic
+        # names sit in row 0 — so TMSL sourceColumn names will NOT match the
+        # warehouse columns and downstream refs/SQL break. Flag it.
+        if re.search(r'Table\.PromoteHeaders', m_expr):
+            promoted.append(name)
         for c in t.get("columns", []):
             sc = c.get("sourceColumn") or c.get("name")
             if sc:
@@ -65,10 +71,18 @@ def main():
     sig = {"tableau_workbook": mdl.get("name") or "Power BI model",
            "warehouse_tables": sorted(set(tables)),
            "referenced_columns": sorted(set(cols)),
-           "measures": measures}
+           "measures": measures,
+           "promoted_header_tables": sorted(set(promoted))}
     json.dump(sig, open(a.out, "w"), indent=2)
     print(f"[pbi-dm-signature] {len(sig['warehouse_tables'])} table(s), "
           f"{len(sig['referenced_columns'])} col(s), {len(measures)} measure(s) -> {a.out}", file=sys.stderr)
+    if promoted:
+        print(f"[pbi-dm-signature] WARNING: {len(promoted)} table(s) use Table.PromoteHeaders "
+              f"({', '.join(promoted)}). Their warehouse columns are likely auto-named (C1, C2, ...) "
+              f"with semantic names in row 0 — TMSL sourceColumn names will NOT match the warehouse. "
+              f"Verify the landed table's real column names and use convert-model.rb --table-map "
+              f"(or a column rename) before the workbook refs resolve. See SKILL.md PromoteHeaders.",
+              file=sys.stderr)
 
 if __name__ == "__main__":
     main()

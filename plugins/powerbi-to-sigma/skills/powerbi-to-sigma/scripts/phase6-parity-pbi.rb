@@ -150,6 +150,15 @@ def write_harness
 end
 
 if opts[:emit]
+  # E-11: the workspace + dataset ids needed for DAX parity ARE captured earlier —
+  # pbi-freshness.py writes them into freshness.json (keys workspace/dataset). Auto-
+  # wire them so the parity gate isn't a dead-end when --workspace/--dataset aren't
+  # repeated on the command line. An explicit flag always wins.
+  opts[:ws] ||= FRESH['workspace']
+  opts[:ds] ||= FRESH['dataset']
+  if (opts[:ws].nil? || opts[:ds].nil?) && opts[:fresh].nil?
+    warn '[phase6-pbi] tip: pass --freshness <work>/freshness.json to auto-fill --workspace/--dataset'
+  end
   %i[ws ds cdax wb out].each { |k| abort("missing --#{k}") unless opts[k] }
   write_harness
   chart_dax = JSON.parse(File.read(opts[:cdax]))

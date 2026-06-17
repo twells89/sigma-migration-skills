@@ -65,7 +65,18 @@ Pulls the refresh history (`GET datasets/{id}/refreshes` via the cached token) �
 
 ## Phase 3 — Convert (MCP)
 `convert_powerbi_to_sigma(model_json, connection_id, database, schema)`.
+
+> ⚠️ **`--converter-out` takes the MCP converter's output — never a hand-authored spec.**
+> The flag exists so you can run the `convert_powerbi_to_sigma` MCP tool, save its
+> result, and resume the pipeline with it (`convert-model.rb --converter-out <that file>`).
+> It is **not** an invitation to write `dm-raw.json` by hand. Hand-authored specs skip
+> the converter's column-name/SQL/formula-prefix guarantees and reliably produce
+> `Missing "kind" field`, `source.statement: undefined`, and `dependency not found`
+> errors (validate-spec.rb now catches the first two, but the right fix is to feed it
+> real converter output). If the MCP tool is unavailable, STOP and gate — don't fabricate.
+
 - DAX measures → Sigma metrics. ~70% mechanical; see `refs/dax-to-sigma-coverage.md` and `fixtures/MANIFEST.md` (test oracle: 94 DAX expressions bucketed a/b/c).
+- **PromoteHeaders**: if `pbi-dm-signature.py` reports `promoted_header_tables` (the model's M-query used `Table.PromoteHeaders`), the warehouse table's real columns are auto-named (`C1`, `C2`, …) with the semantic names in row 0 — the TMSL `sourceColumn` names will NOT resolve. Verify the landed table's real columns and remap with `convert-model.rb --table-map` (in Sigma formulas the columns appear as `C 1`, `C 2`, … and in JOIN SQL alias them, e.g. `c.C2 AS CUSTOMER_NAME`).
 - **Known gap `j89`**: the Snowflake `Snowflake.Databases(...) + Navigation` M pattern isn't parsed → pass `database`/`schema` explicitly until fixed.
 - **DAX gaps → gap-scout**: for measures the converter buckets `b` (restructure) or `c` (no-equivalent) — `RANKX`, `ALLEXCEPT`, `SUMMARIZE`, `USERELATIONSHIP`, `PATH*` — spawn the **gap-scout** sub-agent (`scripts/gap-scout.md`): it proposes a Sigma translation, validates it against the live API (`scripts/scout-validate.py`), and persists the rule to `~/.powerbi-to-sigma/learned-rules.yaml` (loaded by `scripts/learned-rules.py`) so future conversions auto-apply it. Time-intelligence (YTD/SPLY) is usually translatable — see `refs/measure-patterns.md`, not the scout.
 

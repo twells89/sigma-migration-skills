@@ -610,6 +610,24 @@ def build_element(rec, fields, masters, extra_data = [])
   end
 
   master = visual_master(rec, fields)
+  # E-06: a value-driven visual with NO resolvable field binding would emit a
+  # source-less element with a "[]" formula column (an empty PBI `kpi {}` or a
+  # cardVisual->bar approximation), which the API rejects with
+  # `source: Invalid value: undefined`. Skip it loudly rather than ship a broken
+  # element. (control/text/image are handled elsewhere and legitimately carry no
+  # value binding, so they are NOT in this set.)
+  value_driven = %w[kpi-chart bar-chart line-chart area-chart combo-chart
+                    scatter-chart pie-chart donut-chart region-map point-map
+                    table pivot-table].include?(kind)
+  if value_driven
+    all_qrs = (rec['bindings'] || {}).values.flatten.compact
+    if all_qrs.empty? || master.nil?
+      why = all_qrs.empty? ? 'no field bindings' : 'no resolvable master element'
+      warn "[build-workbook] WARN visual '#{rec['title'] || rec['visual_id']}' (#{kind}) has " \
+           "#{why} — element SKIPPED (would emit a source-less \"[]\" column the API rejects)."
+      return nil
+    end
+  end
   # bead 8vzj: a Sigma element sources exactly ONE master. visual_master picks the
   # one covering the MOST fields, but any bound field that cannot resolve on it
   # (not its master and not among its `alts`) is silently DROPPED. Warn loudly so
@@ -1045,6 +1063,26 @@ def build_element(rec, fields, masters, extra_data = [])
       end
     end
     if !group_ids.empty? && !calc_ids.empty?
+      # E-08: a time-intelligence calc (DateLookback / CumulativeSum) needs a DATE
+      # column in the grouping or it compiles to type:error at runtime. Warn when
+      # one is inlined into a purely categorical grouping (e.g. "Revenue vs PY %"
+      # in a customer/segment table) — the measure should instead be routed
+      # through a date-grouped prior-period element (see dax-restructure-patterns.rb).
+      time_intel = /\b(DateLookback|CumulativeSum)\s*\(/i
+      grouped_on_date = group_ids.any? do |gid|
+        f = (cols.find { |c| c['id'] == gid } || {})['formula'].to_s
+        f =~ /\b(date|month|year|quarter|week|day)\b/i || f =~ /DateTrunc\s*\(/i
+      end
+      unless grouped_on_date
+        cols.each do |c|
+          next unless calc_ids.include?(c['id']) && c['formula'].to_s =~ time_intel
+          dim_names = group_ids.map { |g| (cols.find { |x| x['id'] == g } || {})['name'] }.compact.join(', ')
+          warn "[build-workbook] WARN visual '#{name}': time-intel column '#{c['name']}' is inlined " \
+               "into a table grouped only by categorical column(s) (#{dim_names}) — Sigma " \
+               "DateLookback/CumulativeSum needs a date-grouped context and will compile to " \
+               "type:error. Route this measure through a date-grouped prior-period element."
+        end
+      end
       el['groupings'] = [{ 'id' => "#{eid}-g", 'groupBy' => group_ids, 'calculations' => calc_ids }]
     end
   when 'pivot-table'
