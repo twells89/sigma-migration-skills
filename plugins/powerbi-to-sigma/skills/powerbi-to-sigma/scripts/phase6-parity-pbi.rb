@@ -49,6 +49,8 @@ require 'time'
 opts = { extract: false, tol: 0.02 }
 OptionParser.new do |p|
   p.on('--emit-dax')            { opts[:emit] = true }
+  p.on('--local-sql', 'OFFLINE oracle: build the plan from warehouse-SQL `expected` rows (--expected) instead of Power BI executeQueries. No api.powerbi.com / Entra / workspace id needed — use for warehouse-backed models.') { opts[:local_sql] = true }
+  p.on('--expected PATH', 'warehouse-SQL oracle results { "<chart>": [[dim,val],...] } — produced by running build-oracle-sql.rb output via mcp__sigma-mcp-v2__query (type:connection). Used with --local-sql.') { |v| opts[:expected] = v }
   p.on('--finalize')            { opts[:finalize] = true }
   p.on('--workspace ID')        { |v| opts[:ws] = v }
   p.on('--dataset ID')          { |v| opts[:ds] = v }
@@ -149,6 +151,34 @@ def write_harness
   File.write(HARNESS, HARNESS_SRC) unless File.exist?(HARNESS) && File.read(HARNESS) == HARNESS_SRC
 end
 
+if opts[:local_sql]
+  # OFFLINE warehouse-SQL oracle (no Power BI service). `expected` rows were
+  # produced by running build-oracle-sql.rb's SQL via mcp__sigma-mcp-v2__query
+  # (type:connection) against the SAME warehouse the data model reads. Build the
+  # exact same plan the DAX path produces so --finalize is unchanged.
+  %i[expected wb out].each { |k| abort("missing --#{k}") unless opts[k] }
+  expected = JSON.parse(File.read(opts[:expected]))
+  charts = expected.keys.map do |name|
+    { 'chart' => name, 'expected' => expected[name], 'workbook_id' => opts[:wb] }
+  end
+  abort("--expected #{opts[:expected]} has no charts") if charts.empty?
+  plan = { 'extract' => opts[:extract], 'source' => 'warehouse-sql-oracle', 'charts' => charts }
+  File.write(opts[:out], JSON.pretty_generate(plan))
+  warn "[phase6-pbi] wrote plan with WAREHOUSE-SQL `expected` rows (offline oracle, no Power BI) -> #{opts[:out]}"
+  freshness_banner
+  puts '=' * 70
+  puts 'PHASE 6 (warehouse-SQL oracle) — collect Sigma actuals, one MCP query per chart:'
+  puts '=' * 70
+  charts.each_with_index do |c, i|
+    puts "  [#{i + 1}/#{charts.size}] #{c['chart']}  (expected #{c['expected'].size} row(s) from warehouse SQL)"
+  end
+  puts ''
+  puts 'Save actuals to parity-actuals.json: { "<chart name>": [[dim,val],...] }'
+  puts "Then: ruby scripts/phase6-parity-pbi.rb --finalize --plan #{opts[:out]} \\"
+  puts "        --actuals <actuals> --out-dir <dir>#{opts[:extract] ? ' --extract-mode --extract-tol ' + opts[:tol].to_s : ''}"
+  exit 0
+end
+
 if opts[:emit]
   # E-11: the workspace + dataset ids needed for DAX parity ARE captured earlier —
   # pbi-freshness.py writes them into freshness.json (keys workspace/dataset). Auto-
@@ -178,7 +208,7 @@ if opts[:emit]
     end
     { 'chart' => name, 'expected' => exp, 'workbook_id' => opts[:wb] }
   end
-  plan = { 'extract' => opts[:extract], 'charts' => charts }
+  plan = { 'extract' => opts[:extract], 'source' => 'powerbi-executequeries', 'charts' => charts }
   File.write(opts[:out], JSON.pretty_generate(plan))
   warn "[phase6-pbi] wrote plan with PBI `expected` rows -> #{opts[:out]}"
   freshness_banner # bead fmte — staleness leads, before any side-by-side
@@ -260,7 +290,7 @@ if opts[:finalize]
   summary = {
     'workbook_id' => plan.dig('charts', 0, 'workbook_id'),
     'ran_at' => Time.now.utc.iso8601,
-    'source' => 'powerbi-executequeries',
+    'source' => plan['source'] || 'powerbi-executequeries',
     'mode' => opts[:extract] ? 'extract' : 'strict',
     'charts_total' => total, 'charts_pass' => passed.size, 'charts_fail' => divergent,
     'charts_stale_explained' => stale_expl,
