@@ -916,7 +916,7 @@ end
 # Pushes a control-scope CONTRACT row (scope/sourceName/status) or an `unbound` row so the
 # signal is NEVER silently dropped. Dedupes by target column (the same column filtered by
 # two controls is one Sigma control — controlIds are unique).
-def build_qs_control(wrap, master_cols, calc, dmel, scope, unbound, seen_cols, warnings)
+def build_qs_control(wrap, master_cols, calc, dmel, scope, unbound, seen_cols, warnings, masters = {})
   ctype, body = nil, nil
   raw_col = nil; src_kind = :filter
   QS_CONTROL_WRAPS.each do |k|
@@ -964,9 +964,21 @@ def build_qs_control(wrap, master_cols, calc, dmel, scope, unbound, seen_cols, w
                             'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => col_id },
               'filters' => [{ 'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => col_id }])
   end
+  # Cross-master control fan-out (RCA #4 follow-up): a QS sheet control is GLOBAL, so it
+  # must also drive any SECONDARY master that carries the same column — else charts on a
+  # second dataset (e.g. the Weekly Tasks combo on the aggregation table) ignore the filter
+  # and render all-data instead of the controlled slice. Append a filter target per
+  # secondary master that has the column.
+  wired = [{ 'elementId' => 'master', 'columnId' => col_id }]
+  (masters || {}).each_value do |mm|
+    next if mm[:sid] == 'master' || !mm[:labels].include?(disp(raw_col))
+    scol = master_ref(raw_col, calc, mm[:cols], mm[:dmel])
+    el['filters'] << { 'source' => { 'kind' => 'table', 'elementId' => mm[:sid] }, 'columnId' => scol['id'] }
+    wired << { 'elementId' => mm[:sid], 'columnId' => scol['id'] }
+  end
   scope << { 'controlId' => ctl_id, 'sourceName' => sig, 'status' => 'wired',
              'controlType' => el['controlType'], 'scope' => 'page', 'mustReach' => [],
-             'wired' => [{ 'elementId' => 'master', 'columnId' => col_id }] }
+             'wired' => wired }
   el
 end
 
@@ -1119,6 +1131,11 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       bars.each  { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; ycids << id }
       lines.each { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; ycids << { 'columnId' => id, 'type' => 'line' } }
       el = base.merge('columns' => cols, 'xAxis' => { 'columnId' => did }, 'yAxis' => { 'columnIds' => ycids })
+      # A QS ComboChartVisual with NO LineValues (all measures in BarValues) is a clustered
+      # BAR chart, not a combo — Sigma renders a combo-chart's extra series as a line, so a
+      # bars-only QS combo (e.g. Arine "Weekly Tasks": Tasks Closed + Generated) would show a
+      # spurious line. Emit bar-chart when there are no line series.
+      el['kind'] = 'bar-chart' if lines.empty?
       cclr = qs_color(inner, w, el, [did], [], calc, mc_, dmel_, m_)  # combo: by-dimension only
       el['color'] = cclr if cclr && cclr['by'] == 'category'
       rms = qs_reference_lines(inner, calc, mc_, dmel_, m_, title, build_warnings)
@@ -1265,7 +1282,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     next unless wrap.is_a?(Hash)
     n_control_signals += 1
     ctl = build_qs_control(wrap, master_cols, calc, DMEL,
-                           control_scope, control_unbound, control_seen_cols, build_warnings)
+                           control_scope, control_unbound, control_seen_cols, build_warnings, MASTERS)
     if ctl
       elements.unshift(ctl)   # controls render at the top of the page band
       vis_map[ctl['controlId']] = ctl['id']   # layout step can place it if QS gives coords
@@ -1355,11 +1372,12 @@ secondary_masters = MASTERS.values.reject { |mm| mm[:sid] == 'master' || mm[:col
     'columns' => mm[:cols].values }
 end
 STDERR.puts "multi-master: routed visuals across #{1 + secondary_masters.size} master(s) (#{secondary_masters.map { |s| s['name'] }.join(', ')})" unless secondary_masters.empty?
-# QS sheet controls are global; this builder wires them to the PRIMARY master only, so
-# charts on a SECONDARY master are not yet driven by the page controls — surface it loud.
+# Page controls fan out to every master that SHARES the control's column (build_qs_control).
+# A control whose column exists ONLY on the primary still won't constrain a secondary
+# master (that dataset lacks the column) — surface it so the gap is understood, not silent.
 unless secondary_masters.empty?
   build_warnings << { 'visual' => '(controls)', 'type' => 'MultiMasterControlScope',
-                      'reason' => "page controls filter the primary master only; #{secondary_masters.size} secondary master(s) (#{secondary_masters.map { |s| s['name'] }.join(', ')}) are NOT yet driven by the controls — re-author cross-master control targets in Sigma if needed" }
+                      'reason' => "page controls fan out to secondary master(s) (#{secondary_masters.map { |s| s['name'] }.join(', ')}) for SHARED columns; a control on a column that exists only on the primary does not constrain a secondary master that lacks it — verify cross-dataset filter coverage in Sigma" }
 end
 
 # Scatter charts emit a hidden GROUPED source table (one row per point dim). Park
