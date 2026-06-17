@@ -193,6 +193,15 @@ def qs_window_func?(expr)
 end
 
 # minimal QuickSight-expr → Sigma-formula translator for calc fields referenced by visuals
+# QuickSight/moment date-format tokens -> Sigma strftime (RCA #11). Longest-first.
+def qs_datefmt_to_strftime(fmt)
+  return nil if fmt.nil? || fmt.to_s.strip.empty?
+  s = fmt.dup
+  [%w[MMMM %B], %w[MMM %b], %w[MM %m], ['DD', '%d'], ['D', '%-d'],
+   %w[YYYY %Y], %w[YY %y], %w[HH %H], %w[mm %M], %w[ss %S]].each { |q, c| s = s.gsub(q, c) }
+  s
+end
+
 def qs_expr_to_sigma(expr, dmel, params = {})
   s = expr.to_s.dup
   # ${Param} -> inlined default constant (what-if parameters have no DM-formula equivalent).
@@ -606,6 +615,46 @@ route_master = lambda do |inner|
   MASTERS[e['id']]
 end
 
+# RCA #11 / bead 3goo.11: a QS InsightVisual with a single MAX/MIN computation + a
+# CustomNarrative ("Report Date: <expr>") is reproducible as a Sigma TEXT element with a
+# {{Agg([master/col]) | strftime}} dynamic value — not a hard drop. Returns the text body
+# or nil (skip) when the computation isn't a simple single-value one OR the column isn't
+# covered by a registered master (e.g. its dataset wasn't migrated). Conservative: emits
+# only when a master already covers the column, so it never emits a broken ref.
+qs_insight_text = lambda do |inner|
+  cfg = inner['InsightConfiguration'] || {}
+  comps = cfg['Computations'] || []
+  narr = cfg.dig('CustomNarrative', 'Narrative')
+  return nil if comps.size != 1 || narr.nil? || narr.to_s.strip.empty?
+  ckey, comp = comps.first.first
+  agg = ckey == 'MaximumMinimum' ? (comp['Type'].to_s.upcase == 'MINIMUM' ? 'Min' : 'Max') : nil
+  return nil unless agg
+  colname = nil; datefmt = nil
+  walk = lambda do |o|
+    if o.is_a?(Hash)
+      colname ||= o.dig('Column', 'ColumnName')
+      datefmt ||= o.dig('FormatConfiguration', 'DateTimeFormat') || o['DateTimeFormat']
+      o.each_value { |v| walk.call(v) }
+    elsif o.is_a?(Array) then o.each { |v| walk.call(v) }
+    end
+  end
+  walk.call(comp)
+  return nil unless colname
+  dname = disp(colname)
+  target = MASTERS.values.find { |mm| mm[:labels].include?(dname) }
+  return nil unless target   # dataset not migrated (e.g. Arine REPORT_RUN_DATES) -> skip
+  master_ref(colname, {}, target[:cols], target[:dmel])  # land the column on that master
+  fmt = qs_datefmt_to_strftime(datefmt)
+  val = "#{agg}([#{target[:name]}/#{dname}])"
+  value = fmt ? "{{#{val} | #{fmt}}}" : "{{#{val}}}"
+  prefix = narr.gsub(%r{<expression>.*?</expression>}m, '').gsub(/<[^>]+>/, '')
+  { '&amp;' => '&', '&nbsp;' => ' ', '&#39;' => "'", '&quot;' => '"' }
+    .each { |k, v| prefix = prefix.gsub(k, v) }
+  prefix = prefix.tr(" ", ' ').gsub(/\s+/, ' ').strip
+  align = narr =~ /align="right"/ ? 'right' : (narr =~ /align="center"/ ? 'center' : 'left')
+  "<p style=\"text-align: #{align}\"><span style=\"font-size: 16px\">#{prefix} #{value}</span></p>"
+end
+
 def fmt_for(name)
   case name
   when /margin|pct|percent|ratio|rate/i then '.1%'
@@ -951,6 +1000,16 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       reason = QS_UNSUPPORTED[vtype] || "unrecognized QuickSight visual type '#{vtype}'"
       build_warnings << { 'visual' => title, 'type' => vtype, 'reason' => reason }
       unless fk
+        # RCA #11: a simple single-computation Insight narrative -> Sigma text element.
+        if vtype == 'InsightVisual' && (ibody = qs_insight_text.call(inner))
+          tid = nid('txt')
+          elements << { 'id' => tid, 'kind' => 'text', 'name' => 'Insight', 'body' => ibody }
+          vis_map[inner['VisualId']] = tid
+          build_warnings.pop   # supersede the generic "dropped" warning we just queued
+          build_warnings << { 'visual' => title, 'type' => vtype, 'reason' => 'migrated as a dynamic text element (single-computation narrative)' }
+          STDERR.puts "  ~ InsightVisual (#{title}): migrated as dynamic text"
+          next
+        end
         STDERR.puts "  ! skipped #{vtype} (#{title}): #{reason}"
         next
       end
