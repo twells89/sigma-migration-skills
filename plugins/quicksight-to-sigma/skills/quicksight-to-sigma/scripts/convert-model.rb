@@ -263,10 +263,14 @@ if opts[:fixup]
     id_to_name[el['id']] = el['name']
   end
 
-  # Valid bracket-ref prefixes: every element's display name AND its raw warehouse name
-  # (source.path tail) — passthrough refs use the raw name, cross-element refs the display.
+  # Valid bracket-ref prefixes: every element's display name, its raw warehouse name
+  # (source.path tail), AND the "Custom SQL" self-reference idiom that kind:sql elements
+  # (incl. the synthesized join element) use for their own output columns — without it the
+  # prune wrongly drops every legit join-element column (regression caught on a live 3-way
+  # join). Passthrough refs use the raw name; cross-element refs the display name.
   known_refs = all_els.flat_map { |e| [e['name'], (e.dig('source', 'path') || []).last] }
                       .compact.map { |n| n.downcase }.to_set
+  known_refs << 'custom sql'
 
   all_els.each do |el|
     src = el['source'] || {}
