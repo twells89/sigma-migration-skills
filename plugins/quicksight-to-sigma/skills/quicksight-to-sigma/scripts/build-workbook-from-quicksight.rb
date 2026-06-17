@@ -715,8 +715,21 @@ def qs_textbox_to_markdown(html)
   s = s.gsub(%r{<br\s*/?>}i, "\n").gsub(%r{</p>}i, "\n\n").gsub(%r{</div>}i, "\n\n")
   s = s.gsub(/<[^>]+>/, '')
   { '&amp;' => '&', '&lt;' => '<', '&gt;' => '>', '&nbsp;' => ' ',
-    '&#39;' => "'", '&quot;' => '"' }.each { |k, v| s = s.gsub(k, v) }
-  s.split("\n").map(&:strip).reject(&:empty?).join("\n\n").strip
+    '&#39;' => "'", '&quot;' => '"', " " => ' ' }.each { |k, v| s = s.gsub(k, v) }
+  paras = s.split("\n").map(&:strip).reject(&:empty?)
+  # QS wraps each styled run (e.g. a bold word) in its own block, so a single sentence
+  # fragments into several "paragraphs" ("The x-axis represents the" / "starting date" /
+  # "of the timeframe..."). Re-join a SHORT fragment that doesn't end a sentence into the
+  # next paragraph, so captions read as prose instead of clipped stubs (RCA #18 polish).
+  merged = []
+  paras.each do |p|
+    if !merged.empty? && merged.last.length < 40 && merged.last !~ /[.!?:]\s*$/
+      merged[-1] = "#{merged.last} #{p}".strip
+    else
+      merged << p
+    end
+  end
+  merged.join("\n\n").strip
 end
 
 # Column-typed parameter? (ParameterDeclaration whose default came from a column.) We map
