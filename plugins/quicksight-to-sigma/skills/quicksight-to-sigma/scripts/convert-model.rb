@@ -32,6 +32,7 @@
 #   ruby scripts/convert-model.rb --fixup --in converter-out.json --discover-dir DIR --folder-id ID --out dm-spec.json
 require 'json'
 require 'optparse'
+require 'set'
 
 opts = {}
 OptionParser.new do |o|
@@ -262,6 +263,11 @@ if opts[:fixup]
     id_to_name[el['id']] = el['name']
   end
 
+  # Valid bracket-ref prefixes: every element's display name AND its raw warehouse name
+  # (source.path tail) — passthrough refs use the raw name, cross-element refs the display.
+  known_refs = all_els.flat_map { |e| [e['name'], (e.dig('source', 'path') || []).last] }
+                      .compact.map { |n| n.downcase }.to_set
+
   all_els.each do |el|
     src = el['source'] || {}
     cols = el['columns'] || []
@@ -272,6 +278,46 @@ if opts[:fixup]
         c['name'] = titleize(alias_raw) unless alias_raw.nil? || alias_raw.empty?
       end
       c['name'] = sanitize_name(c['name']) if c['name']
+    end
+
+    # RCA #9 / bead 3goo.9: normalize calc-column bracket refs to the EXACT sibling display
+    # name (case-insensitive resolution). The converter sometimes emits `[Hours to Close]`
+    # while the sibling column is "Hours To Close" — "not a sibling column" at POST. Only
+    # rewrites the column part of an existing [..]/[Elem/..] ref that matches a sibling under
+    # a different case; cross-element refs to non-siblings are left untouched.
+    sib = {}
+    cols.each { |c| (sib[c['name'].to_s.strip.downcase] = c['name']) if c['name'] }
+    cols.each do |c|
+      next unless c['formula'].is_a?(String)
+      c['formula'] = c['formula'].gsub(/\[([^\]\/]*\/)?([^\]\/]+)\]/) do
+        pre = Regexp.last_match(1); nm = Regexp.last_match(2)
+        canon = sib[nm.strip.downcase]
+        canon && canon != nm ? "[#{pre}#{canon}]" : Regexp.last_match(0)
+      end
+    end
+
+    # Drop calc columns whose bracket refs can't resolve — a ref with `/` must name a known
+    # element (prefix before the first `/`), a bare ref must be a sibling. These are
+    # aggregate-of-aggregate / metric-style calc fields the converter emitted but can't be
+    # row-level DM columns (e.g. an "Outreach/Task Rate" dividing two distinct_countIf
+    # metrics); they fail POST regardless. Drop + warn rather than emit an unpostable spec
+    # (RCA #9/#10, bead 3goo.9 — matches the manual Arine fix).
+    dropped = []
+    el['columns'] = cols.reject do |c|
+      next false unless c['formula'].is_a?(String)
+      bad = c['formula'].scan(/\[([^\]]+)\]/).flatten.any? do |ref|
+        if ref.include?('/')
+          !known_refs.include?(ref.split('/', 2).first.strip.downcase)
+        else
+          !sib.key?(ref.strip.downcase)
+        end
+      end
+      dropped << c['name'] if bad
+      bad
+    end
+    unless dropped.empty?
+      el['order'] = (el['order'] || []).reject { |oid| el['columns'].none? { |c| c['id'] == oid } } if el['order']
+      STDERR.puts "fixup: dropped #{dropped.size} calc column(s) with unresolvable refs on \"#{el['name']}\": #{dropped.join(', ')}"
     end
 
     # NOTE: window/table-calc neutralization, [Custom SQL/RAW] ref rewriting,
