@@ -107,6 +107,46 @@ No local converter build (CONVERTER_PATH unset) — use the MCP converter:
 """)
     sys.exit(3)
 
+def auto_pick_dm(wd):
+    """Phase 2.5 (automatic) — score existing Sigma DMs against this model's
+    signature and auto-reuse a strong match, so we don't add a 4th near-identical
+    "Apparel" DM when one already covers the same warehouse table. Returns
+    (dm_id|None, match_dict|None). Best-effort: never raises — on any error the
+    caller falls back to building a new DM.
+
+    The picker already auto-reuses a column-SUPERSET match (score >= 0.85); the
+    reason reuse was under-leveraged is that this scan was never run unless the
+    caller hand-passed --reuse-dm. We also override the picker's tie-guard for a
+    guaranteed-safe SUPERSET (same tables + all referenced columns present): a
+    score tie there is exactly the duplicate-DM sprawl we want to collapse, so we
+    reuse through it instead of falling back to build-new."""
+    sig_path   = os.path.join(wd, "dm-signature.json")
+    match_path = os.path.join(wd, "dm-match.json")
+    model_path = os.path.join(wd, "model.tml")
+    try:
+        sig_cmd = [sys.executable, os.path.join(HERE, "ts-dm-signature.py"),
+                   "--tml", model_path, "--out", sig_path]
+        if os.environ.get("TS_DB"):     sig_cmd += ["--database", os.environ["TS_DB"]]
+        if os.environ.get("TS_SCHEMA"): sig_cmd += ["--schema", os.environ["TS_SCHEMA"]]
+        subprocess.run(sig_cmd, check=True, capture_output=True, text=True)
+        # Low auto-pick threshold (0.5) so a DM over the SAME table (table_match
+        # 1.0) with even partial column coverage is a candidate; the superset
+        # override below is what makes a guaranteed-safe reuse fire through ties.
+        subprocess.run(["ruby", os.path.join(HERE, "find-or-pick-dm.rb"),
+                        "--workbook-signature", sig_path, "--out", match_path,
+                        "--auto-pick", "--auto-pick-threshold", "0.5"],
+                       capture_output=True, text=True)
+        if not os.path.exists(match_path):
+            return None, None
+        m = json.load(open(match_path))
+        # The picker (reuse-first --auto-pick) already guards on table coverage and
+        # collapses duplicate-DM ties — reuse only when it actually auto-picked.
+        picked = m.get("recommended_dm_id") if m.get("auto_picked") else None
+        return picked, m
+    except Exception as ex:
+        print(f"  WARN: DM-reuse scan skipped ({ex}) — building a new DM")
+        return None, None
+
 def find_denorm(dm):
     """Read a DM's spec back and locate the denormalized "<root> View" element.
     Returns (denormElemId, denormName)."""
@@ -323,6 +363,8 @@ def main():
     ap.add_argument("--converted", default=None, help="JSON output of the convert_thoughtspot_to_sigma MCP tool")
     ap.add_argument("--reuse-dm", default=None, help="existing Sigma dataModelId to reuse — skips convert + POST "
                     "(decided via ts-dm-signature.py + find-or-pick-dm.rb; see SKILL.md step 2.5)")
+    ap.add_argument("--no-reuse", action="store_true", help="skip the automatic DM-reuse scan and always build a "
+                    "new data model (the scan runs by default and auto-reuses a same-table column-superset DM)")
     a = ap.parse_args()
     wd = resolve_workdir(a.workdir)
     offline = bool(a.model_tml)
@@ -357,6 +399,24 @@ def main():
         from concurrent.futures import ThreadPoolExecutor
         t_lane = time.time()
         lb_lane = ThreadPoolExecutor(max_workers=1).submit(collect_liveboards, a, model_name)
+
+    # Phase 2.5 — automatic DM-reuse scan (runs by default; opt out with
+    # --no-reuse, override with an explicit --reuse-dm). Avoids DM sprawl and
+    # skips the convert + POST + validate when an existing DM already covers the
+    # model's table(s) + columns.
+    if not a.reuse_dm and not a.no_reuse:
+        picked, match = auto_pick_dm(wd)
+        if picked:
+            a.reuse_dm = picked
+            top = (match.get("candidates") or [{}])[0]
+            print(f"  ♻ DM-REUSE (auto): '{top.get('dm_name')}' [{picked}]  "
+                  f"score {match.get('score')}, {int((top.get('column_match') or 0)*100)}% cols / "
+                  f"{int((top.get('table_match') or 0)*100)}% tables — convert + POST skipped")
+            if match.get("warning"):
+                print(f"     ⚠ {match['warning']}")
+        else:
+            r = (match or {}).get("rationale") or "no candidate"
+            print(f"  DM-reuse scan: no safe match ({r}) — building a new DM")
 
     if a.reuse_dm:
         dm = a.reuse_dm

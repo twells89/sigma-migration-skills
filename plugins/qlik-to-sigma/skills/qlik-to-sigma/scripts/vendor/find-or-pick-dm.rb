@@ -343,20 +343,29 @@ end
 best = candidates.first
 second = candidates[1]
 
-# Auto-pick gate: only fires when (a) --auto-pick flag is set, (b) top score
-# clears the auto-pick threshold, and (c) the next candidate is at least
-# auto_pick_tie_window below the top. The tie check protects against silently
-# picking the wrong one of two very-close candidates (e.g., a duplicate DM).
+# Auto-pick gate (reuse-first). Fires when --auto-pick is set and the top
+# candidate (a) clears the auto-pick threshold AND (b) COVERS ALL of the
+# workbook's source tables (table_match 1.0). Table coverage is the safety
+# invariant: a DM that sources every table the workbook needs can satisfy every
+# column ref through its element set, so reusing it is safe; a DM missing a table
+# is never auto-picked (its denorm view can't resolve the missing columns).
+#
+# We deliberately DO NOT block on a score tie here. A tie among table-covering
+# candidates is duplicate-DM SPRAWL (the same star modeled two or three times) —
+# exactly what reuse-first exists to collapse — so we take the top (the
+# deterministic tie-break already prefers a name match, then the fewest extra
+# columns, over the most-recently-updated set). A column-SUPERSET (every
+# referenced column present, column_match 1.0) is the safest case and always
+# qualifies. Callers should reuse `recommended_dm_id` only when `auto_picked`.
 auto_pick_threshold  = opts[:auto_pick_threshold]  || 0.55
 auto_pick_tie_window = opts[:auto_pick_tie_window] || 0.05
 tie_with_second      = best && second && (best['score'] - second['score']) < auto_pick_tie_window
-# A same-score tie is safe to pick through when the deterministic tie-break
-# landed on an exact workbook-name match — the hazard the tie window guards
-# against is arbitrary ordering among lookalikes, which no longer applies.
 best_name_matches    = best && !sig_name_norm.empty? && normalize_col(best['dm_name']) == sig_name_norm
-auto_picked          = opts[:auto_pick] && best && best['score'] >= auto_pick_threshold && (!tie_with_second || best_name_matches)
+best_covers_tables   = best && best['table_match'].to_f >= 1.0
+best_is_superset     = best_covers_tables && best['column_match'].to_f >= 1.0
+auto_picked          = !!(opts[:auto_pick] && best && best['score'] >= auto_pick_threshold && best_covers_tables)
 
-# Standard recommend path keeps the old semantics.
+# Standard recommend path keeps the old semantics (printed for human opt-in).
 recommended_via_std  = best && best['score'] >= opts[:min_score]
 recommended_dm_id    = (auto_picked || recommended_via_std) ? best['dm_id'] : nil
 
@@ -364,11 +373,11 @@ rationale =
   if best.nil?
     'no DMs in org'
   elsif auto_picked
-    "AUTO-PICKED at score #{best['score']} (>= #{auto_pick_threshold}, no tie within #{auto_pick_tie_window}). #{best['shared_columns'].size}/#{tableau_columns.size} cols matched. Caller must WARN about #{best['extra_columns']} inherited columns."
-  elsif best['score'] >= 0.85
-    "auto-reuse candidate (#{best['shared_columns'].size}/#{tableau_columns.size} cols, #{best['shared_tables'].size}/#{tableau_tables.size} tables)"
-  elsif opts[:auto_pick] && best['score'] >= auto_pick_threshold && tie_with_second
-    "would auto-pick but second candidate at #{second['score']} is within #{auto_pick_tie_window} — TIE — falling back to ASK USER"
+    kind = best_is_superset ? 'column-superset' : 'covers all source tables'
+    tie  = tie_with_second ? " (collapsing a #{best['score']}-score tie — duplicate-DM sprawl)" : ''
+    "AUTO-PICKED at score #{best['score']} — #{kind}#{tie}. #{best['shared_columns'].size}/#{tableau_columns.size} cols, #{best['shared_tables'].size}/#{tableau_tables.size} tables matched. Caller must WARN about #{best['extra_columns']} inherited columns."
+  elsif opts[:auto_pick] && best['score'] >= auto_pick_threshold && !best_covers_tables
+    "score #{best['score']} clears the bar but the candidate is MISSING source table(s) #{best['missing_tables'].join(', ')} — not a safe reuse — build a new DM"
   elsif best['score'] >= opts[:min_score]
     'ambiguous match — ASK USER before reusing'
   else

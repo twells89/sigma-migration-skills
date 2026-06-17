@@ -68,7 +68,9 @@ gap-scout or `--force`), `12` = pass 1 done, parity PENDING (collect mcp-v2 actu
 then `--finalize`), `4` = DM posted but the workbook layer needs the agent path,
 `3` = a gate failed, `14` = migration GREEN + Phase E proposals pending
 acceptance, `0` = ALL gates green (only reachable via `--finalize`).
-DM-reuse defaults to BUILD NEW — candidates are printed; `--reuse-dm` opts in.
+DM-reuse is **reuse-first** — auto-reuses an existing DM that covers all the
+workbook's source tables (collapsing duplicate-DM sprawl, skipping the POST);
+`--reuse-dm <id>` pins one, `--skip-reuse-scan` forces build-new.
 Optional `--enhance [--enhance-accept <ids|all-low-risk>]` runs Phase E
 (opt-in) after all gates are green — see the Phase E section below.
 

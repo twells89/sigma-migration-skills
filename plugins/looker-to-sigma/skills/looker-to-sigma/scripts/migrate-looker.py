@@ -652,13 +652,19 @@ console.error('stats:', JSON.stringify(res.stats));
         run(["python3", os.path.join(HERE, "lookml-dm-signature.py"),
              "--lookml-dir", lookml_dir, "--label", dash["title"], "--out", sig])
         rc, _ = run(["ruby", os.path.join(HERE, "find-or-pick-dm.rb"),
-                     "--workbook-signature", sig, "--out", match_out], check=False)
+                     "--workbook-signature", sig, "--out", match_out,
+                     "--auto-pick", "--auto-pick-threshold", "0.5"], check=False)
         try:
             match = json.load(open(match_out))
             cands = match.get("candidates") or []
             for c in cands[:5]:
                 print(f"     candidate: {c.get('dm_name')} ({c.get('dm_id')}) score={c.get('score')}")
-            if rc == 0 and cands:
+            if match.get("auto_picked") and match.get("recommended_dm_id"):
+                a.reuse_dm = match["recommended_dm_id"]
+                print(f"   DM-REUSE (auto): {match.get('rationale')}")
+                if match.get("warning"):
+                    print(f"   ⚠ {match.get('warning')}")
+            elif rc == 0 and cands:
                 print("   ➤ a reusable DM scored ≥ threshold — DEFAULT IS STILL BUILD-NEW. To reuse it, re-run with:")
                 print(f"       --reuse-dm {cands[0].get('dm_id')}")
             else:

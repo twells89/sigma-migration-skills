@@ -54,8 +54,12 @@ python3 scripts/migrate-thoughtspot.py --model-tml fixtures/retail-analytics-mod
 ```
 
 - **Decision points are flags with safe defaults, never silent:** the DM-reuse
-  check (step 2.5) always runs and PRINTS candidates+scores; the default is
-  build-new — reuse only via an explicit `--reuse-dm <id>`. The Sigma folder is
+  scan (step 2.5) runs automatically before convert and PRINTS the chosen
+  candidate + score (or why none matched). The default is now **reuse-first** —
+  it auto-reuses an existing DM that covers all the model's warehouse table(s)
+  (and, through a score tie, a column-superset DM), collapsing duplicate-DM
+  sprawl and skipping convert+POST. Opt out with `--no-reuse` (always build new)
+  or pin a specific model with `--reuse-dm <id>`. The Sigma folder is
   auto-resolved and printed when `SIGMA_FOLDER_ID` is unset.
 - **Freshness first:** before any side-by-side it prints the TS model/Liveboard
   modified times + a cheap `searchdata` aggregate probe vs a live warehouse
@@ -209,16 +213,20 @@ ruby scripts/find-or-pick-dm.rb --workbook-signature dm-signature.json \
 
 `ts-dm-signature.py` derives `{warehouse_tables, referenced_columns, measures}` from the
 exported model TML (`model_tables[].fqn` is a TS guid, so pass the same `TS_DB`/`TS_SCHEMA`
-you export for `migrate.py`). Decision:
-- **Score ≥ 0.6** → **ASK the user** reuse-vs-new: surface the candidate name, matched cols
-  (N/M), and the inherited-extras warning from `dm-match.json`. If they reuse, run a
+you export for `migrate.py`). **`migrate.py` does all of this automatically** (Phase 2.5 via
+`auto_pick_dm`) before convert — it auto-reuses when the top candidate covers ALL the model's
+warehouse tables (`table_match` 1.0), taking a column-superset match even through a score
+tie (the tie is duplicate-DM sprawl to collapse, not an ambiguity), and PRINTS the choice +
+inherited-column warning. Opt out with `--no-reuse`; pin one with `--reuse-dm <id>`. When
+driving the picker by hand:
+- **Top candidate covers all tables (`table_match` 1.0), score ≥ 0.6** → reuse: run a
   **shape preflight** first — read the candidate DM's spec back and confirm every column the
   Liveboards reference resolves on the element you'll wire to (no `type=error` columns;
   the denormalized "<root> View" element vs separate dims) — then skip the DM POST and
   build the workbooks (step 4) against the matched `recommended_dm_id` + its element ids.
-  With `--auto-pick` a clear winner (no tie within 0.05) skips the prompt — still WARN
-  about inherited columns/RLS/metrics.
-- **Score < 0.6** → POST new and TELL the user no reusable DM was found.
+  WARN about inherited columns/RLS/metrics. (A DM that does NOT cover every table is never
+  auto-reused — its denorm view can't satisfy the missing column refs.)
+- **No table-covering candidate** → POST new and TELL the user no reusable DM was found.
 
 ## Scripts
 - `migrate-thoughtspot.py` — **ONE-COMMAND orchestrator** (preferred entry):

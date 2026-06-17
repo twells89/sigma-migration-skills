@@ -357,10 +357,22 @@ else
           '--discover-dir', WORK, '--out', sig_path])
     match_path = File.join(WORK, 'dm-match.json')
     fop_out, = Open3.capture2e('ruby', File.join(HERE, 'find-or-pick-dm.rb'),
-                               '--workbook-signature', sig_path, '--out', match_path)
+                               '--workbook-signature', sig_path, '--out', match_path,
+                               '--auto-pick', '--auto-pick-threshold', '0.5')
     match = File.exist?(match_path) ? (JSON.parse(File.read(match_path)) rescue {}) : {}
+    # Reuse-first (matches thoughtspot-to-sigma): the picker sets auto_picked only
+    # when the top candidate covers ALL of this analysis's source tables — a safe
+    # reuse that collapses duplicate-DM ties. When it fires, route into the
+    # `elsif opts[:reuse_dm]` branch below (skips the DM POST).
+    if !opts[:reuse_dm] && match['auto_picked'] && match['recommended_dm_id']
+      opts[:reuse_dm] = match['recommended_dm_id']
+      puts "   DM-REUSE (auto): #{match['rationale']}"
+      puts "   WARNING: #{match['warning']}" if match['warning']
+    end
     best = (match['candidates'] || []).first
-    if best && best['score'].to_f >= 0.6
+    if opts[:reuse_dm]
+      # auto-reuse fired — candidate hints would be misleading; stay quiet
+    elsif best && best['score'].to_f >= 0.6
       puts "   candidate: '#{best['dm_name']}' (#{best['dm_id']}) score=#{best['score']} — " \
            "#{(best['shared_columns'] || []).size} shared column(s), #{best['extra_columns']} inherited extra(s)"
       puts "   default = BUILD NEW. To reuse it instead, re-run with --reuse-dm #{best['dm_id']}"

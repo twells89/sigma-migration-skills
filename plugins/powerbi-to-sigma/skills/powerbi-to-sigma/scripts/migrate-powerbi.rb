@@ -103,6 +103,13 @@ OptionParser.new do |o|
   # with --enhance-accept <id,id,...> or 'all-low-risk'.
   o.on('--enhance')            {     opts[:enhance] = true }
   o.on('--enhance-accept L')   { |v| opts[:enhance_accept] = v }
+  # DM-REUSE (reuse-first). The scan runs by DEFAULT (Phase 2.9) and auto-reuses
+  # an existing Sigma data model that already covers this model's warehouse
+  # table(s) + columns, instead of building a 4th near-identical DM. --reuse-dm
+  # forces a specific existing dataModelId (skips the scan); --no-reuse always
+  # builds a new DM.
+  o.on('--reuse-dm ID')        { |v| opts[:reuse_dm] = v }
+  o.on('--no-reuse')           {     opts[:no_reuse] = true }
 end.parse!
 
 abort 'missing --tmsl' unless opts[:tmsl]
@@ -455,10 +462,95 @@ if chosen_all.any? { |c| c.to_s =~ /\babort\b/i }
 end
 
 # ---------------------------------------------------------------------------
-# Phase 3 — Build data model (fixups + validate + POST + readback)
+# Phase 2.9 — DM-REUSE scan (reuse-first). Runs by DEFAULT before the DM build:
+# score the existing Sigma DMs against this model's signature and AUTO-REUSE a
+# guaranteed-safe match (same warehouse table(s) + all referenced columns) so we
+# don't create a 4th near-identical DM and we skip the build + POST + validate.
+# Opt out with --no-reuse; force a specific id with --reuse-dm <id>. Best-effort:
+# any failure in the scan falls back to building a new DM — reuse never aborts.
+# ---------------------------------------------------------------------------
+reuse_dm_id = opts[:reuse_dm]
+if reuse_dm_id
+  puts
+  puts "── Phase 2.9 · DM-reuse (explicit --reuse-dm #{reuse_dm_id}) ──"
+elsif !opts[:no_reuse]
+  puts
+  puts '── Phase 2.9 · DM-reuse scan ──'
+  begin
+    sig_path   = File.join(WORK, 'dm-signature.json')
+    match_path = File.join(WORK, 'dm-match.json')
+    # Signature is parsed from the TMSL/model.bim (warehouse FQNs from the M
+    # partition expressions). Best-effort — tolerate a non-zero exit.
+    _so, _ss = Open3.capture2e(PY, File.join(HERE, 'pbi-dm-signature.py'),
+                               '--bim', opts[:tmsl], '--out', sig_path)
+    _so.each_line { |l| puts "   #{l.rstrip}" } unless _so.strip.empty?
+    if File.exist?(sig_path)
+      # find-or-pick-dm.rb exits non-zero when no candidate qualifies; that is
+      # NORMAL (build-new), so don't treat the exit code as fatal.
+      Open3.capture2e(ENV.to_h, 'ruby', File.join(HERE, 'find-or-pick-dm.rb'),
+                      '--workbook-signature', sig_path, '--out', match_path,
+                      '--auto-pick', '--auto-pick-threshold', '0.5')
+    end
+    match = (File.exist?(match_path) ? JSON.parse(File.read(match_path)) : {}) || {}
+    if match['auto_picked'] && match['recommended_dm_id']
+      reuse_dm_id = match['recommended_dm_id']
+      puts "   DM-REUSE (auto): #{match['rationale']}"
+      puts "   ⚠ #{match['warning']}" if match['warning']
+    else
+      top = (match['candidates'] || []).first(3)
+      if top.any?
+        puts "   no auto-safe match (#{match['rationale'] || 'below threshold'}) — building a new DM. Top candidate(s):"
+        top.each { |c| puts "     - #{c['dm_name']} [#{c['dm_id']}] score=#{c['score']}" }
+      else
+        puts "   no reuse candidate (#{match['rationale'] || 'none scored'}) — building a new DM"
+      end
+    end
+  rescue StandardError => e
+    puts "   [warn] DM-reuse scan skipped (#{e.message[0, 120]}) — building a new DM"
+    reuse_dm_id = nil
+  end
+end
+
+# ---------------------------------------------------------------------------
+# Phase 3 — Build data model (fixups + validate + POST + readback) — OR reuse an
+# existing DM (skip the build entirely; read its spec back instead).
 # ---------------------------------------------------------------------------
 hdr(3, TOTAL, 'Build data model')
 
+if reuse_dm_id
+  # REUSE PATH — skip convert-model.rb / validate / POST. GET the existing DM's
+  # spec once and derive the SAME downstream variables the build path produces:
+  #   dm_id    — the reused dataModelId
+  #   dm_spec  — full spec file (Phase 4 reads columns[].name + folderId from it)
+  #   dm_model — the spec itself (conv_elements is read from dm_model['pages'])
+  #   dm_rb    — readback-shaped {dataModelId, pages[].elements[]{id,name}}
+  # If anything here fails, fall back to building a new DM (reuse never aborts).
+  begin
+    require 'sigma_rest'
+    spec = Sigma.request(:get, "/v2/dataModels/#{reuse_dm_id}/spec")
+    spec = JSON.parse(spec) if spec.is_a?(String)
+    raise 'no pages in reused DM spec' unless spec.is_a?(Hash) && spec['pages']
+    dm_id   = reuse_dm_id
+    dm_spec = File.join(WORK, 'dm-spec.json')
+    File.write(dm_spec, JSON.pretty_generate(spec))
+    dm_model = spec                                   # conv_elements reads dm_model['pages']
+    dm_rb = {
+      'dataModelId' => dm_id,
+      'pages' => (spec['pages'] || []).map do |p|
+        { 'id' => p['id'], 'name' => p['name'], 'visibility' => p['visibility'],
+          'elements' => (p['elements'] || []).map { |e| { 'id' => e['id'], 'name' => e['name'] } } }
+      end
+    }
+    File.write(File.join(WORK, 'dm-readback.json'), JSON.pretty_generate(dm_rb))
+    n_el = dm_rb['pages'].flat_map { |p| p['elements'] || [] }.size
+    puts "   REUSING dataModelId = #{dm_id} (#{n_el} element(s)) — convert + POST skipped"
+  rescue StandardError => e
+    puts "   [warn] could not read reused DM #{reuse_dm_id} (#{e.message[0, 120]}) — building a new DM instead"
+    reuse_dm_id = nil
+  end
+end
+
+unless reuse_dm_id
 # Pre-fixup: the converter emits base warehouse-table columns with NO `name`
 # (Sigma derives the display name from the source column at POST time). But
 # validate-spec.rb resolves sibling refs by `name`, and a metric like
@@ -521,6 +613,7 @@ run!(['ruby', File.join(HERE, 'post-and-readback.rb'), '--type', 'datamodel',
 dm_rb = JSON.parse(File.read(dm_readback))
 dm_id = dm_rb['dataModelId']
 puts "   dataModelId = #{dm_id}"
+end # unless reuse_dm_id (build-new path)
 
 # ---------------------------------------------------------------------------
 # Phase 4 — Build workbook (auto master-map from converter + signals, then build+POST)

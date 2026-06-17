@@ -59,7 +59,8 @@ folder, look its id up first — `GET /v2/files?typeFilters=folder&limit=500`
 themselves on first run (`npm install` in `converter/`; needs Node ≥ 18 + npm).
 
 Chains every phase below in one process: module convert → DM-reuse scan
-(candidates printed; default BUILD NEW, `--reuse-dm` opts in) → DM
+(reuse-first: auto-reuses an existing DM covering all the report's source
+tables; `--reuse-dm` pins one, `--skip-reuse-scan` forces build-new) → DM
 post-and-readback (hard gate) → report convert `--dm` → remap → workbook
 post-and-readback (hard gate) → apply-layout (readback-verified) → parity.
 Inputs are the exported module JSON + report XML (Phase 0 / `cognos-discover.sh`

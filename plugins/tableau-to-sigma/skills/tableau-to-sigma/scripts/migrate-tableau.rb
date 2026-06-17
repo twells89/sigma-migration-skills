@@ -623,12 +623,20 @@ else
     'referenced_columns' => sig_cols, 'measures' => sig_meas))
   match_path = File.join(WORK, 'dm-match.json')
   sigma_run!(['ruby', File.join(HERE, 'find-or-pick-dm.rb'),
-              '--workbook-signature', sig_path, '--out', match_path],
+              '--workbook-signature', sig_path, '--out', match_path,
+              '--auto-pick', '--auto-pick-threshold', '0.5'],
              allow_fail: true) # exit 1 = no candidate ≥ min-score (normal: build new)
   dm_match = (JSON.parse(File.read(match_path)) rescue {})
+  # Reuse-first: if the picker auto-picked a safe candidate (covers ALL source
+  # tables), reuse it automatically unless the user passed an explicit --reuse-dm.
+  if !opts[:reuse_dm] && dm_match['auto_picked'] && dm_match['recommended_dm_id']
+    opts[:reuse_dm] = :recommended
+    line "DM-REUSE (auto): #{dm_match['rationale']}"
+  end
   cands = (dm_match['candidates'] || []).first(3)
   if cands.any?
-    line 'top candidate(s) — default is BUILD NEW; pass --reuse-dm to opt in:'
+    line 'top candidate(s):' if opts[:reuse_dm]
+    line 'top candidate(s) — default is BUILD NEW; pass --reuse-dm to opt in:' unless opts[:reuse_dm]
     cands.each { |c| line "  score #{format('%.2f', c['score'] || 0)}  #{c['dm_id']}  '#{c['dm_name']}'" }
   else
     line 'no existing DM covers this workbook — building new'

@@ -341,20 +341,28 @@ if (opt['skip-reuse-scan'] || opt['dry-run']) {
   const sigPath = join(WORK, 'dm-signature.json');
   run('python3', [join(HERE, 'cognos-dm-signature.py'), '--dm-spec', dmPath, '--out', sigPath]);
   const matchPath = join(WORK, 'dm-match.json');
-  run('ruby', [join(HERE, 'find-or-pick-dm.rb'), '--workbook-signature', sigPath, '--out', matchPath],
+  run('ruby', [join(HERE, 'find-or-pick-dm.rb'), '--workbook-signature', sigPath, '--out', matchPath,
+    '--auto-pick', '--auto-pick-threshold', '0.5'],
     { allowFail: true }); // exit 1 = no candidate ≥ min-score (normal)
   match = existsSync(matchPath) ? JSON.parse(readFileSync(matchPath, 'utf8')) : {};
   const cands = (match.candidates || []).slice(0, 3);
-  if (cands.length) {
-    line(`top candidate(s) — default is BUILD NEW; pass --reuse-dm to opt in:`);
-    cands.forEach((c) => line(`  score ${(c.score ?? 0).toFixed(2)}  ${c.dm_id}  '${c.dm_name}'`));
-  } else {
-    line('no existing DM covers this module — building new');
-  }
   if (opt['reuse-dm']) {
     reuseDmId = typeof opt['reuse-dm'] === 'string' ? opt['reuse-dm'] : (match.recommended_dm_id || null);
     if (!reuseDmId) die(`--reuse-dm: picker found no candidate ≥ min-score (top: ${cands[0] ? cands[0].score : 'none'}); pass an explicit --reuse-dm <dataModelId> or drop the flag to build new`, 1);
     line(`REUSING data model ${reuseDmId} (Phase 3 skipped). Inherited columns/metrics/RLS come with it.`);
+  } else if (match.auto_picked && match.recommended_dm_id) {
+    // Reuse-first: picker confirmed the top candidate covers ALL source tables (safe reuse).
+    reuseDmId = match.recommended_dm_id;
+    line(`   DM-REUSE (auto): ${match.rationale || `covers all source tables → reusing ${reuseDmId}`}`);
+    if (match.warning) line(`   warning: ${match.warning}`);
+  }
+  if (!reuseDmId) {
+    if (cands.length) {
+      line(`top candidate(s) — none auto-reused (no single DM covers all tables); pass --reuse-dm to opt in:`);
+      cands.forEach((c) => line(`  score ${(c.score ?? 0).toFixed(2)}  ${c.dm_id}  '${c.dm_name}'`));
+    } else {
+      line('no existing DM covers this module — building new');
+    }
   }
 }
 

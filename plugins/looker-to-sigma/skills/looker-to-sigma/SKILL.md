@@ -90,8 +90,10 @@ python3 scripts/migrate-looker.py --lookml-dir /path/to/lookml \
   runs first — RLS findings STOP the command (exit 10, nothing posted) until you
   either port them via `apply_sigma_rls.py` (Phase 1.5) or re-run with `--yes`
   (proceed WITHOUT RLS — loud + recorded). The DM-reuse check (Phase 2.5) always
-  runs and PRINTS candidates+scores; default is build-new, reuse only via an
-  explicit `--reuse-dm <id>`. The folder is auto-resolved and printed.
+  runs and PRINTS candidates+scores; it is **reuse-first** — auto-reuses an
+  existing DM that covers all the dashboard's warehouse table(s) (collapsing
+  duplicate-DM sprawl, skipping the POST). Opt out with `--skip-dm-reuse-check`
+  or pin one with `--reuse-dm <id>`. The folder is auto-resolved and printed.
 - **Converter paths:** `CONVERTER_SRC` (patched `src/lookml.ts` via tsx) or
   `CONVERTER_PATH` (`build/lookml.js`) — both auto-located; with neither, the
   command writes `<workdir>/convert-request.json` (the exact

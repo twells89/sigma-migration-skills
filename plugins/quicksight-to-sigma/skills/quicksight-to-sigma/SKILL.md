@@ -42,7 +42,7 @@ See `refs/migration-test-slate.md` for the complexity taxonomy + 20-dashboard te
 
 ## One command (preferred): `scripts/migrate-quicksight.rb`
 
-The single-process orchestrator chains every phase below — discover (live AWS or `--from-fixtures <dir>`), convert (local MCP build, or `convert-model.rb --emit-mcp` gate + `--converted` resume), the **Phase 3.5 DM-reuse check** (`qs-dm-signature.py` + `find-or-pick-dm.rb`; default **build new**, attach with `--reuse-dm <id>`), fixup `--folder-id` → validate → post-and-readback, workbook build, layout, then the **two-pass Phase 7 parity** (`phase6-parity-quicksight.rb` emits the per-chart query list and gates; write `parity-expected.json` + `parity-actuals.json` and re-run the SAME command — phases 1–5 skip automatically) and the `assert-phase6-ran.rb --workdir` hard gate:
+The single-process orchestrator chains every phase below — discover (live AWS or `--from-fixtures <dir>`), convert (local MCP build, or `convert-model.rb --emit-mcp` gate + `--converted` resume), the **Phase 3.5 DM-reuse check** (`qs-dm-signature.py` + `find-or-pick-dm.rb`; **reuse-first** — auto-reuses an existing DM covering all the analysis's source tables, `--reuse-dm <id>` pins one, `--skip-reuse-check` forces build new), fixup `--folder-id` → validate → post-and-readback, workbook build, layout, then the **two-pass Phase 7 parity** (`phase6-parity-quicksight.rb` emits the per-chart query list and gates; write `parity-expected.json` + `parity-actuals.json` and re-run the SAME command — phases 1–5 skip automatically) and the `assert-phase6-ran.rb --workdir` hard gate:
 
 ```bash
 ruby scripts/migrate-quicksight.rb \
