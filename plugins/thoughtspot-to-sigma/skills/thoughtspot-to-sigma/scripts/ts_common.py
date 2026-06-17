@@ -258,6 +258,7 @@ def parse_ts_viz(v, resolver=None):
             "color_dim": color, "topn": topn, "date_col": date_col, "conditional_formats": cond_formats,
             "refmarks": parse_refmarks(a, measures, dims),
             "measure_color": parse_measure_color(a, measures),
+            "series_colors": parse_series_colors(a, measures, color),
             "af_names": sorted(af.keys())}
 
 # ── Reference / threshold lines (gap A) ──────────────────────────────────────
@@ -377,6 +378,67 @@ def parse_measure_color(a, measures):
     # (a list of {color} stops) or reference line is present. Verified against live
     # team2 Liveboards (Sample Retail, Performance Tracking) 2026-06-15.
     return None
+
+# ── Per-viz series colors (gap D) ─────────────────────────────────────────────
+# ThoughtSpot stores each viz's colors in `client_state.systemSeriesColors` —
+# `{serieName: hex}` (v1) or `[{serieName, color}]` (v2). A SINGLE-series chart
+# (one measure, no category color dim) carries one hue there keyed by the
+# measure's series name (e.g. `"Total sales": "#06BF7F"`) = the viz's solid
+# color. A geo choropleth instead carries a sequential GRADIENT under
+# `systemMultiColorSeriesColors` (`{measure:{dim:[hex stops]}}` v1, or
+# `[{serieName, colorMap:[{serieName, color:[stops]}]}]` v2). Surfaced as:
+#   {"solid": "#hex"|None, "geo_scheme": [hex, ...]|None}
+# The builder applies `solid` → `color:{by:single}` on a bar/line/area, and
+# `geo_scheme` → `color:{by:scale}` on the region-map. Multi-series CATEGORY
+# palettes (a hue per category value) are intentionally NOT mapped — that is a
+# POSITIONAL Sigma scheme (order-dependent, see charts.md) and out of scope for
+# the per-viz-color pass; those keep Sigma's default category coloring.
+def parse_series_colors(a, measures, color_dim):
+    def _series_map(cs):
+        ss = cs.get("systemSeriesColors")
+        out = {}
+        if isinstance(ss, dict):
+            out = {str(k): v for k, v in ss.items() if isinstance(v, str)}
+        elif isinstance(ss, list):
+            for e in ss:
+                if isinstance(e, dict) and e.get("serieName") and isinstance(e.get("color"), str):
+                    out[str(e["serieName"])] = e["color"]
+        return out
+
+    def _geo_stops(cs):
+        mc = cs.get("systemMultiColorSeriesColors")
+        if isinstance(mc, dict):                       # v1: {measure: {dim: [stops]}}
+            for dmap in mc.values():
+                if isinstance(dmap, dict):
+                    for stops in dmap.values():
+                        if isinstance(stops, list) and len(stops) >= 2:
+                            return [s for s in stops if isinstance(s, str)]
+        elif isinstance(mc, list):                     # v2: [{serieName, colorMap:[{serieName, color:[stops]}]}]
+            for e in mc:
+                for cm in (e.get("colorMap") or []) if isinstance(e, dict) else []:
+                    stops = cm.get("color") if isinstance(cm, dict) else None
+                    if isinstance(stops, list) and len(stops) >= 2:
+                        return [s for s in stops if isinstance(s, str)]
+        return None
+
+    # The measure's own series can be keyed "sales" / "Total sales" / "sales" with
+    # the (TS) "Total " aggregation prefix — match any spelling.
+    mnames = set()
+    for m in measures:
+        mnames |= {m.lower(), ("total " + m).lower(), _strip_total(m).lower()}
+    solid, geo = None, None
+    single_series = len(measures) == 1 and not color_dim
+    for cs in _client_states(a):
+        if not isinstance(cs, dict):
+            continue
+        if geo is None:
+            geo = _geo_stops(cs)
+        if solid is None and single_series:
+            for name, hue in _series_map(cs).items():
+                if name.lower() in mnames:
+                    solid = hue
+                    break
+    return {"solid": solid, "geo_scheme": geo}
 
 def has_cf_rule(a):
     """True if the viz carries ThoughtSpot per-cell CONDITIONAL FORMATTING
@@ -625,6 +687,23 @@ def _apply_measure_color(el, spec, resolver):
     el["columns"].append(dup)
     el["color"] = {"by": "scale", "column": dup_id, "scheme": list(mc["scheme"])}
 
+def _apply_series_colors(el, spec):
+    """gap D — per-viz solid hue → color:{by:single} on a single-series
+    bar/line/area; geo gradient → color:{by:scale} on the region-map's measure
+    column. Never overrides an existing color channel (a category color_dim or a
+    measure-gradient set by _apply_measure_color wins)."""
+    sc = spec.get("series_colors") or {}
+    if el.get("color"):
+        return
+    kind = el.get("kind")
+    if sc.get("solid") and kind in ("bar-chart", "line-chart", "area-chart"):
+        el["color"] = {"by": "single", "value": sc["solid"]}
+    elif sc.get("geo_scheme") and kind == "region-map":
+        region_id = (el.get("region") or {}).get("id")
+        meas_col = next((c for c in el.get("columns", []) if c.get("id") != region_id), None)
+        if meas_col:
+            el["color"] = {"by": "scale", "column": meas_col["id"], "scheme": list(sc["geo_scheme"])}
+
 def _apply_refmarks(el, spec):
     """gap A — attach Sigma refMarks for axis charts."""
     if el.get("kind") not in _AXIS_KINDS:
@@ -694,6 +773,7 @@ def sigma_element(spec, resolver, master="OFV"):
                                              "mode": f["mode"], "values": f["values"]})
     _apply_sorts(el, spec)
     _apply_measure_color(el, spec, resolver)   # gap B: by-measure color scale
+    _apply_series_colors(el, spec)             # gap D: per-viz solid color + geo gradient
     _apply_refmarks(el, spec)                  # gap A: reference / threshold lines
     return el
 
