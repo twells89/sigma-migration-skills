@@ -1242,6 +1242,11 @@ def resolve_shelf_field(field, meta, mmap)
                                  .gsub(/^\[|\]$/, '')
                                  .sub(/^[a-z]+:/i, '')
                                  .sub(/:[a-z]+$/i, '')
+  # Tableau captions sometimes carry trailing/leading whitespace (e.g. the
+  # skeleton's "Order Date "), and the master column is the trimmed name — so a
+  # bare [Master/Order Date ] ref won't resolve. Trim before matching + as the
+  # fallback name (map_column already trims internally for the lookup).
+  cap_for_field = cap_for_field.to_s.strip
   m = map_column(cap_for_field, mmap)
   m ||= { 'id' => "m-#{cap_for_field.downcase.gsub(/\W+/, '-')}", 'name' => cap_for_field }
   [m, cap_for_field]

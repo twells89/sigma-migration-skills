@@ -130,12 +130,18 @@ module MechanicalSpecs
   def pick_fact(model)
     els = all_elements(model)
     return nil if els.empty?
+    # A dimension element's name is "<X> Dim" (trailing) OR "Dim <X>" (leading,
+    # e.g. "Dim Time") — exclude BOTH so a narrow date/time dim can never be
+    # chosen as the fact (the date-crosstab regression: "Dim Time" slipped past a
+    # trailing-only / Dim$/ and won max_by, making the workbook master source the
+    # wrong element).
+    dim_re = /(^Dim\b| Dim$)/i
     derived = els.select { |e| e.dig('source', 'kind') == 'table' && e.dig('source', 'elementId') }
-                 .reject { |e| elem_name(e) =~ / Dim$/i }
+                 .reject { |e| elem_name(e) =~ dim_re }
     return derived.max_by { |e| (e['columns'] || []).size } if derived.any?
     base = els.select { |e| e.dig('source', 'kind') == 'warehouse-table' }
     return nil if base.empty?
-    facts = base.reject { |e| elem_name(e) =~ / Dim$/i }
+    facts = base.reject { |e| elem_name(e) =~ dim_re }
     (facts.empty? ? base : facts).max_by { |e| (e['columns'] || []).size }
   end
 

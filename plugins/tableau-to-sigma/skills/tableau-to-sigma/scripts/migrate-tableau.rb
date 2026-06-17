@@ -1060,7 +1060,12 @@ if reuse_dm_id
   File.write(dm_ids_path, JSON.pretty_generate(dm_ids))
   dm_id = reuse_dm_id
   dm_els = dm_ids['pages'].flat_map { |p| p['elements'] }
-  fact = dm_els.find { |e| e['name'] !~ / Dim$/i } || dm_els.first
+  # The fact is the WIDEST non-dim element. Exclude both "<X> Dim" and "Dim <X>"
+  # (so a date/time dim like "Dim Time" can't be picked) and tie-break by column
+  # count, not list order.
+  dim_re = /(^Dim\b| Dim$)/i
+  fact = dm_els.reject { |e| e['name'] =~ dim_re }.max_by { |e| (e['columnLabels'] || []).size } ||
+         dm_els.find { |e| e['name'] !~ dim_re } || dm_els.first
   fact_eid = fact['id']
   line "REUSED dataModelId = #{dm_id}  (fact element '#{fact['name']}' = #{fact_eid}, name-heuristic pick)"
 elsif mechanical
@@ -1136,10 +1141,18 @@ unless reuse_dm_id
     # derived "<Fact> View" when present). Match it into the readback by name.
     cf = MechanicalSpecs.pick_fact(conv['model'])
     cf_name = cf && (cf['name'] || MechanicalSpecs.elem_name(cf))
+    # Fallback (when the exact name match misses): the fact is the WIDEST non-dim
+    # element — never a narrow date/time dim. Match pick_fact's dim test (both
+    # "<X> Dim" and "Dim <X>") and tie-break by column count, not list order, so
+    # "Dim Time" can't win just by appearing first.
+    dim_re = /(^Dim\b| Dim$)/i
     fact = dm_els.find { |e| e['name'] == cf_name } ||
-           dm_els.find { |e| e['name'] !~ / Dim$/i } || dm_els.first
+           dm_els.reject { |e| e['name'] =~ dim_re }.max_by { |e| (e['columnLabels'] || []).size } ||
+           dm_els.max_by { |e| (e['columnLabels'] || []).size } || dm_els.first
   else
-    fact = dm_els.find { |e| e['name'] !~ / Dim$/i } || dm_els.first
+    dim_re = /(^Dim\b| Dim$)/i
+    fact = dm_els.reject { |e| e['name'] =~ dim_re }.max_by { |e| (e['columnLabels'] || []).size } ||
+           dm_els.find { |e| e['name'] !~ dim_re } || dm_els.first
   end
   fact_eid = fact['id']
   line "dataModelId = #{dm_id}  (fact element '#{fact['name']}' = #{fact_eid})"
