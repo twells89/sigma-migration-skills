@@ -87,6 +87,21 @@ module LayoutLint
 
   # Top-level GridContainers of a page block with their direct children:
   # [{eid:, r0:, r1:, children: [[child_eid, c0, c1, r0, r1], ...]}, ...]
+  # The column count a container's children are laid out against — its OWN
+  # gridTemplateColumns (a child's gridColumn refs are LOCAL to its container,
+  # not the page's 24-col grid). "repeat(N, ...)" -> N; an explicit track list
+  # -> token count; absent -> the page-grid default. A vertical rail declares
+  # repeat(1, 1fr): one full-width column, NOT 1/24 of the page.
+  def grid_col_count(attrs)
+    tmpl = attrs.to_s[/gridTemplateColumns="([^"]*)"/, 1]
+    return GRID_COLS if tmpl.nil? || tmpl.strip.empty?
+    if (rep = tmpl[/repeat\(\s*(\d+)/, 1])
+      return [[rep.to_i, 1].max, GRID_COLS * 4].min
+    end
+    n = tmpl.strip.split(/\s+/).reject(&:empty?).length
+    n.positive? ? n : GRID_COLS
+  end
+
   def containers(page_xml)
     out = []
     s = page_xml.to_s
@@ -94,6 +109,7 @@ module LayoutLint
     while (m = s.match(%r{<GridContainer\b([^>]*?)(/>|>)}m, pos))
       attrs, close = m[1], m[2]
       eid = attrs[/elementId="([^"]*)"/, 1]
+      cols = grid_col_count(attrs)
       r0 = attrs[/gridRow="\s*(\d+)/, 1].to_i
       r1 = attrs[/gridRow="\s*\d+\s*\/\s*(\d+)/, 1].to_i
       inner = ''
@@ -109,7 +125,7 @@ module LayoutLint
          le[/gridColumn="\s*(\d+)/, 1].to_i, le[/gridColumn="\s*\d+\s*\/\s*(\d+)/, 1].to_i,
          le[/gridRow="\s*(\d+)/, 1].to_i, le[/gridRow="\s*\d+\s*\/\s*(\d+)/, 1].to_i]
       end
-      out << { eid: eid, r0: r0, r1: r1, children: children }
+      out << { eid: eid, r0: r0, r1: r1, cols: cols, children: children }
     end
     out
   end
@@ -173,11 +189,16 @@ module LayoutLint
         kpi_band = kids.any? && kids.length <= KPI_BAND_MAX_TILES &&
                    kids.all? { |k| el_kind[k[0]] == 'kpi-chart' }
         next if kpi_band
-        covered = Array.new(GRID_COLS, false)
+        # Measure fill against the container's OWN column count — a child's
+        # gridColumn is local to its container's gridTemplateColumns. A vertical
+        # rail (repeat(1, 1fr)) whose children fill its one column is 100% full,
+        # not 1/24 (was a false-positive hard-fail on every sidebar layout).
+        ncols = b[:cols] || GRID_COLS
+        covered = Array.new(ncols, false)
         kids.each do |_eid, c0, c1, _r0, _r1|
-          (c0...c1).each { |c| covered[c - 1] = true if c >= 1 && c <= GRID_COLS }
+          (c0...c1).each { |c| covered[c - 1] = true if c >= 1 && c <= ncols }
         end
-        fill = covered.count(true).to_f / GRID_COLS
+        fill = covered.count(true).to_f / ncols
         next if fill >= MIN_BAND_FILL
         empty_cols = covered.each_index.reject { |i| covered[i] }.map { |i| i + 1 }
         violations << format('band under-filled: container %s on page %s — %s cover %d of %d grid ' \
@@ -185,7 +206,7 @@ module LayoutLint
                              're-flow the band (SigmaLayout.reflow_bands) or widen the elements',
                              b[:eid], page_id,
                              kids.empty? ? 'no children' : "#{kids.length} element(s) (#{kids.map(&:first).join(', ')})",
-                             covered.count(true), GRID_COLS, fill * 100, MIN_BAND_FILL * 100,
+                             covered.count(true), ncols, fill * 100, MIN_BAND_FILL * 100,
                              empty_cols.empty? ? '-' : empty_cols.slice_when { |a, x| x != a + 1 }.map { |g| g.length > 1 ? "#{g.first}-#{g.last}" : g.first.to_s }.join(', '))
       end
 
