@@ -1235,7 +1235,15 @@ def main():
     controls, control_scope, dropped_controls = [], [], []
     for flt in dash["filters"]:
         fld = flt.get("dimension") or flt.get("field") or flt.get("_resolvedField")
-        ctype = "date-range" if flt["type"] == "date_filter" else "list"
+        # A `list` control targeting a DATETIME column is silently DROPPED by
+        # Sigma on POST (its `filters` come back empty → dead control). A filter
+        # bound to a date/time dimension_group must be a date control regardless
+        # of the Looker filter `type` (a Looker field_filter on a date renders a
+        # list in LookML but must become a date control in Sigma).
+        _fld = flt.get("dimension") or flt.get("field") or flt.get("_resolvedField")
+        is_date_field = (flt["type"] == "date_filter"
+                         or (_fld is not None and dimgroup_display(_fld) is not None))
+        ctype = "date-range" if is_date_field else "list"
         cid = flt["name"].lower().replace(" ", "-")
         entry = {"controlId": cid, "name": flt["title"], "controlType": ctype,
                  "source_signal": f"looker dashboard filter '{flt['name']}' (per-tile listen: scope)",
