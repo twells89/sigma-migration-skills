@@ -90,6 +90,21 @@ python3 scripts/mstr.py                          # login probe + project list
 # dossiers: see assessment, or GET /api/searches/results?type=55 via mstr.py
 ```
 
+### Phase 0.5 — Source type: classic schema vs Quick Cube (branch here)
+
+Check what backs the dossier's dataset before extracting. `GET /objects/{datasetId}?type=3` →
+`subtype`:
+
+- **Classic schema / Mosaic Data Model** (live warehouse-backed) → the normal path. Continue to Phase 1; `extract.py` reads the semantic model.
+- **Quick Cube / super-cube** (`subtype 779`, or a dataset whose source is a file import — `Row Count - <name>.xlsx` metric, no live warehouse connection) → **there is no warehouse semantic model to convert.** The model lives inside the in-memory cube. This is a **data rehost + rebuild**, not a semantic auto-conversion — set expectations accordingly and don't claim `convert.py` drove it.
+
+  **Decide first (ask the customer):** if the cube has a real upstream system of record, prefer pointing Sigma at that live warehouse source. **Rehosting the cube copies a point-in-time snapshot** into the customer's warehouse — it does not stay fresh unless something re-feeds it. Only rehost when there's no live source (demo/prototype cubes, locked-down trials, managed metrics without formulas).
+
+  **If rehosting**, the cube's *data* still extracts cleanly even though its model doesn't:
+  1. Pull all rows via the cube instance API — `POST /v2/cubes/{id}/instances?offset&limit` for page 1 (returns `instanceId` + `definition.grid` + `data`), then `GET /v2/cubes/{id}/instances/{iid}?offset` to page. Element lists in each response are page-scoped. Flatten attributes-on-rows + metrics-on-columns into one table.
+  2. `COPY` it into the warehouse the Sigma connection reaches (quote identifiers to preserve display names; `DATE_FORMAT`/`FIELD_OPTIONALLY_ENCLOSED_BY` for messy CSV; `GRANT SELECT` to the connection role + schema sync — see `sigma-data-models`).
+  3. **Rejoin the normal flow at Phase 3** with a `warehouse-table` source. Skip Phase 1/2 (no bundle to extract) — build the DM + workbook directly, and lean hard on Phase 1.1's source-PDF capture + execute-instance value truth (a cube's KPIs are often a latest-period stat, and a chapter date filter drives the row subsets). Verify with parity + the source-fidelity Visual QA gate exactly as usual.
+
 ## Phase 1 — Extract the bundle
 
 ```bash
