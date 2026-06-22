@@ -28,6 +28,28 @@ declaring the migration done.
 4. **Loop until the render passes inspection.** Declare the migration done on a *clean render*,
    never on an HTTP 200.
 
+## Source-fidelity parity (run BEFORE the quality rubric)
+
+Clean ≠ faithful. A workbook can be perfectly laid out and still look nothing like the
+dashboard it migrated. This check compares the render against the **source's own
+appearance**, captured in Phase 1.1 as `source_dossier.pdf` (MSTR: `export-dossier-pdf.py`;
+other plugins have an equivalent source export). Put the Sigma page PNG and the source page
+side-by-side and verify, page-for-page:
+
+- [ ] **Same element set** — every viz on the source page exists on the Sigma page (none dropped, none invented).
+- [ ] **Same arrangement** — relative position holds (a 3-column source stays 3-column; KPIs that sit under a chart stay under it). Pixel-exact isn't required; the *grouping and reading order* are.
+- [ ] **Matching chart KIND** — source KPI → Sigma `kpi-chart` (not a 1-row table); source horizontal bar → horizontal bar; microchart/indicator → the closest Sigma equivalent (conditional-formatted table / data bars), not a generic bar. The dossier's `visualizationType` (`kpi`, `microcharts`, `combo_chart`, `grid`, …) is the spec to match.
+- [ ] **KPI shows the source's VALUE** — confirm the big number equals what the source card shows (often a latest-period stat, not a windowed Sum — see SKILL.md Phase 1.1). A KPI that's structurally a KPI but shows the wrong metric FAILS.
+- [ ] **Controls / selector panels present** — source filter panels, attribute/metric selectors, and chapter filters have Sigma equivalents (controls or an inherited base filter). An interactive source page rebuilt as a static grid FAILS.
+- [ ] **Branding bands** — header strips, logos, greeting/title bands present, OR explicitly descoped *with the user* and recorded.
+
+A render that diverges on any unchecked box is a FAIL even when row parity is green — fix the
+spec and re-compare. **Known spec ceilings** (don't loop on them — note them as editor
+follow-ups): KPI sparklines and comparison/delta badges are UI-only (`sigma-workbooks`
+`kpis.md`); source-tool chrome (theme toggles, native nav) has no spec equivalent. When the
+user scopes styling down ("layout + metrics, skip branding"), record exactly what was
+descoped in the final summary — never drop it silently.
+
 ## Pass/fail rubric (read the PNG against every item)
 
 - [ ] **No overlaps / no stacking.** No two elements occupy the same cell; no filter, legend, or

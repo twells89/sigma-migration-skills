@@ -64,7 +64,12 @@ logic.
   API-key concept; `scripts/mstr.py` handles it.
 - **Sigma API token** — `eval "$(scripts/get-token.sh)"` (uses
   `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`, same neutral-cred pattern as the
-  sibling skills).
+  sibling skills). If those Sigma creds aren't set yet (fresh machine, no prior
+  migration), run `ruby scripts/setup.rb` once — it prompts for the Sigma
+  base URL / client id / secret (+ optional connection id) and writes them to
+  both `~/.claude/settings.json` and `~/.sigma-migration/env`, so `get-token.sh`
+  and every sibling skill pick them up. (Source-side MSTR creds are separate —
+  see the MicroStrategy bullet above.)
 - **The same warehouse on both sides.** Sigma reads the warehouse live; parity
   only means something when the Sigma connection reaches the database
   MicroStrategy queries.
@@ -95,6 +100,51 @@ Walks dossier definition → dataset reports (`showExpressionAs=tokens`) →
 referenced attributes / metrics (compound bases included via a second pass) /
 facts / logical tables / hierarchy relationships. The bundle is the converter
 contract — `fixtures/bundle.json` is a real, validated example.
+
+### Phase 1.1 — Capture the SOURCE visual + the values it actually shows (mandatory)
+
+The bundle gives you the data model and *which* vizzes exist; it does **not**
+tell you what the dossier *looks like* or what each viz actually *displays*.
+Both are required for a faithful migration — skip this and you will rebuild the
+right numbers in the wrong dashboard (and sometimes the wrong numbers). Two
+captures:
+
+```bash
+# (a) Pixel-faithful PDF of the live dossier — the layout/branding/arrangement reference.
+python3 scripts/export-dossier-pdf.py <dossierId> source_dossier.pdf
+```
+
+**READ `source_dossier.pdf`** before composing anything. Note, per page: the
+element arrangement (columns/rows, what sits next to what), each viz's real
+chart KIND (a "microcharts" or "kpi" type is not a bar table), branding/header
+bands, and any controls/selector panels.
+
+```bash
+# (b) Execute the dossier instance and pull each visualization's grid + DISPLAYED values.
+#     The static definition's panelStacks carry NO grid metrics — you must execute:
+#       POST /dossiers/{id}/instances            (v1; v2 404s) -> mid
+#       GET  /v2/dossiers/{id}/instances/{mid}/chapters/{chapKey}/visualizations/{vizKey}
+#     Per-viz response gives definition.grid (rows/columns/metrics) + data.metricValues.
+```
+
+Capture each viz's **actual displayed values** as the parity baseline. Two
+traps this surfaces that the bundle hides:
+
+- **KPI / stat cards are frequently a *latest-period* value, not a windowed
+  aggregate.** A "Total Sales" KPI may show the most recent day's value with a
+  prior-period delta + sparkline — NOT `Sum` over the filter window. Match the
+  number the card shows; don't assume the aggregation.
+- **Chapter-level filters drive every viz.** A chapter filter (e.g. `Date
+  Between …`) found via `…/instances/{mid}/definition` → `chapters[].filters`
+  (NOT in the static `/definition`) is the reason row counts and totals look
+  "filtered." Apply the equivalent as a page/base filter so all elements inherit
+  it (a hidden base table with the filter, sourced by every element, is the
+  cleanest propagation).
+
+Sparklines and KPI comparison/delta badges are **UI-only in the Sigma spec API**
+(see `sigma-workbooks` `kpis.md`) — reproduce the big-number value via formula,
+and flag the sparkline/badge as a one-click editor follow-up rather than
+claiming spec parity.
 
 ## Phase 2 — Convert → Sigma specs
 
@@ -246,13 +296,28 @@ It also writes the gate sentinels `parity-final.json` + `wb-ids.json` next to
 the report — the contract Phase 6 reads.
 
 ## Visual QA (mandatory gate — never skip)
-A workbook that POSTs 200 and passes parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters over charts.** Sigma's grid has no z-order; the shared layout lib de-overlaps bands, but this visual gate is the safety net (without a top-level layout the workbook renders as a single-column stack — see the existing layout gate).
+A workbook that POSTs 200 and passes row parity can still be **the wrong
+dashboard** — right numbers, wrong look. This gate has TWO parts: source
+**fidelity** (does it resemble the original?) and intrinsic **quality** (is it
+cleanly laid out?). Both must pass. Sigma's grid has no z-order; the shared
+layout lib de-overlaps bands, but this gate is the safety net (without a
+top-level layout the workbook renders as a single-column stack).
 
 1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
-2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in-band, no clipped titles, even heights, right chart kind/format).
-3. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit → push) — then **re-render and re-read**.
-4. Declare the migration done on a **clean render**, not on HTTP 200.
+2. **Source-fidelity check — put the Sigma PNG side-by-side with the Phase 1.1
+   `source_dossier.pdf`** and compare page-for-page against the
+   `refs/layout-visual-qa.md` "Source-fidelity parity" checklist: same element
+   set, same relative arrangement (3-column stays 3-column), matching chart
+   KINDS (KPI vs bar vs table), KPI showing the same VALUE as the source card,
+   selector/control panels present, branding bands present (or explicitly
+   descoped with the user). A render that looks nothing like the PDF FAILS even
+   if parity is green.
+3. **Quality check** — also verify each PNG against the intrinsic checklist (no
+   overlaps/stacking, no dead zones, controls in-band, no clipped titles, even
+   heights, right format).
+4. Fix any failure in the spec — for multi-page workbooks use `sigma-skills/sigma-workbooks/scripts/wb-rep.rb` (pull → edit → push) — then **re-render and re-compare**.
+5. Declare the migration done on a render that **matches the source PDF**, not on HTTP 200 and not on row-parity alone. If the user explicitly scoped styling down (e.g. "layout + metrics, skip branding"), record exactly what was descoped — don't silently drop it.
 
 ## Phase 6 — Finalize (hard gate before declaring GREEN)
 
