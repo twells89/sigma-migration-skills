@@ -44,6 +44,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _SSL = ssl._create_unverified_context()
 MCP_TOOL = "mcp__sigma-data-model__convert_thoughtspot_to_sigma"
 
+# Unattended mode (set from --yes in main). Regression fix (gap-scout PR #153):
+# under --yes the error-column gate is ADVISORY (ships FLAGGED columns + proceeds)
+# instead of a hard exit 11, restoring the unattended/demo path.
+UNATTENDED = False
+
 def need_env(*names):
     missing = [n for n in names if not os.environ.get(n)]
     if missing:
@@ -215,6 +220,16 @@ def error_column_gate(wb, wd, display):
     gid = lambda c: "errcol:%s/%s" % (c.get("elementId"), c.get("label"))
     gap_ids = list(dict.fromkeys(gid(c) for c in errs))
     bk = scout_gate.classify(wd, gap_ids)
+    if bk["unscouted"] and UNATTENDED:
+        # Regression fix (gap-scout PR #153): under --yes the gate is ADVISORY — the
+        # ERROR-typed columns ship FLAGGED in Sigma (as before the gate existed) and
+        # the run proceeds. Record them so re-runs don't re-surface; recommend the scout.
+        print("\n   gap-scout: %d ERROR-typed column(s) NOT scouted — proceeding (--yes); they ship FLAGGED/broken in Sigma."
+              % len(bk["unscouted"]))
+        print("   (optional: run scripts/gap-scout.md on these to persist a faithful Sigma translation)")
+        for i in bk["unscouted"]:
+            scout_gate.record(wd, i, "errcol", "accepted")
+        return
     if bk["unscouted"]:
         print("\n==================== GAP-SCOUT REQUIRED ====================")
         print("%d of %d ERROR-typed column(s) have NOT been scouted — the gap-scout must"
@@ -223,7 +238,7 @@ def error_column_gate(wb, wd, display):
         for i in bk["unscouted"]:
             print("  --gap-id '%s'" % i)
         print("\nSpawn one gap-scout per column (scripts/gap-scout.md) with the exact --gap-id")
-        print("above plus --workdir %s, then re-run. --yes does NOT skip this gate." % wd)
+        print("above plus --workdir %s, then re-run, OR re-run with --yes to ship them FLAGGED." % wd)
         print("===========================================================")
         sys.exit(11)
     print("   gap-scout: all %d error column(s) accounted for (validated or escalated)" % len(gap_ids))
@@ -402,7 +417,11 @@ def main():
                     "(decided via ts-dm-signature.py + find-or-pick-dm.rb; see SKILL.md step 2.5)")
     ap.add_argument("--no-reuse", action="store_true", help="skip the automatic DM-reuse scan and always build a "
                     "new data model (the scan runs by default and auto-reuses a same-table column-superset DM)")
+    ap.add_argument("--yes", action="store_true", help="unattended: accept unscouted ERROR-typed columns at the "
+                    "gap-scout gate (they ship FLAGGED in Sigma) and proceed instead of stopping")
     a = ap.parse_args()
+    global UNATTENDED
+    UNATTENDED = a.yes
     wd = resolve_workdir(a.workdir)
     offline = bool(a.model_tml)
     if not a.model and not a.model_tml:

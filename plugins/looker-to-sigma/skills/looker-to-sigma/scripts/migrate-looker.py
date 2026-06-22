@@ -822,7 +822,7 @@ console.error('stats:', JSON.stringify(res.stats));
         gid = lambda c: "errcol:%s/%s" % (c.get("elementId"), c.get("label"))
         gap_ids = list(dict.fromkeys(gid(c) for c in errs))
         bk = scout_gate.classify(wd, gap_ids)
-        if bk["unscouted"]:
+        if bk["unscouted"] and not args.yes:
             print("\n==================== GAP-SCOUT REQUIRED ====================")
             print("%d of %d ERROR-typed column(s) have NOT been scouted — the gap-scout must"
                   % (len(bk["unscouted"]), len(gap_ids)))
@@ -830,10 +830,22 @@ console.error('stats:', JSON.stringify(res.stats));
             for i in bk["unscouted"]:
                 print("  --gap-id '%s'" % i)
             print("\nSpawn one gap-scout per column (scripts/gap-scout.md) with the exact --gap-id")
-            print("above plus --workdir %s, then re-run. --yes does NOT skip this gate." % wd)
+            print("above plus --workdir %s, then re-run, OR re-run with --yes to ship them FLAGGED." % wd)
             print("===========================================================")
             sys.exit(11)
-        print("   gap-scout: all %d error column(s) accounted for (validated or escalated)" % len(gap_ids))
+        elif bk["unscouted"]:
+            # Regression fix (gap-scout PR #153 made this a hard exit 11 that overrode
+            # --yes, stalling the unattended/demo path). Under --yes the gate is ADVISORY:
+            # the ERROR-typed columns ship FLAGGED in Sigma (as they did before the gate
+            # existed) and the run proceeds. Record them so re-runs don't re-surface;
+            # recommend the gap-scout for anyone who wants a faithful translation.
+            print("\n   gap-scout: %d ERROR-typed column(s) NOT scouted — proceeding (--yes); they ship FLAGGED/broken in Sigma."
+                  % len(bk["unscouted"]))
+            print("   (optional: run scripts/gap-scout.md on these to persist a faithful Sigma translation)")
+            for i in bk["unscouted"]:
+                scout_gate.record(wd, i, "errcol", "accepted")
+        else:
+            print("   gap-scout: all %d error column(s) accounted for (validated or escalated)" % len(gap_ids))
 
     # ── Phase 4c — Visual QA: render each content page to a FULL-PAGE PNG ─────
     # so the layout (applied inline by build_workbook.py and POSTed above) can be

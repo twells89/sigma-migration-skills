@@ -55,8 +55,8 @@ def main():
     ap.add_argument("--workdir", required=True,
                     help="conversion working dir holding scout-ledger.jsonl")
     ap.add_argument("--yes", action="store_true",
-                    help="(does NOT skip the gate; present for parity — an unscouted "
-                         "error column always stops)")
+                    help="unattended: accept unscouted ERROR-typed columns (they ship "
+                         "FLAGGED in Sigma) and proceed instead of stopping")
     a = ap.parse_args()
 
     st, body = api("GET", f"/v2/workbooks/{a.workbook_id}/columns")
@@ -77,6 +77,17 @@ def main():
     gid = lambda c: "errcol:%s/%s" % (c.get("elementId"), c.get("label"))
     gap_ids = list(dict.fromkeys(gid(c) for c in errs))
     bk = scout_gate.classify(a.workdir, gap_ids)
+    if bk["unscouted"] and a.yes:
+        # Regression fix (gap-scout PR #153 made --yes a no-op here, hard-stopping the
+        # unattended/demo path). Under --yes the gate is ADVISORY: ERROR-typed columns
+        # ship FLAGGED in Sigma (as before the gate existed) and the run proceeds.
+        # Record them so re-runs don't re-surface; recommend the gap-scout.
+        print("\ngap-scout: %d ERROR-typed column(s) NOT scouted — proceeding (--yes); they ship FLAGGED/broken in Sigma."
+              % len(bk["unscouted"]))
+        print("(optional: run scripts/gap-scout.md on these to persist a faithful Sigma translation)")
+        for i in bk["unscouted"]:
+            scout_gate.record(a.workdir, i, "errcol", "accepted")
+        return
     if bk["unscouted"]:
         print("\n==================== GAP-SCOUT REQUIRED ====================")
         print("%d of %d ERROR-typed column(s) have NOT been scouted — the gap-scout must"
@@ -85,7 +96,7 @@ def main():
         for i in bk["unscouted"]:
             print("  --gap-id '%s'" % i)
         print("\nSpawn one gap-scout per column (scripts/gap-scout.md) with the exact --gap-id")
-        print("above plus --workdir %s, then re-run this gate. --yes does NOT skip it." % a.workdir)
+        print("above plus --workdir %s, then re-run this gate, OR re-run with --yes to ship them FLAGGED." % a.workdir)
         print("===========================================================")
         sys.exit(11)
     print("gap-scout: all %d error column(s) accounted for (validated or escalated)" % len(gap_ids))

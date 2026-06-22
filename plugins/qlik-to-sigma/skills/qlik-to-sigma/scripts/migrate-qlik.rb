@@ -479,20 +479,32 @@ unless scout_gaps.empty?
   gap_ids = scout_gaps.map { |q| gid.call(q) }.uniq
   buckets = ScoutGate.classify(WORK, gap_ids)
   if buckets[:unscouted].any?
-    puts
-    puts '==================== GAP-SCOUT REQUIRED ===================='
-    puts "#{buckets[:unscouted].size} of #{gap_ids.size} untranslated measure(s) have NOT been scouted —"
-    puts 'the gap-scout must attempt a Sigma translation before the degradation is accepted:'
-    buckets[:unscouted].each { |id| puts "  --gap-id '#{id}'" }
-    puts ''
-    puts "Spawn one gap-scout per measure (scripts/gap-scout.md), passing the exact --gap-id above"
-    puts "plus --workdir #{WORK}, then re-run. --yes does NOT skip this gate."
-    puts '======================================================='
-    puts 'No Sigma objects were created.'
-    phase_summary
-    exit 11
+    unattended = opts[:yes] || opts[:answers]
+    if unattended
+      # Regression fix (gap-scout PR #153 made this a hard `exit 11` that overrode
+      # --yes, stalling the unattended/demo path). Under --yes/--answers the gate is
+      # ADVISORY: these measures take their "proceed" default (already in the decisions
+      # list) and the run flows through. Record as accepted so re-runs don't re-surface
+      # them; recommend the gap-scout for anyone who wants a faithful translation.
+      warn "   gap-scout: #{buckets[:unscouted].size} untranslated measure(s) not scouted — proceeding (unattended); recording as accepted degradations."
+      warn '   (optional: run scripts/gap-scout.md on these to persist a faithful Sigma translation)'
+      buckets[:unscouted].each { |id| ScoutGate.record(WORK, gap_id: id, feature: 'measure', status: 'accepted') }
+    else
+      # Interactive: the same measures already appear as review questions and exit via
+      # the OPEN QUESTIONS block below (exit 10). Just nudge toward the scout.
+      puts
+      puts '-------------------- GAP-SCOUT RECOMMENDED --------------------'
+      puts "#{buckets[:unscouted].size} of #{gap_ids.size} untranslated measure(s) have no faithful translation yet:"
+      buckets[:unscouted].each { |id| puts "  --gap-id '#{id}'" }
+      puts ''
+      puts 'Optional: spawn a gap-scout per measure (scripts/gap-scout.md) with the --gap-id above'
+      puts "plus --workdir #{WORK} to persist a translation; or re-run with --yes to accept the"
+      puts 'degradation defaults. These also appear in OPEN QUESTIONS below.'
+      puts '---------------------------------------------------------------'
+    end
+  else
+    puts "   gap-scout: all #{gap_ids.size} untranslated measure(s) accounted for (validated or escalated)"
   end
-  puts "   gap-scout: all #{gap_ids.size} untranslated measure(s) accounted for (validated or escalated)"
 end
 
 if questions.any? && !opts[:yes] && answers.nil?

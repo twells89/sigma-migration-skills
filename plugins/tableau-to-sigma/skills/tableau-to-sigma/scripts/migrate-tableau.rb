@@ -775,7 +775,13 @@ if unhandled_gaps.any?
   unscouted = buckets[:unscouted].map { |id| by_name[id] }
   escalated = buckets[:escalated].map { |id| by_name[id] }
 
-  if unscouted.any?
+  # Regression fix (gap-scout PR #153): the unscouted branch hard-`exit 11`'d even
+  # under --yes/--force, stalling the unattended/demo path. Under unattended mode
+  # (--yes/--answers/--force) the gate is ADVISORY — record the gaps as accepted and
+  # proceed (the features are MISSING/flagged in Sigma, as before the gate existed).
+  # Interactive runs still hard-stop so a human sees the gap and can scout it.
+  unattended = opts[:yes] || opts[:answers] || opts[:force]
+  if unscouted.any? && !unattended
     puts
     puts '==================== GAP-SCAN STOP (scout required) ===================='
     puts "#{unscouted.size} of #{unhandled_gaps.size} ❌-unhandled feature(s) have NOT been scouted:"
@@ -784,32 +790,34 @@ if unhandled_gaps.any?
     puts "Full report: #{gap_report_md || '(see workdir *gaps-report.md)'}"
     puts 'Spawn ONE gap-scout subagent per row (scripts/gap-scout.md), passing'
     puts "  --gap-id '<the row name above>' --workdir #{WORK}"
-    puts 'so each scout records its result to the ledger. Then re-run this command.'
-    puts '--force does NOT skip this gate — it only accepts gaps the scout tried'
-    puts 'and could not auto-translate (escalated).'
+    puts 'so each scout records its result to the ledger. Then re-run this command,'
+    puts 'or re-run with --yes/--force to accept the degradation (features MISSING/flagged).'
     puts '======================================================='
     puts 'No Sigma objects were created.'
     mark('phase1-join')
     phase_summary
     exit 11
-  elsif escalated.any? && !opts[:force]
+  elsif escalated.any? && !unattended
     puts
     puts '==================== GAP-SCAN STOP (escalated gaps) ===================='
     puts "All #{unhandled_gaps.size} unhandled feature(s) were scouted; #{escalated.size} could NOT be"
     puts 'auto-translated and were escalated (recorded locally; file an issue via escalate-gap.py):'
     escalated.each { |g| puts "  - #{g['name']} (×#{g['count']})" }
     puts ''
-    puts 'Re-run with --force to accept these as manual — they will be MISSING/flagged'
+    puts 'Re-run with --force/--yes to accept these as manual — they will be MISSING/flagged'
     puts 'in the Sigma workbook. (The validated ones still migrate.)'
     puts '======================================================='
     puts 'No Sigma objects were created.'
     mark('phase1-join')
     phase_summary
     exit 11
-  elsif escalated.any?
-    line "--force: proceeding past #{escalated.size} scouted-but-escalated feature(s) — they will NOT migrate"
   else
-    line "gap-scout: all #{unhandled_gaps.size} ❌-unhandled feature(s) resolved via validated rules"
+    if unscouted.any?
+      line "gap-scout: #{unscouted.size} ❌-unhandled feature(s) NOT scouted — proceeding (unattended); they will be MISSING/flagged in Sigma. (optional: scripts/gap-scout.md to translate)"
+      unscouted.each { |g| ScoutGate.record(WORK, gap_id: g['name'].to_s, feature: 'feature', status: 'accepted') }
+    end
+    line "--force/--yes: proceeding past #{escalated.size} scouted-but-escalated feature(s) — they will NOT migrate" if escalated.any?
+    line "gap-scout: all #{unhandled_gaps.size} ❌-unhandled feature(s) resolved via validated rules" if unscouted.empty? && escalated.empty?
   end
 end
 

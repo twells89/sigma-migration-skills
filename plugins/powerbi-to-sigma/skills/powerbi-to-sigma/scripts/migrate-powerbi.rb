@@ -363,11 +363,29 @@ questions = []
 
 # (a) + (b) DAX measures with no Sigma equivalent ((c)-tail) / DAX needing restructure.
 # The converter marks these in `warnings`: ⛔ = no/failed translation (drops to Null);
-# ⚠ = restructure-needed (RANKX/CALCULATE/iterator/scope/time-intel). ℹ = informational
-# (clean auto-handle) — NOT a decision.
+# ⚠ = restructure-needed (RANKX/CALCULATE/iterator/scope/time-intel); ✅ = SUCCESS
+# (the converter auto-translated it — e.g. RANKX→SQL window helper, USERELATIONSHIP→
+# alternate join path); ℹ = informational (clean auto-handle). Only ⛔ and genuinely
+# DROPPED ⚠ are decisions — ✅/ℹ and any ⚠ the converter actually REALIZED in the DM
+# (e.g. time-intel → grouped element) are handled, NOT degradations.
+#
+# Names the converter realized in the DM (element/metric/column display names), used to
+# tell a handled restructure from a real drop. Regression fix: the gap-scout gate used
+# to bucket ✅ and built restructures as "needs scout", hard-stopping the --yes/demo path.
+realized_names = []
+(dm_model['pages'] || []).each do |pg|
+  (pg['elements'] || []).each do |el|
+    realized_names << el['name'].to_s.strip unless el['name'].to_s.strip.empty?
+    (el['metrics'] || []).each { |m| realized_names << m['name'].to_s.strip unless m['name'].to_s.strip.empty? }
+    (el['columns'] || []).each { |c| realized_names << c['name'].to_s.strip unless c['name'].to_s.strip.empty? }
+  end
+end
+measure_of = ->(s) { (s[/"([^"]+)"/, 1] || '').strip }
 conv_warnings.each do |w|
   ws = w.to_s.gsub(/\s+/, ' ').strip
   next if ws.start_with?('ℹ') # informational; auto-handled, no human choice
+  next if ws.start_with?('✅') # SUCCESS — converter translated it; not a degradation, no scout
+  mname = measure_of.call(ws)
   if ws.start_with?('⛔')
     questions << { 'id' => 'dax_no_equivalent', 'severity' => 'review',
                    'detail' => ws,
@@ -375,6 +393,9 @@ conv_warnings.each do |w|
                                  'abort and re-author the measure manually'],
                    'default' => 'proceed (measure degrades to Null; original DAX kept in description)' }
   else # ⚠ and any unmarked warning
+    # A ⚠ measure the converter REALIZED as a DM element/metric/column is a handled
+    # restructure (e.g. TOTALYTD → grouped CumulativeSum element), not a gap — skip it.
+    next if !mname.empty? && realized_names.include?(mname)
     questions << { 'id' => 'dax_needs_restructure', 'severity' => 'review',
                    'detail' => ws,
                    'options' => ['proceed (converter best-effort; verify in Sigma)',
@@ -434,19 +455,33 @@ unless dax_gaps.empty?
   gap_ids = dax_gaps.map { |q| gid.call(q) }.uniq
   buckets = ScoutGate.classify(WORK, gap_ids)
   if buckets[:unscouted].any?
-    puts
-    puts '==================== GAP-SCOUT REQUIRED ===================='
-    puts "#{buckets[:unscouted].size} of #{gap_ids.size} flagged DAX measure(s) have NOT been scouted —"
-    puts 'the gap-scout must attempt a Sigma translation before the degradation is accepted:'
-    buckets[:unscouted].each { |id| puts "  --gap-id '#{id}'" }
-    puts ''
-    puts "Spawn one gap-scout per measure (scripts/gap-scout.md), passing the exact --gap-id above"
-    puts "plus --workdir #{WORK}, then re-run. --yes does NOT skip this gate."
-    puts '======================================================='
-    puts 'No Sigma objects were created.'
-    exit 11
+    unattended = opts[:yes] || opts[:answers]
+    if unattended
+      # Regression fix (gap-scout PR #153 made this a hard `exit 11` that overrode
+      # --yes, stalling the unattended/demo path even for measures the converter
+      # already handled). Under --yes/--answers the gate is ADVISORY: these gaps
+      # take their "proceed" default (already shown in the decisions list) and the
+      # run flows through. Record them as accepted so re-runs don't re-surface them,
+      # and recommend the gap-scout for anyone who wants a faithful translation.
+      warn "   gap-scout: #{buckets[:unscouted].size} flagged DAX measure(s) not scouted — proceeding (unattended); recording as accepted degradations."
+      warn '   (optional: run scripts/gap-scout.md on these to persist a faithful Sigma translation)'
+      buckets[:unscouted].each { |id| ScoutGate.record(WORK, gap_id: id, feature: 'dax', status: 'accepted') }
+    else
+      # Interactive: the same measures already appear as dax_* review questions and
+      # exit via the OPEN QUESTIONS block below (exit 10). Just nudge toward the scout.
+      puts
+      puts '-------------------- GAP-SCOUT RECOMMENDED --------------------'
+      puts "#{buckets[:unscouted].size} of #{gap_ids.size} flagged DAX measure(s) have no faithful translation yet:"
+      buckets[:unscouted].each { |id| puts "  --gap-id '#{id}'" }
+      puts ''
+      puts 'Optional: spawn a gap-scout per measure (scripts/gap-scout.md) with the --gap-id above'
+      puts "plus --workdir #{WORK} to persist a translation; or re-run with --yes to accept the"
+      puts 'degradation defaults. These also appear in OPEN QUESTIONS below.'
+      puts '---------------------------------------------------------------'
+    end
+  else
+    puts "   gap-scout: all #{gap_ids.size} flagged DAX measure(s) accounted for (validated or escalated)"
   end
-  puts "   gap-scout: all #{gap_ids.size} flagged DAX measure(s) accounted for (validated or escalated)"
 end
 
 answers = nil
