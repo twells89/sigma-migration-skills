@@ -39,6 +39,8 @@ reading the relevant `SKILL.md` and executing its scripts.
 | Scope/assess a Cognos Analytics instance | `cognos-assessment` | `plugins/cognos-to-sigma/skills/cognos-assessment/` |
 | Convert a MicroStrategy dossier + semantic model → Sigma | `microstrategy-to-sigma` | `plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/` |
 | Scope/assess a MicroStrategy (Strategy One) instance | `microstrategy-assessment` | `plugins/microstrategy-to-sigma/skills/microstrategy-assessment/` |
+| Convert a Sisense (ElastiCube / Live model + dashboards) → Sigma | `sisense-to-sigma` | `plugins/sisense-to-sigma/skills/sisense-to-sigma/` |
+| Scope/assess a Sisense instance | `sisense-assessment` | `plugins/sisense-to-sigma/skills/sisense-assessment/` |
 | Land a Tableau published-datasource/extract in Snowflake or Databricks | `tableau-vds-to-cdw` | `plugins/tableau-to-sigma/skills/tableau-vds-to-cdw/` |
 
 Assessments are read-only (never write to the source or post to Sigma); run one

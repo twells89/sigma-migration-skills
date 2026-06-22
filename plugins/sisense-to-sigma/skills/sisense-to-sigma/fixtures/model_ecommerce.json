@@ -1,0 +1,839 @@
+{
+  "oid": "5f0cb527-50f2-482b-aece-33e2ece6fe81",
+  "title": "Sample ECommerce",
+  "server": "LocalHost",
+  "serverId": "7c3f73dd-0b38-48dc-9347-c78811bd80c4",
+  "shares": [
+    {
+      "partyId": "6a32fb475397399ec0a31c8f",
+      "type": "user",
+      "permission": "w"
+    }
+  ],
+  "revision": null,
+  "lastBuildTime": "2026-06-17T22:09:33.330Z",
+  "lastSuccessfulBuildTime": null,
+  "lastBuildTimeFromNextECM": null,
+  "lastPublishTime": null,
+  "lastUpdated": "2026-06-17T19:56:32.358Z",
+  "datasets": [
+    {
+      "oid": "bf915bf9-5242-42b7-a64d-ec9d0632afe7",
+      "type": "extract",
+      "connection": {
+        "id": null,
+        "oid": "bac472bd-4d2c-4e10-b444-c478199fe5ab",
+        "provider": "CSV",
+        "parameters": {
+          "culture": "en-US",
+          "Database": "null",
+          "delimiter": ",",
+          "files": [
+            "/opt/sisense/storage/samples/Sample ECommerce/Country/Country.csv"
+          ],
+          "folder": "",
+          "hasHeader": "true",
+          "ignoreFirstRows": "0",
+          "ignoreLastRows": "0",
+          "IsUsingDirectConnection": "false",
+          "Password": "",
+          "Port": "-1",
+          "Schema": "null",
+          "Server": "/opt/sisense/storage/samples/Sample ECommerce/Country/Country.csv",
+          "stringQuote": "\"",
+          "UserName": "null"
+        },
+        "schema": null,
+        "owner": null,
+        "fileName": null,
+        "protectedParameters": null,
+        "uiParams": null,
+        "globalTableConfigOptions": null,
+        "enabled": true,
+        "created": null,
+        "lastModified": "2026-06-17T19:56:32.173+00:00",
+        "supportedModelTypes": [
+          "EXTRACT"
+        ],
+        "ownerId": "6a32fb475397399ec0a31c8f",
+        "createdByUser": false,
+        "name": "Sample Country",
+        "description": "",
+        "connectionPermissions": null
+      },
+      "lastUpdated": "2026-06-18T06:03:04.644Z",
+      "database": "null",
+      "schemaName": "null",
+      "name": "1d533975-e625-4668-bce5-881961ac7c33",
+      "fullname": "CSV:1d533975-e625-4668-bce5-881961ac7c33",
+      "modelingTransformations": [],
+      "schema": {
+        "tables": [
+          {
+            "oid": "a1f938ef-8654-4dcb-86e0-1baeba1a971d",
+            "id": "Country.csv",
+            "name": "Country",
+            "displayName": null,
+            "type": "base",
+            "expression": null,
+            "columns": [
+              {
+                "id": "Country",
+                "name": "Country",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "0920b26d-91ce-4e22-8817-b646a7a9c6c4",
+                "type": 18,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": true,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Country ID",
+                "name": "Country ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "1e238e3a-2408-4681-8fa6-f81286b28da5",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              }
+            ],
+            "buildBehavior": {
+              "type": "sync",
+              "accumulativeConfig": null
+            },
+            "lastUpdated": "2026-06-17T19:56:32.076Z",
+            "hidden": false,
+            "vTag": "1429af56-9813-4706-8ad8-74d76a44065b",
+            "configOptions": {
+              "Table": "Country.csv"
+            },
+            "createdAt": "2026-06-17T19:56:32.000Z",
+            "description": null,
+            "tags": null,
+            "aiGeneratedDescription": null,
+            "isMaterialized": false,
+            "schemaName": null
+          }
+        ]
+      },
+      "schedule": {
+        "type": null,
+        "lastExecution": null,
+        "day": null,
+        "days": null,
+        "hour": null,
+        "minute": null,
+        "second": null
+      },
+      "shares": [],
+      "liveQuerySettings": null
+    },
+    {
+      "oid": "b01a091e-fa02-4ba1-988c-584de06d3de9",
+      "type": "extract",
+      "connection": {
+        "id": null,
+        "oid": "6846d970-605d-4b14-8512-24d1db30d8e3",
+        "provider": "CSV",
+        "parameters": {
+          "culture": "en-US",
+          "Database": "null",
+          "delimiter": ",",
+          "files": [
+            "/opt/sisense/storage/samples/Sample ECommerce/Commerce/Commerce.csv"
+          ],
+          "folder": "",
+          "hasHeader": "true",
+          "ignoreFirstRows": "0",
+          "ignoreLastRows": "0",
+          "IsUsingDirectConnection": "false",
+          "Password": "",
+          "Port": "-1",
+          "Schema": "null",
+          "Server": "/opt/sisense/storage/samples/Sample ECommerce/Commerce/Commerce.csv",
+          "stringQuote": "\"",
+          "UserName": "null"
+        },
+        "schema": null,
+        "owner": null,
+        "fileName": null,
+        "protectedParameters": null,
+        "uiParams": null,
+        "globalTableConfigOptions": null,
+        "enabled": true,
+        "created": null,
+        "lastModified": "2026-06-17T19:56:32.113+00:00",
+        "supportedModelTypes": [
+          "EXTRACT"
+        ],
+        "ownerId": "6a32fb475397399ec0a31c8f",
+        "createdByUser": false,
+        "name": "Sample Commerce",
+        "description": "",
+        "connectionPermissions": null
+      },
+      "lastUpdated": "2026-06-18T06:03:04.644Z",
+      "database": "null",
+      "schemaName": "null",
+      "name": "c5b6aa2d-e010-4255-ad1c-ed7ca9fcb559",
+      "fullname": "CSV:c5b6aa2d-e010-4255-ad1c-ed7ca9fcb559",
+      "modelingTransformations": [],
+      "schema": {
+        "tables": [
+          {
+            "oid": "66885815-f865-413f-949b-d91606539bf3",
+            "id": "Commerce.csv",
+            "name": "Commerce",
+            "displayName": null,
+            "type": "base",
+            "expression": null,
+            "columns": [
+              {
+                "id": "Age Range",
+                "name": "Age Range",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "e03c6792-c418-496d-911a-be01b41d0ee5",
+                "type": 18,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": true,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Cost",
+                "name": "Cost",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "97732adc-fd11-43d8-b007-db20d9e055a6",
+                "type": 5,
+                "size": 50,
+                "precision": 16,
+                "scale": 16,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Brand ID",
+                "name": "Brand ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "ec2c0ae8-5e3c-45e1-87f8-f319fe560580",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Category ID",
+                "name": "Category ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "8190ab95-4723-40e1-a90b-d79443e0cf01",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Condition",
+                "name": "Condition",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "74a75b92-6747-4290-810f-bbf0bbd78759",
+                "type": 18,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": true,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Country ID",
+                "name": "Country ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "f6125e69-8839-4bf8-8cbb-d1ab31198489",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Date",
+                "name": "Date",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "59527454-1bb1-4189-920f-b9d5835bba0d",
+                "type": 4,
+                "size": 8,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Gender",
+                "name": "Gender",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "2375029f-b6d0-4de1-a6b5-bcdb4758ee15",
+                "type": 18,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": true,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Quantity",
+                "name": "Quantity",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "1ad27274-0b7f-43c2-96fe-48c95af8c771",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Revenue",
+                "name": "Revenue",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "098260b9-0608-4673-a6d7-756496815fbf",
+                "type": 5,
+                "size": 50,
+                "precision": 16,
+                "scale": 16,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Visit ID",
+                "name": "Visit ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "f7f6da64-1a5f-45f1-995f-95be6668e978",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              }
+            ],
+            "buildBehavior": {
+              "type": "sync",
+              "accumulativeConfig": null
+            },
+            "lastUpdated": "2026-06-17T19:56:32.076Z",
+            "hidden": false,
+            "vTag": "d50bbb17-f7d8-4bf4-b6e0-0bdf956de323",
+            "configOptions": {
+              "Table": "Commerce.csv"
+            },
+            "createdAt": "2026-06-17T19:56:32.000Z",
+            "description": null,
+            "tags": null,
+            "aiGeneratedDescription": null,
+            "isMaterialized": false,
+            "schemaName": null
+          }
+        ]
+      },
+      "schedule": {
+        "type": null,
+        "lastExecution": null,
+        "day": null,
+        "days": null,
+        "hour": null,
+        "minute": null,
+        "second": null
+      },
+      "shares": [],
+      "liveQuerySettings": null
+    },
+    {
+      "oid": "e9c5bdad-b4d1-43c0-bee7-c8b18b747857",
+      "type": "extract",
+      "connection": {
+        "id": null,
+        "oid": "559fb41d-d8b9-44e6-949d-f32260025b5f",
+        "provider": "CSV",
+        "parameters": {
+          "culture": "en-US",
+          "Database": "null",
+          "delimiter": ",",
+          "files": [
+            "/opt/sisense/storage/samples/Sample ECommerce/Category/Category.csv"
+          ],
+          "folder": "",
+          "hasHeader": "true",
+          "ignoreFirstRows": "0",
+          "ignoreLastRows": "0",
+          "IsUsingDirectConnection": "false",
+          "Password": "",
+          "Port": "-1",
+          "Schema": "null",
+          "Server": "/opt/sisense/storage/samples/Sample ECommerce/Category/Category.csv",
+          "stringQuote": "\"",
+          "UserName": "null"
+        },
+        "schema": null,
+        "owner": null,
+        "fileName": null,
+        "protectedParameters": null,
+        "uiParams": null,
+        "globalTableConfigOptions": null,
+        "enabled": true,
+        "created": null,
+        "lastModified": "2026-06-17T19:56:32.228+00:00",
+        "supportedModelTypes": [
+          "EXTRACT"
+        ],
+        "ownerId": "6a32fb475397399ec0a31c8f",
+        "createdByUser": false,
+        "name": "Sample Category",
+        "description": "",
+        "connectionPermissions": null
+      },
+      "lastUpdated": "2026-06-18T06:03:04.644Z",
+      "database": "null",
+      "schemaName": "null",
+      "name": "a03f00ab-9022-40a5-babf-dcd668daa5af",
+      "fullname": "CSV:a03f00ab-9022-40a5-babf-dcd668daa5af",
+      "modelingTransformations": [],
+      "schema": {
+        "tables": [
+          {
+            "oid": "1c9c1ee0-cc9f-4585-af87-f217f8f98e21",
+            "id": "Category.csv",
+            "name": "Category",
+            "displayName": null,
+            "type": "base",
+            "expression": null,
+            "columns": [
+              {
+                "id": "Category",
+                "name": "Category",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "53175968-694f-4c59-ad18-aaa7ce8e40db",
+                "type": 18,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": true,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Category ID",
+                "name": "Category ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "a0753f57-fd77-4a19-85fe-29d1f1d8509a",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              }
+            ],
+            "buildBehavior": {
+              "type": "sync",
+              "accumulativeConfig": null
+            },
+            "lastUpdated": "2026-06-17T19:56:32.076Z",
+            "hidden": false,
+            "vTag": "631232aa-df76-483a-83c1-88d8830fd863",
+            "configOptions": {
+              "Table": "Category.csv"
+            },
+            "createdAt": "2026-06-17T19:56:32.000Z",
+            "description": null,
+            "tags": null,
+            "aiGeneratedDescription": null,
+            "isMaterialized": false,
+            "schemaName": null
+          }
+        ]
+      },
+      "schedule": {
+        "type": null,
+        "lastExecution": null,
+        "day": null,
+        "days": null,
+        "hour": null,
+        "minute": null,
+        "second": null
+      },
+      "shares": [],
+      "liveQuerySettings": null
+    },
+    {
+      "oid": "ebc6eebd-fc08-479e-a845-dfc774c5929e",
+      "type": "extract",
+      "connection": {
+        "id": null,
+        "oid": "f3a2ca12-c1a3-4d57-a576-12e4961c4700",
+        "provider": "CSV",
+        "parameters": {
+          "culture": "en-US",
+          "Database": "null",
+          "delimiter": ",",
+          "files": [
+            "/opt/sisense/storage/samples/Sample ECommerce/Brand/Brand.csv"
+          ],
+          "folder": "",
+          "hasHeader": "true",
+          "ignoreFirstRows": "0",
+          "ignoreLastRows": "0",
+          "IsUsingDirectConnection": "false",
+          "Password": "",
+          "Port": "-1",
+          "Schema": "null",
+          "Server": "/opt/sisense/storage/samples/Sample ECommerce/Brand/Brand.csv",
+          "stringQuote": "\"",
+          "UserName": "null"
+        },
+        "schema": null,
+        "owner": null,
+        "fileName": null,
+        "protectedParameters": null,
+        "uiParams": null,
+        "globalTableConfigOptions": null,
+        "enabled": true,
+        "created": null,
+        "lastModified": "2026-06-17T19:56:32.280+00:00",
+        "supportedModelTypes": [
+          "EXTRACT"
+        ],
+        "ownerId": "6a32fb475397399ec0a31c8f",
+        "createdByUser": false,
+        "name": "Sample Brand",
+        "description": "",
+        "connectionPermissions": null
+      },
+      "lastUpdated": "2026-06-18T06:03:04.644Z",
+      "database": "null",
+      "schemaName": "null",
+      "name": "95c0d7fe-3eaf-494f-be22-7e6c66889ef6",
+      "fullname": "CSV:95c0d7fe-3eaf-494f-be22-7e6c66889ef6",
+      "modelingTransformations": [],
+      "schema": {
+        "tables": [
+          {
+            "oid": "c447fc2e-51d1-47fd-bb2d-947975b1bbcf",
+            "id": "Brand.csv",
+            "name": "Brand",
+            "displayName": null,
+            "type": "base",
+            "expression": null,
+            "columns": [
+              {
+                "id": "Brand",
+                "name": "Brand",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "21861c02-df83-4302-b8ff-88dc3b28d1c1",
+                "type": 18,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": true,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              },
+              {
+                "id": "Brand ID",
+                "name": "Brand ID",
+                "displayName": null,
+                "semanticIndex": null,
+                "aiGeneratedDescription": null,
+                "oid": "8fb5272d-dd61-4780-b62f-fbc4e7baa9dc",
+                "type": 8,
+                "size": 50,
+                "precision": 0,
+                "scale": 0,
+                "hidden": false,
+                "indexed": false,
+                "isUpsertBy": false,
+                "lastUpdated": "2026-06-17T19:56:32.076Z",
+                "description": null,
+                "expression": null,
+                "import": null,
+                "isCustom": null
+              }
+            ],
+            "buildBehavior": {
+              "type": "sync",
+              "accumulativeConfig": null
+            },
+            "lastUpdated": "2026-06-17T19:56:32.076Z",
+            "hidden": false,
+            "vTag": "20b098f2-90fa-4f8d-a031-fe4e633963e4",
+            "configOptions": {
+              "Table": "Brand.csv"
+            },
+            "createdAt": "2026-06-17T19:56:32.000Z",
+            "description": null,
+            "tags": null,
+            "aiGeneratedDescription": null,
+            "isMaterialized": false,
+            "schemaName": null
+          }
+        ]
+      },
+      "schedule": {
+        "type": null,
+        "lastExecution": null,
+        "day": null,
+        "days": null,
+        "hour": null,
+        "minute": null,
+        "second": null
+      },
+      "shares": [],
+      "liveQuerySettings": null
+    }
+  ],
+  "modelingTransformations": [],
+  "relations": [
+    {
+      "oid": "52c3587b-efbd-4c5d-98c0-ca32f9cfd77c",
+      "columns": [
+        {
+          "dataset": "e9c5bdad-b4d1-43c0-bee7-c8b18b747857",
+          "table": "1c9c1ee0-cc9f-4585-af87-f217f8f98e21",
+          "column": "a0753f57-fd77-4a19-85fe-29d1f1d8509a",
+          "isDropped": null
+        },
+        {
+          "dataset": "b01a091e-fa02-4ba1-988c-584de06d3de9",
+          "table": "66885815-f865-413f-949b-d91606539bf3",
+          "column": "8190ab95-4723-40e1-a90b-d79443e0cf01",
+          "isDropped": null
+        }
+      ],
+      "type": null
+    },
+    {
+      "oid": "0e30a09c-6003-4941-8770-bd6b13e63838",
+      "columns": [
+        {
+          "dataset": "bf915bf9-5242-42b7-a64d-ec9d0632afe7",
+          "table": "a1f938ef-8654-4dcb-86e0-1baeba1a971d",
+          "column": "1e238e3a-2408-4681-8fa6-f81286b28da5",
+          "isDropped": null
+        },
+        {
+          "dataset": "b01a091e-fa02-4ba1-988c-584de06d3de9",
+          "table": "66885815-f865-413f-949b-d91606539bf3",
+          "column": "f6125e69-8839-4bf8-8cbb-d1ab31198489",
+          "isDropped": null
+        }
+      ],
+      "type": null
+    },
+    {
+      "oid": "5b080d72-5075-4723-b81f-087905f3b54a",
+      "columns": [
+        {
+          "dataset": "ebc6eebd-fc08-479e-a845-dfc774c5929e",
+          "table": "c447fc2e-51d1-47fd-bb2d-947975b1bbcf",
+          "column": "8fb5272d-dd61-4780-b62f-fbc4e7baa9dc",
+          "isDropped": null
+        },
+        {
+          "dataset": "b01a091e-fa02-4ba1-988c-584de06d3de9",
+          "table": "66885815-f865-413f-949b-d91606539bf3",
+          "column": "ec2c0ae8-5e3c-45e1-87f8-f319fe560580",
+          "isDropped": null
+        }
+      ],
+      "type": null
+    }
+  ],
+  "schedule": null,
+  "creator": {
+    "id": "6a32fb475397399ec0a31c8f",
+    "userName": "tj@pivotanalyticsllc.net",
+    "active": true,
+    "created": "2026-06-17T19:53:43.397Z",
+    "email": "tj@pivotanalyticsllc.net",
+    "encryptionSHA": null,
+    "firstName": "Thomas",
+    "lastName": "Wells",
+    "lastLogin": "2026-06-18T01:02:57.206Z",
+    "lastUpdated": "2026-06-18T01:02:49.401Z",
+    "prefrences": null,
+    "roleId": "6a32fb470faf9fa6a92192f8"
+  },
+  "type": "extract",
+  "relationType": "direct",
+  "tenant": {
+    "_id": "6a32fb475397399ec0a31c9c",
+    "name": "system",
+    "default": true,
+    "systemManagement": true
+  },
+  "aiAccessController": {
+    "availableForAnalyticsAssistant": true,
+    "availableForStudioAssistant": true,
+    "availableForSemanticEnrichment": true
+  },
+  "relationsTables": [
+    {
+      "firstTable": "1c9c1ee0-cc9f-4585-af87-f217f8f98e21",
+      "secondTable": "66885815-f865-413f-949b-d91606539bf3",
+      "directionType": null,
+      "joinType": "default"
+    },
+    {
+      "firstTable": "a1f938ef-8654-4dcb-86e0-1baeba1a971d",
+      "secondTable": "66885815-f865-413f-949b-d91606539bf3",
+      "directionType": null,
+      "joinType": "default"
+    },
+    {
+      "firstTable": "c447fc2e-51d1-47fd-bb2d-947975b1bbcf",
+      "secondTable": "66885815-f865-413f-949b-d91606539bf3",
+      "directionType": null,
+      "joinType": "default"
+    }
+  ],
+  "analyticalEngine": {
+    "queryAeMode": "AE_ONLY",
+    "customTranslationMode": null,
+    "generateDependenciesMode": null
+  }
+}

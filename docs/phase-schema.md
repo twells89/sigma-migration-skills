@@ -58,6 +58,24 @@ MicroStrategy uses "Phase" numbering and is documented here rather than as an
 | C9 Security/RLS | "Security: RLS/CLS" section |
 | C10 Enhance | — |
 
+### sisense-to-sigma
+
+Sisense uses "Phase" numbering (it joined after the table was set). Its local
+mapping:
+
+| Canonical | sisense-to-sigma |
+|---|---|
+| C1 Assess | sisense-assessment skill + `scan_gaps.py` (gap scout) |
+| C2 Discover | Phase 1 — Discover (`discover.py`) |
+| C3 Reuse-check | Phase 2 — reuse an existing DM on the same warehouse tables before POST |
+| C4 Convert | Phase 2/3 — Convert model + dashboards → Sigma specs |
+| C5 Post-DM gate | Phase 2 — POST + read back real ids |
+| C6 Build workbook | Phase 3 — emit workbook with read-back ids, POST |
+| C7 Layout | within Phase 3 (`build_layout` → `layout` XML, LAST write) |
+| C8 Parity hard gate | Phase 4 — Verify parity (`verify_parity.py` data + `verify_layout.py` layout) |
+| C9 Security/RLS | Phase 1.5 — RLS scan (opt-in: `detect_rls.py` + `apply_sigma_rls.py`) |
+| C10 Enhance | — (defer to `sigma-workbooks`) |
+
 Notes:
 
 - **Looker runs the RLS gate early** (before building, C9 ahead of C4) by

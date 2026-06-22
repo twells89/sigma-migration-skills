@@ -1,0 +1,1961 @@
+[
+  {
+    "_id": "6a33404e17884480503a9e36",
+    "title": "ECommerce Overview (Live)",
+    "desc": "",
+    "source": null,
+    "type": "dashboard",
+    "shares": [
+      {
+        "shareId": "6a32fb475397399ec0a31c8f",
+        "type": "user"
+      }
+    ],
+    "style": {},
+    "owner": "6a32fb475397399ec0a31c8f",
+    "userId": "6a32fb475397399ec0a31c8f",
+    "tenantId": "6a32fb475397399ec0a31c9c",
+    "created": "2026-06-18T00:48:14.234Z",
+    "lastUpdated": "2026-06-18T13:20:07.788Z",
+    "layout": {
+      "type": "columnar",
+      "columns": [
+        {
+          "width": 100,
+          "cells": [
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a33406e17884480503a9e37"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a33406e17884480503a9e39"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a33406e17884480503a9e3b"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a33406f17884480503a9e3d"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a33406f17884480503a9e3f"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a33406f17884480503a9e41"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "instanceType": "owner",
+    "dataExploration": true,
+    "lastOpened": "2026-06-18T13:01:51.313Z",
+    "previewLayout": [],
+    "datasource": {
+      "address": "LocalHost",
+      "title": "Sample ECommerce (Snowflake Live)",
+      "database": "Sample ECommerce (Snowflake Live)",
+      "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+      "live": true
+    },
+    "oid": "6a33404e17884480503a9e35",
+    "settings": {
+      "autoUpdateOnFiltersChange": true
+    },
+    "filters": [
+      {
+        "jaql": {
+          "dim": "[Commerce.Gender]",
+          "table": "Commerce",
+          "column": "Gender",
+          "datatype": "text",
+          "title": "Gender",
+          "filter": {
+            "members": [
+              "Male",
+              "Female"
+            ]
+          }
+        }
+      },
+      {
+        "jaql": {
+          "dim": "[Country.Country]",
+          "table": "Country",
+          "column": "Country",
+          "datatype": "text",
+          "title": "Country",
+          "filter": {
+            "members": [
+              "United States",
+              "Canada"
+            ]
+          }
+        }
+      }
+    ],
+    "widgets": [
+      {
+        "_id": "6a33406e17884480503a9e38",
+        "title": "Total Revenue",
+        "type": "indicator",
+        "subtype": "indicator/numeric",
+        "oid": "6a33406e17884480503a9e37",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:48:46.198Z",
+        "lastUpdated": "2026-06-18T00:48:46.198Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "value",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "title": "Total Revenue",
+                    "agg": "sum"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "instanceid": null,
+        "options": {
+          "dashboardFiltersMode": "filter",
+          "selector": true
+        },
+        "dashboardid": "6a33404e17884480503a9e35",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a33406e17884480503a9e3a",
+        "title": "Total Quantity",
+        "type": "indicator",
+        "subtype": "indicator/numeric",
+        "oid": "6a33406e17884480503a9e39",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:48:46.522Z",
+        "lastUpdated": "2026-06-18T00:48:46.522Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "value",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "title": "Total Quantity",
+                    "agg": "sum"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "instanceid": null,
+        "options": {
+          "dashboardFiltersMode": "filter",
+          "selector": true
+        },
+        "dashboardid": "6a33404e17884480503a9e35",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a33406e17884480503a9e3c",
+        "title": "Revenue by Category",
+        "type": "chart/column",
+        "subtype": "column/classic",
+        "oid": "6a33406e17884480503a9e3b",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:48:46.821Z",
+        "lastUpdated": "2026-06-18T00:48:46.821Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category",
+                    "sort": "desc"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "title": "Revenue",
+                    "agg": "sum"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "instanceid": null,
+        "options": {
+          "dashboardFiltersMode": "filter",
+          "selector": true
+        },
+        "dashboardid": "6a33404e17884480503a9e35",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a33406f17884480503a9e3e",
+        "title": "Revenue by Country (Top 10)",
+        "type": "chart/bar",
+        "subtype": "bar/classic",
+        "oid": "6a33406f17884480503a9e3d",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:48:47.135Z",
+        "lastUpdated": "2026-06-18T00:48:47.135Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Country.Country]",
+                    "title": "Country",
+                    "filter": {
+                      "top": {
+                        "count": 10,
+                        "by": {
+                          "dim": "[Commerce.Revenue]",
+                          "agg": "sum"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "title": "Revenue",
+                    "agg": "sum"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "instanceid": null,
+        "options": {
+          "dashboardFiltersMode": "filter",
+          "selector": true
+        },
+        "dashboardid": "6a33404e17884480503a9e35",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a33406f17884480503a9e40",
+        "title": "Revenue Trend (Monthly)",
+        "type": "chart/line",
+        "subtype": "line/classic",
+        "oid": "6a33406f17884480503a9e3f",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:48:47.519Z",
+        "lastUpdated": "2026-06-18T00:48:47.519Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "x-axis",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Date]",
+                    "title": "Months in Date",
+                    "level": "months"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "title": "Revenue",
+                    "agg": "sum"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "instanceid": null,
+        "options": {
+          "dashboardFiltersMode": "filter",
+          "selector": true
+        },
+        "dashboardid": "6a33404e17884480503a9e35",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a33406f17884480503a9e42",
+        "title": "Quantity by Category",
+        "type": "chart/pie",
+        "subtype": "pie/classic",
+        "oid": "6a33406f17884480503a9e41",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:48:47.839Z",
+        "lastUpdated": "2026-06-18T00:48:47.839Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "title": "Quantity",
+                    "agg": "sum"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "instanceid": null,
+        "options": {
+          "dashboardFiltersMode": "filter",
+          "selector": true
+        },
+        "dashboardid": "6a33404e17884480503a9e35",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      }
+    ]
+  },
+  {
+    "_id": "6a3341b417884480503a9e44",
+    "title": "ECommerce \u2014 Full Coverage",
+    "desc": "",
+    "source": null,
+    "type": "dashboard",
+    "shares": [
+      {
+        "shareId": "6a32fb475397399ec0a31c8f",
+        "type": "user"
+      }
+    ],
+    "style": {},
+    "owner": "6a32fb475397399ec0a31c8f",
+    "userId": "6a32fb475397399ec0a31c8f",
+    "tenantId": "6a32fb475397399ec0a31c9c",
+    "created": "2026-06-18T00:54:12.513Z",
+    "lastUpdated": "2026-06-18T01:02:51.317Z",
+    "layout": {
+      "type": "columnar",
+      "columns": [
+        {
+          "width": 100,
+          "cells": [
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b417884480503a9e45"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b517884480503a9e47"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b517884480503a9e49"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b517884480503a9e4b"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b617884480503a9e4d"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b617884480503a9e4f"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b617884480503a9e51"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b717884480503a9e53"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b717884480503a9e55"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b717884480503a9e57"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b817884480503a9e59"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b817884480503a9e5b"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b817884480503a9e5d"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b917884480503a9e5f"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b917884480503a9e61"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341b917884480503a9e63"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341ba17884480503a9e65"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            },
+            {
+              "subcells": [
+                {
+                  "elements": [
+                    {
+                      "minHeight": 102,
+                      "maxHeight": 1024,
+                      "minWidth": 128,
+                      "maxWidth": 2048,
+                      "height": 512,
+                      "defaultWidth": 512,
+                      "widgetid": "6a3341ba17884480503a9e67"
+                    }
+                  ],
+                  "index": 0,
+                  "stretchable": false,
+                  "width": 100
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "instanceType": "owner",
+    "dataExploration": true,
+    "lastOpened": "2026-06-18T01:02:50.914Z",
+    "previewLayout": [],
+    "datasource": {
+      "address": "LocalHost",
+      "title": "Sample ECommerce (Snowflake Live)",
+      "database": "Sample ECommerce (Snowflake Live)",
+      "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+      "live": true
+    },
+    "oid": "6a3341b417884480503a9e43",
+    "settings": {
+      "autoUpdateOnFiltersChange": true
+    },
+    "widgets": [
+      {
+        "_id": "6a3341b417884480503a9e46",
+        "title": "KPI: Total Revenue",
+        "type": "indicator",
+        "subtype": "indicator/numeric",
+        "oid": "6a3341b417884480503a9e45",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:12.839Z",
+        "lastUpdated": "2026-06-18T00:54:12.839Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "value",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Total Revenue"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b517884480503a9e48",
+        "title": "KPI: Gauge AOV",
+        "type": "indicator",
+        "subtype": "indicator/gauge",
+        "oid": "6a3341b517884480503a9e47",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:13.158Z",
+        "lastUpdated": "2026-06-18T00:54:13.158Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "value",
+              "items": [
+                {
+                  "jaql": {
+                    "formula": "SUM([r])/COUNT([v])",
+                    "context": {
+                      "[r]": {
+                        "dim": "[Commerce.Revenue]"
+                      },
+                      "[v]": {
+                        "dim": "[Commerce.Visit ID]"
+                      }
+                    },
+                    "title": "Avg Order Value"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "min",
+              "items": []
+            },
+            {
+              "name": "max",
+              "items": []
+            },
+            {
+              "name": "secondary",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b517884480503a9e4a",
+        "title": "KPI: Distinct Brands",
+        "type": "indicator",
+        "subtype": "indicator/numeric",
+        "oid": "6a3341b517884480503a9e49",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:13.471Z",
+        "lastUpdated": "2026-06-18T00:54:13.471Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "value",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Brand.Brand]",
+                    "agg": "countDistinct",
+                    "title": "Distinct Brands"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b517884480503a9e4c",
+        "title": "KPI: Revenue per Unit",
+        "type": "indicator",
+        "subtype": "indicator/numeric",
+        "oid": "6a3341b517884480503a9e4b",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:13.778Z",
+        "lastUpdated": "2026-06-18T00:54:13.778Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "value",
+              "items": [
+                {
+                  "jaql": {
+                    "formula": "SUM([r])/SUM([q])",
+                    "context": {
+                      "[r]": {
+                        "dim": "[Commerce.Revenue]"
+                      },
+                      "[q]": {
+                        "dim": "[Commerce.Quantity]"
+                      }
+                    },
+                    "title": "Revenue per Unit"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b617884480503a9e4e",
+        "title": "Revenue by Category",
+        "type": "chart/column",
+        "subtype": "column/classic",
+        "oid": "6a3341b617884480503a9e4d",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:14.098Z",
+        "lastUpdated": "2026-06-18T00:54:14.098Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "sort": "desc",
+                    "title": "Category"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b617884480503a9e50",
+        "title": "Revenue by Country (Top 10)",
+        "type": "chart/bar",
+        "subtype": "bar/classic",
+        "oid": "6a3341b617884480503a9e4f",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:14.468Z",
+        "lastUpdated": "2026-06-18T00:54:14.468Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Country.Country]",
+                    "filter": {
+                      "top": {
+                        "count": 10,
+                        "by": {
+                          "dim": "[Commerce.Revenue]",
+                          "agg": "sum"
+                        }
+                      }
+                    },
+                    "title": "Country"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b617884480503a9e52",
+        "title": "Revenue Trend (Monthly)",
+        "type": "chart/line",
+        "subtype": "line/classic",
+        "oid": "6a3341b617884480503a9e51",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:14.793Z",
+        "lastUpdated": "2026-06-18T00:54:14.793Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "x-axis",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Date]",
+                    "level": "months",
+                    "title": "Months"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b717884480503a9e54",
+        "title": "Quantity Trend (Area)",
+        "type": "chart/area",
+        "subtype": "area/classic",
+        "oid": "6a3341b717884480503a9e53",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:15.098Z",
+        "lastUpdated": "2026-06-18T00:54:15.098Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "x-axis",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Date]",
+                    "level": "months",
+                    "title": "Months"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "agg": "sum",
+                    "title": "Quantity"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b717884480503a9e56",
+        "title": "Revenue by Month x Gender",
+        "type": "chart/line",
+        "subtype": "line/classic",
+        "oid": "6a3341b717884480503a9e55",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:15.415Z",
+        "lastUpdated": "2026-06-18T00:54:15.415Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "x-axis",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Date]",
+                    "level": "months",
+                    "title": "Months"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Gender]",
+                    "title": "Gender"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b717884480503a9e58",
+        "title": "Quantity by Category (Pie)",
+        "type": "chart/pie",
+        "subtype": "pie/classic",
+        "oid": "6a3341b717884480503a9e57",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:15.730Z",
+        "lastUpdated": "2026-06-18T00:54:15.730Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "agg": "sum",
+                    "title": "Quantity"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b817884480503a9e5a",
+        "title": "Revenue by Category (Polar)",
+        "type": "chart/polar",
+        "subtype": "polar/column",
+        "oid": "6a3341b817884480503a9e59",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:16.039Z",
+        "lastUpdated": "2026-06-18T00:54:16.039Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b817884480503a9e5c",
+        "title": "Revenue by Condition (Funnel)",
+        "type": "chart/funnel",
+        "subtype": "funnel/classic",
+        "oid": "6a3341b817884480503a9e5b",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:16.411Z",
+        "lastUpdated": "2026-06-18T00:54:16.411Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Condition]",
+                    "title": "Condition"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b817884480503a9e5e",
+        "title": "Revenue vs Qty by Brand (Scatter)",
+        "type": "chart/scatter",
+        "subtype": "scatter/classic",
+        "oid": "6a3341b817884480503a9e5d",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:16.734Z",
+        "lastUpdated": "2026-06-18T00:54:16.734Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "x-axis",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "y-axis",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "agg": "sum",
+                    "title": "Quantity"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "point",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Brand.Brand]",
+                    "filter": {
+                      "top": {
+                        "count": 50,
+                        "by": {
+                          "dim": "[Commerce.Revenue]",
+                          "agg": "sum"
+                        }
+                      }
+                    },
+                    "title": "Brand"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "break by / color",
+              "items": []
+            },
+            {
+              "name": "size",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b917884480503a9e60",
+        "title": "Pivot: Category x Gender",
+        "type": "pivot2",
+        "subtype": "",
+        "oid": "6a3341b917884480503a9e5f",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:17.114Z",
+        "lastUpdated": "2026-06-18T00:54:17.114Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "rows",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "columns",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Gender]",
+                    "title": "Gender"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "values",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                },
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "agg": "sum",
+                    "title": "Quantity"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b917884480503a9e62",
+        "title": "Detail Table",
+        "type": "tablewidget",
+        "subtype": "",
+        "oid": "6a3341b917884480503a9e61",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:17.430Z",
+        "lastUpdated": "2026-06-18T00:54:17.430Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "columns",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Brand.Brand]",
+                    "title": "Brand"
+                  }
+                },
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category"
+                  }
+                },
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                },
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Quantity]",
+                    "agg": "sum",
+                    "title": "Quantity"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341b917884480503a9e64",
+        "title": "Revenue by Brand (Treemap)",
+        "type": "treemap",
+        "subtype": "",
+        "oid": "6a3341b917884480503a9e63",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:17.739Z",
+        "lastUpdated": "2026-06-18T00:54:17.739Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Brand.Brand]",
+                    "filter": {
+                      "top": {
+                        "count": 20,
+                        "by": {
+                          "dim": "[Commerce.Revenue]",
+                          "agg": "sum"
+                        }
+                      }
+                    },
+                    "title": "Brand"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "size",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "color",
+              "items": []
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341ba17884480503a9e66",
+        "title": "Category>Gender (Sunburst)",
+        "type": "sunburst",
+        "subtype": "",
+        "oid": "6a3341ba17884480503a9e65",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:18.058Z",
+        "lastUpdated": "2026-06-18T00:54:18.058Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "categories",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Category.Category]",
+                    "title": "Category"
+                  }
+                },
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Gender]",
+                    "title": "Gender"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "size",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      },
+      {
+        "_id": "6a3341ba17884480503a9e68",
+        "title": "Revenue by Country (Map)",
+        "type": "map/area",
+        "subtype": "",
+        "oid": "6a3341ba17884480503a9e67",
+        "desc": null,
+        "source": null,
+        "owner": "6a32fb475397399ec0a31c8f",
+        "created": "2026-06-18T00:54:18.373Z",
+        "lastUpdated": "2026-06-18T00:54:18.373Z",
+        "datasource": {
+          "address": "LocalHost",
+          "title": "Sample ECommerce (Snowflake Live)",
+          "database": "Sample ECommerce (Snowflake Live)",
+          "fullname": "LocalHost/Sample ECommerce (Snowflake Live)",
+          "live": true
+        },
+        "selection": null,
+        "metadata": {
+          "panels": [
+            {
+              "name": "geo",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Country.Country]",
+                    "title": "Country"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "color",
+              "items": [
+                {
+                  "jaql": {
+                    "dim": "[Commerce.Revenue]",
+                    "agg": "sum",
+                    "title": "Revenue"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "style": {},
+        "dashboardid": "6a3341b417884480503a9e43",
+        "userId": "6a32fb475397399ec0a31c8f",
+        "instanceType": "owner"
+      }
+    ]
+  }
+]
