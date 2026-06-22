@@ -66,6 +66,7 @@ require 'set'
 HERE = __dir__
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
 require 'scout_gate' # run-each-time gap-scout gate (bead beads-sigma-5l5e)
+require 'dax_gate'   # DAX warning → decision-question classifier (regression-tested)
 
 opts = { db: '', schema: '' }
 OptionParser.new do |o|
@@ -362,47 +363,14 @@ puts "   #{conv_stats['elements'] || (dm_model['pages'] || []).flat_map { |p| p[
 questions = []
 
 # (a) + (b) DAX measures with no Sigma equivalent ((c)-tail) / DAX needing restructure.
-# The converter marks these in `warnings`: ⛔ = no/failed translation (drops to Null);
-# ⚠ = restructure-needed (RANKX/CALCULATE/iterator/scope/time-intel); ✅ = SUCCESS
-# (the converter auto-translated it — e.g. RANKX→SQL window helper, USERELATIONSHIP→
-# alternate join path); ℹ = informational (clean auto-handle). Only ⛔ and genuinely
-# DROPPED ⚠ are decisions — ✅/ℹ and any ⚠ the converter actually REALIZED in the DM
-# (e.g. time-intel → grouped element) are handled, NOT degradations.
-#
-# Names the converter realized in the DM (element/metric/column display names), used to
-# tell a handled restructure from a real drop. Regression fix: the gap-scout gate used
-# to bucket ✅ and built restructures as "needs scout", hard-stopping the --yes/demo path.
-realized_names = []
-(dm_model['pages'] || []).each do |pg|
-  (pg['elements'] || []).each do |el|
-    realized_names << el['name'].to_s.strip unless el['name'].to_s.strip.empty?
-    (el['metrics'] || []).each { |m| realized_names << m['name'].to_s.strip unless m['name'].to_s.strip.empty? }
-    (el['columns'] || []).each { |c| realized_names << c['name'].to_s.strip unless c['name'].to_s.strip.empty? }
-  end
-end
-measure_of = ->(s) { (s[/"([^"]+)"/, 1] || '').strip }
-conv_warnings.each do |w|
-  ws = w.to_s.gsub(/\s+/, ' ').strip
-  next if ws.start_with?('ℹ') # informational; auto-handled, no human choice
-  next if ws.start_with?('✅') # SUCCESS — converter translated it; not a degradation, no scout
-  mname = measure_of.call(ws)
-  if ws.start_with?('⛔')
-    questions << { 'id' => 'dax_no_equivalent', 'severity' => 'review',
-                   'detail' => ws,
-                   'options' => ['proceed (measure degrades to Null; original DAX kept in description)',
-                                 'abort and re-author the measure manually'],
-                   'default' => 'proceed (measure degrades to Null; original DAX kept in description)' }
-  else # ⚠ and any unmarked warning
-    # A ⚠ measure the converter REALIZED as a DM element/metric/column is a handled
-    # restructure (e.g. TOTALYTD → grouped CumulativeSum element), not a gap — skip it.
-    next if !mname.empty? && realized_names.include?(mname)
-    questions << { 'id' => 'dax_needs_restructure', 'severity' => 'review',
-                   'detail' => ws,
-                   'options' => ['proceed (converter best-effort; verify in Sigma)',
-                                 'restructure manually via gap-scout (scripts/gap-scout.md)'],
-                   'default' => 'proceed (converter best-effort; verify in Sigma)' }
-  end
-end
+# Classification lives in lib/dax_gate.rb (pure + unit-tested in test-dax-gate.rb).
+# The converter marks each warning: ⛔ = no/failed translation (drops to Null);
+# ⚠ = restructure-needed; ✅ = SUCCESS (auto-translated — RANKX→SQL window helper,
+# USERELATIONSHIP→alternate join path); ℹ = informational. Only ⛔ and genuinely
+# DROPPED ⚠ become decisions — ✅/ℹ and any ⚠ the converter actually REALIZED in the
+# DM (e.g. time-intel → grouped element) are handled, NOT degradations. Regression fix:
+# the gate used to bucket ✅ and built restructures as "needs scout", stalling --yes.
+questions.concat(DaxGate.dax_questions(conv_warnings, dm_model))
 
 # (b) visuals with no NATIVE Sigma kind. extract-pbir maps unknown visualTypes to
 # "bar" as a fallback; flag any visualType that is NOT a recognized native PBI kind
