@@ -103,7 +103,11 @@ Check what backs the dossier's dataset before extracting. `GET /objects/{dataset
   **If rehosting**, the cube's *data* still extracts cleanly even though its model doesn't:
   1. Pull all rows via the cube instance API — `POST /v2/cubes/{id}/instances?offset&limit` for page 1 (returns `instanceId` + `definition.grid` + `data`), then `GET /v2/cubes/{id}/instances/{iid}?offset` to page. Element lists in each response are page-scoped. Flatten attributes-on-rows + metrics-on-columns into one table.
   2. `COPY` it into the warehouse the Sigma connection reaches (quote identifiers to preserve display names; `DATE_FORMAT`/`FIELD_OPTIONALLY_ENCLOSED_BY` for messy CSV; `GRANT SELECT` to the connection role + schema sync — see `sigma-data-models`).
-  3. **Rejoin the normal flow at Phase 3** with a `warehouse-table` source. Skip Phase 1/2 (no bundle to extract) — build the DM + workbook directly, and lean hard on Phase 1.1's source-PDF capture + execute-instance value truth (a cube's KPIs are often a latest-period stat, and a chapter date filter drives the row subsets). Verify with parity + the source-fidelity Visual QA gate exactly as usual.
+  3. **Rejoin the normal flow at Phase 3** with a `warehouse-table` source. Skip Phase 1/2 (no bundle to extract) — build the DM + workbook directly, and lean hard on Phase 1.1's source-PDF capture + execute-instance value truth (a cube's KPIs are often a latest-period stat, and a chapter date filter drives the row subsets).
+  4. **Emit REAL charts, not labeled-table stubs.** The `convert.py` classic path currently falls back to flagged tables for chart vizzes (roadmap) — **do NOT carry that fallback into a path-B hand build.** Map each `visualizationType` (`refs/viz-type-mapping.md`) to its Sigma element via the `sigma-workbooks` skill: `kpi`→`kpi-chart`, `bar_chart`→`bar-chart`, `combo_chart`→`combo-chart`, `grid`→`table`/`pivot-table`, `microcharts`→`pivot-table` with `conditionalFormats`/data bars. These all build via the workbook spec (proven live on Retail Insights — kpi/bar/combo/pivot). A table is the fallback ONLY for a genuinely unmappable type, and you say so.
+  5. **Gates:** `assert-phase6-ran.rb` is wired for the classic path — in path B it does not apply, but you still MUST run the **parity gate** and the **source-fidelity Visual QA gate** (compare the render to `source_dossier.pdf`, every page). Don't declare done on HTTP 200.
+
+  > **Known ceiling — be honest in the writeup:** a cube's *derived* metrics (e.g. an "Inventory Performance" ratio, or non-additive aggregations) carry their formula only inside the cube — they do NOT reduce from the rehosted base columns. Recover exact definitions via Workstation export / ODBC, or approximate and **label the approximation**. Never silently ship a guessed metric as exact.
 
 ## Phase 1 — Extract the bundle
 
@@ -141,6 +145,15 @@ bands, and any controls/selector panels.
 #       GET  /v2/dossiers/{id}/instances/{mid}/chapters/{chapKey}/visualizations/{vizKey}
 #     Per-viz response gives definition.grid (rows/columns/metrics) + data.metricValues.
 ```
+
+> **A page's top-level `visualizations[]` is ALWAYS empty in the static
+> definition — the real vizzes live in `panelStacks[].panels[].visualizations[]`
+> (each carries `key`, `name`, `visualizationType`). NEVER conclude a page "has
+> no visualizations" and emit a stub/placeholder from the empty page-level list
+> — that is a bug, not an empty page. Walk panelStacks recursively (see
+> `convert.py:_walk_viz_keys`), then execute each `key` for its grid+values. A
+> page that looks empty means you read the wrong field.** (This is the
+> single most common way a migrated page comes out blank.)
 
 Capture each viz's **actual displayed values** as the parity baseline. Two
 traps this surfaces that the bundle hides:
