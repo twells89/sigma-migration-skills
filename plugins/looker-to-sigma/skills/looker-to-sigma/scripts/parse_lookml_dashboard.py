@@ -69,6 +69,22 @@ def norm_color(viz):
     }
 
 
+def norm_cell_viz(el):
+    """series_cell_visualizations (LookML grid data bars) -> {field: {scheme:[hex]|None}}.
+    Mirrors fetch_looker_dashboard._cell_viz; see it for the Looker shape + caveats."""
+    out = {}
+    scv = el.get("series_cell_visualizations")
+    if not isinstance(scv, dict):
+        return out
+    for fld, cfg in scv.items():
+        if not isinstance(cfg, dict) or cfg.get("is_active") is False:
+            continue
+        pal = cfg.get("palette") if isinstance(cfg.get("palette"), dict) else {}
+        custom = [c for c in (pal.get("custom_colors") or []) if isinstance(c, str)]
+        out[fld] = {"scheme": custom or None}
+    return out
+
+
 def norm_element(el):
     return {
         "name": el.get("name") or el.get("title"),
@@ -95,6 +111,8 @@ def norm_element(el):
         "referenceLines": norm_reflines(el),
         # color encoding (series_colors / colors / color_application) → Sigma color channel
         "color": norm_color(el),
+        # grid in-cell data bars (series_cell_visualizations) → Sigma conditionalFormats
+        "cellVisualizations": norm_cell_viz(el),
         # newspaper grid units (LookML uses `col`; API uses `column` — normalize to col)
         "layout": {
             "row": el.get("row", 0), "col": el.get("col", 0),

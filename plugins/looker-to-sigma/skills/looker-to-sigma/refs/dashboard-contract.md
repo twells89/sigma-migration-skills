@@ -36,6 +36,7 @@ Keep the converter source-agnostic: it only sees this contract.
       "listen": {},                    // filterName → field (which dashboard filters this tile obeys)
       "dynamicFields": [],             // table calcs / custom measures (client-side) → workbook formulas
       "noteText": "…", "subtitleText": "…",
+      "cellVisualizations": {},        // grid in-cell data bars: {field: {scheme:[hex]|null}} from vis_config.series_cell_visualizations → conditionalFormats dataBars (often absent from the API even when the render shows bars — see SKILL.md Phase 3b)
       "layout": { "row": 0, "col": 0, "width": 8, "height": 6 }  // newspaper units
     }
   ]

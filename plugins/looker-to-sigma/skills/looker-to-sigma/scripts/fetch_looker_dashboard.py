@@ -132,6 +132,28 @@ def _color(vc):
     }
 
 
+def _cell_viz(vc):
+    """vis_config.series_cell_visualizations -> {fieldName: {scheme: [hex,...]|None}}
+    for active in-cell data bars. Looker shape:
+      {"view.field": {"is_active": true, "palette": {"palette_id"|"collection_id"|
+      "custom_colors": [...]}}}.
+    A field present (and not is_active:false) gets data bars; custom_colors becomes the
+    Sigma low->high `scheme`, else None (let Sigma apply its default bar color).
+    NOTE: Looker frequently omits this block from the dashboard/query API even when the
+    render shows bars — those can't be recovered here (see build_workbook + SKILL.md)."""
+    out = {}
+    scv = vc.get("series_cell_visualizations")
+    if not isinstance(scv, dict):
+        return out
+    for fld, cfg in scv.items():
+        if not isinstance(cfg, dict) or cfg.get("is_active") is False:
+            continue
+        pal = cfg.get("palette") if isinstance(cfg.get("palette"), dict) else {}
+        custom = [c for c in (pal.get("custom_colors") or []) if isinstance(c, str)]
+        out[fld] = {"scheme": custom or None}
+    return out
+
+
 def _dyn(df):
     """Looker returns dashboard_element.query.dynamic_fields as a JSON string."""
     if isinstance(df, str):
@@ -218,6 +240,7 @@ def normalize(d):
             # chart reference lines + color encoding (vis_config) → Sigma refMarks/color
             "referenceLines": _reflines(vc),
             "color": _color(vc),
+            "cellVisualizations": _cell_viz(vc),
             "layout": comp_by_el.get(el.get("id"), {}),
         })
 

@@ -980,6 +980,12 @@ def main():
                 yid = sid("y"); cols.append({"id": yid, "formula": "Count()", "name": "Count"}); ymids.append(yid)
             base["columns"] = cols
             base["xAxis"] = {"columnId": xid}; base["yAxis"] = {"columnIds": ymids}
+            # Looker `looker_bar` renders HORIZONTAL bars, `looker_column` vertical —
+            # both map to a Sigma bar-chart, so carry the orientation through (Sigma's
+            # default is vertical, so only set it for looker_bar; omit otherwise).
+            # Verified field: sigma-workbooks charts.md ("orientation: horizontal").
+            if el["tileType"] == "looker_bar":
+                base["orientation"] = "horizontal"
             # Looker pivot → Sigma series via the color channel (split/stack by the
             # pivot dimension). One color channel; extra pivots → UI. Reproduce the
             # categorical palette Looker declared (series_colors / colors) when present.
@@ -1053,6 +1059,25 @@ def main():
             # col ids]}].
             if gids and cids:
                 base["groupings"] = [{"id": sid("g"), "groupBy": gids, "calculations": cids}]
+            # Looker grid data bars (vis_config.series_cell_visualizations) → Sigma
+            # element-level conditionalFormats `dataBars` on the measure's calc column.
+            # Looker colors the in-cell bar by VALUE (low→high gradient); carry the
+            # palette when Looker declared one (custom_colors), else let Sigma default.
+            # Shape verified live: sigma-workbooks tables.md. NOTE: Looker often does
+            # NOT expose series_cell_visualizations via the dashboard/query API even
+            # when the render shows bars — that render-only case can't be auto-detected
+            # here; the Phase-4 visual-QA gate flags it for a manual add (see SKILL.md).
+            cviz = el.get("cellVisualizations") or {}
+            cfmts = []
+            for f in el["fields"]:
+                if f in cviz and field2cid.get(f) in cids:
+                    bar = {"type": "dataBars", "columnIds": [field2cid[f]]}
+                    scheme = (cviz[f] or {}).get("scheme")
+                    if scheme:
+                        bar["scheme"] = scheme
+                    cfmts.append(bar)
+            if cfmts:
+                base["conditionalFormats"] = cfmts
             if el.get("pivots"):
                 warnings.append(f"tile '{el['name']}': pivot {el['pivots']} flattened to columns — "
                                 f"rebuild as a Sigma pivot-table for true cross-tab")
