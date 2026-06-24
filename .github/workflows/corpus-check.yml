@@ -109,3 +109,21 @@ jobs:
             echo "::endgroup::"
           done
           exit $fail
+      - name: Run offline test_*.py suites
+        # EXPLICIT allow-list — creds-free, network-free Python tests only.
+        # PyYAML is needed by the looker offline dashboard parser
+        # (parse_lookml_dashboard.py); the runner does not ship it by default.
+        # New offline test_*.py → add its path here.
+        run: |
+          set -uo pipefail
+          python3 -m pip install --quiet pyyaml
+          tests=(
+            plugins/looker-to-sigma/skills/looker-to-sigma/tests/test_grid_fidelity.py
+          )
+          fail=0
+          for t in "${tests[@]}"; do
+            echo "::group::$t"
+            if python3 "$t"; then echo "OK $t"; else echo "::error file=$t::test failed"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
