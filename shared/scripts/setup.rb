@@ -39,13 +39,19 @@ print "Base URL [https://aws-api.sigmacomputing.com]: "
 base = $stdin.gets.chomp
 base = "https://aws-api.sigmacomputing.com" if base.empty?
 
-print "Client ID: "
-cid = $stdin.noecho(&:gets).chomp
-puts
+# Client ID is NOT a secret — echo it so the reader can eyeball it. A hidden
+# (noecho) prompt here was a recurring quickstart confusion: people paste the
+# wrong value blind and only discover it when auth fails.
+print "Client ID (not a secret — will echo): "
+cid = $stdin.gets.chomp
 
-print "Client Secret: "
+print "Client Secret (hidden): "
 sec = $stdin.noecho(&:gets).chomp
 puts
+
+if [base, cid, sec].any?(&:empty?)
+  abort "Base URL, Client ID, and Client Secret are all required. Aborting without writing settings."
+end
 
 # The one-command orchestrators (migrate-looker.py, migrate-qlik.rb, ...) need
 # the FULL warehouse-connection UUID for DM conversion. Capturing it here (when
@@ -60,6 +66,7 @@ settings["env"]["SIGMA_CLIENT_ID"]     = cid
 settings["env"]["SIGMA_CLIENT_SECRET"] = sec
 settings["env"]["SIGMA_CONNECTION_ID"] = conn unless conn.empty?
 
+FileUtils.mkdir_p(File.dirname(SETTINGS_PATH))
 File.write(SETTINGS_PATH, JSON.pretty_generate(settings))
 
 pairs = {
@@ -70,11 +77,19 @@ pairs = {
 pairs["SIGMA_CONNECTION_ID"] = conn unless conn.empty?
 upsert_neutral_env(pairs)
 
+redacted_secret = sec.length > 8 ? "#{sec[0..3]}…#{sec[-4..]} (#{sec.length} chars)" : "(#{sec.length} chars)"
+
 puts
 puts "Credentials saved to:"
 puts "  #{SETTINGS_PATH}  (Claude Code auto-loads this)"
 puts "  #{NEUTRAL_PATH}  (any other agent / shell)"
 puts
+puts "  SIGMA_BASE_URL:      #{base}"
+puts "  SIGMA_CLIENT_ID:     #{cid}"
+puts "  SIGMA_CLIENT_SECRET: #{redacted_secret}"
+puts "  SIGMA_CONNECTION_ID: #{conn.empty? ? '(skipped)' : conn}"
+puts
+puts "If the Client ID above looks like a URL or doesn't match what Sigma showed you, re-run this script."
 puts "Claude Code: open a new session (or run `! source ~/.claude/settings.json`)."
 puts "Other agents / shell: run `source ~/.sigma-migration/env` once per shell —"
 puts "though get-token.sh and the Ruby scripts auto-source it for you."

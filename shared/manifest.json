@@ -191,6 +191,19 @@
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/refs/layout-visual-qa.md",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/refs/layout-visual-qa.md"
       ]
+    },
+    {
+      "canonical": "shared/scripts/setup.rb",
+      "targets": [
+        "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/setup.rb",
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/setup.rb",
+        "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/setup.rb",
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/setup.rb",
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/setup.rb",
+        "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/setup.rb",
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/setup.rb",
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/setup.rb"
+      ]
     }
   ]
 }
