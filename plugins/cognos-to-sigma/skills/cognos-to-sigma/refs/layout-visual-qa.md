@@ -72,6 +72,11 @@ drop it silently.
 - [ ] **No clipped titles/values.** KPI bands are ≥ 5 grid rows (titles hide below that); side
       charts are ≥ 6 columns wide (narrower truncates the title); table tiles show all rows
       without cutting off the summary bar.
+- [ ] **Trend/comparison KPIs are tall enough to show the spark.** A KPI stacks title → value →
+      comparison → sparkline and drops the lower items first when short, so a KPI carrying a
+      sparkline or delta needs ~8+ grid rows (~240px), not 5. If you built a sparkline but the
+      render shows only the number, grow the tile's `gridRow` span and re-export before concluding
+      it failed — a too-short tile makes a real spark look missing.
 - [ ] **Even heights.** Charts in one band share an inner row span; sibling chart bands match.
 - [ ] **Right chart kind & formatting.** The rendered viz matches the source (no silently-dropped
       log scale, data labels, `$`/`%` formats, or palette).
@@ -131,7 +136,7 @@ header band → control band → KPI band → chart rows → detail row. Verifie
 |---|---|---|
 | Header | rows `1 / 4`, style `#0F172A` + `round` | full-width title text, inner `1 / 25` |
 | Control row | 3 rows | controls side-by-side, inner row `1 / 4` |
-| KPI row | ≥ 5 rows | N KPIs side-by-side, equal col spans (true peers → equal is correct here) |
+| KPI row | ≥ 5 rows (≥ 8 if KPIs carry a sparkline/comparison) | N KPIs side-by-side, equal col spans (true peers → equal is correct here) |
 | Chart row | 11–12 rows | 2–3 charts side-by-side, identical inner row span, each ≥ 6 cols |
 | Detail table | content + summary (~4 rows + ~0.7/row) | never a fixed 20 (dead space) |
 
