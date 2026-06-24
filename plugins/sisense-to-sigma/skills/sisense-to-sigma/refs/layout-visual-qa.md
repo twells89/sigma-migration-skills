@@ -112,6 +112,9 @@ drop it silently.
 - [ ] **Containers are for bands, not decoration.** No chart wrapped in its own card *inside* a band
       container (card-in-card flattens hierarchy). Separate content levels with spacing, type, and
       dividers before adding another container. *AI tell: nested cards.*
+- [ ] **Tables use the presentation style.** `table` / `pivot-table` elements carry
+      `tableStyle: {preset: presentation}` (roomier than the dense `spreadsheet` default) unless the
+      source is a true data grid; any source in-cell **data bars** are carried over (`dataBars`).
 
 ## Building clean in the first place (so the gate rarely fails)
 
@@ -144,6 +147,14 @@ doesn't dictate otherwise — §3 fidelity caveat):
   rest to the neutral surface.
 - **Let type carry hierarchy.** Header title > section titles > KPI values > labels — don't flatten
   everything to one size.
+
+**Table style — default to `presentation`.** Set `tableStyle: {preset: presentation}` on every
+`table` / `pivot-table` element (roomier rows, lighter grid lines — matches how most source BI tools
+present tables and reads better than Sigma's dense `spreadsheet` default). Keep `spreadsheet` only when
+the source is explicitly a dense data grid. This is spec-authorable and round-trips but is **frequently
+dropped** in migrations — set it deliberately. While you're styling the table, carry over any source
+in-cell bars with `conditionalFormats: [{type: dataBars, columnIds: [<aggregate col id>], scheme: ["#a4dfc0","#4caf7d"]}]`
+(also spec-authorable, also commonly dropped). See sigma-workbooks `tables.md` for the full field set.
 
 ## Known render caveats (not fixable via spec — keep titles short, drop redundant legends)
 
