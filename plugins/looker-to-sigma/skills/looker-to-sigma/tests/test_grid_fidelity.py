@@ -3,9 +3,11 @@
 
   1. Looker `looker_bar` tiles -> Sigma bar-chart with `orientation: horizontal`
      (`looker_column` stays vertical = no orientation key).
-  2. Looker grid data bars (vis_config.series_cell_visualizations) -> element-level
-     `conditionalFormats` of `type: dataBars` on the measure's calc column, carrying a
-     custom palette as the low->high `scheme` when Looker declared one.
+  2. Looker grid cell visualizations (vis_config.series_cell_visualizations) -> element-level
+     `conditionalFormats`. Sigma data bars are sign-colored (can't vary bar color by value),
+     so a Looker VALUE-colored bar (custom_colors palette) maps to a Color scale
+     (`backgroundScale`, carrying the palette as the scheme); a plain bar (no palette)
+     maps to `dataBars` (magnitude).
 
 Plus unit coverage for the contract extractors (`_cell_viz` / `norm_cell_viz`).
 
@@ -70,7 +72,7 @@ def test_build():
     import parse_lookml_dashboard as offline
     contract = offline.parse(DASH)[0]  # parse() returns a list of dashboards
 
-    # Patch: flip the column tile -> looker_bar; add data bars to the table tile.
+    # Patch: flip the column tile -> looker_bar; add a VALUE-colored cell viz to the table.
     bar_tile = grid_tile = None
     for el in contract["elements"]:
         if el.get("tileType") == "looker_column":
@@ -92,16 +94,28 @@ def test_build():
         assert "orientation" not in o, f"orientation leaked onto {o.get('kind')}"
     print(f"[ok] orientation: looker_bar '{bar_tile}' -> bar-chart orientation=horizontal")
 
-    # (2) the grid tile carries conditionalFormats dataBars with the custom scheme.
+    # (2a) VALUE-colored Looker bars -> Sigma Color scale (backgroundScale), NOT dataBars
+    #      (Sigma data bars are sign-colored — can't vary bar color by value).
     tables = _find(spec, lambda o: o.get("kind") == "table" and o.get("conditionalFormats"))
     assert tables, "no table with conditionalFormats emitted"
     cf = tables[0]["conditionalFormats"][0]
-    assert cf["type"] == "dataBars", cf
+    assert cf["type"] == "backgroundScale", f"expected backgroundScale for value palette, got {cf}"
     assert cf["scheme"] == ["#e52592", "#7b4ebf", "#1a73e8"], cf
-    # columnIds must target a real column on that table
     colids = {c["id"] for c in tables[0]["columns"]}
     assert cf["columnIds"] and set(cf["columnIds"]) <= colids, (cf["columnIds"], colids)
-    print(f"[ok] dataBars: grid '{grid_tile}' -> conditionalFormats dataBars (scheme carried)")
+    print(f"[ok] color scale: value-colored grid '{grid_tile}' -> backgroundScale (scheme carried)")
+
+    # (2b) a PLAIN Looker bar (no value palette) -> dataBars (magnitude).
+    contract2 = offline.parse(DASH)[0]
+    for el in contract2["elements"]:
+        if el.get("tileType") == "table":
+            el["cellVisualizations"] = {"order_fact.total_net_revenue": {"scheme": None}}
+    spec2 = build(contract2)
+    t2 = _find(spec2, lambda o: o.get("kind") == "table" and o.get("conditionalFormats"))
+    assert t2 and t2[0]["conditionalFormats"][0]["type"] == "dataBars", \
+        ("expected dataBars for plain bar", t2 and t2[0].get("conditionalFormats"))
+    assert "scheme" not in t2[0]["conditionalFormats"][0], "plain dataBars must not carry a scheme"
+    print("[ok] dataBars: plain Looker bar (no value palette) -> dataBars (magnitude)")
 
 
 if __name__ == "__main__":

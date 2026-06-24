@@ -623,17 +623,24 @@ Newspaper layout math (a single arithmetic transform, no spatial heuristic):
   both map to a Sigma `bar-chart`. `build_workbook.py` emits `orientation: horizontal` for
   `looker_bar` and omits the key (Sigma's vertical default) for `looker_column`. Field verified:
   `sigma-workbooks` `charts.md`.
-- **Grid data bars (`series_cell_visualizations`).** A Looker grid can draw in-cell bars on a
-  measure column, colored by VALUE (low→high gradient). When the tile's `vis_config` exposes
-  `series_cell_visualizations`, `fetch_looker_dashboard.py` captures it (contract
-  `cellVisualizations: {field: {scheme}}`) and `build_workbook.py` emits an element-level
-  `conditionalFormats: [{type: dataBars, columnIds:[<calc col>], scheme?}]` on the table (verified
-  spec shape: `sigma-workbooks` `tables.md`). **Render-only caveat:** Looker frequently does **not**
-  return `series_cell_visualizations` from the dashboard/query API even when the rendered dashboard
-  shows the bars (observed on a fixture-built UDD) — that case can't be auto-detected from the
-  contract, so the Phase-4a visual-QA gate is where you catch it: if the Looker render shows in-cell
-  bars but the Sigma table has none, add the `dataBars` `conditionalFormat` by hand (sample the
-  source bar colors for the `scheme`) and `PUT` the spec.
+- **Grid cell visualizations (`series_cell_visualizations`).** A Looker grid can draw in-cell bars
+  on a measure column, often colored by VALUE (low→high gradient). **Sigma data bars are
+  SIGN-colored** — one fill for positive, one for negative (verified live 2026-06-24: the
+  `Format rule` → `Data bars` UI exposes only a *Negative color* + *Positive color*, and a
+  multi-stop `scheme` collapses to the single positive color). So the bar fill **cannot** vary by
+  value. The mappings `build_workbook.py` emits from contract `cellVisualizations: {field:{scheme}}`:
+    - Looker bar **colored by value** (a `custom_colors` palette) → Sigma **Color scale**
+      (`conditionalFormats: [{type: backgroundScale, columnIds:[<calc col>], scheme:[…]}]`) — tints
+      the cell low→high, reproducing Looker's value encoding — **plus a warning** (the bar+value-color
+      combo isn't reproducible; flip the rule to `dataBars` if you'd rather keep a magnitude bar).
+    - Looker **plain** bar (no value palette) → `conditionalFormats: [{type: dataBars, columnIds:[…]}]`
+      (magnitude). Verified spec shapes: `sigma-workbooks` `tables.md`.
+  **Render-only caveat:** Looker frequently does **not** return `series_cell_visualizations` from the
+  dashboard/query API even when the rendered dashboard shows the bars (confirmed on dash 11 via the
+  query, `result_maker`, and `dashboard_element` endpoints — all empty). That case can't be
+  auto-detected from the contract, so the Phase-4a visual-QA gate is where you catch it: if the Looker
+  render shows value-colored in-cell bars but the Sigma table has none, add a `backgroundScale`
+  `conditionalFormat` by hand (sample the source colors for the `scheme`) and `PUT` the spec.
 
 ### 3c. POST the workbook + verify
 

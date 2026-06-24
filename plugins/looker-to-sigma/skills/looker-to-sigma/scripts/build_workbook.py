@@ -1059,23 +1059,35 @@ def main():
             # col ids]}].
             if gids and cids:
                 base["groupings"] = [{"id": sid("g"), "groupBy": gids, "calculations": cids}]
-            # Looker grid data bars (vis_config.series_cell_visualizations) → Sigma
-            # element-level conditionalFormats `dataBars` on the measure's calc column.
-            # Looker colors the in-cell bar by VALUE (low→high gradient); carry the
-            # palette when Looker declared one (custom_colors), else let Sigma default.
-            # Shape verified live: sigma-workbooks tables.md. NOTE: Looker often does
-            # NOT expose series_cell_visualizations via the dashboard/query API even
-            # when the render shows bars — that render-only case can't be auto-detected
-            # here; the Phase-4 visual-QA gate flags it for a manual add (see SKILL.md).
+            # Looker grid cell visualizations (vis_config.series_cell_visualizations) →
+            # Sigma element-level conditionalFormats on the measure's calc column.
+            # KEY (verified live 2026-06-24): Sigma `dataBars` are SIGN-colored — one fill
+            # for positive, one for negative — they CANNOT vary the bar color by value.
+            # So when Looker colored the bars BY VALUE (a custom_colors palette), the
+            # faithful reproduction is a Color scale (`backgroundScale`) that tints the
+            # cell low→high, NOT a `dataBars` with a multi-stop `scheme` (Sigma collapses
+            # that to a single positive color). A plain Looker bar (no value palette) →
+            # `dataBars` (magnitude). Shapes verified: sigma-workbooks tables.md.
+            # NOTE: Looker often does NOT expose series_cell_visualizations via the
+            # dashboard/query API even when the render shows bars — that render-only case
+            # can't be auto-detected here; the Phase-4 visual-QA gate flags it for a
+            # manual add (see SKILL.md Phase 3b).
             cviz = el.get("cellVisualizations") or {}
             cfmts = []
             for f in el["fields"]:
                 if f in cviz and field2cid.get(f) in cids:
-                    bar = {"type": "dataBars", "columnIds": [field2cid[f]]}
                     scheme = (cviz[f] or {}).get("scheme")
-                    if scheme:
-                        bar["scheme"] = scheme
-                    cfmts.append(bar)
+                    if scheme:   # Looker colored the bars by value → Sigma Color scale
+                        cfmts.append({"type": "backgroundScale",
+                                      "columnIds": [field2cid[f]], "scheme": scheme})
+                        warnings.append(
+                            f"tile '{el['name']}': Looker value-colored data bars on "
+                            f"'{leaf(f)}' → Sigma Color scale (cell tint by value). Sigma "
+                            "data bars are sign-colored only, so a value-colored bar isn't "
+                            "reproducible; switch this rule to dataBars if you prefer a "
+                            "magnitude bar over the value tint.")
+                    else:        # plain magnitude bar (no value palette)
+                        cfmts.append({"type": "dataBars", "columnIds": [field2cid[f]]})
             if cfmts:
                 base["conditionalFormats"] = cfmts
             if el.get("pivots"):
