@@ -44,13 +44,16 @@ Duration: 2
 - **A coding agent that runs skills** — Claude Code (CLI or desktop), Cursor, Cortex Code, etc.
 - **qlik-cli** on your PATH (official; reaches both the REST API and the Engine/qix API — the Engine API is required for sheet/chart definitions, the data model, and the load script). Install the GitHub-release binary from `qlik-oss/qlik-cli`.
   - **On-prem (client-managed) Qlik Sense instead of Cloud?** Skip qlik-cli — it's
-    Cloud-only. Use the bundled `scripts/qlik-onprem-shim.py` (QRS + Engine
-    WebSocket, same command surface): `pip3 install websocket-client`, configure
-    auth per `refs/connection-onprem.md` (QMC certificate export or a JWT virtual
-    proxy), then `export QLIK_BIN="$PWD/scripts/qlik-onprem-shim.py"` — every
-    step below runs unchanged. A shim-driven discovery is verified
-    output-identical to a qlik-cli run on the same app. QlikView ≠ Qlik Sense:
-    not covered.
+    Cloud-only. Use the bundled shim `qlik-onprem-shim.py` (QRS + Engine
+    WebSocket, same command surface) instead. It ships **inside this skill**, in the
+    same `scripts/` folder as everything else: `scripts/qlik-onprem-shim.py` and the
+    auth guide `refs/connection-onprem.md` are **relative to the skill directory**
+    (the folder this QUICKSTART lives in — `plugins/qlik-to-sigma/skills/qlik-to-sigma/`
+    in the source repo, `qlik-migration-skills/qlik-to-sigma/` in the published
+    quickstart). Don't create a qlik-cli context — follow
+    **[On-prem setup](#on-prem-setup-client-managed-qlik-sense)** below in place of
+    Installation steps 4–5. A shim-driven discovery is verified output-identical to a
+    qlik-cli run on the same app. QlikView ≠ Qlik Sense: not covered.
 - **Qlik Cloud access** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible).
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity).
@@ -97,6 +100,45 @@ Duration: 5
    qlik context use sigma-migration
    ```
 5. **Verify:** `qlik item ls --resourceType app --limit 5` returns your apps.
+
+## On-prem setup (client-managed Qlik Sense)
+Duration: 5
+
+negative
+: **Skip this whole section if you're on Qlik Cloud** — you already did Installation steps 4–5. This section *replaces* steps 4–5 for client-managed Qlik Sense Enterprise on Windows. `qlik-cli` is Cloud-only, so there is **no qlik-cli context and no `qlik context create`** on-prem — the bundled shim provides the same command surface over the on-prem APIs.
+
+All paths below are **relative to the skill directory** — the folder that holds this QUICKSTART, `SKILL.md`, `scripts/`, and `refs/`. `cd` into it first so `scripts/...` and `refs/...` resolve and `$PWD` is correct:
+
+```bash
+cd plugins/qlik-to-sigma/skills/qlik-to-sigma   # source repo layout
+#   (published quickstart: cd qlik-migration-skills/qlik-to-sigma)
+ls scripts/qlik-onprem-shim.py refs/connection-onprem.md   # both should exist
+```
+
+1. **Install the Engine transport:**
+   ```bash
+   pip3 install websocket-client      # PEP 668 machines: add --user, or use a venv
+   ```
+2. **Configure auth** per [`refs/connection-onprem.md`](refs/connection-onprem.md) — two supported paths:
+   - **Certificates** (best for automation): QMC → Certificates → export PEMs; the skill machine needs ports **4242** (QRS) + **4747** (Engine) open to the server.
+   - **JWT virtual proxy**: admin adds a JWT virtual proxy; everything stays on **443**.
+
+   Either way, put the env in `~/.sigma-migration/qlik-onprem.env` (the ref has a copy-paste block for each path) and `source` it. Use a **read-access service account** on the streams in scope.
+   ```bash
+   source ~/.sigma-migration/qlik-onprem.env
+   ```
+3. **Point the pipeline at the shim** — `qlik-discover.py` honors `QLIK_BIN`:
+   ```bash
+   export QLIK_BIN="$PWD/scripts/qlik-onprem-shim.py"
+   ```
+4. **Verify** (the shim's equivalent of step 5):
+   ```bash
+   python3 scripts/qlik-onprem-shim.py item ls --resourceType app --limit 5
+   ```
+   This should list your on-prem apps. From here **every step below runs unchanged** — wherever the guide says a `qlik ...` command or `--context <ctx>`, the shim handles it via `QLIK_BIN` (no context flag needed).
+
+positive
+: The shim's Engine/QIX layer is **live-verified** (output-identical to qlik-cli on the same app). The QRS layer + on-prem auth bootstrap are code-complete but newer — if a first connection misbehaves, expect to debug auth/ports here, not in discovery or conversion. Without QRS only `appName`/`lastReloadTime` metadata degrade; discovery still completes.
 
 ## Prepare demo data (optional)
 Duration: 3
