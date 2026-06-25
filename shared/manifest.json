@@ -232,6 +232,20 @@
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/setup.rb",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/setup.rb"
       ]
+    },
+    {
+      "canonical": "shared/lib/coverage_gate.rb",
+      "targets": [
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/lib/coverage_gate.rb",
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/coverage_gate.rb"
+      ]
+    },
+    {
+      "canonical": "shared/scripts/test-coverage-gate.rb",
+      "targets": [
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-coverage-gate.rb",
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-coverage-gate.rb"
+      ]
     }
   ]
 }

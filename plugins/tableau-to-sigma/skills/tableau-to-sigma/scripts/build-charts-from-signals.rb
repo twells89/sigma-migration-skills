@@ -67,6 +67,9 @@ OptionParser.new do |p|
   p.on('--page-per-dashboard', 'Emit ONE Sigma page per Tableau DASHBOARD (multi-dashboard workbooks - bead ptrt)') { opts[:pages_mode] = :dashboard }
   p.on('--auto-controls', 'Auto-emit Sigma controls from shared-view filters in --meta')              { opts[:auto_controls] = true }
   p.on('--out PATH')                { |v| opts[:out] = v }
+  # Where the migration COVERAGE ledger lands (the aggregated drop/approx report
+  # migrate-tableau.rb surfaces). Default: coverage.json next to --out. bead beads-sigma-59mk.
+  p.on('--coverage-out PATH')       { |v| opts[:coverage_out] = v }
 end.parse!
 %i[tab layout mmap out].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
 
@@ -3652,7 +3655,25 @@ unless control_scope_records.empty?
   File.write(scope_path, JSON.pretty_generate(sidecar))
   warn "wrote #{scope_path} (#{contract_controls.size} control scope entr(y/ies), #{dropped_rs.size} dropped)"
 end
-warnings.each { |w| warn "  WARN  #{w}" }
+# Classify each build message so the WARN count reflects ACTUAL gaps, not volume
+# (bead beads-sigma-59mk). The builder historically prefixed every note — including
+# SUCCESS confirmations ("decomposed: …", "translated inline: …") and verify-nudges
+# ("auto-emitted … verify", "sort carried", "inferred from shelves") — with WARN,
+# so a clean conversion read like a pile of failures (the "drops a lot" perception).
+# Only genuine drops/degradations are WARN now; the rest are NOTE. The SAME helper
+# feeds coverage.json below, so WARN count == coverage gap count from warnings.
+#   :dropped  — a source component was lost (no element / value)
+#   :degraded — built best-effort but a piece stays manual / wasn't auto-emitted
+#   :note     — success or a verify nudge (NOT a gap)
+def warning_severity(w)
+  s = w.to_s
+  return :dropped  if s =~ /dropped from the grid|—\s*skipping|could not be carried|cannot reconstruct/i
+  return :degraded if s =~ /STAYS MANUAL|could not be auto-decomposed|not composable as agg-of-agg|not auto-emitted|falling (through|back)/i
+  :note
+end
+warnings.each do |w|
+  warn(warning_severity(w) == :note ? "  NOTE  #{w}" : "  WARN  #{w}")
+end
 
 # ---- Visual-verify sidecar (build-from-signals tiles) -----------------------
 # Tiles built from .twb signals (empty data export) can't be value-diffed, so
@@ -3730,3 +3751,87 @@ unless actions.empty?
   File.write(actions_md_path, md)
   warn "wrote #{actions_md_path} (#{actions.size} action entries)"
 end
+
+# ---- coverage.json — ONE consolidated "what didn't carry over (and why)" ledger
+# (bead beads-sigma-59mk; ports powerbi-to-sigma PR #177). The builder already
+# emits the facts — 87 build WARN lines + the dropped-control / inferred-tile /
+# nested-LOD sidecars — but scattered across the log + several files. This
+# AGGREGATES them into the shared coverage.json schema that CoverageGate renders,
+# so a complex dashboard's gaps surface in one place instead of being
+# reconstructed by hand. Leads with what CARRIED OVER (only a 'dropped' component
+# is truly absent; approximated/degraded still land with their data).
+# Entry: {visual, source_type, severity(dropped|degraded|approximated), detail,
+#         recoverable, action}.
+coverage_unresolved = []
+
+# (1) dropped controls — a source filter/parameter that resolved to no target.
+control_scope_records.select { |r| r['status'] == 'dropped' }.each do |r|
+  coverage_unresolved << {
+    'visual' => (r['source_signal'] || r['sourceName'] || 'filter/control').to_s,
+    'source_type' => 'filter', 'severity' => 'dropped', 'recoverable' => true,
+    'detail' => "filter/control dropped: #{r['reason'] || r['drop_reason'] || 'did not resolve to a target column'}",
+    'action' => 'Map the filtered column on the master (or fix master-columns.json) so the control wires, then re-run.'
+  }
+end
+
+# (2) inferred chart-kind tiles — built with a best-guess Sigma kind (no value
+# export to confirm), an APPROXIMATION the image-verify gate must confirm. Plain
+# 'empty-data-export' tiles built faithfully and are NOT a coverage gap.
+signal_built_tiles.select { |t| t['reason'] == 'chart-kind-inferred' }
+                  .uniq { |t| t['worksheet'] }.each do |t|
+  coverage_unresolved << {
+    'visual' => t['worksheet'].to_s, 'source_type' => 'worksheet',
+    'severity' => 'approximated', 'recoverable' => false,
+    'detail' => 'chart kind inferred (no value export to confirm) — verify against the source image',
+    'action' => 'Compare the rendered Sigma tile to the Tableau view image (visual-verify gate); fix the kind if the inference is wrong.'
+  }
+end
+
+# (3) nested-LOD chains — built as a helper-element chain the agent must assemble.
+lod_chains.each do |lc|
+  nm = (lc['final'] || lc['name'] || lc['caption'] || 'nested-LOD calc').to_s
+  coverage_unresolved << {
+    'visual' => nm, 'source_type' => 'calc', 'severity' => 'degraded', 'recoverable' => true,
+    'detail' => 'nested FIXED LOD needs a helper-element chain to resolve',
+    'action' => 'Build the nested-LOD helper chain from the <out>-lod-chains.json sidecar (one grouped element per level).'
+  }
+end
+
+# (4) build messages that name a LOST or degraded component — classified by the
+# SAME warning_severity helper used for the WARN/NOTE split above, so the coverage
+# gap list and the WARN log agree exactly. :note messages (successes / verify
+# nudges) are NOT coverage gaps.
+warnings.each do |w|
+  sev = warning_severity(w)
+  next if sev == :note
+  ws = w.to_s.gsub(/\s+/, ' ').strip
+  vis = (ws[/\A'([^']+)'/, 1] || 'field/calc')
+  recoverable = !(ws =~ /unmapped|master|master-col|could not be auto-decomposed|STAYS MANUAL/i).nil?
+  coverage_unresolved << {
+    'visual' => vis, 'source_type' => 'field/calc',
+    'severity' => sev.to_s, 'recoverable' => recoverable,
+    'detail' => ws[0, 300],
+    'action' => (recoverable ? 'Resolve the field on the master (map it / add the calc column), then re-run.' : nil)
+  }
+end
+
+built_n = (defined?(elements) && elements.respond_to?(:size)) ? elements.size : 0
+dropped_n = coverage_unresolved.select { |u| u['severity'] == 'dropped' }.map { |u| u['visual'] }.uniq.size
+by_sev = coverage_unresolved.group_by { |u| u['severity'] }.transform_values(&:size)
+coverage_path = opts[:coverage_out] ||
+                File.join(File.dirname(File.expand_path(opts[:out])), 'coverage.json')
+File.write(coverage_path, JSON.pretty_generate(
+             { 'version' => 1, 'source' => 'tableau',
+               'summary' => {
+                 'sourceVisuals' => built_n + dropped_n,
+                 'builtElements' => built_n,
+                 'dropped' => by_sev['dropped'] || 0,
+                 'degraded' => by_sev['degraded'] || 0,
+                 'approximated' => by_sev['approximated'] || 0,
+                 'recoverable' => coverage_unresolved.count { |u| u['recoverable'] }
+               },
+               'unresolved' => coverage_unresolved }
+           ))
+warn "wrote #{coverage_path} (#{built_n} element(s) built; " \
+     "#{by_sev['dropped'] || 0} dropped, #{by_sev['degraded'] || 0} degraded, " \
+     "#{by_sev['approximated'] || 0} approximated)"

@@ -133,7 +133,7 @@ which calc translation, which layout) — not orchestration.
 | `scripts/escalate-gap.py` | Shared opt-in issue filer. Dry-run by default (drafts the issue + dedupes against open issues/beads); files only with `--yes`. Routes by gap category: converter→`sigma-data-model-manager`+`sigma-data-model-mcp` (mirrored), builder/skill→`sigma-migration-skills`. |
 | `scripts/learned-rules.rb` | Loader module: reads `~/.tableau-to-sigma/learned-rules.yaml` at startup. Customer-discovered rules apply BEFORE the built-in translators in `build-charts-from-signals.rb`. |
 | `scripts/parse-twb-layout.rb` | Parse a `.twb` XML file into a per-dashboard zone list plus a sister `*-meta.json` (worksheets + shared_filters + parameters + column_aliases). Per chart zone surfaces: position (`x/y/w/h%`), `chart_kind`, `mark_class`, `geo_role`, `sort`, `filters` (with resolved column captions + member values + action-vs-value flag), `aggregations`, `channels`, `formats` (Tableau format strings → Sigma d3-format with paren-negative handling), `calculations`, `dual_axis` (synchronized-axes detection), `ref_marks` (reference lines/bands/trendlines), `filter_column_caption`. Detects Tableau **stories** (both `<story>` and storyboard-dashboard shapes): flags storyboard dashboards `is_story: true` and writes `story-plan.json` (story → ordered points with captions + captured sheets) — when present, run `build-story-pages.rb`. Bin calc columns surface `bin_size`/`bin_peg`. |
-| `scripts/build-charts-from-signals.rb` | Generate Sigma chart-element specs from parse-twb-layout output + view CSVs + master-column map. Auto-translates: column aliases → `Switch(…)` calc, parameter-driven CASE/IF chains → `Switch([ctl-param-x], …)` with controlId rewrite per page, table calcs (INDEX/LOOKUP/TOTAL/RANK/ZN/IIF/COUNTD) → Sigma equivalents, `DATEPART('iso-year')` → Thursday-of-ISO-week `Year(DateAdd(...))` composition, `FINDNTH` → `SplitToArray`/`ArraySlice`/`ArrayJoin` composition, Tableau bins → native `BinFixed`/`BinRange` recipe, **nested `{FIXED}` LODs → helper-element chain** (innermost LOD = helper element 1, outer consumes `[LOD Helper k/Value]`; machine-readable sidecar `<out>-lod-chains.json`), Tableau formats (p%.%/C1033%/`(neg)`) → Sigma d3-format. Honors `--page-per-worksheet`, `--auto-controls`. Loads customer learned-rules first. Writes `*-actions.md` companion listing Tableau action filters for post-publish cross-filter setup. |
+| `scripts/build-charts-from-signals.rb` | Generate Sigma chart-element specs from parse-twb-layout output + view CSVs + master-column map. Auto-translates: column aliases → `Switch(…)` calc, parameter-driven CASE/IF chains → `Switch([ctl-param-x], …)` with controlId rewrite per page, table calcs (INDEX/LOOKUP/TOTAL/RANK/ZN/IIF/COUNTD) → Sigma equivalents, `DATEPART('iso-year')` → Thursday-of-ISO-week `Year(DateAdd(...))` composition, `FINDNTH` → `SplitToArray`/`ArraySlice`/`ArrayJoin` composition, Tableau bins → native `BinFixed`/`BinRange` recipe, **nested `{FIXED}` LODs → helper-element chain** (innermost LOD = helper element 1, outer consumes `[LOD Helper k/Value]`; machine-readable sidecar `<out>-lod-chains.json`), Tableau formats (p%.%/C1033%/`(neg)`) → Sigma d3-format. Honors `--page-per-worksheet`, `--auto-controls`. Loads customer learned-rules first. Writes `*-actions.md` companion listing Tableau action filters for post-publish cross-filter setup. **Writes `coverage.json`** (`--coverage-out`): aggregates every dropped/degraded/approximated component into one ledger (rendered by `migrate-tableau.rb`); classifies build messages so `WARN` = real gap, `NOTE` = success/verify (bead beads-sigma-59mk). |
 | `scripts/extract-custom-sql.rb` | Phase 1f: pull Custom SQL blocks behind a workbook via Metadata GraphQL + .twb XML fallback. Output → `/tmp/<name>/custom-sql.json`. |
 | `scripts/lib/tableau_rest.rb` | Ruby wrapper for the Tableau REST endpoints the skill uses |
 | `scripts/estimate-cost.rb` | Predict input/output token cost from workbook + datasource metadata |
@@ -1100,7 +1100,8 @@ ruby scripts/build-charts-from-signals.rb \
   --master-element-id master \
   --auto-controls --page-per-worksheet \
   --title "<Workbook Title>" \
-  --out /tmp/<name>/chart-specs.json
+  --out /tmp/<name>/chart-specs.json \
+  --coverage-out /tmp/<name>/coverage.json
 ```
 
 What the build script auto-handles (no agent action needed):
@@ -1117,15 +1118,28 @@ What the build script auto-handles (no agent action needed):
 - ✅ Synchronized-axis worksheets → `combo-chart` kind w/ two yAxis groups
 - ✅ Customer-discovered learned-rules from `~/.tableau-to-sigma/learned-rules.yaml`
 
-What WARN lines mean — act on each one:
-- `'X' parameter-driven calc … → translated to Switch: …` — already emitted, no action needed
-- `'X' Tableau table-calc … → Sigma: ...` — copy-paste the formula into a master column if it's used by multiple charts
-- `'X' learned-rule applied to … → Sigma: ...` — already emitted, no action needed
-- `'X' has Tableau reference marks (...)` — manually add Sigma `referenceMarks` to the chart post-publish (see beads-sigma-7ak)
-- `'X' has a color channel on …` — multi-series fan-out: agent emits one yAxis per category in the chart spec
-- `'X' has N Tableau action filter(s) — skipped` — read `<out>-actions.md` and wire Sigma cross-element filtering manually
-- `'X' detected as dual-axis` — auto-emitted as combo-chart; verify the right kind in the readback
-- `parameter '...' is a numeric range — skipped auto-control` — add a number control by hand (blocked on beads-sigma-ebw)
+### Migration coverage — WARN vs NOTE (read this before reacting to log volume)
+The build prints two prefixes (bead beads-sigma-59mk). **`NOTE`** = a success
+confirmation or a verify-nudge — NOT a gap (`translated inline:` / `decomposed:` /
+`learned-rule applied` / `auto-emitted … verify` / `sort carried`). **`WARN`** =
+an actual drop or degradation that needs a decision. Historically every note was
+prefixed `WARN`, so a clean conversion read like a pile of failures — that volume
+is what fuels the "it drops a lot" perception; it is not the gap count.
+
+The build also writes **`coverage.json`** (`--coverage-out`, aggregating the WARN
+lines + dropped controls + inferred-kind tiles + nested-LOD chains) and
+`migrate-tableau.rb` prints ONE **MIGRATION COVERAGE** readout that leads with what
+carried over (only a `dropped` component is truly absent; `approximated`/`degraded`
+still land with their data). `WARN` count == coverage gap count by construction.
+
+What the remaining message types mean — act on each one:
+- `NOTE 'X' … translated inline / decomposed / learned-rule applied` — already emitted, no action.
+- `NOTE 'X' auto-emitted … verify / detected as dual-axis` — built; eyeball it against the source PNG.
+- `WARN 'X' … could not be auto-decomposed — dropped from the grid` — re-author the calc manually (a `dropped` coverage gap).
+- `WARN 'X' … STAYS MANUAL` — degraded: copy the printed Sigma formula into a master column.
+- `WARN 'X' has Tableau reference marks (...) not auto-emitted` — add Sigma `referenceMarks` post-publish (beads-sigma-7ak).
+- `'X' has N Tableau action filter(s) — skipped` — read `<out>-actions.md` and wire Sigma cross-element filtering manually.
+- `parameter '...' is a numeric range — skipped auto-control` — add a number control by hand (beads-sigma-ebw).
 
 ### 5a. Write the workbook spec
 

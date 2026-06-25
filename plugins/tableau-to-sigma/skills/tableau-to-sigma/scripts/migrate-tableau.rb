@@ -82,6 +82,7 @@ $stdout.sync = true # progress lines interleave correctly when piped/captured
 
 HERE = __dir__
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
+require 'coverage_gate' # build-charts coverage.json → consolidated report (bead beads-sigma-59mk)
 
 opts = {}
 OptionParser.new do |o|
@@ -1300,7 +1301,8 @@ if mechanical
                '--tableau-dir', WORK, '--layout', layout_json,
                '--master-map', mmap_path, '--master-element-id', 'master',
                '--page-per-dashboard',
-               '--out', charts_path]
+               '--out', charts_path,
+               '--coverage-out', File.join(WORK, 'coverage.json')]
   build_cmd += ['--meta', layout_json.sub(/\.json$/, '-meta.json')] if File.exist?(layout_json.sub(/\.json$/, '-meta.json'))
   build_cmd += ['--auto-controls'] if File.exist?(layout_json.sub(/\.json$/, '-meta.json'))
   run!(build_cmd, allow_fail: true)
@@ -1328,6 +1330,31 @@ if mechanical
   else
     line "build-charts: #{chart_elements.size} chart/control element(s) across #{chart_pages ? chart_pages.size : 1} page(s)" \
          "#{data_elements.any? ? " + #{data_elements.size} hidden data element(s)" : ''}"
+  end
+
+  # MIGRATION COVERAGE — one consolidated "what carried over (and what didn't)"
+  # readout (bead beads-sigma-59mk; ports powerbi-to-sigma PR #177). Leads with
+  # what converted; nothing is silently dropped. Non-blocking — the build's
+  # control_lint + visual-verify gates already hard-gate the recoverable classes.
+  coverage = CoverageGate.load(File.join(WORK, 'coverage.json'))
+  if coverage
+    puts
+    puts '==================== MIGRATION COVERAGE ===================='
+    puts "   #{CoverageGate.headline(coverage)}"
+    rlines = CoverageGate.report_lines(coverage)
+    (puts; puts rlines.join("\n")) unless rlines.empty?
+    cov_qs = CoverageGate.questions(coverage)
+    unless cov_qs.empty?
+      puts
+      if opts[:yes] || opts[:answers]
+        puts "   #{cov_qs.size} recoverable gap(s) — proceeding (unattended); recorded as accepted degradations."
+      else
+        puts '-------------------- ASSISTANCE AVAILABLE --------------------'
+        puts "   #{cov_qs.size} gap(s) are RECOVERABLE — ask the user whether to recover or accept each."
+        puts JSON.pretty_generate('recoverable_gaps' => cov_qs)
+      end
+    end
+    puts '==========================================================='
   end
 
   # 3) Assemble the workbook spec (page-data master [+ hidden helpers] + one
