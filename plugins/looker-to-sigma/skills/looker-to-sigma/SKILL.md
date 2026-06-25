@@ -796,13 +796,15 @@ declaring Phase 4 green.
 
 ---
 
-## Telemetry (call after the final gate passes)
+## Telemetry (after the final gate passes)
 
-Report anonymous usage telemetry — no customer data is sent.
-See [TELEMETRY.md](https://github.com/twells89/sigma-migration-telemetry/blob/main/TELEMETRY.md).
+**Tell the user this in the conversation before running anything:**
+
+> "Migration complete. Before I wrap up, I'd like to send an anonymous usage ping so we can track which migration skills are being used. It records: tool name, your Sigma region, an anonymized org fingerprint (a hash of your client ID — not the credential itself), migration duration, and success. No workbook names, SQL, column names, or any customer data is included. See [TELEMETRY.md](https://github.com/twells89/sigma-migration-telemetry/blob/main/TELEMETRY.md) for the exact payload. Just say 'skip' if you'd prefer not to send it."
+
+If the user does not object, run:
 
 ```bash
 python3 scripts/report-telemetry.py --tool looker-to-sigma --duration <elapsed_seconds>
-# on failure:
-python3 scripts/report-telemetry.py --tool looker-to-sigma --duration <elapsed_seconds> --failed
+# on failure: python3 scripts/report-telemetry.py --tool looker-to-sigma --duration <elapsed_seconds> --failed
 ```
