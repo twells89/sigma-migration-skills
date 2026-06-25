@@ -13,6 +13,11 @@ opts = {}
 OptionParser.new do |p|
   p.on('--dir D') { |v| opts[:dir] = v }
   p.on('--signals S') { |v| opts[:sig] = v }
+  # Optional: the build's coverage.json. When supplied, every RECOVERABLE gap it
+  # records must be acknowledged — its visual name must appear in some page's
+  # deltas[] (proof the human saw it during the eyeball compare) or in an
+  # explicit `acceptedGaps` list — so recoverable drops can't ship unnoticed.
+  p.on('--coverage C') { |v| opts[:cov] = v }
 end.parse!
 abort('need --dir and --signals') unless opts[:dir] && opts[:sig]
 path = File.join(opts[:dir], 'visual-compare.json')
@@ -31,4 +36,25 @@ bad = entries.reject { |e| %w[PASS ACCEPTED].include?(e['verdict'].to_s.upcase) 
 abort("BLOCKED: non-passing verdict(s): #{bad.map { |e| "#{e['page']}=#{e['verdict']}" }.join(', ')}") unless bad.empty?
 unexplained = entries.select { |e| e['verdict'].to_s.upcase == 'ACCEPTED' && Array(e['deltas']).empty? }
 abort("BLOCKED: ACCEPTED verdict without deltas[] explaining what differs: #{unexplained.map { |e| e['page'] }.join(', ')}") unless unexplained.empty?
+
+# Coverage cross-check: every RECOVERABLE gap the build flagged must be
+# acknowledged (recovered or explicitly accepted), never silently shipped.
+if opts[:cov] && File.exist?(opts[:cov])
+  cov = JSON.parse(File.read(opts[:cov])) rescue {}
+  recoverable = (cov['unresolved'] || []).select { |u| u['recoverable'] }
+  if recoverable.any?
+    acknowledged = entries.flat_map { |e| Array(e['deltas']) + Array(e['acceptedGaps']) }
+                          .map { |d| d.to_s.downcase }
+    unaccounted = recoverable.reject do |u|
+      v = u['visual'].to_s.downcase
+      acknowledged.any? { |d| !v.empty? && d.include?(v) }
+    end
+    unless unaccounted.empty?
+      msg = unaccounted.map { |u| "#{u['visual']} (#{u['detail']})" }.join('; ')
+      abort("BLOCKED: #{unaccounted.size} recoverable coverage gap(s) not acknowledged in any page's " \
+            "deltas[]/acceptedGaps — recover them or list each as an accepted delta: #{msg}")
+    end
+    puts "coverage cross-check GREEN: all #{recoverable.size} recoverable gap(s) acknowledged."
+  end
+end
 puts "visual-compare GREEN: #{entries.length} page(s) verified against the source render."

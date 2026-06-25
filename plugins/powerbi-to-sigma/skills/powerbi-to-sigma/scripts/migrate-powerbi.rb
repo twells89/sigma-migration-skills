@@ -65,8 +65,9 @@ require 'set'
 
 HERE = __dir__
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
-require 'scout_gate' # run-each-time gap-scout gate (bead beads-sigma-5l5e)
-require 'dax_gate'   # DAX warning → decision-question classifier (regression-tested)
+require 'scout_gate'    # run-each-time gap-scout gate (bead beads-sigma-5l5e)
+require 'dax_gate'      # DAX warning → decision-question classifier (regression-tested)
+require 'coverage_gate' # workbook-build coverage.json → consolidated report + assistance prompt
 
 opts = { db: '', schema: '' }
 OptionParser.new do |o|
@@ -1082,6 +1083,7 @@ build = ['ruby', File.join(HERE, 'build-workbook-from-pbir.rb'),
          # contract for the control lint) lands in WORK.
          '--model', opts[:tmsl],
          '--control-scope-out', File.join(WORK, 'control-scope.json'),
+         '--coverage-out', File.join(WORK, 'coverage.json'),
          '--out', wb_spec, '--layout-out', layout]
 # The workbook POST requires a folderId. Use --folder if given, else inherit the
 # DM's folderId (harvested from the ref-dm at Phase 3) so both land together.
@@ -1130,6 +1132,43 @@ end
 wb_rb = JSON.parse(File.read(wb_readback))
 wb_id = wb_rb['workbookId']
 puts "   workbookId = #{wb_id}"
+
+# ---------------------------------------------------------------------------
+# MIGRATION COVERAGE REPORT — what carried over, and what didn't (bead beads-sigma-cov).
+# The build warns loudly at each drop site, but on a complex report those warnings
+# scatter through the log; this aggregates coverage.json into ONE readout and, for
+# RECOVERABLE gaps, an explicit assistance prompt so nothing is "silently dropped".
+# It leads with what DID convert — the perception that a lot is lost is usually
+# "the few gaps weren't surfaced in one place". Non-blocking (the workbook is
+# posted + usable); the recoverable items are HARD-gated later by
+# assert-visual-compare.rb (must be ACCEPTED or fixed before Phase 6 sign-off).
+# ---------------------------------------------------------------------------
+coverage = CoverageGate.load(File.join(WORK, 'coverage.json'))
+if coverage
+  puts
+  puts '==================== MIGRATION COVERAGE ===================='
+  puts "   #{CoverageGate.headline(coverage)}"
+  rlines = CoverageGate.report_lines(coverage)
+  unless rlines.empty?
+    puts
+    puts rlines.join("\n")
+  end
+  cov_qs = CoverageGate.questions(coverage)
+  unless cov_qs.empty?
+    puts
+    if opts[:yes] || opts[:answers]
+      puts "   #{cov_qs.size} recoverable gap(s) — proceeding (unattended); recorded as accepted degradations."
+      puts '   (re-run after the action note on each to recover; they are also gated by assert-visual-compare.rb)'
+    else
+      puts '-------------------- ASSISTANCE AVAILABLE --------------------'
+      puts "   #{cov_qs.size} gap(s) below are RECOVERABLE — ask the user whether to recover or accept each."
+      puts '   These are NOT silent: each has a concrete action. assert-visual-compare.rb (Phase 5e)'
+      puts '   will not go GREEN until every recoverable gap is recovered or explicitly ACCEPTED.'
+      puts JSON.pretty_generate('recoverable_gaps' => cov_qs)
+    end
+  end
+  puts '==========================================================='
+end
 
 # ---------------------------------------------------------------------------
 # Phase 5 — Layout (authoritative final spec write — bead 16i)

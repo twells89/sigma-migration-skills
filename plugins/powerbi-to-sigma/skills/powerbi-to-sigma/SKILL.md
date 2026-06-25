@@ -111,6 +111,23 @@ Then: `tableau-to-sigma/scripts/post-and-readback.rb --type datamodel`. See `ref
   - measure formula wraps the master col: `CountDistinct([Master/Col])`, `Sum([Master/Col])`, date dim `DateTrunc("month",[Master/Col])`.
 - `POST /v2/workbooks/spec` (post-and-readback `--type workbook`). Chart-element shapes mirror `tableau-to-sigma/scripts/build-charts-from-signals.rb`.
 
+## Phase 5c — Coverage report (NEVER silently drop a component)
+The build **never silently drops** what it can't resolve — every drop, downgrade,
+and approximation is recorded to `$WORK/coverage.json` and surfaced as ONE
+consolidated **MIGRATION COVERAGE** readout (the doctrine the RLS section already
+states, extended to visuals). `migrate-powerbi.rb` prints it automatically after
+the workbook POST; for a standalone `build-workbook-from-pbir.rb` run pass
+`--coverage-out` and read the file. The report **leads with what carried over**
+(an approximated treemap→bar or a degraded missing-field visual still lands with
+its data; only a `dropped` visual is truly absent) so the common "it drops a lot"
+perception — usually just gaps that were never surfaced in one place — is
+answered with the real number.
+
+- `severity`: `dropped` (no element built) · `degraded` (built, lost a role/field/sort) · `approximated` (built as a substituted Sigma kind, e.g. treemap/funnel/gauge/waterfall → bar/kpi).
+- `recoverable: true` items carry a concrete **action** (supply `--image-map`, add a joined master, re-point a drill level, supply a geo column). In an interactive run they print as an **ASSISTANCE AVAILABLE** block — present them to the user (one `AskUserQuestion` checklist: *recover* vs *accept*). Under `--yes`/`--answers` they take the accept default and are recorded as accepted degradations.
+- `recoverable: false` items are genuine Sigma spec limitations (no native gauge; region maps have no categorical legend) — reported, never asked about.
+- The recoverable items are **hard-gated** at Phase 5e: `assert-visual-compare.rb --coverage` will not go GREEN until each is recovered or explicitly acknowledged.
+
 ## Phase 5d — Layout (do NOT skip — stacked ≠ done)
 Map each visual's `x,y,w,h` → 24-col grid (`COL_UNIT = page_w/24`, `ROW_UNIT ≈ 30`) → single top-level `layout` XML (one `<Page>` per page, server page IDs) → `tableau-to-sigma/scripts/put-layout.rb`. Math + snap rules in `research/powerbi-visual-layout.md §4`.
 
@@ -130,8 +147,11 @@ pages next to the Power BI renders. Do this BEFORE Phase 6, every run:
 4. Write `$WORK/visual-qa/visual-compare.json`: `[{page, verdict: PASS|ACCEPTED|FAIL, deltas: ["…"]}]`
    — ACCEPTED means the user explicitly OK'd a listed delta (e.g. zip
    choropleth instead of PBI's bubble map; theme colors). FAIL = fix and re-export.
-5. Gate: `ruby scripts/assert-visual-compare.rb --dir $WORK/visual-qa --signals $WORK/signals.json`
-   must print GREEN before Phase 6 may be declared.
+5. Gate: `ruby scripts/assert-visual-compare.rb --dir $WORK/visual-qa --signals $WORK/signals.json --coverage $WORK/coverage.json`
+   must print GREEN before Phase 6 may be declared. `--coverage` cross-checks the
+   Phase 5c ledger: every **recoverable** gap must be acknowledged — its visual
+   named in a page's `deltas[]` (or an explicit `acceptedGaps` list) — so a
+   recoverable drop can never ship unnoticed.
 
 Layout escalation if the compare fails on arrangement: the builder's default
 `--layout clean` preserves the source positions inside a normalized grid; use
@@ -295,7 +315,7 @@ The conversion is script-driven (mirrors `tableau-to-sigma/scripts/`). `scripts/
 | `sigma-export-png.py` | 5e/5f compare | Renders a built Sigma page to PNG (`--workbook <id> --page <pageId> --out … --w 1600`) for the source-vs-target compare AND the Phase 5f Visual QA read (checked against `refs/layout-visual-qa.md`). |
 | `assert-visual-compare.rb` | 5e gate | HARD GATE: blocks Phase 6 unless visual-compare.json has a PASS/ACCEPTED verdict (with explained deltas) for every content page. |
 | `convert-model.rb` | 2–3 convert/post | MODE A prints the exact `convert_powerbi_to_sigma` MCP call for a `model.bim`; MODE B takes the converter output and applies the 3 fixups (schemaVersion + folderId/ownerId via a ref-DM harvest + base-element names) → postable DM spec. |
-| `build-workbook-from-pbir.rb` | 4 build | `signals.json` + a `master-map.json` → full workbook spec + 24-col layout XML. Applies the measure-translation patterns in `refs/measure-patterns.md`; **line charts default to a single series** (`beads-sigma-c07`) unless PBI bound a Series/Legend role. **Carries the PBI visual sort** (`f972` — PBIR `query.sortDefinition` / classic `prototypeQuery.OrderBy` → chart `xAxis.sort`/`color.sort`; grouped table → `groupings[0].sort` — element-level sort is rejected on grouped tables). Analog of `build-charts-from-signals.rb`. |
+| `build-workbook-from-pbir.rb` | 4 build | `signals.json` + a `master-map.json` → full workbook spec + 24-col layout XML. Applies the measure-translation patterns in `refs/measure-patterns.md`; **line charts default to a single series** (`beads-sigma-c07`) unless PBI bound a Series/Legend role. **Carries the PBI visual sort** (`f972` — PBIR `query.sortDefinition` / classic `prototypeQuery.OrderBy` → chart `xAxis.sort`/`color.sort`; grouped table → `groupings[0].sort` — element-level sort is rejected on grouped tables). Analog of `build-charts-from-signals.rb`. **Writes `coverage.json`** (`--coverage-out`): every dropped/degraded/approximated component aggregated (Phase 5c) — nothing silently dropped. |
 | `phase6-parity-pbi.rb` | 7 parity | executeQueries(DAX) adapter: `--emit-dax` runs the PBI side and writes the parity plan's `expected` rows; `--finalize` injects Sigma actuals and runs the shared `verify-parity.rb`. The PBI analog of Tableau's view-CSV parity adapter. |
 | `enhance-scan.rb` | E scan (opt-in) | **Phase E part 1 — SCAN (read-only).** Source signals + built spec + live element exports → `enhancements.json` candidates `{id, category, evidence, proposed, risk, verdict_hint, patch}` + descoped propose-in-UI notes. Shared Phase-E engine, vendored byte-identical across plugins (md5 discipline). |
 | `enhance-apply.rb` | E apply (opt-in) | **Phase E part 2 — APPLY (accept-only, clone-first).** Clones the parity workbook as `"<name> — Enhanced"` (1:1 artifact never written), applies ONLY `--accept`-ed candidates one at a time, each gated by an untouched-element clone-vs-original spot-check (auto-revert on shift). Writes `enhance-report.json`. Byte-identical twin of the tableau copy. |

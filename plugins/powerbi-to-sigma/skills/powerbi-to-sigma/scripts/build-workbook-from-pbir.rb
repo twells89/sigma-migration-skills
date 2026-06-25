@@ -76,6 +76,10 @@ OptionParser.new do |p|
   # Where the intended-scope contract lands (consumed by workstream A's lint).
   # Default: control-scope.json next to --out.
   p.on('--control-scope-out PATH') { |v| opts[:scope_out] = v }
+  # Where the migration COVERAGE report lands (the aggregated drop/approx ledger
+  # migrate-powerbi.rb surfaces + assert-visual-compare.rb gates on). Default:
+  # coverage.json next to --out.
+  p.on('--coverage-out PATH') { |v| opts[:coverage_out] = v }
 end.parse!
 %i[sig mmap out].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
 
@@ -182,6 +186,27 @@ $control_scope = []
 $control_unbound = []
 $used_control_ids = Hash.new(0)
 
+# coverage.json accumulator (bead beads-sigma-cov). Every visual/field the build
+# could NOT carry over faithfully is recorded here so migrate-powerbi.rb can show
+# ONE consolidated coverage report + an assistance gate instead of leaving these
+# as scattered STDERR warnings the user has to reconstruct by hand (customer
+# feedback, 2026-06-25: "silently drops components it cannot resolve"). The build
+# ALREADY warns loudly at each site — this just AGGREGATES the same facts.
+# Entry schema: {visual, pbi_type, sigma_kind, severity, detail, recoverable, action}.
+#   severity: 'dropped'      — nothing built for this visual/field
+#             'degraded'     — element built, but a role/field/sort was lost
+#             'approximated' — built as a different (best-effort) Sigma kind
+# recoverable: true  -> a concrete user/agent action recovers it (surfaced as a
+#                       decision in migrate-powerbi.rb + a hard visual-compare gate)
+#              false -> a genuine Sigma spec limitation (informational only)
+$unresolved = []
+def record_unresolved(visual:, severity:, detail:, pbi_type: nil, sigma_kind: nil,
+                      recoverable: false, action: nil)
+  $unresolved << { 'visual' => visual.to_s, 'pbi_type' => pbi_type, 'sigma_kind' => sigma_kind,
+                   'severity' => severity, 'detail' => detail.to_s,
+                   'recoverable' => recoverable, 'action' => action }
+end
+
 # TMSL column type for ENTITY.LEAF — date-typed slicers must become date-range
 # controls: a `list` control bound to a datetime column posts fine but Sigma
 # SILENTLY STRIPS its filter targets (known estate-repair gotcha).
@@ -192,6 +217,17 @@ def tmsl_date_column?(ent, leaf)
   c = t && (t['columns'] || []).find { |col| col['name'].to_s.casecmp(leaf.to_s).zero? }
   !!(c && c['dataType'].to_s =~ /date/i)
 end
+
+# PBI visualTypes that map 1:1 to a native Sigma element kind (no approximation).
+# Anything NOT in this set is rendered as a best-effort Sigma kind and recorded
+# in coverage.json as 'approximated' so the user sees the substitution (e.g.
+# treemap/funnel/gauge/ribbon/waterfall → bar). Mirrors migrate-powerbi.rb NATIVE.
+NATIVE_VISUAL_TYPES = %w[card multiRowCard kpi textbox actionButton lineChart areaChart
+                         stackedAreaChart barChart clusteredBarChart stackedBarChart columnChart
+                         clusteredColumnChart stackedColumnChart hundredPercentStackedColumnChart
+                         hundredPercentStackedBarChart lineClusteredColumnComboChart
+                         lineStackedColumnComboChart pieChart donutChart scatterChart tableEx
+                         pivotTable matrix slicer map filledMap shapeMap azureMap image].freeze
 
 SIGMA_KIND = {
   'kpi' => 'kpi-chart', 'bar' => 'bar-chart', 'line' => 'line-chart',
@@ -526,12 +562,18 @@ def apply_sort(el, kind, rec, qr_cids, name)
     end
   when 'pivot-table'
     warn "[build-workbook] WARN visual '#{name}': pivot-table sort is not spec-expressible in Sigma — set it in the UI."
+    record_unresolved(visual: name, severity: 'degraded', recoverable: false,
+                      detail: 'pivot-table sort is not spec-expressible in Sigma',
+                      action: 'Set the sort on the pivot in the Sigma UI after migration.')
   end
 end
 
 def warn_sort_miss(name, srt)
   warn "[build-workbook] WARN visual '#{name}': sort field '#{srt['queryRef']}' is not among " \
        'the built columns — sort skipped.'
+  record_unresolved(visual: name, severity: 'degraded', recoverable: true,
+                    detail: "sort field '#{srt['queryRef']}' is not among the built columns — sort skipped",
+                    action: "Add '#{srt['queryRef']}' to the visual's fields in master-map.json so the sort can resolve.")
 end
 
 # Build chart element from a normalized visual record. `extra_data` is an
@@ -568,6 +610,11 @@ def resolve_map_kind(rec, name)
   end
   why = loc.nil? ? 'no location binding' : ($geo_categories.empty? ? 'no --bim geo metadata supplied' : "'#{loc}' has no geocodable dataCategory")
   warn "[build-workbook] WARN visual '#{name}': PBI map downgraded to bar chart — #{why}. "        'Sigma maps need a region-typed column (country/state/county/zip/place) or lat+long; '        'PBI relied on Bing geocoding which Sigma does not do.'
+  record_unresolved(visual: name, pbi_type: 'map', sigma_kind: 'bar-chart',
+                    severity: 'approximated', recoverable: true,
+                    detail: "PBI map downgraded to bar chart — #{why}",
+                    action: 'Supply a region-typed column (country/state/county/zip/place) via --bim dataCategory, ' \
+                            'or lat+long bindings, to render a real Sigma map — or accept the bar approximation.')
   series = (b['Series'] || b['Legend'] || []).first
   b['Category'] = [series] if series  # old downgrade kept the legend as the bar category
   'bar-chart'
@@ -604,6 +651,10 @@ def build_element(rec, fields, masters, extra_data = [])
     unless url
       warn "[build-workbook] visual '#{rec['visual_id']}': image asset '#{rec['resource']}' " \
            'skipped — supply --image-map {resource: hostedUrl} to embed it (Sigma images are URL-only).'
+      record_unresolved(visual: (rec['title'].to_s.strip.empty? ? rec['visual_id'] : rec['title']),
+                        pbi_type: 'image', severity: 'dropped', recoverable: true,
+                        detail: "image asset '#{rec['resource']}' skipped (Sigma images are URL-only)",
+                        action: "Supply --image-map '{\"#{rec['resource']}\": \"<hostedUrl>\"}' and re-run to embed it.")
       return nil
     end
     return { 'id' => eid, 'kind' => 'image', 'url' => url }
@@ -625,6 +676,11 @@ def build_element(rec, fields, masters, extra_data = [])
       why = all_qrs.empty? ? 'no field bindings' : 'no resolvable master element'
       warn "[build-workbook] WARN visual '#{rec['title'] || rec['visual_id']}' (#{kind}) has " \
            "#{why} — element SKIPPED (would emit a source-less \"[]\" column the API rejects)."
+      record_unresolved(visual: (rec['title'] || rec['visual_id']), pbi_type: rec['visual_type'],
+                        sigma_kind: kind, severity: 'dropped', recoverable: !all_qrs.empty?,
+                        detail: "#{kind} has #{why} — element skipped",
+                        action: (all_qrs.empty? ? 'Source visual carries no field bindings; nothing to recover.' \
+                                                : 'Add a resolvable master element for this visual in master-map.json and re-run.'))
       return nil
     end
   end
@@ -641,7 +697,23 @@ def build_element(rec, fields, masters, extra_data = [])
       warn "[build-workbook] WARN visual '#{(rec['title'] || rec['visual_id'])}' has field(s) " \
            "#{unreachable.join(', ')} not reachable on the chosen master '#{master}'; a Sigma element " \
            "sources only one master, so they will be DROPPED — point them at a single joined master element."
+      record_unresolved(visual: (rec['title'] || rec['visual_id']), pbi_type: rec['visual_type'],
+                        sigma_kind: kind, severity: 'degraded', recoverable: true,
+                        detail: "field(s) #{unreachable.join(', ')} not reachable on master '#{master}' — dropped",
+                        action: "Add a single joined master element covering #{unreachable.join(', ')} " \
+                                'in master-map.json (a Sigma element sources exactly one master).')
     end
+  end
+  # Record a non-native APPROXIMATION (e.g. treemap/funnel/gauge/ribbon/waterfall
+  # → bar/kpi). map/image carry their own, more specific coverage entries above,
+  # so they're excluded from NATIVE_VISUAL_TYPES handling here. This is what makes
+  # the coverage report honest about "looks like the source" vs "same numbers".
+  vt = rec['visual_type'].to_s
+  unless vt.empty? || NATIVE_VISUAL_TYPES.include?(vt)
+    record_unresolved(visual: name, pbi_type: vt, sigma_kind: kind,
+                      severity: 'approximated', recoverable: false,
+                      detail: "#{vt} has no native Sigma element kind — approximated as #{kind}",
+                      action: "Sigma has no native #{vt}; the data is preserved as a #{kind}. Accept or pick a different Sigma chart.")
   end
   master_id = master && masters[master] ? masters[master]['id'] : nil
   el = { 'id' => eid, 'kind' => kind, 'name' => name }
@@ -683,6 +755,10 @@ def build_element(rec, fields, masters, extra_data = [])
                             'reason' => "column '#{qr}' resolves to no master column " \
                                         "(master=#{pmaster.inspect}); dropped loudly rather than " \
                                         'wired to a wrong column or shipped dead' }
+      record_unresolved(visual: name, pbi_type: 'slicer', sigma_kind: 'control',
+                        severity: 'dropped', recoverable: true,
+                        detail: "slicer column '#{qr}' resolves to no master column — control skipped",
+                        action: "Add column '#{qr}' to a master (or fix master-map.json) so the slicer can wire, then re-run.")
       return nil
     end
     reach = MODEL_RELATIONSHIPS.any? || MODEL_TABLES.any? ? reachable_entities(ent) : [ent]
@@ -795,6 +871,10 @@ def build_element(rec, fields, masters, extra_data = [])
     end
     if (srs = (b['Series'] || b['Legend'] || []).first)
       warn "[build-workbook] WARN visual '#{name}': region-map colors by the measure scale — "            "PBI legend '#{srs}' dropped (no categorical legend on a Sigma region map)."
+      record_unresolved(visual: name, pbi_type: 'map', sigma_kind: 'region-map',
+                        severity: 'degraded', recoverable: false,
+                        detail: "categorical legend '#{srs}' dropped — Sigma region maps color by a measure scale only",
+                        action: 'Sigma region maps have no categorical legend; the map colors by the measure scale instead.')
     end
   when 'point-map'
     latq = (b['Latitude'] || []).first
@@ -827,6 +907,11 @@ def build_element(rec, fields, masters, extra_data = [])
        dim_role.all? { |q| q.to_s =~ /hierarchy/i || q.to_s =~ /\.(Year|Quarter|Month|Week|Day|Date)\s*\z/i }
       warn "[build-workbook] WARN visual '#{name}': date hierarchy with #{dim_role.length} levels " \
            "reduced to '#{dim}' — deeper drill levels (#{dim_role[1..].join(', ')}) dropped."
+      record_unresolved(visual: name, pbi_type: rec['visual_type'], sigma_kind: kind,
+                        severity: 'degraded', recoverable: true,
+                        detail: "date hierarchy reduced to '#{dim}' — deeper levels (#{dim_role[1..].join(', ')}) dropped",
+                        action: "Re-point the axis dim at the intended drill level in master-map.json; " \
+                                'deeper PBI drill-down levels map to Sigma UI drill, not a single chart.')
     end
     meas = (b['Y'] || b['Values'] || [])
     series = (b['Series'] || b['Legend'] || []).first
@@ -977,6 +1062,10 @@ def build_element(rec, fields, masters, extra_data = [])
           calc_ids << gsz
         else
           warn "[build-workbook] WARN scatter '#{name}': Size role '#{sizeqr}' is not a measure — size DROPPED."
+          record_unresolved(visual: name, pbi_type: rec['visual_type'], sigma_kind: 'scatter-chart',
+                            severity: 'degraded', recoverable: false,
+                            detail: "scatter Size role '#{sizeqr}' is not a measure — bubble size dropped",
+                            action: 'A Sigma scatter size dimension must be a measure; bind an aggregatable field to Size.')
         end
       end
       extra_data << { 'id' => src_id, 'kind' => 'table', 'name' => src_name,
@@ -1013,8 +1102,14 @@ def build_element(rec, fields, masters, extra_data = [])
         cols << { 'id' => dcid, 'formula' => dfs['ref'], 'name' => qr_leaf(detail, 'Detail') }
         el['color'] = { 'by' => 'category', 'column' => dcid }
       end
-      warn "[build-workbook] WARN scatter '#{name}': Size role '#{(b['Size'] || []).first}' DROPPED " \
-           '(ungrouped scatter path).' if (b['Size'] || []).first
+      if (b['Size'] || []).first
+        warn "[build-workbook] WARN scatter '#{name}': Size role '#{(b['Size'] || []).first}' DROPPED " \
+             '(ungrouped scatter path).'
+        record_unresolved(visual: name, pbi_type: rec['visual_type'], sigma_kind: 'scatter-chart',
+                          severity: 'degraded', recoverable: true,
+                          detail: "scatter Size role '#{(b['Size'] || []).first}' dropped (ungrouped scatter path)",
+                          action: 'Add a Details/Category dimension in master-map.json so the scatter groups and the Size measure can bind.')
+      end
     end
     # PBI legend.show=false -> hide the Sigma legend (the detail-on-color split
     # otherwise surfaces a legend PBI did not show).
@@ -1533,6 +1628,36 @@ spec['folderId'] = opts[:folder] if opts[:folder]
 File.write(opts[:out], JSON.pretty_generate(spec))
 warn "[build-workbook] wrote #{opts[:out]} (#{data_elements.size} master(s), " \
      "#{content_pages.sum { |p| p['elements'].size }} chart element(s); layout embedded)"
+
+# coverage.json — the aggregated migration-coverage ledger (bead beads-sigma-cov).
+# Written AFTER the final spec so builtElements equals the shipped element count.
+# Headline framing on PURPOSE: report how MANY source visuals converted cleanly,
+# not just the handful that didn't — the "drops a lot" perception is really
+# "the few gaps weren't surfaced in one place". `unresolved` is every
+# DROPPED/DEGRADED/APPROXIMATED item (already warned at its site, now aggregated).
+total_visuals = signals['pages'].sum { |pg| (pg['visuals'] || []).size }
+# Count CONTENT elements only — exclude layout chrome (header band containers)
+# that 'clean' layout adds, so the stat reflects converted visuals, not scaffolding.
+built_elements = content_pages.sum { |p| (p['elements'] || []).count { |e| e['kind'] != 'container' } }
+by_sev = $unresolved.group_by { |u| u['severity'] }.transform_values(&:size)
+coverage_path = opts[:coverage_out] ||
+                File.join(File.dirname(File.expand_path(opts[:out])), 'coverage.json')
+File.write(coverage_path, JSON.pretty_generate(
+             { 'version' => 1, 'source' => 'powerbi',
+               'summary' => {
+                 'sourceVisuals' => total_visuals,
+                 'builtElements' => built_elements,
+                 'dropped' => by_sev['dropped'] || 0,
+                 'degraded' => by_sev['degraded'] || 0,
+                 'approximated' => by_sev['approximated'] || 0,
+                 'recoverable' => $unresolved.count { |u| u['recoverable'] }
+               },
+               'unresolved' => $unresolved }
+           ))
+warn "[build-workbook] wrote coverage -> #{coverage_path} " \
+     "(#{total_visuals} source visual(s) -> #{built_elements} element(s); " \
+     "#{by_sev['dropped'] || 0} dropped, #{by_sev['degraded'] || 0} degraded, " \
+     "#{by_sev['approximated'] || 0} approximated)"
 
 if opts[:layout_out]
   File.write(opts[:layout_out], layout_xml)
