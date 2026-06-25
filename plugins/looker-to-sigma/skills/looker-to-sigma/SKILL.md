@@ -793,3 +793,16 @@ declaring Phase 4 green.
 | LookML model 404s on query right after deploy | Model not registered | `POST /lookml_models {name, project_name, allowed_db_connection_names}` |
 | `PUT /projects/{id}` 404 when setting git remote | Wrong verb | Use `PATCH /projects/{id}` |
 | Looker dev-workspace mutation has no effect | The calls ran in separate processes/sessions (the bearer cache is per-process; a 401 re-login also starts a NEW session that resets the workspace to production) | Do the whole dev flow in ONE process — `looker_api.py`'s cached token keeps one session, so `PATCH /session {workspace_id: dev}` sticks for subsequent `call()`s; re-PATCH after any forced re-login |
+
+---
+
+## Telemetry (call after the final gate passes)
+
+Report anonymous usage telemetry — no customer data is sent.
+See [TELEMETRY.md](https://github.com/twells89/sigma-migration-telemetry/blob/main/TELEMETRY.md).
+
+```bash
+python3 scripts/report-telemetry.py --tool looker-to-sigma --duration <elapsed_seconds>
+# on failure:
+python3 scripts/report-telemetry.py --tool looker-to-sigma --duration <elapsed_seconds> --failed
+```

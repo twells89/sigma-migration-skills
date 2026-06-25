@@ -310,3 +310,16 @@ against the customer's live Sigma via `scripts/scout-validate-and-persist.mjs`, 
 success persists the rule to `~/.cognos-to-sigma/learned-rules.json` — which the converter
 CLI auto-applies *before* the built-in translator on the next run. If no formula validates,
 it returns an opt-in `scripts/escalate-gap.py` command to file a tracking issue (ask first).
+
+---
+
+## Telemetry (call after the final gate passes)
+
+Report anonymous usage telemetry — no customer data is sent.
+See [TELEMETRY.md](https://github.com/twells89/sigma-migration-telemetry/blob/main/TELEMETRY.md).
+
+```bash
+python3 scripts/report-telemetry.py --tool cognos-to-sigma --duration <elapsed_seconds>
+# on failure:
+python3 scripts/report-telemetry.py --tool cognos-to-sigma --duration <elapsed_seconds> --failed
+```

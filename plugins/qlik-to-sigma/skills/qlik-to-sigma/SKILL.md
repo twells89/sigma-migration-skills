@@ -359,3 +359,16 @@ Row/column security is **never silently dropped and never silently ported** — 
 
 **Skip is loud:** opting out leaves the migrated model with NO RLS — all rows visible to everyone. Confirm before skipping.
 
+
+---
+
+## Telemetry (call after the final gate passes)
+
+Report anonymous usage telemetry — no customer data is sent.
+See [TELEMETRY.md](https://github.com/twells89/sigma-migration-telemetry/blob/main/TELEMETRY.md).
+
+```bash
+python3 scripts/report-telemetry.py --tool qlik-to-sigma --duration <elapsed_seconds>
+# on failure:
+python3 scripts/report-telemetry.py --tool qlik-to-sigma --duration <elapsed_seconds> --failed
+```

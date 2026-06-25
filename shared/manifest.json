@@ -63,6 +63,34 @@
       ]
     },
     {
+      "canonical": "shared/lib/sigma_telemetry.py",
+      "targets": [
+        "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/sigma_telemetry.py",
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/lib/sigma_telemetry.py"
+      ]
+    },
+    {
+      "canonical": "shared/scripts/report-telemetry.py",
+      "targets": [
+        "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/report-telemetry.py",
+        "plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/report-telemetry.py",
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/report-telemetry.py",
+        "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/report-telemetry.py",
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/report-telemetry.py",
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/report-telemetry.py",
+        "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/report-telemetry.py",
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/report-telemetry.py",
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/report-telemetry.py"
+      ]
+    },
+    {
       "canonical": "shared/scripts/escalate-gap.py",
       "targets": [
         "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/escalate-gap.py",

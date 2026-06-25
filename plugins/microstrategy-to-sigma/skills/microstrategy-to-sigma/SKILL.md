@@ -406,3 +406,16 @@ doesn't carry them).
   gate 7 catches escapes).
 - Python 3.13+ rejects some MSTR cloud CA certs (`VERIFY_X509_STRICT`) —
   `mstr.py` handles it.
+
+---
+
+## Telemetry (call after the final gate passes)
+
+Report anonymous usage telemetry — no customer data is sent.
+See [TELEMETRY.md](https://github.com/twells89/sigma-migration-telemetry/blob/main/TELEMETRY.md).
+
+```bash
+python3 scripts/report-telemetry.py --tool microstrategy-to-sigma --duration <elapsed_seconds>
+# on failure:
+python3 scripts/report-telemetry.py --tool microstrategy-to-sigma --duration <elapsed_seconds> --failed
+```
