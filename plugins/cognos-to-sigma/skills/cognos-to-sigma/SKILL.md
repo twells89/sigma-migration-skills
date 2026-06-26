@@ -2,10 +2,12 @@
 name: cognos-to-sigma
 description: >-
   Migrate IBM Cognos Analytics content to Sigma. Use when the user has a Cognos
-  Data Module, Framework Manager package, or report (Report Studio / CA Reporting)
-  and wants to recreate it in Sigma. Converts Data Module JSON → Sigma data model
-  and report-spec XML → Sigma workbook, translating the Cognos expression DSL and
-  flagging constructs with no clean Sigma analog. Discovery via the CA REST API.
+  Data Module, Framework Manager package, report (Report Studio / CA Reporting),
+  or dashboard (exploration) and wants to recreate it in Sigma. Converts Data
+  Module JSON → Sigma data model and report-spec XML → Sigma workbook, translating
+  the Cognos expression DSL and flagging constructs with no clean Sigma analog.
+  Dashboards (exploration JSON) are hand-authored per refs/dashboard-migration.md
+  (tabs → separate Sigma pages). Discovery via the CA REST API.
 user-invocable: true
 ---
 
@@ -35,7 +37,10 @@ of emitting wrong logic.
 
 > Read `refs/` before relying on shapes: `design-notes.md` (translation surface + scope),
 > `format-shapes.md` (the real CA Data-Module JSON + report-spec XML structures),
-> `expression-dsl.md` (the Cognos-expression → Sigma-formula mapping table).
+> `expression-dsl.md` (the Cognos-expression → Sigma-formula mapping table),
+> `dashboard-migration.md` (Cognos **dashboards** / exploration JSON → Sigma: tabs→pages,
+> the Akamai bridge, the dataset-query data path, all-SQL DM pattern — the converter does
+> NOT do dashboards).
 > For the canonical Sigma data-model + workbook spec shapes, defer to the companion
 > `sigma-data-models` / `sigma-workbooks` skills.
 
@@ -147,6 +152,8 @@ windows are the workaround for session-replay auth, not a substitute for asking.
 - Samples folder, modules, and reports are discovered by walking `GET /objects/{id}/items`.
 - **Data Module spec**: `GET /bi/v1/metadata/modules/{id}` (NOT `/modules/{id}`, which is empty).
 - **Report spec**: `GET /bi/v1/objects/{id}?fields=specification` → the `specification` string is the report XML.
+- **Dashboard spec**: `GET /bi/v1/objects/{id}?fields=specification` → the `specification` string is **exploration JSON** (not XML). This is a different artifact the converter does NOT handle — hand-author per **`refs/dashboard-migration.md`**. ⚠️ A Cognos dashboard's **tabs (`spec.layout.items[]`) must become separate Sigma pages** — never flatten all widgets onto one page.
+- **Akamai/CAF wall**: plain `curl` of `/bi/v1` can return **441/403** (TLS fingerprinting) even with a good cookie/API key. Use the headed-Chrome Puppeteer bridge in `refs/dashboard-migration.md` for dashboard pulls + the dataset-query data path.
 - Prefer **warehouse-backed** modules (built on a Data server connection) over file-backed
   ones — they carry complete schemas. File-backed modules (uploaded `.xlsx`) are a
   *land-in-warehouse-first* case (see Verify/parity).
