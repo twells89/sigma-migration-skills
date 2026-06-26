@@ -28,7 +28,33 @@ columns:
 
 **Rule of thumb:** if your element's `source` points at another element (or a warehouse table, or a join), 90%+ of your formulas will start with `[<SourceName>/...]`. Bare refs are only for columns you literally defined a line or two above in the same `columns[]` array.
 
-Before publishing, run `./scripts/validate-spec.sh <spec.yaml>` — it catches exactly this mistake.
+> **`<SourceName>` is the element's `name`, not its `id`.** An element with `id: master` but `name: Orders` is referenced as `[Orders/Net Revenue]` — `[Master/Net Revenue]` resolves to nothing. The trap: **a wrong element-name prefix is NOT caught at POST** — the spec saves `200` and the error only appears in the rendered output as `Invalid Query: Unknown column`. So if you rename an element (or set `id` ≠ `name`), update every formula that references it, and **always render-check after POST** — a clean `200` is not proof the formulas resolve. (Live-verified 2026-06-26.)
+
+Before publishing, run `./scripts/validate-spec.sh <spec.yaml>` — it catches the missing-prefix mistake (but not a wrong-name prefix; only a render does).
+
+---
+
+## ⚠️ READ THIRD: Every column needs a `formula`
+
+On **any** element sourced from a data model, warehouse table, or another element, **each entry in `columns[]` must carry a `formula`.** A column with only `name` (display label) and/or `columnId` is rejected:
+
+```
+400  pages[0].elements[N].columns[0].formula: Invalid string: undefined
+```
+
+```yaml
+# ✗ 400 — name/columnId alone is not a binding
+columns:
+  - { id: c1, name: Net Revenue }
+  - { id: c2, columnId: Net Revenue }
+
+# ✓ formula is the binding; name is just the display label
+columns:
+  - { id: c1, formula: "[Net Revenue]",            name: Net Revenue }
+  - { id: c2, formula: "[Order Fact/Order Id]",    name: Order Id }
+```
+
+This bites when **hand-authoring from scratch** (vs. round-tripping a GET'd spec, where every column already carries its `formula`). When cloning an element from an existing workbook, keep the `formula` on each column — don't strip it down to `name`. (Live-verified 2026-06-26.)
 
 ---
 

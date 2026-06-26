@@ -51,9 +51,9 @@ never an override of a user's stated branding or a migration's source fidelity.*
 
 ---
 
-## Workbook theme (2026-06-18 release)
+## Workbook theme (2026-06-18 release; `themeOverrides` schema documented 2026-06-25)
 
-A workbook now carries a **top-level theme**, alongside `pages` and `layout`:
+A workbook carries a **top-level theme**, alongside `pages` and `layout`:
 
 ```yaml
 name: My Workbook
@@ -68,10 +68,40 @@ themeOverrides:          # optional — colors / fonts / layout style / table de
     surface: "#101826"
 ```
 
-- `themeName` accepts a **built-in** name (`Light` / `Dark` / `Surface`) or an **org theme id** (a UUID). All four round-trip. Only the **format** is checked, not existence: a malformed value 400s, but a well-formed but nonexistent UUID is accepted as-is and renders broken (like a bad `pluginId`) — so a clean POST is not proof the theme exists.
+The **full `themeOverrides` schema is now in the public OpenAPI** (`.../spec` POST/PUT request body and GET response — added 2026-06-25; earlier release notes shipped the feature before the spec documented it). The OpenAPI is the source of truth for every field; the list below is the verified summary.
+
+### `themeName`
+
+- Accepts a **built-in** name (`Light` / `Dark` / `Surface`) or an **org theme id** (a UUID). All round-trip. Only the **format** is checked, not existence: a malformed value 400s, but a well-formed but nonexistent UUID is accepted as-is and renders broken (like a bad `pluginId`) — so a clean POST is not proof the theme exists.
 - **There is no API to discover theme names.** Built-ins are the three above; an org theme id can only be learned by reading a workbook spec that already uses it (admin Branding Settings shows names, not ids). So the theme id has to come from somewhere external — an agent cannot enumerate them from a single call.
 - **Use the per-org theme registry instead of asking blind.** `harvest-theme-registry.py` (in `sigma-migration-skills/shared/scripts/`) scans an org's workbook specs once and writes `~/.sigma-migration/theme-registry.yaml`, keyed by API host, with each `themeName` and how many workbooks use it. Read it to suggest the org's themes ranked by frequency — **the most-used org-UUID is almost always the org default.** If the registry is missing or stale, run the harvester (a full scan is ~20–40s and persists), then fall back to asking the user only if no org themes are found. Singletons are often test/transient junk — prefer the high-count entries.
-- `themeOverrides` round-trips (colors confirmed). Use it for one-off tweaks on top of a base theme.
+
+### `themeOverrides` — one-off tweaks stacked on the base theme
+
+Every field below **round-trips and renders** — verified live 2026-06-26 (POST → GET round-trip with 0 dropped fields, + PNG export showing the override applied; a 14-key override on a `Light` base produced a dark canvas, pill cards, cyan headers, row banding, and a monospace data font).
+
+| Field | Type / values | Notes |
+|---|---|---|
+| `colors` | `{ text, highlight, surface, success, warning, danger, darkMode }` | hex; `highlight` maps to theme `$primary`. `darkMode: shown\|hidden`. |
+| `colorOverrides` | `{ <token>: "#hex" }` | per-token layout colors; keys match the theme color inspector (`backgroundCanvas`, `elementBackground`, …). |
+| `fonts` | `{ textFont, dataFont }` | **font family names.** `textFont` = format-panel "Text font"; `dataFont` = "Data font" (values/numbers). |
+| `titleFont` | `{ color, fontSize (6–96), fontWeight: bold\|normal }` | element **title** font. |
+| `borderRadius` | `square \| round \| pill` | corner rounding. |
+| `elementBorder` | `{ color, width (0–3) }` | `color` = hex **or** `{ kind: theme, ref: "colors-xxx" }`. |
+| `categoricalScheme` | palette name **or** `["#hex", …]` | custom categorical palette (incl. donut/pie — see below). |
+| `sequentialScheme` / `divergingScheme` | named scheme (string) | continuous palettes. |
+| `pageWidth` / `maxPageWidth` | `full\|large\|medium\|custom` / number (≥600) | `maxPageWidth` applies when `pageWidth: custom`. |
+| `space` | `{ unit: small\|medium\|large, showElementPadding: shown\|hidden }` | element spacing / padding. |
+| `hasCards` | `shown \| hidden` | card-style element chrome. |
+| `layoutColors` | `{ useElementForeground: shown\|hidden }` | render elements above the canvas. |
+| `invertTooltipColors` | `shown \| hidden` | |
+| `tableStyles` | see below | full table-default block. |
+
+`tableStyles`: `preset` (`spreadsheet`\|`presentation`), `cellSpacing` (`extra-small`\|`small`\|`medium`\|`large`), `gridLines` (`none`\|`vertical`\|`horizontal`\|`all`), `banding` + `bandingColor`, `outerBorder`, `autofitColumns`, `headerDividerColor`, `heavyVerticalDividers`/`heavyHorizontalDividers` (pivot only), and `textStyles.{header,cell,columnHeader,rowHeader}` — each `{ font, fontSize, fontWeight, color, backgroundColor, align, verticalAlign, textWrap }`. Color fields take hex or a `{ kind: theme, ref }` reference.
+
+**Gotchas:**
+- The server **lowercases hex** on save (`#0F172A` → `#0f172a`) — cosmetic, not a drop; don't treat it as a failed round-trip.
+- `themeOverrides` is the spec path to **donut/pie slice colors** — set `categoricalScheme` here (the per-element `color.scheme` is still silently dropped on donut/pie — see Recipe 5). This supersedes the old "set the theme in the UI" workaround.
 - Theme vs. the recipes below: a theme is the global skin (selected, org-managed). The recipes here style individual elements from spec fields and **stack on top of** whatever theme is set. For a migration, prefer the source dashboard's look; reach for a theme only when the user asks to apply one.
 
 ---
@@ -262,7 +292,7 @@ For bar / line / area / combo charts, pin slice colors to the vetted palette:
 
 `scheme` is positional — pin colors to category sort order, not to category names. Sort by the value descending to get "biggest bar = primary blue, smaller = warning amber/red."
 
-> **Donut and pie do NOT accept `scheme`.** The field is silently stripped on those chart kinds; they always use Sigma's default palette. To customize donut/pie slice colors, set the workbook theme in the UI. See `charts.md` donut section for the verified gotchas.
+> **Donut and pie do NOT accept `scheme`.** The field is silently stripped on those chart kinds. To customize donut/pie slice colors from spec, set `themeOverrides.categoricalScheme` at the workbook level (see *Workbook theme* above) — that path is now spec-authorable and verified. See `charts.md` donut section for the verified gotchas.
 
 ---
 
@@ -434,15 +464,27 @@ Neil-style gradient banners are NOT directly authorable:
 - `style.backgroundColor` with a CSS `linear-gradient(...)` string is **accepted by POST/PUT but
   silently dropped** — the container renders with *no* background at all (worse than a 400; only
   a render catches it). Hex only.
-- Container `backgroundImage` is `{url}` only — the schema says "**must be an external URL
-  (uploads are not supported)**", and data-URIs are additionally WAF-blocked (below).
-- ✓ The working recipe (live-verified): generate a small gradient PNG (256×64 is plenty — it
-  stretches), host it at any https URL, and set `backgroundImage: {url: "https://…/gradient.png"}`
-  on the hero container, keeping a solid `style.backgroundColor` as the load/fallback color.
-  `url` supports `{{formula}}` templating for data-driven backgrounds. A pure-Ruby/zlib PNG
-  encoder is ~20 lines if no image tooling is available; GitHub Pages works as the host (mind
-  build pipelines — a Vite/Actions site only ships what its build emits, so static assets go in
-  `public/`, not the repo root).
+- ✓ **The working recipe (re-verified 2026-06-26): `backgroundImage` is a TOP-LEVEL field on the
+  container element — a SIBLING of `style`, NOT nested inside `style`.** Nesting it under `style`
+  silently drops it (posts `200`, GET readback shows only `backgroundColor`, renders flat) — that was
+  a real mistake caught this session. The correct shape:
+  ```yaml
+  - id: hero
+    kind: container
+    style: { backgroundColor: "#0B1120", borderRadius: round }   # solid fallback / load color
+    backgroundImage: { url: "https://…/gradient.png" }           # <-- sibling of style, not inside it
+  ```
+  Lay the title **text element inside the hero container** and it overlays the gradient (text-over-image
+  works for a container background — unlike a separate `image` element, which does NOT z-stack under
+  text and instead stacks vertically). Generate a small gradient PNG (512×96 scales fine); external
+  https images **do render in PNG export** (raw.githubusercontent.com and GitHub Pages both work;
+  data-URIs are still WAF-blocked — below). `url` supports `{{formula}}` templating.
+  - A pure-Ruby/zlib PNG encoder is ~20 lines; host via `gh api PUT .../contents/...` to a long-lived
+    branch and reference the `raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` URL
+    (`Content-Type: image/png`), or GitHub Pages (mind build pipelines — a Vite/Actions site only ships
+    what its build emits, so static assets go in `public/`).
+  - Separately, chart elements (bar/line/area/…) also accept a `backgroundImage: {url}` for the
+    **plot area** — a different field on a different element, documented in the OpenAPI.
 
 ### Icons — inline SVG data-URIs ✗ (WAF-blocked via API)
 
@@ -497,7 +539,7 @@ Don't waste a round-trip trying to set these — the spec API silently drops the
 - **Donut / pie slice colors** (spec-findings #22)
 - **KPI title color or "hide title" toggle** — `name` always renders as a black title
 - **Element title font size / font family** — the `name` field has no `style` sibling. (Text *elements* CAN set fonts via `<span style="font-family: …">` — see field-observed idioms above; it's only the title `name` that can't.)
-- **Workbook-level palette / theme** via spec (open question in spec-findings)
+- ~~**Workbook-level palette / theme** via spec~~ — **RESOLVED**: now spec-authorable via top-level `themeName` + `themeOverrides` (see *Workbook theme* above).
 - **Chart `tooltip` / `trellis*` fields** (UI-only)
 
 If a customer needs slice color branding on donut/pie, set the workbook theme in the UI after the spec is posted.
