@@ -79,17 +79,37 @@ Duration: 5
    `plugins/cognos-to-sigma/skills/…`; `AGENTS.md` indexes every skill.
 2. **Sigma credentials** — export `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`; the skill's
    `scripts/get-token.sh` exchanges them for a `SIGMA_API_TOKEN`.
-3. **Cognos session** — capture a live browser session (keep secrets out of any transcript):
-   ```bash
-   # paste the FULL Cookie header (incl. Akamai _abck/bm_sz/bm_sv/ak_bmsc) into ~/.cognos/cookie.txt
-   export COG_BASE="https://<host>/bi/v1"  COG_XSRF="<X-XSRF-TOKEN value>"
-   eval "$(scripts/get-cognos-session.sh)"
-   cog_get "/objects/.public_folders/items?fields=defaultName,type,id"   # smoke test
-   ```
+3. **Capture a live Cognos session** — required before any discovery/extraction. See the
+   dedicated **"Capture a Cognos session (Copy as cURL)"** step below — do it first.
 4. **Verify the converter offline** (no Cognos access needed):
    ```bash
    cd converter && npm install && npm test   # converts every bundled real-IBM-sample fixture
    ```
+
+## Capture a Cognos session (Copy as cURL) — REQUIRED
+Duration: 4
+
+Cognos has no headless login on IBMid-SSO trials, and CA-on-Cloud sits behind **Akamai
+bot-protection**. So **every** discovery/extraction call needs a **live browser session**,
+captured with **Copy as cURL**. Do this first — nothing else works without it.
+
+1. Log in to Cognos in Chrome and open the dashboard/report you're migrating.
+2. **DevTools → Network**, click any request to `…/bi/v1/…` (e.g. a `…/data` or
+   `…/objects/…` call), then **right-click → Copy → Copy as cURL**.
+3. From that cURL, save the **full `Cookie` header** (the whole `-b '…'` value, including the
+   Akamai cookies `_abck` / `bm_sz` / `bm_sv` / `ak_bmsc`) to `~/.cognos/cookie.txt`, and note
+   the **`X-XSRF-TOKEN`** value. Then:
+   ```bash
+   export COG_BASE="https://<host>/bi/v1"  COG_XSRF="<X-XSRF-TOKEN value>"
+   eval "$(scripts/get-cognos-session.sh)"
+   cog_get "/objects/.public_folders/items?fields=defaultName,type,id"   # smoke test
+   ```
+
+negative
+: **The cookie is the whole point — not the API key.** A CA API key authenticates (201) but Akamai still **441/403**s every content call, because the wall is **TLS/JA3 fingerprinting**, not auth. Curl can't look like Chrome, so even a perfect cookie may be rejected on replay. The session is also short-lived (minutes) — if you get **HTTP 441**, re-copy a *hot* cURL.
+
+positive
+: **Akamai-walled tenant (curl keeps 441'ing) or migrating a dashboard?** Drive a **headed Chrome via Puppeteer** with the copied cookies injected — real-browser TLS passes Akamai, and you can screenshot the live dashboard as a visual target and replay its `/bi/v1/datasets/{id}/data` queries to pull rows. Full recipe in **`refs/dashboard-migration.md`**.
 
 ## Prepare demo data (optional)
 Duration: 3
