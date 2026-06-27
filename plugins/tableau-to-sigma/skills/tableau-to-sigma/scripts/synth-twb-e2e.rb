@@ -114,8 +114,14 @@ gw_path = File.join(WORK, 'get-workbook.json')
 unless File.exist?(gw_path)
   # Synthesize from the layout's worksheet names so build-charts can map each
   # chart zone to a "view" (id == slug(name)); no CSV → signal-built tile.
+  # build-charts keys the view lookup off z['caption'] (the worksheet name), so
+  # synthesize one stub per chart zone caption (not 'worksheet'/'name', which the
+  # layout zones don't carry — that left standard charts unmatched).
   layout = JSON.parse(File.read(layout_path))
-  names = layout.flat_map { |d| (d['zones'] || []).map { |z| z['worksheet'] || z['name'] } }.compact.uniq
+  names = layout.flat_map do |d|
+    (d['zones'] || []).select { |z| z['kind'] == 'chart' }
+                      .map { |z| z['caption'] || z['worksheet'] || z['name'] }
+  end.compact.uniq
   views = names.map { |n| { 'name' => n, 'id' => n.downcase.gsub(/\W+/, '-').gsub(/^-|-$/, '') } }
   File.write(gw_path, JSON.pretty_generate('views' => { 'view' => views }))
   puts "  synthesized get-workbook.json with #{views.size} view stub(s) from layout worksheets"
