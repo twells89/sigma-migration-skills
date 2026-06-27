@@ -1762,6 +1762,15 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
       f = translate_user_agg_formula(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
       if f
         uv['col']['formula'] = f
+        # Attainment/share ratios (a measure ÷ a goal/target/budget/quota) are
+        # percentages by convention — the default ',.0f' would round e.g. 0.93 to
+        # "1". Detect by the value name OR a goal/target denominator in the source
+        # formula and apply a percent format. (Names like "Revenue Attainment"
+        # would otherwise false-match the currency heuristic on "revenue".)
+        if uv['name'].to_s =~ /attain|\bshare\b|sell[-\s]?through|win[-\s]?rate|conversion/i ||
+           ws_calc['formula'].to_s =~ /\b(goal|target|budget|quota|plan|forecast)\b/i
+          uv['col']['format'] = { 'kind' => 'number', 'formatString' => ',.1%' }
+        end
         warnings << "'#{cap}' pivot value '#{uv['name']}' is a Tableau User-aggregated calc — decomposed: #{f[0..120]}"
       else
         # Can't decompose → its emitted Sum([Master/<calc>]) references a
