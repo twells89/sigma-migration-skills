@@ -19,12 +19,18 @@ import hashlib
 import re
 import time
 import os
+import subprocess
+import uuid
 import urllib.request
 import urllib.error
 import json
 
 TELEMETRY_ENDPOINT = "https://sigma-migration-telemetry.onrender.com/track"
-SKILL_VERSION = "1.0"
+
+# Fallback only — the real value is resolved at runtime by _skill_version()
+# (git describe of the skills checkout). A constant here would make every event
+# look identical regardless of which build actually ran.
+SKILL_VERSION_FALLBACK = "unknown"
 
 
 def _region_from_base(sigma_base: str) -> str:
@@ -41,6 +47,55 @@ def _org_hash(client_id: str) -> str:
     return hashlib.sha256(client_id.encode()).hexdigest()[:8]
 
 
+def _skill_version() -> str:
+    """Real build identifier, best-effort and non-identifying:
+      1. SIGMA_SKILL_VERSION env override (set by a release/packaging step)
+      2. `git describe` of the checkout this file lives in (e.g. "v1.3.0-2-gabc1234")
+      3. "unknown"
+    Replaces the old hardcoded "1.0" so telemetry can distinguish builds."""
+    env = os.environ.get("SIGMA_SKILL_VERSION")
+    if env:
+        return env[:32]
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        out = subprocess.run(
+            ["git", "-C", here, "describe", "--tags", "--always", "--dirty"],
+            capture_output=True, timeout=3,
+        )
+        v = (out.stdout or b"").decode("ascii", "ignore").strip()
+        if v:
+            return v[:32]
+    except Exception:
+        pass
+    return SKILL_VERSION_FALLBACK
+
+
+def _environment() -> str:
+    """Coarse run environment — no host names, no PII. Lets us tell an automated
+    CI/benchmark loop apart from a human running a one-off migration."""
+    ci_vars = ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "JENKINS_URL",
+               "BUILDKITE", "TF_BUILD", "TEAMCITY_VERSION")
+    if any(os.environ.get(v) for v in ci_vars):
+        return "ci"
+    cloud_vars = ("CODESPACES", "GITPOD_WORKSPACE_ID", "KUBERNETES_SERVICE_HOST",
+                  "AWS_EXECUTION_ENV", "RENDER", "FLY_APP_NAME", "K_SERVICE")
+    if any(os.environ.get(v) for v in cloud_vars) or os.path.exists("/.dockerenv"):
+        return "cloud"
+    return "local"
+
+
+def _client_agent() -> str:
+    """Which harness is driving the skill — no PII. Helps explain usage shape."""
+    e = os.environ
+    if e.get("CLAUDECODE") or e.get("CLAUDE_CODE_ENTRYPOINT") or e.get("CLAUDE_CODE"):
+        return "claude-code"
+    if e.get("CURSOR_TRACE_ID") or (e.get("TERM_PROGRAM") or "").lower() == "cursor":
+        return "cursor"
+    if e.get("CORTEX_AGENT") or e.get("SNOWFLAKE_CORTEX") or "cortex" in (e.get("TERM_PROGRAM") or "").lower():
+        return "cortex"
+    return "cli" if hasattr(__import__("sys").stdin, "isatty") and __import__("sys").stdin.isatty() else "unknown"
+
+
 def report_migration(
     tool: str,
     sigma_base: str,
@@ -48,7 +103,12 @@ def report_migration(
     duration_seconds: int,
     success: bool,
     mode: str = "unknown",
-    skill_version: str = SKILL_VERSION,
+    outcome: str = None,
+    failure_stage: str = None,
+    skill_version: str = None,
+    environment: str = None,
+    client_agent: str = None,
+    run_id: str = None,
     endpoint: str = TELEMETRY_ENDPOINT,
     timeout: int = 5,
 ) -> bool:
@@ -62,10 +122,15 @@ def report_migration(
       - org_id_hash: SHA256 of your SIGMA_CLIENT_ID, first 8 chars
           → unique per org, not reversible to your credentials
       - migration duration in seconds
-      - success flag
-      - input mode: "live" (source API), "file" (raw export only),
-          "both", or "unknown" — a coarse enum, no file names or content
-      - skill version
+      - success flag + outcome ("success" / "partial" / "failed")
+      - failure_stage when not successful: a coarse enum
+          ("auth" / "convert" / "spec_post" / "query_validate" / "other"),
+          never a stack trace or message
+      - input mode: "live" / "file" / "both" / "unknown" — coarse, no file names
+      - skill_version: build identifier (git describe), no longer a constant
+      - environment: "ci" / "cloud" / "local" — run context, no host names
+      - client_agent: "claude-code" / "cursor" / "cortex" / "cli" / "unknown"
+      - run_id: a random per-run UUID (dedupe + retry-vs-distinct-run grouping)
 
     What is NOT sent:
       - workbook names, IDs, or URLs
@@ -81,8 +146,13 @@ def report_migration(
         "org_id_hash":      _org_hash(client_id),
         "duration_seconds": duration_seconds,
         "success":          success,
+        "outcome":          outcome or ("success" if success else "failed"),
+        "failure_stage":    failure_stage,
         "mode":             mode or "unknown",
-        "skill_version":    skill_version,
+        "skill_version":    skill_version or _skill_version(),
+        "environment":      environment or _environment(),
+        "client_agent":     client_agent or _client_agent(),
+        "run_id":           run_id or uuid.uuid4().hex,
     }
 
     print("\nReporting anonymous migration telemetry (no customer data sent):")
@@ -131,7 +201,6 @@ def _post(endpoint, body, timeout):
         first = str(e).splitlines()[0] if str(e) else type(e).__name__
         # 2) Fall back to curl — succeeds on boxes where python's CA store is broken.
         try:
-            import subprocess
             r = subprocess.run(
                 ["curl", "-sS", "-m", str(timeout), "-o", "/dev/null",
                  "-w", "%{http_code}", "-X", "POST",

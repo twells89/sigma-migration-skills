@@ -63,6 +63,9 @@ parser.add_argument('--failed',   action='store_true', help='Pass if the migrati
 parser.add_argument('--declined', action='store_true', help='User declined the ping: record the decision, send nothing')
 parser.add_argument('--mode',     default='unknown', choices=['live', 'file', 'both', 'unknown'],
                     help='Input mode (auto-derived from intake.json if omitted): live, file, both, or unknown')
+parser.add_argument('--failure-stage', default=None,
+                    choices=['auth', 'convert', 'spec_post', 'query_validate', 'other'],
+                    help='When --failed: coarse stage the migration broke at (no messages or stack traces)')
 parser.add_argument('--workdir',  default=None, help='Run directory; the telemetry marker is written here for the gate')
 args = parser.parse_args()
 
@@ -104,6 +107,7 @@ sent = report_migration(
     duration_seconds=duration,
     success=not args.failed,
     mode=mode,
+    failure_stage=(args.failure_stage if args.failed else None),
 )
 # Honest marker (handoff FIX 3): "sent" ONLY when the POST actually landed (2xx);
 # otherwise "skipped" so the audit record never claims a delivery that failed.
