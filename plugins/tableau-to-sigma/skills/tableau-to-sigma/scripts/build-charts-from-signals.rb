@@ -73,6 +73,10 @@ OptionParser.new do |p|
   p.on('--dashboard NAME', 'Build only this dashboard (name: exact or unique substring, case-insensitive). Repeatable.') { |v| (opts[:dashboards] ||= []) << v }
   p.on('--page ID', 'Build only the dashboard whose zone-root id matches (rarely needed; --dashboard is the handle).') { |v| (opts[:pages] ||= []) << v }
   p.on('--auto-controls', 'Auto-emit Sigma controls from shared-view filters in --meta')              { opts[:auto_controls] = true }
+  # Converter meta (conv-meta.json) carrying workbookPatterns — used to auto-wire
+  # parameter measure-pickers (kind:param-switch) into a control-driven Switch
+  # tile measure (n4pi.10). Optional; absent ⇒ pickers stay surfaced as notes.
+  p.on('--workbook-patterns PATH', 'converter conv-meta.json (workbookPatterns) — auto-wire param measure-pickers') { |v| opts[:wb_patterns] = v }
   p.on('--out PATH')                { |v| opts[:out] = v }
   # Where the migration COVERAGE ledger lands (the aggregated drop/approx report
   # migrate-tableau.rb surfaces). Default: coverage.json next to --out. bead beads-sigma-59mk.
@@ -1320,6 +1324,136 @@ def translate_if_chain_on_param(formula, param_captions, mmap = nil, columns_by_
   "Switch(#{parts.join(', ')})"
 end
 
+# ---- Converter param measure-pickers (workbookPatterns kind:param-switch) ----
+# The Tableau→Sigma converter detects a parameter measure-picker
+# (`CASE [Parameters].[P] WHEN v THEN <measure> … END`) and emits a clean
+# `param-switch` workbookPattern: { name (the calc CAPTION), controlId, paramName,
+# cases:[{when,then}], elseExpr, formula }. The build layer materialises it as a
+# control-driven Switch — a single-select control under the EXACT controlId the
+# converter baked into the formula, and the tile's MEASURE set to the Switch
+# (branch results remapped onto the master columns). This auto-wires the recipe
+# that was verified by hand (KPI=24) instead of leaving it a manual note.
+#
+# $param_switch_by_key bridges Calculation_NNN→caption: the layout references a
+# picker calc by its internal `Calculation_<id>`, but the converter keys the
+# pattern by the human caption — so we index BOTH (every Calculation_<id> whose
+# .twb caption equals the pattern name) and the caption itself.
+$param_switches = []
+$param_switch_by_key = {}
+$param_switch_used = [] # controlIds actually wired onto a tile — emit only these
+
+def load_param_switches(wb_patterns_path, meta)
+  return unless wb_patterns_path && File.exist?(wb_patterns_path)
+  raw = (JSON.parse(File.read(wb_patterns_path)) rescue {})
+  wp = raw['workbookPatterns'] || raw['workbook_patterns'] || []
+  cbg = meta['columns_by_guid'] || {}
+  cap_to_ids = Hash.new { |h, k| h[k] = [] }
+  cbg.each { |gid, info| c = (info || {})['caption']; cap_to_ids[c.to_s.downcase] << gid if c && !c.to_s.empty? }
+  wp.select { |p| p['kind'] == 'param-switch' }.each do |p|
+    name = p['name'].to_s
+    keys = ([name.downcase] + cap_to_ids[name.downcase].map(&:downcase)).uniq
+    sw = { 'name' => name, 'control_id' => p['controlId'], 'param_name' => p['paramName'],
+           'cases' => p['cases'] || [], 'else' => p['elseExpr'], 'keys' => keys }
+    $param_switches << sw
+    keys.each { |k| $param_switch_by_key[k] = sw }
+  end
+end
+
+# Look up a param-switch by a chart header / field caption OR its Calculation_NNN
+# internal id (any of several candidate refs). Returns the switch hash or nil.
+def param_switch_for(*candidates)
+  candidates.flatten.compact.each do |c|
+    key = c.to_s.gsub(/^\[|\]$/, '').strip.downcase
+    sw = $param_switch_by_key[key]
+    return sw if sw
+  end
+  nil
+end
+
+# Build the inline, SIBLING-form Switch measure formula for a param-switch + the
+# list of master columns the Switch's branches reference (to materialise as hidden
+# passthrough siblings — a `[Master/X]` nested inside Switch() does NOT resolve
+# standalone). Returns nil when a branch carries a chart-context-only window
+# function (window_sum / running_* / rank / lookup) that can't live in an inline
+# Switch — those stay surfaced as a migration note, never emitted broken.
+def param_switch_inline(sw, mmap, cbg)
+  branches = sw['cases'].map { |c| c['then'].to_s } + [sw['else'].to_s]
+  # A branch carrying a chart-context-only window/table calc can't live in an
+  # inline Switch — surface the whole picker as a note instead of emitting broken.
+  return nil if branches.any? { |b| b =~ /\b(?:window_\w+|running_\w+|rank|index|lookup|previous_value|total)\s*\(/i }
+  # Split the master-map into real COLUMNS (passthrough-able) vs aggregate METRICS
+  # (entries that carry a `formula` — derive_master registers these NOT as master
+  # columns but as inline aggregate formulas, e.g. "Signs - Actuals" =
+  # CountDistinct([Master/STORE_ACCOUNT_ID])). A metric ref can't be a passthrough
+  # sibling (the master table has no such column); it must be INLINED as its
+  # formula — exactly what the normal measure path does (meas['formula']).
+  col_names = {}
+  metric_formulas = {}
+  mmap.each_value do |v|
+    next unless v.is_a?(Hash) && v['name']
+    if v['formula'] && !v['formula'].to_s.empty?
+      metric_formulas[v['name'].downcase] = v['formula']
+    else
+      col_names[v['name'].downcase] = true
+    end
+  end
+  unresolved = []
+  # Remap a branch result onto [Master/…], inline any metric refs to their formula,
+  # then require every remaining ref to be the control or a real master COLUMN. A
+  # branch that still references something the master can't carry — an un-emitted
+  # calc, or a caption with a '/' like "TAM / CW" that remap skips (a slash signals
+  # an already-qualified ref) — is replaced with Null so the OTHER options + the
+  # control keep working (graceful degradation, never a broken dependency), and the
+  # dropped option is recorded so it's surfaced (never silent).
+  resolve_branch = lambda do |label, expr|
+    return 'Null' if expr.nil? || expr.empty?
+    r = remap_param_branch(expr, mmap, cbg)
+    4.times do
+      changed = false
+      r = r.gsub(%r{\[Master/([^\]]+)\]}) do
+        mf = metric_formulas[Regexp.last_match(1).downcase]
+        if mf then changed = true; "(#{mf})" else Regexp.last_match(0) end
+      end
+      break unless changed
+    end
+    bad = r.scan(/\[([^\]]+)\]/).flatten.reject do |ref|
+      ref.start_with?('ctl-') ||
+        (ref.start_with?('Master/') && col_names[ref.sub(%r{\AMaster/}, '').downcase])
+    end
+    if bad.any?
+      unresolved << label
+      'Null'
+    else
+      r
+    end
+  end
+  parts = ["[#{sw['control_id']}]"]
+  sw['cases'].each do |c|
+    parts << coerce_case_literal(%("#{c['when']}"))
+    parts << resolve_branch.call(c['when'].to_s, c['then'].to_s)
+  end
+  parts << resolve_branch.call('(else)', sw['else'].to_s) if sw['else'] && !sw['else'].to_s.empty?
+  # All branches unresolvable ⇒ nothing to plot; let it fall through to a note.
+  return nil if unresolved.size >= sw['cases'].size && (sw['else'].nil? || sw['else'].to_s.empty? || unresolved.include?('(else)'))
+  master_form = "Switch(#{parts.join(', ')})"
+  branch_refs = master_form.scan(%r{\[Master/([^\]]+)\]}).flatten.uniq
+  { 'sibling_form' => master_form.gsub(%r{\[Master/([^\]]+)\]}) { "[#{Regexp.last_match(1)}]" },
+    'branch_refs' => branch_refs, 'control_id' => sw['control_id'], 'name' => sw['name'],
+    'unresolved' => unresolved.uniq }
+end
+
+# Add hidden passthrough sibling columns ([Master/X] resolves standalone) for each
+# branch ref, so the nested-in-Switch [X] refs resolve. Idempotent on name.
+def add_switch_siblings!(element, branch_refs)
+  existing = (element['columns'] ||= []).map { |c| c['name'] }.compact
+  branch_refs.each do |b|
+    next if existing.include?(b)
+    bid = "swcol-#{b.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+    element['columns'] << { 'id' => bid, 'name' => b, 'formula' => "[Master/#{b}]" }
+    existing << b
+  end
+end
+
 # Pick the Tableau format for a given header against a worksheet's formats dict.
 # Match by best-effort: field ref contains a column GUID OR a friendly name
 # fragment that overlaps with the header.
@@ -1497,7 +1631,11 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
       col_obj['format'] = { 'kind' => 'datetime', 'formatString' => '%b %Y' }
     end
     cols_array << col_obj
-    user_vals << { 'col' => col_obj, 'name' => m['name'].to_s.strip } if target == :value && %w[usr user].include?(deriv)
+    # Carry the field's raw ref (its Calculation_<id> internal id) so a converter
+    # param measure-picker can be matched by id, not just the resolved caption
+    # (the Calculation_NNN→caption bridge — n4pi.10).
+    user_vals << { 'col' => col_obj, 'name' => m['name'].to_s.strip,
+                   'raw' => (field['column'] || field['raw']).to_s } if target == :value && %w[usr user].include?(deriv)
     case target
     when :row   then rows_by    << { 'id' => col_id }
     when :col   then cols_by    << { 'id' => col_id }
@@ -1555,6 +1693,30 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
   #     UNVALIDATED in pivot context — dropped from the grid with a loud warn.
   win_stage = [] # { 'col' =>, 'plan' => }
   user_vals.each do |uv|
+    # Converter param measure-picker (n4pi.10): if this value IS a param-switch
+    # calc (matched by its resolved caption OR its Calculation_<id> internal id),
+    # use the converter's CLEAN Switch — its cases are already resolved to captions,
+    # so it bridges the Calculation_NNN→caption gap that re-translating the raw
+    # Tableau formula below hits (the raw branch refs are [Calculation_<id>] sibling
+    # refs that don't resolve, and the ws_calc lookup keys off the internal id while
+    # this value keys off the caption). Materialize the [Master/Y] branch refs as
+    # hidden sibling cols and rewrite to [Y] (nested [Master/Y] doesn't resolve).
+    psw = param_switch_for(uv['name'], uv['raw'], uv['col']['name'])
+    if psw && (plan = param_switch_inline(psw, mmap, meta['columns_by_guid'] || {}))
+      existing_names = cols_array.map { |c| c['name'] }.compact
+      plan['branch_refs'].each do |bn|
+        next if existing_names.include?(bn)
+        bid = "pvsw-#{bn.downcase.gsub(/\W+/, '-')[0..36]}".sub(/-$/, '')
+        cols_array << { 'id' => bid, 'name' => bn, 'formula' => "[Master/#{bn}]" }
+        existing_names << bn
+      end
+      uv['col']['formula'] = plan['sibling_form']
+      $param_switch_used << plan['control_id'] unless $param_switch_used.include?(plan['control_id'])
+      drp = plan['unresolved'].any? ? " (option(s) #{plan['unresolved'].join(', ')} show blank — their measure isn't a master column)" : ''
+      warnings << "'#{cap}' pivot value '#{uv['name']}' → converter param measure-picker Switch over " \
+                  "[#{plan['control_id']}] (#{psw['cases'].size} option(s))#{drp}: #{plan['sibling_form'].gsub(/\s+/, ' ')[0..100]}"
+      next
+    end
     ws_calc = (z['calculations'] || []).find do |c|
       c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(uv['name'])
     end
@@ -1725,6 +1887,12 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
   deriv = measure_field['derivation'].to_s.downcase
   norm = ->(x) { x.to_s.gsub(/^\[|\]$/, '').strip.downcase }
 
+  # Parameter measure-picker (n4pi.10): if this KPI's measure IS a converter
+  # param-switch calc (matched by caption OR its Calculation_NNN internal id),
+  # the value becomes a control-driven Switch over the materialised branch cols.
+  psw = param_switch_for(field_cap, measure_field['raw'], measure_field['guid'])
+  pswitch_plan = psw && param_switch_inline(psw, mmap, meta['columns_by_guid'] || {})
+
   source_eid = opts[:master_id]
   two_stage_formula = nil
   ws_calc_lod = (z['calculations'] || []).find { |c| norm.call(c['name']) == norm.call(field_cap) }
@@ -1767,7 +1935,7 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
   #   3. row-level worksheet calc (DATEDIFF(...)) → translate, wrap in the
   #      shelf aggregation (Avg/Sum/...)
   #   4. plain master column wrapped in the shelf aggregation
-  formula = two_stage_formula || master['formula']
+  formula = (pswitch_plan && pswitch_plan['sibling_form']) || two_stage_formula || master['formula']
   ws_calc = (z['calculations'] || []).find { |c| norm.call(c['name']) == norm.call(field_cap) }
   if formula.nil? && ws_calc && %w[usr user].include?(deriv)
     formula = translate_user_agg_formula(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
@@ -1828,6 +1996,15 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
     'value'   => { 'columnId' => measure_col_id }
   }
 
+  # Param measure-picker: materialise the hidden passthrough sibling cols the
+  # Switch's branches reference, and register the control for emission (n4pi.10).
+  if pswitch_plan
+    add_switch_siblings!(element, pswitch_plan['branch_refs'])
+    $param_switch_used << pswitch_plan['control_id'] unless $param_switch_used.include?(pswitch_plan['control_id'])
+    warnings << "'#{cap}' KPI measure '#{field_cap}' is a parameter measure-picker → control-driven Switch over " \
+                "[#{pswitch_plan['control_id']}] (#{psw['cases'].size} option(s)): #{pswitch_plan['sibling_form'][0..100]}"
+  end
+
   # If the Tableau worksheet had Show Mark Labels on (typical for KPIs since
   # the number IS the chart), we don't need a separate dataLabel — kpi-chart
   # always renders the value. No-op.
@@ -1837,6 +2014,14 @@ end
 
 # A workbook may have multiple dashboards; iterate all and concatenate elements.
 # Drop the chart_kind=automatic warnings to stderr so the caller can act on them.
+# Converter param measure-pickers (kind:param-switch) — indexed by caption +
+# Calculation_NNN id so a picker plotted as a tile measure becomes a control-
+# driven Switch (n4pi.10). Optional; no --workbook-patterns ⇒ empty index. Loaded
+# here (after the helper defs above, before the element loop) so the globals it
+# populates are initialised first.
+load_param_switches(opts[:wb_patterns], meta)
+warn "loaded #{$param_switches.size} param measure-picker(s) from #{opts[:wb_patterns]}" if $param_switches.any?
+
 elements = []
 data_elements = [] # hidden helper elements (scatter grouped sources — bead z1d0)
 warnings = []
@@ -2097,6 +2282,11 @@ layout.each do |dash|
       warnings << "no master column matched measure header '#{meas_hdr}' for '#{cap}'"
       meas = { 'id' => "m-#{meas_hdr.downcase.gsub(/\W+/,'-')}", 'name' => meas_hdr }
     end
+    # Parameter measure-picker (n4pi.10): a measure that IS a converter param-
+    # switch calc (matched by caption OR its Calculation_NNN id) becomes a
+    # control-driven Switch tile measure over materialised branch cols.
+    chart_pswitch = param_switch_for(meas_hdr, meas && meas['name'])
+    chart_pswitch_plan = chart_pswitch && param_switch_inline(chart_pswitch, mmap, meta['columns_by_guid'] || {})
     color_dim = nil
     if color_hdr
       color_dim = map_column(color_hdr, mmap)
@@ -2137,10 +2327,10 @@ layout.each do |dash|
     # aggregated (typically a ratio like SUM(a)/COUNT(b)). Wrapping it in
     # Sum([Master/X]) is unresolvable when no master column carries the ratio —
     # decompose the calc formula into a direct Sigma formula instead (bead k3kk).
-    user_agg_formula = nil
+    user_agg_formula = chart_pswitch_plan && chart_pswitch_plan['sibling_form']
     window_plan = nil
     window_calc_name = nil
-    if agg_label == 'User' && meas['formula'].nil?
+    if user_agg_formula.nil? && agg_label == 'User' && meas['formula'].nil?
       norm = ->(x) { x.to_s.gsub(/^\[|\]$/, '').strip.downcase }
       user_calc = (z['calculations'] || []).find do |c|
         n = norm.call(c['name'])
@@ -3105,6 +3295,16 @@ layout.each do |dash|
       warnings << "'#{cap}' uses Tableau calc #{c['name']}: #{hint}. Formula: #{formula[0..120]}"
     end
 
+    # Param measure-picker (n4pi.10): the tile measure was set to the control-
+    # driven Switch (sibling form) above — materialise the hidden passthrough
+    # sibling cols its branches reference, and register the control for emission.
+    if chart_pswitch_plan
+      add_switch_siblings!(element, chart_pswitch_plan['branch_refs'])
+      $param_switch_used << chart_pswitch_plan['control_id'] unless $param_switch_used.include?(chart_pswitch_plan['control_id'])
+      warnings << "'#{cap}' measure '#{meas_hdr}' is a parameter measure-picker → control-driven Switch over " \
+                  "[#{chart_pswitch_plan['control_id']}] (#{chart_pswitch['cases'].size} option(s))"
+    end
+
     # Stamp with worksheet + dashboard so the page emitters can group.
     element['_worksheet'] = cap
     element['_dashboard'] = dash['dashboard']
@@ -3249,6 +3449,16 @@ if opts[:auto_controls]
   referenced_caps = (meta['worksheets'] || {}).values
     .flat_map { |w| (w['calculations'] || []).flat_map { |c| c['parameter_refs'] || [] } }
     .uniq
+  # A Tableau parameter that drives a WIRED measure-picker Switch already has its
+  # control emitted under the converter's controlId (ctl-parameter-<n>); don't ALSO
+  # emit the legacy auto-param control (ctl-param-<caption>) for the same parameter
+  # — that second control binds nothing and trips the control lint (n4pi.10).
+  picker_param_caps = {}
+  $param_switches.each do |sw|
+    next unless $param_switch_used.include?(sw['control_id'])
+    pc = (meta['columns_by_guid'] || {}).dig(sw['param_name'], 'caption')
+    picker_param_caps[pc.to_s.downcase] = true if pc && !pc.to_s.empty?
+  end
   # A parameter is typically declared once in the workbook metadata AND again in
   # every worksheet's datasource-dependencies that references it, so
   # meta['parameters'] commonly carries many duplicates of the same caption
@@ -3261,6 +3471,10 @@ if opts[:auto_controls]
     next if cap.empty?
     next if seen_param_caps[cap.downcase]
     seen_param_caps[cap.downcase] = true
+    if picker_param_caps[cap.downcase]
+      warnings << "parameter '#{cap}' drives a measure-picker Switch — control emitted under the converter controlId; skipping the redundant auto-param control"
+      next
+    end
     unless referenced_caps.include?(cap)
       warnings << "parameter '#{cap}' is defined in Tableau but not referenced by any worksheet calc — skipped auto-control (orphan parameter)"
       next
@@ -3331,6 +3545,40 @@ if opts[:auto_controls]
       }.map { |e| { 'element_id' => e['id'], 'name' => e['name'] } }
     }
   end
+end
+
+# ---- Param measure-picker controls (n4pi.10) ------------------------------
+# Emit a single-select segmented control under the EXACT controlId the converter
+# baked into each param-switch's Switch formula (e.g. ctl-parameter-17), for every
+# picker actually wired onto a tile above. Values = the case match literals; the
+# control's display name is the parameter's caption when known. Not gated on
+# --auto-controls: the picker wiring already happened during chart building, and
+# the Switch tile measure is inert without its control.
+$param_switches.each do |sw|
+  next unless $param_switch_used.include?(sw['control_id'])
+  next if param_controls.any? { |c| c['controlId'] == sw['control_id'] }
+  values = sw['cases'].map { |c| c['when'].to_s }
+  next if values.empty?
+  pcap = (meta['columns_by_guid'] || {}).dig(sw['param_name'], 'caption') || sw['param_name'] || sw['name']
+  param_controls << {
+    'id'          => "el-#{sw['control_id']}",
+    'kind'        => 'control',
+    'controlId'   => sw['control_id'],
+    'name'        => pcap,
+    'controlType' => 'segmented',
+    'source'      => { 'kind' => 'manual', 'valueType' => 'text', 'values' => values, 'labels' => values },
+    'value'       => values.first,
+    'includeNulls' => 'when-no-value-is-selected'
+  }
+  control_scope_records << {
+    'controlId' => sw['control_id'], 'name' => pcap, 'mechanism' => 'formula',
+    'source_signal' => "tableau parameter measure-picker '#{sw['name']}' → control-driven Switch",
+    'intended' => elements.select { |e|
+      (e['columns'] || []).any? { |c| c['formula'].to_s.include?("[#{sw['control_id']}]") }
+    }.map { |e| { 'element_id' => e['id'], 'name' => e['name'] } }
+  }
+  warnings << "param measure-picker '#{sw['name']}' → segmented control [#{sw['control_id']}] " \
+              "with #{values.size} option(s): #{values.join(' / ')}"
 end
 
 # ---- Auto-generated controls from shared-view filters (--auto-controls) ----
