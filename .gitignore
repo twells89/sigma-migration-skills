@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 node_modules/
+
+# Generated at vendor/release time by tools/stamp-version.rb (do not commit)
+shared/lib/VERSION
+plugins/*/skills/*/scripts/lib/VERSION

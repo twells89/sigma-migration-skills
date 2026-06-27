@@ -50,14 +50,26 @@ def _org_hash(client_id: str) -> str:
 def _skill_version() -> str:
     """Real build identifier, best-effort and non-identifying:
       1. SIGMA_SKILL_VERSION env override (set by a release/packaging step)
-      2. `git describe` of the checkout this file lives in (e.g. "v1.3.0-2-gabc1234")
-      3. "unknown"
+      2. a VERSION file next to this lib (or a parent dir), written at vendor/
+         release time by tools/stamp-version.rb — survives `.git` stripping, which
+         is exactly what the plugin-cache delivery path does
+      3. `git describe` of the checkout this file lives in (e.g. "v1.3.0-2-gabc1234")
+      4. "unknown"
     Replaces the old hardcoded "1.0" so telemetry can distinguish builds."""
     env = os.environ.get("SIGMA_SKILL_VERSION")
     if env:
         return env[:32]
+    here = os.path.dirname(os.path.abspath(__file__))
+    # VERSION file: lib dir, then up to 2 parents (skill / plugin root)
+    for d in (here, os.path.dirname(here), os.path.dirname(os.path.dirname(here))):
+        try:
+            with open(os.path.join(d, "VERSION")) as fh:
+                v = fh.read().strip()
+            if v:
+                return v[:32]
+        except Exception:
+            pass
     try:
-        here = os.path.dirname(os.path.abspath(__file__))
         out = subprocess.run(
             ["git", "-C", here, "describe", "--tags", "--always", "--dirty"],
             capture_output=True, timeout=3,
