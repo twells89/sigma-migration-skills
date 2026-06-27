@@ -108,12 +108,13 @@ require 'optparse'
 require 'rbconfig'
 
 opts = { min_pass_rate: 1.0, allow_extract: false, min_layout_elements: 2,
-         allow_missing_tiles: 0 }
+         allow_missing_tiles: 0, min_parity_score: 0.0 }
 OptionParser.new do |p|
   p.on('--tableau DIR')              { |v| opts[:tab] = v }
   p.on('--workdir DIR', 'alias of --tableau for non-Tableau converters') { |v| opts[:tab] = v }
   p.on('--workbook-id ID')           { |v| opts[:wb] = v }
   p.on('--min-pass-rate F', Float)   { |v| opts[:min_pass_rate] = v }
+  p.on('--min-parity-score F', Float, 'gate 1: fail if value_parity_score (mean per-tile, parity-score.json) < F (0..1, default 0 = off)') { |v| opts[:min_parity_score] = v }
   p.on('--allow-extract')            { opts[:allow_extract] = true }
   p.on('--skip-column-check')        { opts[:skip_column] = true }
   p.on('--skip-orphan-check')        { opts[:skip_orphan] = true }
@@ -185,6 +186,26 @@ else
       warn "       Failing charts: #{fail_names.join(', ')}"
     end
     exit 2
+  end
+
+  # Value-parity SCORE gate (bead y9rd.2): the mean per-tile value-fidelity score
+  # is a finer signal than pass/fail — a tile can PASS the bucket check yet score
+  # low on value drift. When --min-parity-score is set, gate on the real number.
+  if opts[:min_parity_score] > 0.0
+    vps = summary['value_parity_score']
+    if vps.nil?
+      warn "[FAIL] --min-parity-score #{opts[:min_parity_score]} requested but parity-final.json has no value_parity_score."
+      warn "       Re-run phase6-parity.rb --finalize (it now writes the score via verify-parity --score-out)."
+      exit 2
+    end
+    if vps.to_f < opts[:min_parity_score]
+      warn "[FAIL] value-parity score=#{(vps.to_f * 100).round(1)}% < required #{(opts[:min_parity_score] * 100).round(1)}%"
+      low = (summary['per_tile_scores'] || []).select { |t| t['score'].to_f < opts[:min_parity_score] }
+                                              .sort_by { |t| t['score'].to_f }.first(5)
+      low.each { |t| warn format('       %-40s %.0f%% (%s)', t['chart'], t['score'].to_f * 100, t['status']) }
+      exit 2
+    end
+    puts "[OK] gate 1/7: value-parity score=#{(vps.to_f * 100).round(1)}% (>= #{(opts[:min_parity_score] * 100).round(1)}% required)"
   end
 
   if rate_gate_only && status != 'PASS'

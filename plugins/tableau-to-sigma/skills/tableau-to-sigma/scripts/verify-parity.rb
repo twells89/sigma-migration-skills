@@ -38,7 +38,9 @@ OptionParser.new do |p|
   p.on('--plan P')              { |v| opts[:plan] = v }
   p.on('--extract-mode')        {     opts[:mode] = :extract }
   p.on('--extract-tol TOL', Float) { |v| opts[:tol] = v }
+  p.on('--score-out P')         { |v| opts[:score_out] = v }
 end.parse!
+require 'time'
 abort('--plan required') unless opts[:plan]
 
 MONTH_NUM = {
@@ -107,6 +109,14 @@ def round_row(row)
   end
 end
 
+# Per-tile value-parity score in [0,1] (bead y9rd.2): tuple-set Jaccard —
+# matched cells / distinct cells across both sides. 1.0 = exact. Lets us turn
+# "75% parity" into a real, repeatable, gateable number instead of pass/fail only.
+def jaccard(exp_set, act_set)
+  union = (exp_set | act_set).size
+  union.zero? ? 1.0 : ((exp_set & act_set).size.to_f / union).round(4)
+end
+
 def strict_compare(exp, act)
   # Compare the FULL tuple width the plan carries (bead s6fo): 3-channel charts
   # (stacked color / pivot row+col+value / scatter dim+x+y) must compare every
@@ -114,7 +124,8 @@ def strict_compare(exp, act)
   width = [(exp.map(&:size) + act.map(&:size)).max || 2, 2].max
   exp_set = Set.new(exp.map { |r| r.first(width) })
   act_set = Set.new(act.map { |r| r.first(width) })
-  return { status: 'PASS', only_in_tableau: [], only_in_sigma: [] } if exp_set == act_set
+  counts = { n_expected: exp_set.size, n_actual: act_set.size, n_matched: (exp_set & act_set).size }
+  return { status: 'PASS', score: 1.0, only_in_tableau: [], only_in_sigma: [], **counts } if exp_set == act_set
 
   # Month-grain fallback — REPRESENTATION mismatches only: a monthly chart's
   # Tableau label ("January 2026" → "2026-01") vs Sigma's DateTrunc value
@@ -127,14 +138,16 @@ def strict_compare(exp, act)
      (day_form.call(exp_set) && month_form.call(act_set))
     to_month = ->(set) { Set.new(set.map { |r| [month_grain(r[0]), *r[1..]] }) }
     if to_month.call(exp_set) == to_month.call(act_set)
-      return { status: 'PASS', only_in_tableau: [], only_in_sigma: [],
-               notes: ['matched at month grain (label vs first-of-month representation)'] }
+      return { status: 'PASS', score: 1.0, only_in_tableau: [], only_in_sigma: [],
+               notes: ['matched at month grain (label vs first-of-month representation)'], **counts }
     end
   end
 
   { status: 'DIVERGE',
+    score: jaccard(exp_set, act_set),
     only_in_tableau: (exp_set - act_set).to_a,
-    only_in_sigma:   (act_set - exp_set).to_a }
+    only_in_sigma:   (act_set - exp_set).to_a,
+    **counts }
 end
 
 # Extract-mode: same row count + same dim set + same dim sort. Measure values
@@ -164,31 +177,39 @@ def extract_compare(exp, act, tol:)
     notes << "dim sort order differs (extract-mode flags only — not a failure)"
   end
 
-  # Wild-divergence check on measures (10x or more drift = probably a real bug,
-  # not just extract staleness)
-  if exp.size == act.size && exp_set == act_set
-    exp_h = exp.each_with_object({}) { |r, h| h[r[0]] = r[1] }
-    act_h = act.each_with_object({}) { |r, h| h[r[0]] = r[1] }
-    big_drifts = []
-    exp_h.each do |k, v|
-      a = act_h[k]
-      next if v.nil? || a.nil?
-      next unless v.is_a?(Numeric) && a.is_a?(Numeric)
-      denom = [v.abs.to_f, a.abs.to_f, 1.0].max
-      drift = (v - a).abs.to_f / denom
-      big_drifts << [k, v, a, drift] if drift > tol
-    end
-    if big_drifts.any?
-      notes << "#{big_drifts.size} measure value(s) drift > #{(tol * 100).to_i}% — review:"
-      big_drifts.first(3).each do |k, v, a, d|
-        notes << "    #{k.inspect} tableau=#{v} sigma=#{a} drift=#{(d * 100).round}%"
-      end
+  # Value fidelity over matched dims (bead y9rd.2 score): mean of max(0, 1-drift)
+  # across comparable numeric cells, capped at 1. Computed regardless of bucket
+  # alignment so the score reflects real value accuracy even when extract-mode
+  # leniently PASSes. big_drifts (> tol) still surfaced as review notes.
+  exp_h = exp.each_with_object({}) { |r, h| h[r[0]] = r[1] }
+  act_h = act.each_with_object({}) { |r, h| h[r[0]] = r[1] }
+  big_drifts = []
+  fidelities = []
+  exp_h.each do |k, v|
+    a = act_h[k]
+    next if v.nil? || a.nil?
+    next unless v.is_a?(Numeric) && a.is_a?(Numeric)
+    denom = [v.abs.to_f, a.abs.to_f, 1.0].max
+    drift = (v - a).abs.to_f / denom
+    fidelities << [0.0, 1.0 - drift].max
+    big_drifts << [k, v, a, drift] if drift > tol
+  end
+  if big_drifts.any? && exp.size == act.size && exp_set == act_set
+    notes << "#{big_drifts.size} measure value(s) drift > #{(tol * 100).to_i}% — review:"
+    big_drifts.first(3).each do |k, v, a, d|
+      notes << "    #{k.inspect} tableau=#{v} sigma=#{a} drift=#{(d * 100).round}%"
     end
   end
 
-  { status: status, notes: notes,
+  # Score = dim-set Jaccard × mean value fidelity (when comparable numerics exist).
+  dim_jac = jaccard(exp_set, act_set)
+  value_acc = fidelities.empty? ? 1.0 : (fidelities.sum / fidelities.size)
+  score = (dim_jac * value_acc).round(4)
+
+  { status: status, notes: notes, score: score,
     only_in_tableau: (exp_set - act_set).to_a,
-    only_in_sigma:   (act_set - exp_set).to_a }
+    only_in_sigma:   (act_set - exp_set).to_a,
+    n_expected: exp_set.size, n_actual: act_set.size, n_matched: (exp_set & act_set).size }
 end
 
 raw = JSON.parse(File.read(opts[:plan]))
@@ -221,7 +242,7 @@ end
 
 results.each do |r|
   tag = r[:extract] ? '[extract]' : '[strict] '
-  printf "%-7s  %s  %s\n", r[:status], tag, r[:chart]
+  printf "%-7s  %s  %s  (score %.0f%%)\n", r[:status], tag, r[:chart], (r[:score] || 0) * 100
   if r[:status] != 'PASS' || (r[:notes] && r[:notes].any?)
     Array(r[:notes]).each { |n| puts "    #{n}" }
     if r[:only_in_tableau].any? || r[:only_in_sigma].any?
@@ -232,6 +253,29 @@ results.each do |r|
 end
 
 failed = results.count { |r| r[:status] != 'PASS' }
+# Overall value-parity score (bead y9rd.2): mean per-tile score — the real,
+# repeatable number behind "N% parity". Separate from pass/fail (a chart can
+# DIVERGE yet score 0.9 if only one bucket is off) so trends are visible.
+overall = results.empty? ? 1.0 : (results.sum { |r| r[:score] || 0.0 } / results.size).round(4)
 puts '---'
 puts "#{results.size - failed}/#{results.size} pass" + (mode_forced ? '  (extract-mode)' : '')
+puts "value-parity score: #{(overall * 100).round(1)}%  (mean per-tile, #{results.size} tile(s))"
+
+if opts[:score_out]
+  score_doc = {
+    'ran_at'              => Time.now.utc.iso8601,
+    'mode'                => mode_forced ? 'extract' : 'strict',
+    'tiles_total'         => results.size,
+    'tiles_pass'          => results.size - failed,
+    'tiles_fail'          => failed,
+    'value_parity_score'  => overall,
+    'tiles'               => results.map { |r|
+      { 'chart' => r[:chart], 'status' => r[:status], 'extract' => r[:extract],
+        'score' => (r[:score] || 0.0),
+        'n_expected' => r[:n_expected], 'n_actual' => r[:n_actual], 'n_matched' => r[:n_matched] }
+    }
+  }
+  File.write(opts[:score_out], JSON.pretty_generate(score_doc))
+  warn "value-parity score written → #{opts[:score_out]}"
+end
 exit(failed.zero? ? 0 : 1)

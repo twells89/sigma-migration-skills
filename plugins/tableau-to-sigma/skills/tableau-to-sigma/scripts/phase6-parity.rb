@@ -43,6 +43,7 @@ OptionParser.new do |p|
   p.on('--extract-tol F', Float) { |v| opts[:extract_tol] = v }
   p.on('--rename PAIR', 'Tableau-name=Sigma-name (repeat)') { |v| opts[:renames] << v }
   p.on('--dashboard-layout PATH', 'parse-twb-layout output for the tile census (default <tableau-dir>/dashboard-layout.json)') { |v| opts[:dash_layout] = v }
+  p.on('--coverage PATH', 'build-charts coverage.json for the tier-coverage report (default <tableau-dir>/coverage.json)') { |v| opts[:coverage] = v }
   # Per-dashboard parity scoping: scope parity checks to only tiles on the
   # named dashboard (case-insensitive exact or unique substring). Repeatable.
   # Threaded through to auto-parity-plan.rb's --dashboard flag so both the
@@ -200,8 +201,9 @@ end
 File.write(plan_path, JSON.pretty_generate(plan))
 
 warn "Phase 6 PASS 2: running verifier (#{opts[:extract_mode] ? 'extract-mode' : 'strict'})"
+score_out_path = File.join(opts[:tab], 'parity-score.json')
 verifier_args = ['ruby', File.join(__dir__, 'verify-parity.rb'),
-                 '--plan', plan_path]
+                 '--plan', plan_path, '--score-out', score_out_path]
 if opts[:extract_mode]
   verifier_args.concat(['--extract-mode', '--extract-tol', opts[:extract_tol].to_s])
 end
@@ -216,8 +218,10 @@ File.write(opts[:out], out)
 # masked the cluster follower regression on 2026-05-22, see beads-sigma-4pm).
 summary_path = File.join(opts[:tab], 'parity-final.json')
 total = plan['charts'].size
-passed_chart_names = out.scan(/^PASS\s+\[[^\]]+\]\s+(.+)$/).flatten
-failed_chart_names = out.scan(/^DIVERGE\s+\[[^\]]+\]\s+(.+)$/).flatten
+# NB: verify-parity appends a "  (score NN%)" suffix (bead y9rd.2) — strip it so
+# chart names stay clean for the tile-census name match.
+passed_chart_names = out.scan(/^PASS\s+\[[^\]]+\]\s+(.+?)(?:\s+\(score [\d.]+%\))?$/).flatten
+failed_chart_names = out.scan(/^DIVERGE\s+\[[^\]]+\]\s+(.+?)(?:\s+\(score [\d.]+%\))?$/).flatten
 
 # ---- Tile census (bead gjhe) ------------------------------------------------
 # Compare the Tableau dashboard's chart-zone count against the charts that made
@@ -267,6 +271,27 @@ summary = {
   'status'       => (status.success? && total > 0 && passed_chart_names.size == total) ? 'PASS' : 'FAIL'
 }
 summary['tile_census'] = tile_census if tile_census
+
+# ---- Value-parity score + tier coverage report (bead y9rd.2) ----------------
+# Fold the verifier's per-tile value score (parity-score.json) and the
+# build-layer coverage tiers (coverage.json: built/approximated/degraded/dropped)
+# into one report so "N% parity" is a real number with a tier breakdown behind
+# it — repeatable and CI-gateable via assert-phase6-ran.rb --min-parity-score.
+if File.exist?(score_out_path)
+  score_doc = JSON.parse(File.read(score_out_path)) rescue nil
+  if score_doc
+    summary['value_parity_score'] = score_doc['value_parity_score']
+    summary['per_tile_scores'] = score_doc['tiles']
+    warn "value-parity score: #{(score_doc['value_parity_score'].to_f * 100).round(1)}% (#{score_doc['tiles_pass']}/#{score_doc['tiles_total']} tiles exact)"
+  end
+end
+coverage_path = opts[:coverage] || File.join(opts[:tab], 'coverage.json')
+if File.exist?(coverage_path)
+  cov = JSON.parse(File.read(coverage_path)) rescue nil
+  summary['tier_coverage'] = cov['summary'] if cov.is_a?(Hash) && cov['summary']
+end
+
 File.write(summary_path, JSON.pretty_generate(summary))
-warn "wrote #{summary_path} (status=#{summary['status']} #{summary['charts_pass']}/#{summary['charts_total']})"
+warn "wrote #{summary_path} (status=#{summary['status']} #{summary['charts_pass']}/#{summary['charts_total']}" \
+     "#{summary['value_parity_score'] ? format(' parity=%.1f%%', summary['value_parity_score'].to_f * 100) : ''})"
 exit(status.success? ? 0 : 2)
