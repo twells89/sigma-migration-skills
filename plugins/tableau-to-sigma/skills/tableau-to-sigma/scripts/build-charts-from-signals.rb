@@ -2100,24 +2100,28 @@ layout.each do |dash|
                   'routed to image confirmation (verify-visual-tiles) — confirm against the Tableau view image.'
     end
     csv_path = File.join(opts[:tab], 'views', "#{view['id']}.csv")
-    unless File.exist?(csv_path)
-      warnings << "missing CSV for '#{cap}' at #{csv_path}"
-      next
-    end
-    rows = CSV.read(csv_path)
+    # A view CSV that is MISSING (dataless / signal-only run — e.g. synth-twb-e2e
+    # stubs the views with no export) is treated the same as an EMPTY one: the
+    # standard-chart flow below is header+signal driven, so reconstruct the view
+    # from the .twb shelf signals rather than silently dropping the zone. (Pivot
+    # and KPI zones already took their fast paths above; this is the standard
+    # line/bar/scatter path — without this, every standard chart in a dataless
+    # run was skipped while crosstabs/KPIs built. bead y9rd.)
+    csv_missing = !File.exist?(csv_path)
+    rows = csv_missing ? [] : CSV.read(csv_path)
     if rows.empty?
       # An empty/0-byte view CSV is usually NOT a missing viz — it's a sheet
       # gated behind a dashboard ACTION filter (Tableau renders it fine, but its
       # headless data export returns zero rows), or a permission/timeout empty.
-      # Dropping the tile shipped N-1 charts (bead gjhe). Instead, reconstruct
-      # the view headers from the .twb shelf signals and build the chart from
-      # those — the downstream flow is header+signal driven, not row driven — so
-      # we never skip a viz that exists in the workbook. Parity for THIS tile is
-      # downgraded to manual (no exportable actuals to diff).
+      # A MISSING CSV is a dataless signal-only run. Either way, reconstruct the
+      # view headers from the .twb shelf signals and build the chart from those
+      # (header+signal driven, not row driven) — we never skip a viz that exists
+      # in the workbook. Parity for THIS tile is downgraded to manual (no
+      # exportable actuals to diff).
       synth = synthesize_view_from_signals(z, meta)
       if synth
-        warnings << "'#{cap}' — Tableau view CSV is EMPTY (0 bytes), almost always an ACTION-FILTER-gated " \
-                    "export (the sheet renders fine in Tableau). BUILT FROM .twb SIGNALS instead of dropping it: " \
+        warnings << "'#{cap}' — Tableau view CSV is #{csv_missing ? "MISSING (dataless/signal-only run)" : "EMPTY (0 bytes), almost always an ACTION-FILTER-gated export (the sheet renders fine in Tableau)"}. " \
+                    "BUILT FROM .twb SIGNALS instead of dropping it: " \
                     "headers=#{synth[:headers].inspect}. Sigma sources the same warehouse so the chart will populate; " \
                     "DATA PARITY for this one tile must be verified manually (no exportable actuals)."
         rows = [synth[:headers]]   # header row only — body stays empty
@@ -2280,6 +2284,7 @@ layout.each do |dash|
     dim_hdr_base = dim_hdr.sub(/^(?:second|minute|hour|day|week|month|quarter|year) of /i, '')
     dim  = map_column(dim_hdr, mmap) || (dim_hdr_base != dim_hdr ? map_column(dim_hdr_base, mmap) : nil)
     meas = map_column(meas_hdr, mmap)
+    meas_unresolved = meas.nil?
     find_ws_calc = lambda do |hdr|
       (z['calculations'] || []).find { |c| c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(hdr.to_s.strip) }
     end
@@ -2347,12 +2352,22 @@ layout.each do |dash|
     user_agg_formula = chart_pswitch_plan && chart_pswitch_plan['sibling_form']
     window_plan = nil
     window_calc_name = nil
-    if user_agg_formula.nil? && agg_label == 'User' && meas['formula'].nil?
+    # Translate the measure's source calc when it's a Tableau User-aggregated calc
+    # (agg=User) OR when the measure header didn't resolve to a master column at all
+    # (meas_unresolved) — a window table-calc on a shelf carries a Sum/None pill,
+    # not agg=User, so gating on User alone left running-sum / share-of-total LINE
+    # and BAR measures emitting an unresolvable Sum([Master/<calc>]). bead y9rd.
+    if user_agg_formula.nil? && (agg_label == 'User' || meas_unresolved) && meas['formula'].nil?
       norm = ->(x) { x.to_s.gsub(/^\[|\]$/, '').strip.downcase }
       user_calc = (z['calculations'] || []).find do |c|
         n = norm.call(c['name'])
-        !n.empty? && (n == norm.call(meas['name']) || n == norm.call(meas_hdr) ||
-                      norm.call(meas_hdr).include?(n))
+        cap_n = norm.call(c['caption'])
+        targets = [norm.call(meas['name']), norm.call(meas_hdr)]
+        # Match on the calc's internal name (Calculation_NNN) OR its human caption
+        # ("Running Revenue") — a chart measure header is the CAPTION, so name-only
+        # matching missed window calcs in the standard-chart path. bead y9rd.
+        (!n.empty? && (targets.include?(n) || norm.call(meas_hdr).include?(n))) ||
+          (!cap_n.empty? && targets.include?(cap_n))
       end
       # Window table-calcs FIRST (RUNNING_* / WINDOW_* / RANK / LOOKUP / INDEX /
       # TOTAL): translate to Sigma-native window math on the chart yAxis (see
