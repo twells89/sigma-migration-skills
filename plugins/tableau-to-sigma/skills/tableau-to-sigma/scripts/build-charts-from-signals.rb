@@ -1784,6 +1784,14 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
       # conservative "UNVALIDATED in pivot context" behaviour lost real measures
       # like share-of-total and running-total from migrated crosstabs).
       uv['col']['formula'] = plan['formula']
+      # Window formulas that yield a 0–1 fraction (share-of-total, rank-percentile)
+      # must carry a percent format, else the default ',.0f' rounds every cell to
+      # "0" and the crosstab reads as all-zeros even though it computes correctly
+      # (grand total = 1.0). Mirrors the chart-path override (PercentOfTotal→',.2%').
+      case plan['formula']
+      when /\A\s*(?:CumulativeSum\(PercentOfTotal|PercentOfTotal)\(/ then uv['col']['format'] = { 'kind' => 'number', 'formatString' => ',.2%' }
+      when /\A\s*RankPercentile\(/ then uv['col']['format'] = { 'kind' => 'number', 'formatString' => ',.1%' }
+      end
       sort_note = plan['follows_sort'] ? ' (accumulates along the pivot sort — verify order vs Tableau)' : ''
       warnings << "'#{cap}' pivot value '#{uv['name']}' → window formula in grid: " \
                   "#{plan['formula'].gsub(/\s+/, ' ')[0..100]}#{sort_note}"
