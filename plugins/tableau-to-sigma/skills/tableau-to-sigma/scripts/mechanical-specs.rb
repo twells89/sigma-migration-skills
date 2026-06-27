@@ -859,6 +859,40 @@ module MechanicalSpecs
     cols = raw_cols.map { |c| [col_display(c), c['format'], label_for[c['id']]] }
     cols.sort_by! { |(dn, _, _)| (dn.to_s.include?('(') ? 1 : 0) }
     cols.each { |(dn, fmt, real_label)| add.call(dn, fmt, real_label) }
+    # FIXED-LOD helper surfacing (y9rd.10): a FIXED/INCLUDE/EXCLUDE LOD becomes a
+    # separate grouped helper element related to the fact (rel named "FIXED <dims>"),
+    # so its output measure (e.g. "Region Revenue LOD") is NOT a fact column and a
+    # KPI/tile referencing it would be viz-pruned. The LOD value is a partition
+    # broadcast (one value per link key, repeated per row) — exactly a many-to-one
+    # relationship lookup — so surface each non-key helper column onto the master as
+    # a 3-part cross-element ref [fact/REL/Field]. (Window helpers — rel "Window …" —
+    # are ORDERED and context-dependent; they are deliberately NOT surfaced this way.)
+    if model
+      els_by_id ||= all_elements(model).each_with_object({}) { |e, h| h[e['id']] = e }
+      (fact_el['relationships'] || []).each do |rel|
+        next unless rel['name'].to_s =~ /\A(FIXED|INCLUDE|EXCLUDE)\b/i
+        tgt = els_by_id[rel['targetElementId']]
+        next unless tgt && tgt.dig('source', 'kind') == 'sql'
+        key_ids = (rel['keys'] || []).map { |k| k['targetColumnId'] }
+        (tgt['columns'] || []).each do |hc|
+          next if key_ids.include?(hc['id'])
+          dn = col_display(hc)
+          next if dn.nil? || dn.to_s.empty? || dn =~ GUID_RE
+          key = dn.downcase
+          next if seen[key]
+          seen[key] = true
+          id = "m-#{slug(dn)}"
+          master_columns << { 'id' => id, 'name' => dn, 'formula' => "[#{fact_name}/#{rel['name']}/#{dn}]" }
+          entry = { 'id' => id, 'name' => dn }
+          entry['format'] = hc['format'] if hc['format']
+          rx = header_regex(dn)
+          unless used_regex[rx]
+            mmap[rx] = entry
+            used_regex[rx] = true
+          end
+        end
+      end
+    end
     # Aggregate calc metrics are NOT master columns — they are workbook-level
     # aggregate formulas registered as master-map entries with a verbatim
     # `formula` (base-col refs rewritten to [Master/Col]); build-charts emits the
