@@ -1147,6 +1147,66 @@ def build_window_helper(el_id:, master_id:, partition_dims:, addressing_dims:,
   [element, src_name]
 end
 
+# Hidden helper CHAIN for an AGGREGATE-DERIVED DIMENSION (calc-on-calc; y9rd.13).
+# A Tableau dimension defined by BUCKETING an aggregate metric, e.g.
+#   High Margin Flag = IF [Margin Pct] > 0.3 THEN "High" ELSE "Low" END
+#   Margin Pct       = SUM([Gross Profit]) / SUM([Gross Revenue])
+# A metric can't be a grouping dimension, and the bucket can't be a row-level DM
+# column (it references aggregates), so the converter reports it as an
+# `aggregate-dimension` workbookPattern (y9rd.11). The build layer materialises
+# it as a TWO-element chain (chart then sources the 2nd):
+#   INNER (grouped by the chart's BASE dims — the view's OTHER dims; whole-table
+#     when none): its GROUP CALCULATIONS are the referenced aggregate metric(s)
+#     + the tile measure, so each aggregate becomes a row-level value per group.
+#   PASSTHRU (sources INNER *WITH groupingId* so it reads the grouped grain — the
+#     verified table→table pattern; a chart source SILENTLY DROPS groupingId and
+#     would read base-grain rows with the aggregate REPEATED, fanning the measure
+#     ×row-count): an UNGROUPED element exposing the measure + base dims + the
+#     BUCKET column (row-level over the grouped rows). The chart sources PASSTHRU
+#     (now one row per base group, no broadcast), groups by the bucket, and
+#     re-aggregates the measure — value-correct (live-verified 116,557.3 exact vs
+#     the de-fanned warehouse total; a chart-direct source fanned it to 82.2M).
+# bucket_name/bucket_formula: the dimension caption + its Sigma If/Case body, the
+# latter with metric/base refs still in bare [Name] form (rewritten here onto the
+# inner element). base_dims/agg_metrics/measure carry [Master/…] formulas.
+def build_aggregate_dim_helper(el_id:, master_id:, base_dims:, agg_metrics:, measure:,
+                               bucket_name:, bucket_formula:)
+  stem = el_id.sub(/^el-(kpi-)?/, '')
+  inner_id = "#{el_id}-aggdim-in"
+  inner_name = "#{stem} AggDim Inner"
+  pass_id = "#{el_id}-aggdim"
+  pass_name = "#{stem} AggDim"
+  inner_grp = "#{inner_id}-g"
+  base = base_dims.empty? ? [{ 'name' => 'All Rows', 'formula' => '1' }] : base_dims
+  base_cols   = base.each_with_index.map { |d, i| { 'id' => "#{inner_id}-b#{i}", 'name' => d['name'], 'formula' => d['formula'] } }
+  metric_cols = agg_metrics.each_with_index.map { |m, i| { 'id' => "#{inner_id}-m#{i}", 'name' => m['name'], 'formula' => m['formula'] } }
+  meas_col    = { 'id' => "#{inner_id}-v", 'name' => measure['name'], 'formula' => measure['formula'] }
+  inner = {
+    'id' => inner_id, 'kind' => 'table', 'name' => inner_name,
+    'source' => { 'kind' => 'table', 'elementId' => master_id },
+    'columns' => base_cols + metric_cols + [meas_col],
+    'groupings' => [{ 'id' => inner_grp, 'groupBy' => base_cols.map { |c| c['id'] },
+                      'calculations' => (metric_cols + [meas_col]).map { |c| c['id'] } }],
+    'visibleAsSource' => false
+  }
+  # Rewrite the bucket's [Metric]/[BaseDim] refs onto the inner element (cross-
+  # element refs resolve at the grouped grain the passthru reads).
+  bucket = bucket_formula.to_s.dup
+  (agg_metrics.map { |m| m['name'] } + base_dims.map { |d| d['name'] }).each do |nm|
+    bucket = bucket.gsub(/\[#{Regexp.escape(nm)}\]/i, "[#{inner_name}/#{nm}]")
+  end
+  pass_cols = base_dims.each_with_index.map { |d, i| { 'id' => "#{pass_id}-b#{i}", 'name' => d['name'], 'formula' => "[#{inner_name}/#{d['name']}]" } }
+  pass_cols << { 'id' => "#{pass_id}-v", 'name' => measure['name'], 'formula' => "[#{inner_name}/#{measure['name']}]" }
+  pass_cols << { 'id' => "#{pass_id}-bk", 'name' => bucket_name, 'formula' => bucket }
+  passthru = {
+    'id' => pass_id, 'kind' => 'table', 'name' => pass_name,
+    'source' => { 'kind' => 'table', 'elementId' => inner_id, 'groupingId' => inner_grp },
+    'columns' => pass_cols,
+    'visibleAsSource' => false
+  }
+  [inner, passthru, pass_name]
+end
+
 # ---- Nested FIXED LOD decomposition (beads-sigma-t67b) ----------------------
 # Tableau allows LODs inside LODs:
 #   {FIXED [Region] : AVG({FIXED [Region], [Customer Id] : SUM([Sales])})}
@@ -1366,6 +1426,47 @@ def param_switch_for(*candidates)
     key = c.to_s.gsub(/^\[|\]$/, '').strip.downcase
     sw = $param_switch_by_key[key]
     return sw if sw
+  end
+  nil
+end
+
+# ---- Converter aggregate-derived dimensions (workbookPatterns kind:aggregate-
+# dimension; y9rd.13) ---------------------------------------------------------
+# The converter emits { kind:'aggregate-dimension', name (the calc CAPTION),
+# formula (the Sigma-translated bucket, e.g. If([Margin Pct] > 0.3,"High","Low")),
+# source, requires, note } for a dimension built by bucketing an aggregate metric
+# (a metric can't be a grouping dim; the bucket can't be a row-level DM column).
+# We index by the caption AND every Calculation_<id> whose .twb caption matches
+# (a layout shelf references the calc by its internal id), and parse the bucket's
+# bracketed refs as the aggregate metric(s) the helper must compute per group.
+$agg_dims = []
+$agg_dim_by_key = {}
+
+def load_aggregate_dims(wb_patterns_path, meta)
+  return unless wb_patterns_path && File.exist?(wb_patterns_path)
+  raw = (JSON.parse(File.read(wb_patterns_path)) rescue {})
+  wp = raw['workbookPatterns'] || raw['workbook_patterns'] || []
+  cbg = meta['columns_by_guid'] || {}
+  cap_to_ids = Hash.new { |h, k| h[k] = [] }
+  cbg.each { |gid, info| c = (info || {})['caption']; cap_to_ids[c.to_s.downcase] << gid if c && !c.to_s.empty? }
+  wp.select { |p| p['kind'] == 'aggregate-dimension' }.each do |p|
+    name = p['name'].to_s
+    refs = p['formula'].to_s.scan(/\[([^\]]+)\]/).flatten.map(&:strip)
+                       .reject { |r| r.include?('/') || r.start_with?('ctl-') }.uniq
+    keys = ([name.downcase] + cap_to_ids[name.downcase].map(&:downcase)).uniq
+    ad = { 'name' => name, 'formula' => p['formula'], 'agg_refs' => refs, 'keys' => keys }
+    $agg_dims << ad
+    keys.each { |k| $agg_dim_by_key[k] = ad }
+  end
+end
+
+# Look up an aggregate-dimension pattern by a chart dim caption OR its
+# Calculation_<id> internal id (any candidate). Returns the pattern hash or nil.
+def agg_dim_for(*candidates)
+  candidates.flatten.compact.each do |c|
+    key = c.to_s.gsub(/^\[|\]$/, '').strip.downcase
+    ad = $agg_dim_by_key[key]
+    return ad if ad
   end
   nil
 end
@@ -2038,6 +2139,8 @@ end
 # populates are initialised first.
 load_param_switches(opts[:wb_patterns], meta)
 warn "loaded #{$param_switches.size} param measure-picker(s) from #{opts[:wb_patterns]}" if $param_switches.any?
+load_aggregate_dims(opts[:wb_patterns], meta)
+warn "loaded #{$agg_dims.size} aggregate-derived dimension(s) from #{opts[:wb_patterns]}" if $agg_dims.any?
 
 elements = []
 data_elements = [] # hidden helper elements (scatter grouped sources — bead z1d0)
@@ -2622,6 +2725,55 @@ layout.each do |dash|
         warnings << "'#{cap}' averages dim-table column '#{meas['name']}' (#{meas['grain']['element']}) but its chart dims " \
                     'are not plain columns of that dim element — left at row grain; values may diverge from Tableau ' \
                     '(relationship semantics average at the dim grain). Verify or restructure manually.'
+      end
+    end
+
+    # ---- Aggregate-derived grouping dimension (calc-on-calc; y9rd.13) -------
+    # The chart is grouped by a dimension that buckets an aggregate metric
+    # (converter `aggregate-dimension` workbookPattern). It can't be a master
+    # column or a metric, so build a hidden grouped helper at the chart's BASE
+    # grain (the color dim, else whole table) whose group calculations are the
+    # referenced aggregate metric(s) + this tile's measure; then group the chart
+    # by the bucket expression over that element and re-aggregate the measure.
+    # Skip when the measure path already retargeted the source (rare combo) —
+    # surface it rather than emit two competing helpers.
+    agg_dim = agg_dim_for(dim_hdr, dim && dim['name'])
+    if agg_dim
+      if chart_source_eid != opts[:master_id]
+        warnings << "'#{cap}' is grouped by aggregate-derived dimension '#{dim['name']}' AND its measure needed a " \
+                    'helper element — the combination is unsupported; the aggregate-dimension grouping was NOT wired ' \
+                    '(verify manually).'
+      else
+        agg_metrics = agg_dim['agg_refs'].map do |r|
+          mc = map_column(r, mmap)
+          (mc && mc['formula'] && !mc['formula'].to_s.empty?) ? { 'name' => mc['name'], 'formula' => mc['formula'] } : nil
+        end
+        if agg_metrics.any? && agg_metrics.none?(&:nil?)
+          base_dims = color_col_obj ? [{ 'name' => color_col_obj['name'], 'formula' => color_col_obj['formula'] }] : []
+          inner, passthru, pass_name = build_aggregate_dim_helper(
+            el_id: el_id, master_id: opts[:master_id], base_dims: base_dims,
+            agg_metrics: agg_metrics, measure: { 'name' => meas['name'], 'formula' => measure_formula },
+            bucket_name: dim['name'], bucket_formula: agg_dim['formula'])
+          data_elements << inner
+          data_elements << passthru
+          chart_source_eid = passthru['id']
+          # Chart sources the PASSTHRU (one row per base group): plot the bucket
+          # column raw and Sum the measure across the bucket's groups.
+          dim_col_obj['formula'] = "[#{pass_name}/#{dim['name']}]"
+          dim_col_obj.delete('format') # the bucket is a text label, never a date
+          color_col_obj['formula'] = "[#{pass_name}/#{color_col_obj['name']}]" if color_col_obj
+          measure_formula = "#{sigma_agg}([#{pass_name}/#{meas['name']}])"
+          warnings << "'#{cap}' grouped by aggregate-derived dimension '#{dim['name']}' (#{agg_dim['formula']}) → " \
+                      "hidden helper chain (inner grouped at base grain = " \
+                      "#{base_dims.any? ? base_dims.map { |d| d['name'] }.join(', ') : 'whole table'} computing " \
+                      "[#{agg_metrics.map { |m| m['name'] }.join('], [')}] + measure; passthru '#{pass_name}' reads it " \
+                      "via groupingId and buckets it); chart #{sigma_agg}'s the measure per bucket — exact for " \
+                      'composable aggregates (Sum/Min/Max/Count) [y9rd.13] ⚠ verify in Sigma'
+        else
+          warnings << "'#{cap}' aggregate-derived dimension '#{dim['name']}' references aggregate metric(s) " \
+                      "[#{agg_dim['agg_refs'].join('], [')}] not all resolvable in the master map — left unwired " \
+                      '(the bar would be viz-pruned; verify manually).'
+        end
       end
     end
 

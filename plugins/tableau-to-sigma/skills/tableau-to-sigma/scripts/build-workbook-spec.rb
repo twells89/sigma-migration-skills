@@ -107,7 +107,13 @@ ensure
   seen_master_ids[c['id']] = true
 end
 
-# Build the data page
+# Build the data page. Beyond the master, build-charts may emit hidden helper
+# elements (scatter grouped sources, FIXED/INCLUDE/EXCLUDE LOD two-level
+# helpers, window helpers, aggregate-derived dimension helpers — y9rd.13) under
+# the top-level `data_elements` key; they source the master (or each other) and
+# the visible charts source THEM, so they must live on the Data page or the
+# workbook POST 400s "Dependency not found". They carry visibleAsSource:false.
+helper_elements = (specs.is_a?(Hash) && specs['data_elements']) || []
 data_page = {
   'id'   => 'page-data',
   'name' => 'Data',
@@ -119,8 +125,9 @@ data_page = {
     'source' => { 'kind' => 'data-model', 'dataModelId' => dm_id, 'elementId' => dm_el_id },
     'columns' => master_columns,
     'order'   => master_columns.map { |c| c['id'] }
-  }]
+  }] + helper_elements
 }
+warn "  Data page: + #{helper_elements.size} hidden helper element(s) [#{helper_elements.map { |h| h['id'] }.join(', ')}]" if helper_elements.any?
 
 # Build the visible pages from chart-specs.json
 # Two shapes:
