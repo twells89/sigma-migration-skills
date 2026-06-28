@@ -2805,6 +2805,16 @@ layout.each do |dash|
     if meas['format'].is_a?(String)
       meas_col_obj['format'] = { 'kind' => 'number', 'formatString' => meas['format'] }
     end
+    # Attainment/share ratios (a measure ÷ a goal/target/budget/quota) are
+    # percentages by convention — same rule the pivot path applies (y9rd.5). The
+    # converter often guesses CURRENCY for such a metric (its numerator is
+    # revenue/$), so this override fires LAST, after meas['format']. Gate on an
+    # actual division so plain currency measures ("Revenue Goal") never flip.
+    if measure_formula.to_s =~ %r{/} &&
+       (meas['name'].to_s =~ /attain|\bshare\b|sell[-\s]?through|win[-\s]?rate|conversion/i ||
+        measure_formula.to_s =~ /\b(goal|target|budget|quota|plan|forecast)\b/i)
+      meas_col_obj['format'] = { 'kind' => 'number', 'formatString' => ',.1%' }
+    end
     # Windowed-measure format overrides: a rank named "Revenue Rank" would
     # otherwise inherit the $-currency heuristic from the /revenue/ name match.
     if window_plan && window_plan['mode'] == 'inline'
