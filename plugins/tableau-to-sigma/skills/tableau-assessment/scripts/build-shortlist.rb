@@ -74,19 +74,22 @@ complexity.each do |luid, r|
     end
 
   rows << {
-    'name'       => name,
-    'luid'       => luid,
-    'url'        => inv && inv['url'],
-    'accesses'   => accesses,
-    'actors'     => actors,
-    'auto'       => r['n_auto'],
-    'hint'       => r['n_hint'],
-    'manual'     => r['n_manual'],
-    'unhandled'  => r['n_unhandled'],
-    'value'      => value.round(1),
-    'cost'       => cost,
-    'score'      => score.round(2),
-    'tag'        => tag
+    'name'                 => name,
+    'luid'                 => luid,
+    'url'                  => inv && inv['url'],
+    'accesses'             => accesses,
+    'actors'              => actors,
+    'auto'                 => r['n_auto'],
+    'hint'                 => r['n_hint'],
+    'manual'               => r['n_manual'],
+    'unhandled'            => r['n_unhandled'],
+    # Pre-migration parity PREDICTION (y9rd.6) carried through from complexity.json.
+    'predicted_parity_pct' => r['predicted_parity_pct'],
+    'parity_band'          => r['parity_band'],
+    'value'                => value.round(1),
+    'cost'                 => cost,
+    'score'                => score.round(2),
+    'tag'                  => tag
   }
 end
 
@@ -95,8 +98,9 @@ rows.sort_by! { |r| -r['score'] }
 File.write(File.join(opts[:out], 'shortlist.json'), JSON.pretty_generate(rows))
 puts "wrote shortlist.json (#{rows.size} workbooks)"
 puts
-printf "%-50s %5s %5s %5s %5s %7s %s\n", 'Workbook', 'acc', 'view', 'manl', 'unhd', 'score', 'tag'
+printf "%-46s %5s %5s %5s %5s %6s %7s %s\n", 'Workbook', 'acc', 'view', 'manl', 'unhd', 'parity', 'score', 'tag'
 rows.each do |r|
-  printf "%-50s %5d %5d %5d %5d %7.2f %s\n",
-    (r['name'] || '')[0, 49], r['accesses'], r['actors'], r['manual'], r['unhandled'], r['score'], r['tag']
+  printf "%-46s %5d %5d %5d %5d %4.0f%%%s %7.2f %s\n",
+    (r['name'] || '')[0, 45], r['accesses'], r['actors'], r['manual'], r['unhandled'],
+    r['predicted_parity_pct'].to_f, r['parity_band'].to_s, r['score'], r['tag']
 end

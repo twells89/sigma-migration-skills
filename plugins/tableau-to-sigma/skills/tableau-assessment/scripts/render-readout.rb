@@ -185,12 +185,13 @@ if has_shortlist
              when 'retire'           then '🗑 retire'
              else 'moderate'
              end
+    parity_md = r['predicted_parity_pct'] ? "#{format('%.0f', r['predicted_parity_pct'])}% (#{r['parity_band']})" : '—'
     [r['name'], r['accesses'], r['actors'],
      "#{r['auto']} / #{r['hint']} / #{r['manual']} / #{r['unhandled']}",
-     format('%.1f', r['value']), format('%.2f', r['score']), tag_md]
+     parity_md, format('%.1f', r['value']), format('%.2f', r['score']), tag_md]
   end
   shortlist_table = md_table(
-    ['Workbook', 'Acc', 'Viewers', 'Auto/Hint/Man/Unh', 'Value', 'Score', 'Tag'], rows
+    ['Workbook', 'Acc', 'Viewers', 'Auto/Hint/Man/Unh', 'Pred. parity', 'Value', 'Score', 'Tag'], rows
   )
 
   total_accesses = shortlist.sum { |r| r['accesses'].to_i }
@@ -211,11 +212,12 @@ if has_shortlist
     crows = complexity.values.sort_by do |r|
       -(r['n_unhandled'] * 10 + r['n_manual'] * 3 + r['n_hint'])
     end.map do |r|
+      parity_md = r['predicted_parity_pct'] ? "#{format('%.0f', r['predicted_parity_pct'])}% (#{r['parity_band']})" : '—'
       [r['name'], r['twb_size_kb'], r['n_features'], r['n_auto'], r['n_hint'], r['n_manual'],
-       r['n_unhandled'].positive? ? "**#{r['n_unhandled']}**" : 0]
+       r['n_unhandled'].positive? ? "**#{r['n_unhandled']}**" : 0, parity_md]
     end
     complexity_table = md_table(
-      ['Workbook', 'KB', 'Features', 'Auto', 'Hint', 'Manual', 'Unhandled'], crows
+      ['Workbook', 'KB', 'Features', 'Auto', 'Hint', 'Manual', 'Unhandled', 'Pred. parity'], crows
     )
     total_unhandled = complexity.values.sum { |r| r['n_unhandled'].to_i }
     n_workbooks_with_unhandled = complexity.values.count { |r| r['n_unhandled'].positive? }
