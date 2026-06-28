@@ -1430,6 +1430,30 @@ def param_switch_for(*candidates)
   nil
 end
 
+# Normalize a parameter caption/name for dedup matching: strip Tableau's
+# "[Parameters].[X]" wrapping and bare brackets, then case-fold. (jwsf)
+def norm_param_caption(s)
+  s.to_s.gsub(/\A\[Parameters\]\.\[|\]\z|\A\[|\]\z/, '').strip.downcase
+end
+
+# Index the parameter captions that drive a WIRED measure-picker Switch, so the
+# auto-control loop can skip the redundant `ctl-param-<caption>` control (jwsf).
+# The converter usually puts the parameter CAPTION directly in `param_name`
+# ("Metric Picker"), but older paths put a GUID/key resolvable via
+# columns_by_guid; index EVERY form so the dedup fires regardless. Returns a
+# Set-like hash {normalized_caption => true}. Only pickers actually used on a
+# tile count (an un-wired picker doesn't suppress its parameter's control).
+def picker_param_caps_index(param_switches, used, columns_by_guid)
+  idx = {}
+  (param_switches || []).each do |sw|
+    next unless (used || []).include?(sw['control_id'])
+    [sw['param_name'], (columns_by_guid || {}).dig(sw['param_name'], 'caption')]
+      .compact.reject { |x| x.to_s.strip.empty? }
+      .each { |pc| idx[norm_param_caption(pc)] = true }
+  end
+  idx
+end
+
 # ---- Converter aggregate-derived dimensions (workbookPatterns kind:aggregate-
 # dimension; y9rd.13) ---------------------------------------------------------
 # The converter emits { kind:'aggregate-dimension', name (the calc CAPTION),
@@ -3647,12 +3671,13 @@ if opts[:auto_controls]
   # control emitted under the converter's controlId (ctl-parameter-<n>); don't ALSO
   # emit the legacy auto-param control (ctl-param-<caption>) for the same parameter
   # — that second control binds nothing and trips the control lint (n4pi.10).
-  picker_param_caps = {}
-  $param_switches.each do |sw|
-    next unless $param_switch_used.include?(sw['control_id'])
-    pc = (meta['columns_by_guid'] || {}).dig(sw['param_name'], 'caption')
-    picker_param_caps[pc.to_s.downcase] = true if pc && !pc.to_s.empty?
-  end
+  # Skip the redundant ctl-param-<caption> auto-control for any parameter that
+  # already drives a WIRED measure-picker Switch (jwsf: when paramName was already
+  # the caption, the old columns_by_guid-only lookup returned nil → the control
+  # leaked, got pruned as unreferenced, and its orphan control-scope record tripped
+  # control_lint "missing control"). picker_param_caps_index matches every caption
+  # form.
+  picker_param_caps = picker_param_caps_index($param_switches, $param_switch_used, meta['columns_by_guid'])
   # A parameter is typically declared once in the workbook metadata AND again in
   # every worksheet's datasource-dependencies that references it, so
   # meta['parameters'] commonly carries many duplicates of the same caption
@@ -3665,7 +3690,7 @@ if opts[:auto_controls]
     next if cap.empty?
     next if seen_param_caps[cap.downcase]
     seen_param_caps[cap.downcase] = true
-    if picker_param_caps[cap.downcase]
+    if picker_param_caps[norm_param_caption(cap)] || picker_param_caps[norm_param_caption(p['name'])]
       warnings << "parameter '#{cap}' drives a measure-picker Switch — control emitted under the converter controlId; skipping the redundant auto-param control"
       next
     end

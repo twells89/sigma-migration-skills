@@ -102,6 +102,7 @@ jobs:
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-layout-lint.rb
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-parity-score.rb
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-aggregate-dimension.rb
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-param-measure-picker.rb
             plugins/tableau-to-sigma/skills/tableau-assessment/scripts/test-predicted-parity.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-dax-restructure.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-telemetry-gate.rb

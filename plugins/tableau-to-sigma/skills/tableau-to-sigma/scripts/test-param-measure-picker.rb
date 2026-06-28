@@ -19,7 +19,8 @@ SRC = File.read(File.join(DIR, 'build-charts-from-signals.rb'))
 # Pull the pure helper methods out of the script (which otherwise runs main) and
 # define them here. Order doesn't matter — they're resolved at call time.
 %w[map_column coerce_case_literal remap_param_branch
-   load_param_switches param_switch_for param_switch_inline].each do |fn|
+   load_param_switches param_switch_for param_switch_inline
+   norm_param_caption picker_param_caps_index].each do |fn|
   m = SRC.match(/^def #{fn}\b.*?\n^end$/m) or abort("could not extract #{fn} from build-charts-from-signals.rb")
   eval(m[0]) # rubocop:disable Security/Eval — test-only extraction of first-party code
 end
@@ -94,6 +95,26 @@ check(param_switch_inline(sw3, MMAP, CBG).nil?, 'window-function picker → nil 
 sw4 = { 'name' => 'P4', 'control_id' => 'ctl-parameter-5', 'param_name' => 'Parameter 5',
         'cases' => [{ 'when' => 'X', 'then' => '[Ghost A]' }, { 'when' => 'Y', 'then' => '[Ghost B]' }], 'else' => nil }
 check(param_switch_inline(sw4, MMAP, CBG).nil?, 'all branches unresolvable → nil (no empty Switch)', fails)
+
+# ---- 5. picker-param dedup index (jwsf) ----------------------------------------
+# The auto-control loop must skip the redundant ctl-param-<caption> control for a
+# parameter that already drives a WIRED picker — else the orphan control-scope
+# record trips control_lint "missing control". The jwsf failure: param_name WAS
+# the caption ("Metric Picker"), so the old columns_by_guid-only lookup returned
+# nil and the dedup never fired.
+check(norm_param_caption('[Parameters].[Metric Picker]') == 'metric picker', 'norm_param_caption strips [Parameters].[…] wrapping', fails)
+check(norm_param_caption('[Metric Picker]') == 'metric picker', 'norm_param_caption strips bare brackets', fails)
+sws = [{ 'control_id' => 'ctl-metric-picker', 'param_name' => 'Metric Picker' }]
+# jwsf case: param_name is already the caption, columns_by_guid has NO entry for it.
+idx = picker_param_caps_index(sws, ['ctl-metric-picker'], {})
+check(idx['metric picker'] == true, 'jwsf: dedup matches when param_name IS the caption (columns_by_guid miss)', fails)
+# GUID-keyed param_name still resolves via columns_by_guid (legacy path).
+idx2 = picker_param_caps_index([{ 'control_id' => 'ctl-x', 'param_name' => 'Parameter 7' }],
+                               ['ctl-x'], { 'Parameter 7' => { 'caption' => 'Region Picker' } })
+check(idx2['region picker'] == true, 'GUID-keyed param_name resolves caption via columns_by_guid', fails)
+# An UN-wired picker must NOT suppress its parameter's control.
+idx3 = picker_param_caps_index(sws, [], {})
+check(idx3.empty?, 'un-wired picker → no dedup (control still emitted)', fails)
 
 puts
 if fails.empty?
