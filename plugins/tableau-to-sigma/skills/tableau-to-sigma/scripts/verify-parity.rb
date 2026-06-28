@@ -212,6 +212,42 @@ def extract_compare(exp, act, tol:)
     n_expected: exp_set.size, n_actual: act_set.size, n_matched: (exp_set & act_set).size }
 end
 
+# Per-COLUMN (per-formula) value scoring (y9rd.14): project the row tuples to each
+# column position and score it independently, so a 3-channel / multi-measure tile
+# reports WHICH column diverged (the per-formula "coverage answer"), not just one
+# blended tile score. Column 0 is the key/dim → distinct-value-set Jaccard. A
+# numeric column i>0 is a measure → key-set Jaccard × mean value fidelity keyed on
+# the row's dim (col 0), matching extract_compare. A non-numeric column i>0 falls
+# back to set Jaccard. `cols` = the plan's sigma_columns (ids in row order).
+def per_column_scores(exp, act, cols)
+  width = [(exp.map(&:size) + act.map(&:size)).max || 0, 0].max
+  return [] if width.zero?
+  (0...width).map do |i|
+    exp_vals = exp.map { |r| r[i] }
+    act_vals = act.map { |r| r[i] }
+    present  = (exp_vals + act_vals).compact
+    numeric  = i.positive? && present.any? && present.all? { |v| v.is_a?(Numeric) }
+    if numeric
+      exp_h = exp.each_with_object({}) { |r, h| h[r[0]] = r[i] }
+      act_h = act.each_with_object({}) { |r, h| h[r[0]] = r[i] }
+      fids = []
+      exp_h.each do |k, v|
+        a = act_h[k]
+        next if v.nil? || a.nil?
+        denom = [v.abs.to_f, a.abs.to_f, 1.0].max
+        fids << [0.0, 1.0 - (v - a).abs.to_f / denom].max
+      end
+      key_jac = jaccard(Set.new(exp_h.keys), Set.new(act_h.keys))
+      val_acc = fids.empty? ? (key_jac.zero? ? 0.0 : 1.0) : (fids.sum / fids.size)
+      score = (key_jac * val_acc).round(4)
+    else
+      score = jaccard(Set.new(exp_vals), Set.new(act_vals))
+    end
+    { 'index' => i, 'column_id' => (cols && cols[i]), 'kind' => (numeric ? 'measure' : 'dim'),
+      'score' => score, 'n_expected' => exp_vals.compact.uniq.size, 'n_actual' => act_vals.compact.uniq.size }
+  end
+end
+
 raw = JSON.parse(File.read(opts[:plan]))
 default_extract = false
 if raw.is_a?(Hash) && raw['charts']
@@ -237,7 +273,8 @@ results = plan.map do |p|
                  end
 
   result = this_extract ? extract_compare(exp, act, tol: opts[:tol]) : strict_compare(exp, act)
-  result.merge(chart: p['chart'], extract: this_extract)
+  result.merge(chart: p['chart'], extract: this_extract,
+               columns: per_column_scores(exp, act, p['sigma_columns']))
 end
 
 results.each do |r|
@@ -248,6 +285,11 @@ results.each do |r|
     if r[:only_in_tableau].any? || r[:only_in_sigma].any?
       puts "    Tableau-only: #{r[:only_in_tableau].inspect[0..200]}"
       puts "    Sigma-only:   #{r[:only_in_sigma].inspect[0..200]}"
+    end
+    # Point at the weakest column (per-formula coverage answer, y9rd.14).
+    weak = (r[:columns] || []).reject { |c| (c['score'] || 1.0) >= 0.999 }.min_by { |c| c['score'] }
+    if weak
+      puts "    weakest column: ##{weak['index']} #{weak['column_id'] || '(unnamed)'} (#{weak['kind']}) score #{(weak['score'] * 100).round}%"
     end
   end
 end
@@ -272,7 +314,9 @@ if opts[:score_out]
     'tiles'               => results.map { |r|
       { 'chart' => r[:chart], 'status' => r[:status], 'extract' => r[:extract],
         'score' => (r[:score] || 0.0),
-        'n_expected' => r[:n_expected], 'n_actual' => r[:n_actual], 'n_matched' => r[:n_matched] }
+        'n_expected' => r[:n_expected], 'n_actual' => r[:n_actual], 'n_matched' => r[:n_matched],
+        # per-column (per-formula) scores (y9rd.14) — which column carried the divergence
+        'columns' => (r[:columns] || []) }
     }
   }
   File.write(opts[:score_out], JSON.pretty_generate(score_doc))

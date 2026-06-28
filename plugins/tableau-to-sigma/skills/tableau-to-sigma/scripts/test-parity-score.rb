@@ -39,6 +39,16 @@ Dir.mktmpdir do |d|
      (tiles['Drift']['score'] - 0.9545).abs < 0.01 && tiles['Drift']['status'] == 'PASS')
   ok('overall = mean per-tile (~0.818)', (doc['value_parity_score'] - 0.8182).abs < 0.001)
   ok('tiles_total/pass counts', doc['tiles_total'] == 3 && doc['tiles_pass'] == 2)
+
+  # per-column (per-formula) scores — bead y9rd.14
+  ok('per-column scores present (2 cols)', tiles['Exact']['columns'].is_a?(Array) && tiles['Exact']['columns'].size == 2)
+  ok('exact: both columns score 1.0', tiles['Exact']['columns'].all? { |c| c['score'] == 1.0 })
+  hm = tiles['HalfMatch']['columns']
+  ok('half-match dim col (idx0, kind=dim) scores 0.5', hm[0]['score'] == 0.5 && hm[0]['kind'] == 'dim')
+  ok('half-match measure col (idx1, kind=measure) scores 0.5 (key 0.5 × value 1.0)',
+     hm[1]['score'] == 0.5 && hm[1]['kind'] == 'measure')
+  dr = tiles['Drift']['columns']
+  ok('drift measure col reflects the 9% drift (~0.95)', (dr[1]['score'] - 0.9545).abs < 0.01)
 end
 
 # ── assert-phase6-ran.rb --min-parity-score gate ────────────────────────────

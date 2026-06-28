@@ -286,9 +286,69 @@ if File.exist?(score_out_path)
   end
 end
 coverage_path = opts[:coverage] || File.join(opts[:tab], 'coverage.json')
+cov_unresolved = []
 if File.exist?(coverage_path)
   cov = JSON.parse(File.read(coverage_path)) rescue nil
-  summary['tier_coverage'] = cov['summary'] if cov.is_a?(Hash) && cov['summary']
+  if cov.is_a?(Hash)
+    summary['tier_coverage'] = cov['summary'] if cov['summary']
+    cov_unresolved = cov['unresolved'] || []
+    # Tier report enrichment (bead y9rd.14): the summary counts alone don't say
+    # WHICH tier or WHY. Add a distribution (by severity + source kind) and the
+    # full dropped-with-root-cause list so a reviewer sees exactly what was lost.
+    if cov_unresolved.any?
+      summary['tier_distribution'] = {
+        'by_severity'    => cov_unresolved.group_by { |u| u['severity'] }.transform_values(&:size),
+        'by_source_type' => cov_unresolved.group_by { |u| u['source_type'] }.transform_values(&:size)
+      }
+      summary['excluded_with_root_cause'] = cov_unresolved
+        .select { |u| u['severity'] == 'dropped' }
+        .map { |u| u.select { |k, _| %w[visual source_type sigma_kind detail action recoverable].include?(k) } }
+    end
+  end
+end
+
+# Cross-ref DEPTH (bead y9rd.14): how deep the nested-LOD calc chains run — a
+# proxy for calc-on-calc complexity. The build emits a <chart-specs>-lod-chains.json
+# sidecar (decompose_nested_fixed, innermost-first); each chain's length is its
+# depth. Best-effort: glob the tableau dir, omit the block when no chains exist.
+lod_files = Dir.glob(File.join(opts[:tab], '*-lod-chains.json'))
+chains = lod_files.flat_map { |f| (JSON.parse(File.read(f)) rescue []) }.select { |c| c.is_a?(Hash) }
+if chains.any?
+  depths = chains.map { |c| (c['chain'] || []).size }.reject(&:zero?)
+  if depths.any?
+    by_depth = depths.group_by(&:itself).transform_keys(&:to_s).transform_values(&:size)
+    summary['cross_ref_depth'] = { 'max_depth' => depths.max, 'chains' => depths.size, 'by_depth' => by_depth }
+  end
+end
+
+# Per-FORMULA "coverage answer" artifact (bead y9rd.14, ThoughtSpot idea): one
+# record per scored column (did this formula migrate + at what fidelity) PLUS the
+# dropped items (migrated:false + root cause). Flattens per-tile per-column scores
+# (from parity-score.json, now carrying `columns`) and joins the coverage drops.
+formula_coverage = []
+if defined?(score_doc) && score_doc
+  (score_doc['tiles'] || []).each do |t|
+    (t['columns'] || []).each do |c|
+      formula_coverage << {
+        'chart' => t['chart'], 'column_id' => c['column_id'], 'kind' => c['kind'],
+        'migrated' => true, 'fidelity' => c['score'],
+        'coverage_status' => ((c['score'] || 0) >= 0.999 ? 'exact' : 'diverged')
+      }
+    end
+  end
+end
+cov_unresolved.select { |u| u['severity'] == 'dropped' }.each do |u|
+  formula_coverage << {
+    'chart' => u['visual'], 'column_id' => nil, 'kind' => u['source_type'],
+    'migrated' => false, 'fidelity' => nil, 'coverage_status' => 'dropped', 'detail' => u['detail']
+  }
+end
+unless formula_coverage.empty?
+  fc_path = File.join(opts[:tab], 'parity-formula-coverage.json')
+  File.write(fc_path, JSON.pretty_generate(formula_coverage))
+  n_drop = formula_coverage.count { |f| !f['migrated'] }
+  n_div  = formula_coverage.count { |f| f['coverage_status'] == 'diverged' }
+  warn "wrote #{fc_path} (#{formula_coverage.size} formula record(s): #{n_div} diverged, #{n_drop} dropped)"
 end
 
 File.write(summary_path, JSON.pretty_generate(summary))
