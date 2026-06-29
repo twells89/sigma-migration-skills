@@ -1072,15 +1072,32 @@ def translate_window_calc(formula, mmap, columns_by_guid = {})
   #       sort-dependent RowNumber()<=N with the operand gone.
   if (tn = s.match(/\A\s*RANK(?:_UNIQUE)?\s*\(\s*(.+?)\s*(?:,\s*'(?:asc|desc)'\s*)?\)\s*(<=|>=|<|>)\s*(\d+)\s*\z/i))
     operand, op, n = tn[1], tn[2], tn[3]
+    # RANK_UNIQUE assigns 1..N with NO ties (like ROW_NUMBER); RANK ties on equal
+    # values. A Sigma top-n filter mirrors this via rankingFunction. Only the
+    # `<=N` / `<N` shapes are a FIXED-COUNT top-N (keep the N highest-ranked);
+    # `>=N` / `>N` keep "everything ranked N or worse" — NOT a fixed bottom-N
+    # count, so they only get the inline/manual note (no top-n filter).
+    ranking  = (tn[0] =~ /_UNIQUE/i) ? 'row-number' : 'rank'
+    row_count = (op == '<=') ? n.to_i : (op == '<' ? n.to_i - 1 : nil)  # nil ⇒ not a top-n filter
     ranked = translate_user_agg_formula(operand, mmap, {})
+    base = { 'top_op' => op, 'ranking' => ranking, 'operand_raw' => operand.to_s.gsub(/\s+/, ' ') }
+    base['top_n'] = row_count if row_count
     if ranked
-      return { 'mode' => 'inline', 'formula' => "RowNumber() #{op} #{n}",
+      # Clean aggregate operand: caller emits a real Sigma Top-N FILTER keyed on
+      # this measure when top_n is set. Keep the legacy inline RowNumber() form +
+      # ranked_measure for the measure-on-yAxis path, which now auto-sorts the
+      # tile by the ranked measure (bead pnxp).
+      filt = row_count ? "Sigma top-#{row_count} filter ranked by #{ranked[0..70]}" : "RowNumber() #{op} #{n} on a tile sorted by #{ranked[0..70]}"
+      return base.merge('mode' => 'inline', 'formula' => "RowNumber() #{op} #{n}",
                'follows_sort' => true, 'ranked_measure' => ranked,
-               'note' => "RANK#{tn[0] =~ /_UNIQUE/i ? '_UNIQUE' : ''}(expr) #{op} #{n} top-N → RowNumber() #{op} #{n}; " \
-                         "SORT the tile by the ranked measure #{ranked[0..80]} (RowNumber follows the viz sort, else the cutoff is wrong)" }
+               'note' => "RANK#{tn[0] =~ /_UNIQUE/i ? '_UNIQUE' : ''}(expr) #{op} #{n} top-N → #{filt}")
     end
-    return { 'mode' => 'manual',
-             'note' => "top-N over an untranslatable LOD operand (#{operand.to_s.gsub(/\s+/, ' ')[0..80]}) — build a Sigma Top-N filter ranked by the LOD helper measure; never a sort-dependent RowNumber() #{op} #{n} with the operand dropped" }
+    # Untranslatable LOD operand: cannot key a filter on a measure we couldn't
+    # build. STAY MANUAL, but carry the parsed top-N facts so the caller can
+    # surface a precise, actionable instruction (build the LOD helper measure,
+    # then a top-n filter ranked by it) — never a sort-dependent RowNumber().
+    return base.merge('mode' => 'manual',
+             'note' => "top-N over an untranslatable LOD operand (#{operand.to_s.gsub(/\s+/, ' ')[0..80]}) — build the LOD helper as a Sigma measure, then a Sigma #{row_count ? "top-#{row_count}" : 'top-N'} filter ranked by it; never a sort-dependent RowNumber() #{op} #{n} with the operand dropped")
   end
 
   # Unbounded share-of-total: AGG / WINDOW_SUM(AGG) or AGG / TOTAL(AGG) on the
@@ -3218,6 +3235,23 @@ layout.each do |dash|
         sort_by ||= sort_target_column_id(z['sort'], dim, dim_hdr, dim_col_obj['id'], meas_col_obj['id'])
         x_axis['sort'] = { 'by' => sort_by, 'direction' => sigma_dir }
       end
+      # Top-N measure-on-yAxis safety (bead pnxp): when the plotted measure is a
+      # RANK_UNIQUE/RANK(<clean agg>)<=N idiom, translate_window_calc emits the
+      # inline RowNumber()<=N form and RECORDS the ranked measure. RowNumber()
+      # follows the viz sort, so without sorting by that measure the "top N"
+      # cutoff is wrong. If Tableau carried no explicit sort, auto-wire xAxis.sort
+      # by a hidden companion of the ranked measure (descending = top).
+      if window_plan && window_plan['mode'] == 'inline' && window_plan['ranked_measure'] &&
+         !z['sort'] && x_axis['sort'].nil? && chart_source_eid == opts[:master_id]
+        rm_id = "topn-sort-#{el_id}"
+        unless (element['columns'] || []).any? { |c| c['id'] == rm_id }
+          element['columns'] << { 'id' => rm_id, 'name' => "#{header_base(meas_hdr)} (rank measure)",
+                                  'formula' => window_plan['ranked_measure'] }
+        end
+        x_axis['sort'] = { 'by' => rm_id, 'direction' => 'descending' }
+        warnings << "'#{cap}' top-N measure (RowNumber()<=N) auto-sorted by its ranked measure " \
+                    "#{window_plan['ranked_measure'][0..70]} desc (RowNumber follows the viz sort — else the cutoff is wrong)"
+      end
       element['xAxis'] = x_axis
       # Combo-chart: yAxis.columnIds is a mixed array — bare strings default to
       # bar; { columnId, type: 'line' } objects override the series type.
@@ -3317,8 +3351,76 @@ layout.each do |dash|
       end
       fid
     end
+    # Top-N filter idiom (bead pnxp): a Tableau filter whose target is a BOOLEAN
+    # calc `RANK(<expr>)<=N` / `RANK_UNIQUE(<expr>)<=N` kept on `true`. Tableau
+    # exports hide this (it just thins the rows) and map_column can't resolve the
+    # calc to a warehouse column, so it used to be silently dropped. Resolve the
+    # filter to its calc formula and, when the ranked operand translates cleanly,
+    # emit a NATIVE Sigma `kind:top-n` element filter keyed on that measure
+    # (rowCount=N, rankingFunction row-number/rank) + sort the tile by it. An
+    # untranslatable LOD operand is surfaced (build the helper measure first),
+    # never emitted as a sort-dependent RowNumber.
+    norm_calc = ->(x) { x.to_s.gsub(/^\[|\]$/, '').strip.downcase }
+    topn_filter_plan = lambda do |f|
+      ref = [f['column_caption'], f['raw_param']].compact.map { |x| x.to_s }.join(' ')
+      calc = (z['calculations'] || []).find do |c|
+        cap_n  = norm_calc.call(c['caption'])
+        name_n = norm_calc.call(c['name'])
+        next false if c['formula'].to_s !~ /\bRANK(?:_UNIQUE)?\s*\(/i
+        (!cap_n.empty? && norm_calc.call(f['column_caption']) == cap_n) ||
+          (!name_n.empty? && ref.downcase.include?(name_n))
+      end
+      return nil unless calc
+      plan = translate_window_calc(calc['formula'], mmap, meta['columns_by_guid'] || {})
+      return nil unless plan && plan['operand_raw'] # only the top-N branch sets this
+      # The filter must KEEP the top rows (member 'true'); a keep-false would
+      # invert it. Tableau exports the keep-list in members.
+      kept = (f['members'] || []).map { |v| v.to_s.downcase }
+      plan = plan.merge('keeps_true' => kept.empty? || kept.include?('true'))
+      plan.merge('calc_caption' => calc['caption'] || calc['name'])
+    end
     value_filters.each do |f|
       fcap = f['column_caption'] || f['raw_param']
+      # --- Top-N idiom interception (before master-column resolution) ---------
+      if (tp = topn_filter_plan.call(f))
+        label = tp['calc_caption']
+        unless tp['keeps_true']
+          warnings << "'#{cap}' top-N filter '#{label}' keeps FALSE (anti-top-N) — not auto-emitted; re-create by hand"
+          next
+        end
+        unless tp['top_n'] && tp['ranked_measure']
+          # LOD operand or non-fixed-count op (>=/>): surface the actionable note.
+          warnings << "'#{cap}' top-N filter '#{label}': #{tp['note']}"
+          next
+        end
+        # Find or add the ranked-measure column on the element.
+        rm = tp['ranked_measure']
+        norm_f = ->(x) { x.to_s.gsub(/\s+/, '').downcase }
+        ranked_col = (element['columns'] || []).find { |c| norm_f.call(c['formula']) == norm_f.call(rm) }
+        if ranked_col.nil?
+          rc_id = "topn-#{el_id}"
+          ranked_col = { 'id' => rc_id, 'name' => header_base(label.to_s).strip.empty? ? 'Top-N Rank Measure' : label.to_s.sub(/\s*<=?\s*\d+\s*$/, '').strip,
+                         'formula' => rm }
+          element['columns'] << ranked_col
+        end
+        el_filters << {
+          'columnId' => ranked_col['id'], 'kind' => 'top-n',
+          'rankingFunction' => tp['ranking'], 'mode' => 'top-n',
+          'rowCount' => tp['top_n'], 'includeNulls' => 'never'
+        }
+        # Make the visible order match the ranking (cosmetic but expected). Only
+        # set when the tile has no explicit Tableau sort already.
+        unless z['sort']
+          if element['xAxis'].is_a?(Hash) && element['xAxis']['sort'].nil?
+            element['xAxis']['sort'] = { 'by' => ranked_col['id'], 'direction' => 'descending' }
+          elsif kind == 'table' && element.dig('groupings', 0) && element['groupings'][0]['sort'].nil?
+            element['groupings'][0]['sort'] = [{ 'columnId' => ranked_col['id'], 'direction' => 'descending' }]
+          end
+        end
+        warnings << "'#{cap}' top-N filter '#{label}' → native Sigma top-#{tp['top_n']} filter " \
+                    "(rankingFunction:#{tp['ranking']}) ranked by #{rm[0..80]}#{ranked_col['id'] == "topn-#{el_id}" ? ' (hidden companion measure added)' : ''}"
+        next
+      end
       m = fcap ? map_column(fcap, mmap) : nil
       if m.nil?
         warnings << "value filter on '#{cap}' targets '#{fcap}' — no master column matched, skipping"

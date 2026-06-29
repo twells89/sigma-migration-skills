@@ -117,7 +117,7 @@ All 🧩 forms are **chart-context only** — place in a grouped workbook elemen
 | `agg / WINDOW_SUM(agg)` | `PercentOfTotal(agg,"grand_total")` | 🧩 | |
 | `RUNNING_SUM(agg)/TOTAL(agg)` | `CumulativeSum(PercentOfTotal(…))` | 🧩 | pareto |
 | `RANK / RANK_DENSE / RANK_PERCENTILE` | `Rank / RankDense / RankPercentile(agg,"desc")` | 🧩 | default direction forced to `desc` (Tableau default) |
-| `RANK_UNIQUE(expr) <= N` (Top-N) | `RowNumber()<=N` (clean agg) · `manual` (LOD operand) | 🟡 | clean operand records `ranked_measure` — **verify the tile is sorted by it** (auto-sort/Top-N-filter is bead pnxp); LOD operand no longer silently dropped. See `window-functions.md` Complex composites |
+| `RANK_UNIQUE(expr) <= N` (Top-N) | native `kind:top-n` filter (clean agg) · surfaced (LOD operand) | ✅ | Filters-shelf idiom → real Sigma top-N filter keyed on the ranked measure (rowCount=N, rankingFunction row-number/rank) + DESC sort; LOD operand surfaced (build the helper measure first), never a sort-dependent RowNumber. yAxis-measure form auto-sorts by `ranked_measure`. See `window-functions.md` Complex composites |
 | `INDEX()` | `RowNumber()` | 🧩 | also the basis for `INDEX()<=N` / `RANK_UNIQUE(...)<=N` Top-N idioms — see Complex composites |
 | `LOOKUP(agg,±n)` | `Lag/Lead(agg,n)` | 🧩 | `LOOKUP(agg,0)`→identity |
 | `(ZN(SUM)−LOOKUP(SUM,−1))/ABS(LOOKUP(SUM,−1))` (period-over-period %) | `(Coalesce(Sum,0)−Lag(Sum,1))/Abs(Lag(Sum,1))` | 🧩 | **now auto** (ZN→Coalesce, ABS→Abs); chart should be date-sorted |

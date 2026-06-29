@@ -113,18 +113,26 @@ Partner-analytics .twb, 2026-06-29). Some are auto, some manual — but all have
 known Sigma recipe, so apply it rather than leaving the tile empty.
 
 ### Top-N: `RANK_UNIQUE(<expr>) <= N` / `RANK(<expr>) <= N`
-build-charts detects this idiom (translate_window_calc):
-- **Clean aggregate operand** (e.g. `RANK_UNIQUE(SUM(x))<=N`) → `RowNumber()<=N`,
-  and the result records `ranked_measure` (the translated `<expr>`).
-  ⚠️ `RowNumber()` follows the **viz sort**, and auto-sort-wiring is **not yet
-  done** — so you MUST **verify the element is sorted by the ranked measure**, or
-  the "Top N" shows the wrong N rows (clean-looking, value-wrong). A real Sigma
-  **Top-N filter** (filter on the grouping dim, ranked by `<expr>` DESC, limit N)
-  is order-independent and preferred — that's the planned converter follow-up
-  (bead pnxp). Until then: verify the sort.
-- **EXCLUDE/INCLUDE-LOD operand** (`RANK_UNIQUE(sum({EXCLUDE …}))<=N`) → returns
-  **`manual`** (no longer silently dropped to a bare `RowNumber()`): build the LOD
-  as a helper measure first (below), then a Top-N filter ranked by it.
+build-charts detects this idiom in two places (translate_window_calc):
+
+**On the Filters shelf** (the real EDNA "Top 25 Partners" idiom — a boolean calc
+kept on `true`). build-charts now emits a **native Sigma `kind:top-n` element
+filter** — order-independent, the proper fix:
+- **Clean aggregate operand** (`RANK_UNIQUE(SUM(x))<=N`) → a `kind:top-n` filter
+  keyed on the ranked measure, `rowCount=N`, `rankingFunction` = `row-number`
+  (RANK_UNIQUE, unique ranks) or `rank` (RANK, ties). The tile is also sorted by
+  that measure DESC so the visible order matches. `<N` keeps N−1; `<=N` keeps N.
+- **EXCLUDE/INCLUDE-LOD operand** (`RANK_UNIQUE(sum({EXCLUDE …}))<=N`) → **NOT
+  auto-emitted** (the operand can't be translated to a measure to rank on). It is
+  **surfaced** with an actionable note: build the LOD as a helper measure first
+  (below), then add a `kind:top-n` filter ranked by it. Never a sort-dependent
+  `RowNumber()`.
+- `>=N` / `>N` (rank N-or-worse) are not a fixed-count bottom-N → surfaced, not
+  auto-emitted.
+
+**As a plotted measure on the yAxis** (rare) → `RowNumber()<=N` + the tile is
+**auto-sorted** by the recorded `ranked_measure` DESC (`RowNumber()` follows the
+viz sort). Prefer re-authoring as a Filters-shelf top-N.
 
 ### Period-over-period % change: `(ZN(SUM(x)) − LOOKUP(SUM(x), −1)) / ABS(LOOKUP(SUM(x), −1))`
 **Now AUTO** (build-charts reduces `ZN→Coalesce(_,0)`, `ABS→Abs`, `LOOKUP(-1)→Lag`)
