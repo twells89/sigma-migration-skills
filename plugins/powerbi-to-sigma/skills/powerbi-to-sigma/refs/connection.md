@@ -6,7 +6,7 @@ Validated 2026-05-31, tenant `sigmacomputing.com` (corp), Fabric trial. This is 
 In the corp tenant, the obvious routes are all blocked:
 - **Entra app registration** — user can't create one (tenant-restricted).
 - **Fabric Git integration** — greyed out (tenant setting off, IT-controlled).
-- **XMLA** — needs PPU/capacity AND Windows-only ADOMD client; dead on macOS.
+- **XMLA** — needs PPU/capacity. Historically also needed the Windows-only ADOMD client (dead on macOS), BUT the [Power BI Modeling MCP](https://github.com/microsoft/powerbi-modeling-mcp) bundles a cross-platform TOM/ADOMD client and DOES reach XMLA from macOS — a viable secondary connector where the model is on capacity. See `refs/pbi-modeling-mcp.md`. (Still device-code by default; XMLA is the fallback.)
 - **`.pbix` download** — gives layout but the model is a binary `DataModel` blob, not JSON.
 
 The path that needs **no app and no IT toggle**: device-code login against a Microsoft **first-party public client**, as the user.
