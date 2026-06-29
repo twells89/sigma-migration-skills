@@ -113,28 +113,26 @@ Partner-analytics .twb, 2026-06-29). Some are auto, some manual — but all have
 known Sigma recipe, so apply it rather than leaving the tile empty.
 
 ### Top-N: `RANK_UNIQUE(<expr>) <= N` / `RANK(<expr>) <= N`
-build-charts rewrites `RANK_UNIQUE(<expr>)` → `RowNumber()` and **drops the
-operand**. `RowNumber()` follows the **viz sort**, not `<expr>`, so
-`RowNumber() <= N` is correct **only if the element is sorted by `<expr>`** —
-otherwise the "Top N" silently shows the wrong N rows (a clean-looking,
-value-wrong tile).
-- **Prefer a real Sigma Top-N filter**: a filter on the grouping dim, ranked by
-  the measure `<expr>` DESC, limit N. Order-independent; survives re-sorts.
-- If you keep the `RowNumber()` form, **VERIFY the element is sorted by the
-  ranked measure.**
-- If `<expr>` is an EXCLUDE/INCLUDE LOD (`RANK_UNIQUE(sum({EXCLUDE …}))`), build
-  the LOD as a helper measure FIRST (below) and rank by it — never let the LOD
-  operand get silently dropped.
+build-charts detects this idiom (translate_window_calc):
+- **Clean aggregate operand** (e.g. `RANK_UNIQUE(SUM(x))<=N`) → `RowNumber()<=N`,
+  and the result records `ranked_measure` (the translated `<expr>`).
+  ⚠️ `RowNumber()` follows the **viz sort**, and auto-sort-wiring is **not yet
+  done** — so you MUST **verify the element is sorted by the ranked measure**, or
+  the "Top N" shows the wrong N rows (clean-looking, value-wrong). A real Sigma
+  **Top-N filter** (filter on the grouping dim, ranked by `<expr>` DESC, limit N)
+  is order-independent and preferred — that's the planned converter follow-up
+  (bead pnxp). Until then: verify the sort.
+- **EXCLUDE/INCLUDE-LOD operand** (`RANK_UNIQUE(sum({EXCLUDE …}))<=N`) → returns
+  **`manual`** (no longer silently dropped to a bare `RowNumber()`): build the LOD
+  as a helper measure first (below), then a Top-N filter ranked by it.
 
 ### Period-over-period % change: `(ZN(SUM(x)) − LOOKUP(SUM(x), −1)) / ABS(LOOKUP(SUM(x), −1))`
-STAYS MANUAL today (the `ZN()` wrapper blocks auto-reduction). One of the most
-common BI calcs (QoQ/MoM % change) — build it as a yAxis viz formula on a chart
-sorted by the date dim:
+**Now AUTO** (build-charts reduces `ZN→Coalesce(_,0)`, `ABS→Abs`, `LOOKUP(-1)→Lag`)
+to a yAxis viz formula — emitted on a chart that should be sorted by the date dim:
 ```
-(Sum([Master/x]) - Lag(Sum([Master/x]), 1)) / Abs(Lag(Sum([Master/x]), 1))
+(Coalesce(Sum([Master/x]), 0) - Lag(Sum([Master/x]), 1)) / Abs(Lag(Sum([Master/x]), 1))
 ```
-`ZN(a)` → `Coalesce(a, 0)`; `LOOKUP(agg, -1)` → `Lag(agg, 1)` (mapping table).
-Format as a percent.
+Format as a percent. (One of the most common BI calcs — QoQ/MoM % change.)
 
 ### Nested LOD inside an aggregate: `COUNTD(IF {FIXED [id] : SUM([x])} <> 0 THEN [id] END)`
 "Count distinct entities whose per-entity total is non-zero." No single Sigma
