@@ -264,7 +264,7 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
   residue = out.dup
   residue.gsub!(/"(?:\\.|[^"\\])*"/, '1') # string literals ("desc", "grand_total")
   residue.gsub!(/\[Master\/[^\]]+\]/, '1')
-  allowed = %w[Sum Avg Min Max Median CountDistinct CountIf IsNotNull Coalesce If] + extra_fns
+  allowed = %w[Sum Avg Min Max Median CountDistinct CountIf IsNotNull Coalesce If Abs] + extra_fns
   residue.gsub!(/\b(#{allowed.map { |f| Regexp.escape(f) }.join('|')})\b/, '')
   return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
   out
@@ -873,6 +873,9 @@ def translate_tableau_tc(formula)
   if s.gsub!(/\bIFNULL\s*\(/, 'Coalesce(')
     changed = true
   end
+  if s.gsub!(/\bABS\s*\(/, 'Abs(')
+    changed = true
+  end
   if s.gsub!(/\bCOUNTD\s*\(/, 'CountDistinct(')
     changed = true
   end
@@ -1055,6 +1058,30 @@ def translate_window_calc(formula, mmap, columns_by_guid = {})
   agg_src = '(?:SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*\[[^\]]+\]\s*\)'
   norm = ->(x) { x.to_s.gsub(/\s+/, '').downcase }
   tx_agg = ->(a) { translate_user_agg_formula(a, mmap, {}) }
+
+  # Top-N idiom: RANK(<expr>)<=N or RANK_UNIQUE(<expr>)<=N (bead pnxp).
+  # The generic rewrite below collapses RANK_UNIQUE(<expr>) → RowNumber() and
+  # DROPS <expr> entirely, which is only correct when the element is sorted by
+  # <expr> — and is value-WRONG when <expr> is an untranslatable LOD ({exclude…}
+  # /{include…}/{fixed…}). Intercept the top-N filter shape here so the operand
+  # is never silently discarded:
+  #   (a) <expr> reduces cleanly to a Sigma aggregate → RowNumber()<=N AND record
+  #       the ranked measure so the caller can sort the tile by it (RowNumber
+  #       follows the viz sort).
+  #   (b) <expr> does NOT reduce (LOD operand) → STAY MANUAL: never emit a
+  #       sort-dependent RowNumber()<=N with the operand gone.
+  if (tn = s.match(/\A\s*RANK(?:_UNIQUE)?\s*\(\s*(.+?)\s*(?:,\s*'(?:asc|desc)'\s*)?\)\s*(<=|>=|<|>)\s*(\d+)\s*\z/i))
+    operand, op, n = tn[1], tn[2], tn[3]
+    ranked = translate_user_agg_formula(operand, mmap, {})
+    if ranked
+      return { 'mode' => 'inline', 'formula' => "RowNumber() #{op} #{n}",
+               'follows_sort' => true, 'ranked_measure' => ranked,
+               'note' => "RANK#{tn[0] =~ /_UNIQUE/i ? '_UNIQUE' : ''}(expr) #{op} #{n} top-N → RowNumber() #{op} #{n}; " \
+                         "SORT the tile by the ranked measure #{ranked[0..80]} (RowNumber follows the viz sort, else the cutoff is wrong)" }
+    end
+    return { 'mode' => 'manual',
+             'note' => "top-N over an untranslatable LOD operand (#{operand.to_s.gsub(/\s+/, ' ')[0..80]}) — build a Sigma Top-N filter ranked by the LOD helper measure; never a sort-dependent RowNumber() #{op} #{n} with the operand dropped" }
+  end
 
   # Unbounded share-of-total: AGG / WINDOW_SUM(AGG) or AGG / TOTAL(AGG) on the
   # SAME aggregate. Both denominators are the grand total of the partition; the
