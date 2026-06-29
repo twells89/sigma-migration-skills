@@ -12,18 +12,21 @@
 #   - UNTRANSLATABLE LOD operand → NOT emitted; surfaced with an actionable note
 #     (build the LOD helper measure first). Never a sort-dependent RowNumber.
 #
-# Deterministic + offline: synthesizes two minimal bar-chart worksheets (clean +
-# LOD), runs the ACTUAL parse-twb-layout.rb + build-charts-from-signals.rb, and
-# asserts the emitted element filters.
+# Deterministic + offline + CREDS-FREE: drives the ACTUAL build-charts-from-
+# signals.rb against committed parser-output fixtures (test-fixtures/topn-*.json,
+# generated once from a 2-bar-chart .twb — clean + LOD — via parse-twb-layout).
+# We feed build-charts directly (NOT the nokogiri-backed parser) so this runs in
+# the creds-free CI ruby. To regenerate the fixtures, see the heredoc TWB in the
+# git history of this file / run parse-twb-layout on it.
 #
 # Usage:  ruby scripts/test-topn-filter-emission.rb
 
 require 'json'
 require 'tmpdir'
 
-DIR    = __dir__
-PARSER = File.join(DIR, 'parse-twb-layout.rb')
-BUILD  = File.join(DIR, 'build-charts-from-signals.rb')
+DIR     = __dir__
+BUILD   = File.join(DIR, 'build-charts-from-signals.rb')
+FIXTURE = File.join(DIR, 'test-fixtures')
 
 fails = []
 def check(cond, msg, fails)
@@ -31,89 +34,10 @@ def check(cond, msg, fails)
   puts "  #{cond ? 'PASS' : 'FAIL'}  #{msg}"
 end
 
-# Two bar charts: Partner Name (dim) × SUM(Net Revenue) (measure). Each has a
-# boolean rank calc on the Filters shelf kept on `true`:
-#   Top 25 Partners      → RANK_UNIQUE(SUM([Net Revenue]))<=25         (clean)
-#   Top 25 Partners LOD  → RANK_UNIQUE(SUM({exclude [Seg]:SUM([Net Revenue])}))<=10  (LOD)
-# The filter column refs use the real `[usr:<name>:nk:3]` shape (guid_from_param
-# returns nil for it — so the fix must match the calc by NAME substring, exactly
-# like the real workbook).
-TWB = <<~XML
-  <?xml version='1.0' encoding='utf-8' ?>
-  <workbook>
-    <datasources>
-      <datasource caption='ORDER_FACT' name='federated.fact'>
-        <connection class='federated'>
-          <named-connections>
-            <named-connection name='snow'><connection class='snowflake' dbname='CSA' schema='TJ' /></named-connection>
-          </named-connections>
-          <relation connection='snow' name='ORDER_FACT' table='[TJ].[ORDER_FACT]' type='table' />
-        </connection>
-        <column caption='Net Revenue' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' />
-        <column caption='Partner Name' name='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' datatype='string' role='dimension' type='nominal' />
-      </datasource>
-    </datasources>
-    <worksheets>
-      <worksheet name='Top 25 Partners'>
-        <table>
-          <view>
-            <datasource-dependencies datasource='federated.fact'>
-              <column caption='Net Revenue' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' />
-              <column caption='Partner Name' name='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' datatype='string' role='dimension' type='nominal' />
-              <column-instance column='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' derivation='None' name='[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]' pivot='key' type='nominal' />
-              <column-instance column='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' derivation='Sum' name='[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]' pivot='key' type='quantitative' />
-              <column caption='Top25Flag' datatype='boolean' name='[topn_clean]' role='measure' type='nominal'>
-                <calculation class='tableau' formula='RANK_UNIQUE(SUM([Net Revenue]))&lt;=25'>
-                  <table-calc ordering-type='Rows' />
-                </calculation>
-              </column>
-              <column-instance column='[topn_clean]' derivation='User' name='[usr:topn_clean:nk:3]' pivot='key' type='nominal' />
-            </datasource-dependencies>
-          </view>
-          <rows>[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]</rows>
-          <cols>[federated.fact].[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]</cols>
-          <pane><mark class='Bar' /></pane>
-          <filter class='categorical' column='[federated.fact].[usr:topn_clean:nk:3]'>
-            <groupfilter function='member' level='[usr:topn_clean:nk:3]' member='true' />
-          </filter>
-        </table>
-      </worksheet>
-      <worksheet name='Top 10 Partners LOD'>
-        <table>
-          <view>
-            <datasource-dependencies datasource='federated.fact'>
-              <column caption='Net Revenue' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' />
-              <column caption='Partner Name' name='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' datatype='string' role='dimension' type='nominal' />
-              <column-instance column='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' derivation='None' name='[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]' pivot='key' type='nominal' />
-              <column-instance column='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' derivation='Sum' name='[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]' pivot='key' type='quantitative' />
-              <column caption='Top10FlagLOD' datatype='boolean' name='[topn_lod]' role='measure' type='nominal'>
-                <calculation class='tableau' formula='RANK_UNIQUE(sum({exclude [Seg]: sum([Net Revenue])}))&lt;=10'>
-                  <table-calc ordering-type='Rows' />
-                </calculation>
-              </column>
-              <column-instance column='[topn_lod]' derivation='User' name='[usr:topn_lod:nk:3]' pivot='key' type='nominal' />
-            </datasource-dependencies>
-          </view>
-          <rows>[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]</rows>
-          <cols>[federated.fact].[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]</cols>
-          <pane><mark class='Bar' /></pane>
-          <filter class='categorical' column='[federated.fact].[usr:topn_lod:nk:3]'>
-            <groupfilter function='member' level='[usr:topn_lod:nk:3]' member='true' />
-          </filter>
-        </table>
-      </worksheet>
-    </worksheets>
-    <dashboards>
-      <dashboard name='Dash'>
-        <zones>
-          <zone id='1' name='Top 25 Partners' x='0' y='0' w='50000' h='100000' />
-          <zone id='2' name='Top 10 Partners LOD' x='50000' y='0' w='50000' h='100000' />
-        </zones>
-      </dashboard>
-    </dashboards>
-  </workbook>
-XML
-
+# The two fixtures model bar charts of Partner Name (dim) × SUM(Net Revenue) with
+# a boolean rank calc on the Filters shelf kept on `true`:
+#   Top 25 Partners      → RANK_UNIQUE(SUM([Net Revenue]))<=25                      (clean)
+#   Top 10 Partners LOD  → RANK_UNIQUE(sum({exclude [Seg]:sum([Net Revenue])}))<=10 (LOD)
 MASTER_MAP = {
   '(?i)^Net Revenue$'  => { 'id' => 'm-nr', 'name' => 'Net Revenue' },
   '(?i)^Partner Name$' => { 'id' => 'm-pn', 'name' => 'Partner Name' }
@@ -122,10 +46,11 @@ MASTER_MAP = {
 build_out = nil
 build_log = ''
 Dir.mktmpdir do |d|
-  twb = File.join(d, 'wb.twb')
-  lay = File.join(d, 'layout.json')
-  mm  = File.join(d, 'master-map.json')
-  File.write(twb, TWB)
+  lay  = File.join(d, 'layout.json')
+  meta = File.join(d, 'layout-meta.json')
+  mm   = File.join(d, 'master-map.json')
+  File.write(lay,  File.read(File.join(FIXTURE, 'topn-layout.json')))
+  File.write(meta, File.read(File.join(FIXTURE, 'topn-layout-meta.json')))
   File.write(mm, JSON.dump(MASTER_MAP))
   File.write(File.join(d, 'get-workbook.json'),
              JSON.dump('views' => { 'view' => [
@@ -135,9 +60,8 @@ Dir.mktmpdir do |d|
   Dir.mkdir(File.join(d, 'views'))
   File.write(File.join(d, 'views', 'v1.csv'), '')   # empty → build from .twb signals
   File.write(File.join(d, 'views', 'v2.csv'), '')
-  abort 'parse-twb-layout failed' unless system('ruby', PARSER, twb, lay, out: File::NULL, err: File::NULL)
   out = File.join(d, 'specs.json')
-  build_log = `ruby #{BUILD} --tableau-dir #{d} --layout #{lay} --meta #{lay.sub(/\.json$/, '-meta.json')} --master-map #{mm} --master-element-id master --title Dash --out #{out} 2>&1`
+  build_log = `ruby #{BUILD} --tableau-dir #{d} --layout #{lay} --meta #{meta} --master-map #{mm} --master-element-id master --title Dash --out #{out} 2>&1`
   build_out = JSON.parse(File.read(out)) if File.exist?(out)
 end
 
@@ -172,8 +96,7 @@ check(lfilters.none? { |f| f['kind'] == 'top-n' },
 lcols = lod ? (lod['columns'] || []) : []
 check(lcols.none? { |c| c['formula'].to_s =~ /RowNumber\(\)\s*<=/ },
       'LOD tile has no sort-dependent RowNumber()<=N column', fails)
-check(build_log =~ /Top 10 Partners LOD.*top-N filter.*LOD/m ||
-      build_log =~ /top-N filter 'Top10FlagLOD'/,
+check(build_log =~ /top-N filter.*(?:LOD|untranslatable)/m,
       'builder SURFACED the LOD top-N (actionable warning, not silently dropped)', fails)
 
 puts

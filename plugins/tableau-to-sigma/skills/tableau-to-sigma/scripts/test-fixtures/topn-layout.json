@@ -1,0 +1,226 @@
+[
+  {
+    "dashboard": "Dash",
+    "is_story": false,
+    "zones": [
+      {
+        "id": "1",
+        "kind": "chart",
+        "caption": "Top 25 Partners",
+        "view_ref": null,
+        "x_pct": 0.0,
+        "y_pct": 0.0,
+        "w_pct": 50.0,
+        "h_pct": 100.0,
+        "chart_kind": "bar",
+        "chart_kind_inferred": false,
+        "mark_class": "Bar",
+        "geo_role": null,
+        "sort": null,
+        "filters": [
+          {
+            "raw_class": "categorical",
+            "raw_param": "[federated.fact].[usr:topn_clean:nk:3]",
+            "column_guid": null,
+            "column_caption": null,
+            "datatype": null,
+            "is_action": false,
+            "kind": "list",
+            "members": [
+              "true"
+            ]
+          }
+        ],
+        "hidden_filters": [
+
+        ],
+        "aggregations": {
+          "[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]": "None",
+          "[33b6c718-9b55-3dc0-9698-d1d57fac0f90]": "Sum",
+          "[topn_clean]": "User"
+        },
+        "channels": {
+        },
+        "formats": {
+        },
+        "calculations": [
+          {
+            "name": "[topn_clean]",
+            "caption": "Top25Flag",
+            "datatype": "boolean",
+            "role": "measure",
+            "class": "tableau",
+            "formula": "RANK_UNIQUE(SUM([Net Revenue]))<=25"
+          }
+        ],
+        "dual_axis": false,
+        "measures": [
+          {
+            "column": "[33b6c718-9b55-3dc0-9698-d1d57fac0f90]",
+            "derivation": "Sum"
+          }
+        ],
+        "ref_marks": [
+
+        ],
+        "axis_formats": [
+
+        ],
+        "mark_labels_show": false,
+        "rows_shelf": {
+          "raw": "[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]",
+          "fields": [
+            {
+              "raw": "[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]",
+              "role": "measure",
+              "derivation": "sum",
+              "guid": "33b6c718-9b55-3dc0-9698-d1d57fac0f90"
+            }
+          ],
+          "dim_count": 0,
+          "measure_count": 1,
+          "has_measure_names": false,
+          "has_measure_values": false
+        },
+        "cols_shelf": {
+          "raw": "[federated.fact].[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]",
+          "fields": [
+            {
+              "raw": "[federated.fact].[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]",
+              "role": "dim",
+              "derivation": "none",
+              "guid": "d73055c0-9ed1-347d-8f8e-05a48ce2c8a8"
+            }
+          ],
+          "dim_count": 1,
+          "measure_count": 0,
+          "has_measure_names": false,
+          "has_measure_values": false
+        },
+        "is_crosstab": false,
+        "is_kpi": false,
+        "filter_column_caption": null,
+        "filter_column_datatype": null
+      },
+      {
+        "id": "2",
+        "kind": "chart",
+        "caption": "Top 10 Partners LOD",
+        "view_ref": null,
+        "x_pct": 50.0,
+        "y_pct": 0.0,
+        "w_pct": 50.0,
+        "h_pct": 100.0,
+        "chart_kind": "bar",
+        "chart_kind_inferred": false,
+        "mark_class": "Bar",
+        "geo_role": null,
+        "sort": null,
+        "filters": [
+          {
+            "raw_class": "categorical",
+            "raw_param": "[federated.fact].[usr:topn_lod:nk:3]",
+            "column_guid": null,
+            "column_caption": null,
+            "datatype": null,
+            "is_action": false,
+            "kind": "list",
+            "members": [
+              "true"
+            ]
+          }
+        ],
+        "hidden_filters": [
+
+        ],
+        "aggregations": {
+          "[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]": "None",
+          "[33b6c718-9b55-3dc0-9698-d1d57fac0f90]": "Sum",
+          "[topn_lod]": "User"
+        },
+        "channels": {
+        },
+        "formats": {
+        },
+        "calculations": [
+          {
+            "name": "[topn_lod]",
+            "caption": "Top10FlagLOD",
+            "datatype": "boolean",
+            "role": "measure",
+            "class": "tableau",
+            "formula": "RANK_UNIQUE(sum({exclude [Seg]: sum([Net Revenue])}))<=10"
+          }
+        ],
+        "dual_axis": false,
+        "measures": [
+          {
+            "column": "[33b6c718-9b55-3dc0-9698-d1d57fac0f90]",
+            "derivation": "Sum"
+          }
+        ],
+        "ref_marks": [
+
+        ],
+        "axis_formats": [
+
+        ],
+        "mark_labels_show": false,
+        "rows_shelf": {
+          "raw": "[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]",
+          "fields": [
+            {
+              "raw": "[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]",
+              "role": "measure",
+              "derivation": "sum",
+              "guid": "33b6c718-9b55-3dc0-9698-d1d57fac0f90"
+            }
+          ],
+          "dim_count": 0,
+          "measure_count": 1,
+          "has_measure_names": false,
+          "has_measure_values": false
+        },
+        "cols_shelf": {
+          "raw": "[federated.fact].[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]",
+          "fields": [
+            {
+              "raw": "[federated.fact].[none:d73055c0-9ed1-347d-8f8e-05a48ce2c8a8:nk]",
+              "role": "dim",
+              "derivation": "none",
+              "guid": "d73055c0-9ed1-347d-8f8e-05a48ce2c8a8"
+            }
+          ],
+          "dim_count": 1,
+          "measure_count": 0,
+          "has_measure_names": false,
+          "has_measure_values": false
+        },
+        "is_crosstab": false,
+        "is_kpi": false,
+        "filter_column_caption": null,
+        "filter_column_datatype": null
+      }
+    ],
+    "zone_tree": [
+      {
+        "id": "1",
+        "kind": "chart",
+        "caption": "Top 25 Partners",
+        "x_pct": 0.0,
+        "y_pct": 0.0,
+        "w_pct": 50.0,
+        "h_pct": 100.0
+      },
+      {
+        "id": "2",
+        "kind": "chart",
+        "caption": "Top 10 Partners LOD",
+        "x_pct": 50.0,
+        "y_pct": 0.0,
+        "w_pct": 50.0,
+        "h_pct": 100.0
+      }
+    ]
+  }
+]
