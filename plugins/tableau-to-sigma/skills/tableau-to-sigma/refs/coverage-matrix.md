@@ -117,8 +117,8 @@ All 🧩 forms are **chart-context only** — place in a grouped workbook elemen
 | `agg / WINDOW_SUM(agg)` | `PercentOfTotal(agg,"grand_total")` | 🧩 | |
 | `RUNNING_SUM(agg)/TOTAL(agg)` | `CumulativeSum(PercentOfTotal(…))` | 🧩 | pareto |
 | `RANK / RANK_DENSE / RANK_PERCENTILE` | `Rank / RankDense / RankPercentile(agg,"desc")` | 🧩 | default direction forced to `desc` (Tableau default) |
-| `RANK_UNIQUE` | `Rank(agg,"desc")` | 🟡 | no unique-tiebreak in Sigma; flagged verify |
-| `INDEX()` | `RowNumber()` | 🧩 | also the basis for `INDEX()<=N` Top-N idioms |
+| `RANK_UNIQUE(expr)` | `RowNumber()` (**operand dropped**) | 🟡 | sort-dependent: correct only if the tile is sorted by `expr`. For `RANK_UNIQUE(expr)<=N` Top-N, prefer a real Sigma Top-N filter — see `window-functions.md` Complex composites |
+| `INDEX()` | `RowNumber()` | 🧩 | also the basis for `INDEX()<=N` / `RANK_UNIQUE(...)<=N` Top-N idioms — see Complex composites |
 | `LOOKUP(agg,±n)` | `Lag/Lead(agg,n)` | 🧩 | `LOOKUP(agg,0)`→identity |
 | `WINDOW_SUM(agg)` unbounded (no offsets) | `GrandTotal(Sum(...))` | ✅ | the one DM-safe table calc |
 | shifted `WINDOW_*` (first>0 / last<0) | — | ❌ | falls to placeholder comment |

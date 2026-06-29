@@ -91,8 +91,11 @@ for these and build-charts emits a STAYS MANUAL warning:
 
 - `WINDOW_MEDIAN`, `WINDOW_PERCENTILE`, `WINDOW_CORR`, `WINDOW_COVAR(P)`,
   `WINDOW_VAR(P)`, `WINDOW_STDEVP`
-- `PREVIOUS_VALUE`, `SIZE()`, `FIRST()`, `LAST()` (incl. as window bounds)
-- `RANK_UNIQUE`, `RANK_MODIFIED`
+- `PREVIOUS_VALUE`, `SIZE()`, `FIRST()`, `LAST()` (incl. as window bounds) —
+  but `FIRST()/LAST()` used as a row filter has a recipe, see Complex composites
+- `RANK_MODIFIED` (no modified-rank variant in Sigma). **`RANK_UNIQUE` is NOT
+  fully manual** — build-charts rewrites it to `RowNumber()` (a sort-dependent
+  approximation); see the Top-N composite below for the sharp edge + recipe.
 - shifted windows (`WINDOW_*(agg, 1, 3)` — first > 0 or last < 0)
 - any compute-using / addressing variant beyond the default `Table (Across)`
   or a simple one-dim partition: "restart every", pane-relative addressing,
@@ -102,6 +105,55 @@ for these and build-charts emits a STAYS MANUAL warning:
 
 Multi-dim partitions beyond a single color split are **untested** — the build
 emits a verify-warning when it detects one.
+
+## Complex composites — recognize, then build (don't drop)
+
+The hard residue of dense exec workbooks (verified against a real customer
+Partner-analytics .twb, 2026-06-29). Some are auto, some manual — but all have a
+known Sigma recipe, so apply it rather than leaving the tile empty.
+
+### Top-N: `RANK_UNIQUE(<expr>) <= N` / `RANK(<expr>) <= N`
+build-charts rewrites `RANK_UNIQUE(<expr>)` → `RowNumber()` and **drops the
+operand**. `RowNumber()` follows the **viz sort**, not `<expr>`, so
+`RowNumber() <= N` is correct **only if the element is sorted by `<expr>`** —
+otherwise the "Top N" silently shows the wrong N rows (a clean-looking,
+value-wrong tile).
+- **Prefer a real Sigma Top-N filter**: a filter on the grouping dim, ranked by
+  the measure `<expr>` DESC, limit N. Order-independent; survives re-sorts.
+- If you keep the `RowNumber()` form, **VERIFY the element is sorted by the
+  ranked measure.**
+- If `<expr>` is an EXCLUDE/INCLUDE LOD (`RANK_UNIQUE(sum({EXCLUDE …}))`), build
+  the LOD as a helper measure FIRST (below) and rank by it — never let the LOD
+  operand get silently dropped.
+
+### Period-over-period % change: `(ZN(SUM(x)) − LOOKUP(SUM(x), −1)) / ABS(LOOKUP(SUM(x), −1))`
+STAYS MANUAL today (the `ZN()` wrapper blocks auto-reduction). One of the most
+common BI calcs (QoQ/MoM % change) — build it as a yAxis viz formula on a chart
+sorted by the date dim:
+```
+(Sum([Master/x]) - Lag(Sum([Master/x]), 1)) / Abs(Lag(Sum([Master/x]), 1))
+```
+`ZN(a)` → `Coalesce(a, 0)`; `LOOKUP(agg, -1)` → `Lag(agg, 1)` (mapping table).
+Format as a percent.
+
+### Nested LOD inside an aggregate: `COUNTD(IF {FIXED [id] : SUM([x])} <> 0 THEN [id] END)`
+"Count distinct entities whose per-entity total is non-zero." No single Sigma
+formula. Recipe: a FIXED-LOD **helper element** grouped by `[id]` computing
+`Sum([Master/x])`, then `CountDistinct([id])` filtered to `helper <> 0` — or a
+`kind:sql` element with a `GROUP BY [id] HAVING SUM(x) <> 0` subquery. This is
+the helper-element chain (`<out>-lod-chains.json`); if it can't be wired,
+escalate via gap-scout rather than emit a partial count.
+
+### Positional row filters: `FIRST() == 0`, `LAST() == 0`
+"Keep only the first/last row." No chart-formula mapping. Recipe: for
+`LAST()==0` (latest period) use a `[date] = Max([date])` filter, or a
+`RowNumber()`-desc `= 1` filter on the sorted element; verify against the source.
+
+### Extract-based (Hyper) workbooks
+If the .twb carries a Hyper extract, Tableau's numbers are a **frozen snapshot**
+while Sigma reads **live** warehouse. Expect value drift — reconcile Phase-6
+expected values against the live warehouse (or the same extract refresh), and
+report drift as drift, NOT as a migration defect.
 
 ## Manual-residue fallback: Custom SQL
 
