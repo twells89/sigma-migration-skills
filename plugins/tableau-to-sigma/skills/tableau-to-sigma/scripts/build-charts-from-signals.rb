@@ -3799,6 +3799,35 @@ filter_zone_dashboards = lambda do |cap|
   end.map { |d| d['dashboard'] }
 end
 
+# E1 (gap ubr5.17): a parameter/filter control's Tableau display mode → Sigma
+# control style. parse-twb-layout surfaces the zone `mode` attr as
+# `control_display` ('compact' → dropdown/Sigma controlType:list; 'type_in' →
+# text; absent → default button/radio → segmented). control_display_for looks it
+# up by the control's caption across all dashboards' (flat, all-descendant) zones,
+# returning nil when Tableau gave no explicit mode (→ caller keeps segmented).
+# `norm` is the caption normalizer (passed so this stays a pure, testable def).
+def control_display_for(layout, cap, norm)
+  (layout || []).each do |d|
+    (d['zones'] || []).each do |z|
+      next unless z['kind'] == 'filter' || z['kind'] == 'parameter'
+      next unless norm.call(z['filter_column_caption']) == norm.call(cap)
+      cd = z['control_display']
+      return cd if cd && !cd.to_s.empty?
+    end
+  end
+  nil
+end
+
+# Map a Tableau control_display to a Sigma controlType for a discrete/list param.
+# compact → list (dropdown); type_in → text; otherwise segmented (button row).
+def sigma_control_type(disp)
+  case disp
+  when 'compact' then 'list'
+  when 'type_in' then 'text'
+  else 'segmented'
+  end
+end
+
 # Worksheets whose own view filters carry `[Action (<cap>)]` — the .twb scopes
 # those cross-sheet filter actions to specific sheets.
 action_worksheets = lambda do |cap|
@@ -3888,7 +3917,9 @@ if opts[:auto_controls]
       'includeNulls' => 'when-no-value-is-selected'
     }
     if p['param_domain'] == 'list'
-      spec['controlType']   = 'segmented'
+      # E1: dropdown vs segmented from the Tableau control display mode; default
+      # segmented (button row) when Tableau declared no explicit mode.
+      spec['controlType']   = sigma_control_type(control_display_for(layout, cap, norm_cap))
       values = p['members'] || []
       # Tableau list parameters often store integer-coded members (1..13) whose
       # human meaning lives in the parameter's value ALIASES (1→"TCV", 3→"ACV").
@@ -3965,7 +3996,9 @@ $param_switches.each do |sw|
     'kind'        => 'control',
     'controlId'   => sw['control_id'],
     'name'        => pcap,
-    'controlType' => 'segmented',
+    # E1: a measure-picker often renders as a dropdown (Tableau 'compact'); honor
+    # its display mode, else segmented (button row).
+    'controlType' => sigma_control_type(control_display_for(layout, pcap, norm_cap)),
     'source'      => { 'kind' => 'manual', 'valueType' => 'text', 'values' => values, 'labels' => values },
     'value'       => values.first,
     'includeNulls' => 'when-no-value-is-selected'
