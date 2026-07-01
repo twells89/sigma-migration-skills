@@ -1,7 +1,7 @@
 {
   "source_repo": "twells89/sigma-data-model-mcp",
-  "source_commit": "867c669",
-  "source_commit_date": "2026-06-22",
+  "source_commit": "4cb6d02",
+  "source_commit_date": "2026-07-01",
   "fast_xml_parser_version": "4.5.6",
   "artifact": "tableau.mjs",
   "bundler": "esbuild --bundle --format=esm --platform=node",

@@ -24,9 +24,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js
 var require_util = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js"(exports) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js"(exports) {
     "use strict";
     var nameStartChar = ":A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
     var nameChar = nameStartChar + "\\-.\\d\\u00B7\\u0300-\\u036F\\u203F-\\u2040";
@@ -98,9 +98,9 @@ var require_util = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js
 var require_validator = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js"(exports) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js"(exports) {
     "use strict";
     var util = require_util();
     var defaultOptions = {
@@ -410,9 +410,9 @@ var require_validator = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
 var require_OptionsBuilder = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js"(exports) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js"(exports) {
     var { DANGEROUS_PROPERTY_NAMES, criticalProperties } = require_util();
     var defaultOnDangerousProperty = (name) => {
       if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
@@ -536,9 +536,9 @@ var require_OptionsBuilder = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
 var require_xmlNode = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js"(exports, module) {
     "use strict";
     var XmlNode = class {
       constructor(tagname) {
@@ -563,9 +563,9 @@ var require_xmlNode = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
 var require_DocTypeReader = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js"(exports, module) {
     var util = require_util();
     var DocTypeReader = class {
       constructor(options) {
@@ -851,9 +851,9 @@ var require_DocTypeReader = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/strnum/strnum.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/strnum/strnum.js
 var require_strnum = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/strnum/strnum.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/strnum/strnum.js"(exports, module) {
     var hexRegex = /^[-+]?0x[a-fA-F0-9]+$/;
     var numRegex = /^([\-\+])?(0*)([0-9]*(\.[0-9]*)?)$/;
     var consider = {
@@ -939,9 +939,9 @@ var require_strnum = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js
 var require_ignoreAttributes = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js"(exports, module) {
     function getIgnoreAttributesFn(ignoreAttributes) {
       if (typeof ignoreAttributes === "function") {
         return ignoreAttributes;
@@ -964,9 +964,9 @@ var require_ignoreAttributes = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
 var require_OrderedObjParser = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js"(exports, module) {
     "use strict";
     var util = require_util();
     var xmlNode = require_xmlNode();
@@ -1569,9 +1569,9 @@ var require_OrderedObjParser = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js
 var require_node2json = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js"(exports) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js"(exports) {
     "use strict";
     function prettify(node, options) {
       return compress(node, options);
@@ -1656,9 +1656,9 @@ var require_node2json = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
 var require_XMLParser = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js"(exports, module) {
     var { buildOptions } = require_OptionsBuilder();
     var OrderedObjParser = require_OrderedObjParser();
     var { prettify } = require_node2json();
@@ -1714,9 +1714,9 @@ var require_XMLParser = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
 var require_orderedJs2Xml = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js"(exports, module) {
     var EOL = "\n";
     function toXml(jArray, options) {
       let indentation = "";
@@ -1847,9 +1847,9 @@ var require_orderedJs2Xml = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
 var require_json2xml = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js"(exports, module) {
     "use strict";
     var buildFromOrderedJs = require_orderedJs2Xml();
     var getIgnoreAttributesFn = require_ignoreAttributes();
@@ -2093,9 +2093,9 @@ var require_json2xml = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js
 var require_fxp = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js"(exports, module) {
+  "../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js"(exports, module) {
     "use strict";
     var validator = require_validator();
     var XMLParser2 = require_XMLParser();
@@ -2108,10 +2108,10 @@ var require_fxp = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/tableau.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/build/tableau.js
 var import_fast_xml_parser = __toESM(require_fxp(), 1);
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/sigma-ids.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/build/sigma-ids.js
 var SIGMA_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var _usedIds = /* @__PURE__ */ new Set();
 var SIGMA_LOWERCASE_WORDS = /* @__PURE__ */ new Set([
@@ -2347,7 +2347,251 @@ function buildDerivedElements(elements) {
   return derived;
 }
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/formulas.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/build/formulas.js
+function decodeXmlEntities(s) {
+  if (!s || s.indexOf("&") === -1)
+    return s;
+  return s.replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10))).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+function stripLineComments(s) {
+  if (!s || s.indexOf("//") === -1)
+    return s;
+  let out = "", inS = false, inD = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inS) {
+      out += c;
+      if (c === "'")
+        inS = false;
+      continue;
+    }
+    if (inD) {
+      out += c;
+      if (c === '"')
+        inD = false;
+      continue;
+    }
+    if (c === "'") {
+      inS = true;
+      out += c;
+      continue;
+    }
+    if (c === '"') {
+      inD = true;
+      out += c;
+      continue;
+    }
+    if (c === "/" && s[i + 1] === "/") {
+      while (i < s.length && s[i] !== "\n")
+        i++;
+      if (i < s.length)
+        out += "\n";
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+function tableauInToSigma(formula) {
+  const re = /(\[[^\]]+\]|[A-Za-z_][\w]*)\s+(not\s+)?in\s*\(/gi;
+  let f = formula, guard = 0;
+  for (let m = re.exec(f); m && guard < 200; m = re.exec(f), guard++) {
+    const operand = m[1];
+    const isNot = !!m[2];
+    const open = m.index + m[0].length - 1;
+    let depth = 0, close = -1;
+    for (let i = open; i < f.length; i++) {
+      if (f[i] === "(")
+        depth++;
+      else if (f[i] === ")") {
+        depth--;
+        if (depth === 0) {
+          close = i;
+          break;
+        }
+      }
+    }
+    if (close === -1)
+      break;
+    const inner = f.slice(open + 1, close);
+    const parts = [];
+    let buf = "", d = 0, sq = false, dq = false;
+    for (const ch of inner) {
+      if (sq) {
+        buf += ch;
+        if (ch === "'")
+          sq = false;
+        continue;
+      }
+      if (dq) {
+        buf += ch;
+        if (ch === '"')
+          dq = false;
+        continue;
+      }
+      if (ch === "'") {
+        sq = true;
+        buf += ch;
+        continue;
+      }
+      if (ch === '"') {
+        dq = true;
+        buf += ch;
+        continue;
+      }
+      if (ch === "(") {
+        d++;
+        buf += ch;
+        continue;
+      }
+      if (ch === ")") {
+        d--;
+        buf += ch;
+        continue;
+      }
+      if (ch === "," && d === 0) {
+        parts.push(buf.trim());
+        buf = "";
+        continue;
+      }
+      buf += ch;
+    }
+    if (buf.trim())
+      parts.push(buf.trim());
+    if (!parts.length)
+      continue;
+    const op = isNot ? "<>" : "=";
+    const join = isNot ? " and " : " or ";
+    const chain = "(" + parts.map((p) => `${operand} ${op} ${p}`).join(join) + ")";
+    f = f.slice(0, m.index) + chain + f.slice(close + 1);
+    re.lastIndex = m.index + chain.length;
+  }
+  return f;
+}
+var _TEXT_FN_RE = /(?:Coalesce|Concat|Text|Left|Right|Mid|Substring|Substr|Upper|Lower|Trim|Replace|MonthName|WeekdayName|DateName|Proper)$/i;
+function _isTextOperand(op, isTextRef) {
+  let s = op.trim();
+  while (/^\(.*\)$/s.test(s)) {
+    let depth = 0, ok = true;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === "(")
+        depth++;
+      else if (s[i] === ")") {
+        depth--;
+        if (depth === 0 && i < s.length - 1) {
+          ok = false;
+          break;
+        }
+      }
+    }
+    if (!ok || depth !== 0)
+      break;
+    s = s.slice(1, -1).trim();
+  }
+  if (!s)
+    return false;
+  if (/^"(?:[^"\\]|\\.)*"$/.test(s) || /^'(?:[^'\\]|\\.)*'$/.test(s))
+    return true;
+  const ref = s.match(/^\[([^\]\/]+)\]$/);
+  if (ref)
+    return isTextRef ? isTextRef(ref[1]) : false;
+  const fn = s.match(/^([A-Za-z_]+)\s*\(.*\)$/s);
+  if (fn && _TEXT_FN_RE.test(fn[1]))
+    return true;
+  return false;
+}
+function tableauTextConcatToSigma(formula, isTextRef) {
+  if (!formula || formula.indexOf("+") === -1)
+    return formula;
+  const grab = (s, i, dir) => {
+    let j = i;
+    while (j >= 0 && j < s.length && /\s/.test(s[j]))
+      j += dir;
+    if (j < 0 || j >= s.length)
+      return "";
+    const close = dir < 0 ? s[j] : "";
+    if (dir < 0 && (close === ")" || close === "]")) {
+      const open = close === ")" ? "(" : "[", cl = close;
+      let depth = 0, k2 = j;
+      for (; k2 >= 0; k2--) {
+        if (s[k2] === cl)
+          depth++;
+        else if (s[k2] === open) {
+          depth--;
+          if (depth === 0)
+            break;
+        }
+      }
+      let f2 = k2;
+      while (f2 - 1 >= 0 && /[A-Za-z0-9_]/.test(s[f2 - 1]))
+        f2--;
+      return s.slice(f2, j + 1);
+    }
+    if (dir > 0 && (s[j] === "(" || s[j] === "[")) {
+      const open = s[j], cl = open === "(" ? ")" : "]";
+      let depth = 0, k2 = j;
+      for (; k2 < s.length; k2++) {
+        if (s[k2] === open)
+          depth++;
+        else if (s[k2] === cl) {
+          depth--;
+          if (depth === 0)
+            break;
+        }
+      }
+      return s.slice(j, k2 + 1);
+    }
+    if (s[j] === '"' || s[j] === "'") {
+      const q = s[j];
+      let k2 = j + dir;
+      while (k2 >= 0 && k2 < s.length && s[k2] !== q)
+        k2 += dir;
+      return dir < 0 ? s.slice(k2, j + 1) : s.slice(j, k2 + 1);
+    }
+    let k = j;
+    while (k >= 0 && k < s.length && /[A-Za-z0-9_.]/.test(s[k]))
+      k += dir;
+    return dir < 0 ? s.slice(k + 1, j + 1) : s.slice(j, k);
+  };
+  let f = formula, changed = true, guard = 0;
+  while (changed && guard++ < 500) {
+    changed = false;
+    for (let i = 0; i < f.length; i++) {
+      if (f[i] !== "+")
+        continue;
+      const left = grab(f, i - 1, -1), right = grab(f, i + 1, 1);
+      if (_isTextOperand(left, isTextRef) || _isTextOperand(right, isTextRef)) {
+        f = f.slice(0, i) + "&" + f.slice(i + 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return f;
+}
+function tableauParamSwitchToSigma(formula, controlId, warnings) {
+  const f = decodeXmlEntities(stripLineComments(formula)).trim();
+  const head = f.match(/^case\s+\[Parameters?\]\s*\.\s*\[([^\]]+)\]\s+([\s\S]*?)\s*end\s*$/i);
+  if (!head)
+    return null;
+  const paramName = head[1];
+  const body = head[2];
+  const cases = [];
+  const pairRe = /\bwhen\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s+then\s+([\s\S]*?)(?=\s*\bwhen\b|\s*\belse\b|$)/gi;
+  let m;
+  while (m = pairRe.exec(body)) {
+    const whenVal = m[1].slice(1, -1).replace(/\\(.)/g, "$1");
+    const thenSig = tableauFormulaToSigma(m[2].trim(), warnings);
+    cases.push({ when: whenVal, then: thenSig });
+  }
+  if (!cases.length)
+    return null;
+  const elseM = body.match(/\belse\s+([\s\S]*?)$/i);
+  const elseExpr = elseM ? tableauFormulaToSigma(elseM[1].trim(), warnings) : null;
+  const parts = cases.map((c) => `"${c.when}", ${c.then}`).join(", ");
+  const switchFormula = `Switch([${controlId}], ${parts}${elseExpr ? `, ${elseExpr}` : ""})`;
+  return { paramName, controlId, cases, elseExpr, switchFormula };
+}
 var TABLEAU_FUNC_MAP = {
   "AVG": "Avg",
   "MAX": "Max",
@@ -2412,6 +2656,16 @@ var TABLEAU_FUNC_MAP = {
 };
 var SIGMA_CHART_ONLY_WINDOW_RE = /\b(?:Cumulative(?:Sum|Avg|Min|Max|Count)|Moving(?:Sum|Avg|Min|Max|Count|StdDev)|RankDense|RankPercentile|Rank|PercentOfTotal|RowNumber|Lag|Lead)\s*\(/;
 var TABLEAU_TABLE_CALC_TOKEN_RE = /\b(?:WINDOW_[A-Z]+|RUNNING_[A-Z]+|LOOKUP|PREVIOUS_VALUE|RANK(?:_[A-Z]+)?|INDEX|SIZE|TOTAL|FIRST|LAST)\s*\(/;
+var TABLEAU_TABLE_CALC_TOKEN_CI_RE = /\b(?:WINDOW_[A-Za-z]+|RUNNING_[A-Za-z]+|PREVIOUS_VALUE)\s*\(/i;
+var TABLEAU_LOD_LEFTOVER_RE = /\{\s*(?:FIXED|INCLUDE|EXCLUDE)\b/i;
+function formulaHasUntranslatableFragment(f) {
+  if (!f)
+    return false;
+  if (TABLEAU_LOD_LEFTOVER_RE.test(f) || TABLEAU_TABLE_CALC_TOKEN_RE.test(f) || TABLEAU_TABLE_CALC_TOKEN_CI_RE.test(f) || /\/\*\s*(?:LOD|table calc|no Sigma equivalent)/.test(f))
+    return true;
+  const masked = f.replace(/"[^"]*"|'[^']*'|\[[^\]]*\]/g, " ");
+  return /\b(?:then|end|when)\b/i.test(masked);
+}
 var _TC_AGG_MAP = {
   SUM: "Sum",
   AVG: "Avg",
@@ -2449,7 +2703,7 @@ function tableauWindowToSigmaChart(formula) {
   if (!f || tableauWindowUntranslatable(f))
     return null;
   let m;
-  m = f.match(new RegExp(`^${_TC_AGG_EXPR}\\s*\\/\\s*WINDOW_SUM\\s*\\(\\s*${_TC_AGG_EXPR}\\s*\\)$`, "i"));
+  m = f.match(new RegExp(`^${_TC_AGG_EXPR}\\s*\\/\\s*(?:TOTAL|WINDOW_SUM)\\s*\\(\\s*${_TC_AGG_EXPR}\\s*\\)$`, "i"));
   if (m && m[1].toUpperCase() === m[3].toUpperCase() && _tcSameRef(m[2], m[4])) {
     return { formula: `PercentOfTotal(${_tcAgg(m[1], m[2])}, "grand_total")`, kind: "percent-of-total" };
   }
@@ -2561,7 +2815,7 @@ function tableauCaseToSigma(f) {
 function tableauFormulaToSigma(formula, warnings) {
   if (!formula || !formula.trim())
     return "";
-  let f = formula.trim();
+  let f = stripLineComments(decodeXmlEntities(formula)).trim();
   if (/^\s*\{/.test(f)) {
     if (warnings)
       warnings.push("\u26A0 LOD expression not converted: " + f.slice(0, 60));
@@ -2602,6 +2856,7 @@ function tableauFormulaToSigma(formula, warnings) {
   f = f.replace(/\bCOUNT\s*\(([^)]+)\)/gi, (m, arg) => "CountIf(IsNotNull(" + arg.trim() + "))");
   f = f.replace(/\bCOUNTD\s*\(/gi, "CountDistinct(");
   f = f.replace(/\bATTR\s*\(([^)]+)\)/gi, "$1");
+  f = tableauInToSigma(f);
   f = tableauIfToSigma(f);
   f = f.replace(/\bIIF\s*\(/gi, "If(");
   f = tableauCaseToSigma(f);
@@ -2648,6 +2903,7 @@ function tableauFormulaToSigma(formula, warnings) {
     }
   });
   f = f.replace(/\bDATETRUNC\s*\(\s*'([^']+)'\s*,/gi, 'DateTrunc("$1",');
+  f = f.replace(/,\s*["'](?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)["']\s*\)/gi, ")");
   f = f.replace(/\bDATEADD\s*\(\s*'([^']+)'\s*,/gi, 'DateAdd("$1",');
   f = f.replace(/\bDATEDIFF\s*\(\s*'([^']+)'\s*,/gi, 'DateDiff("$1",');
   f = f.replace(/\bSTDEVP\s*\(([^()]+(?:\([^()]*\)[^()]*)*)\)/gi, "Sqrt(VariancePop($1))");
@@ -2672,6 +2928,7 @@ function tableauFormulaToSigma(formula, warnings) {
       return match;
     return "[" + sigmaDisplayName(colName) + "]";
   });
+  f = tableauTextConcatToSigma(f);
   if (warnings && TABLEAU_TABLE_CALC_TOKEN_RE.test(f)) {
     warnings.push(`\u26A0 Table-calc function embedded in a larger expression \u2014 NOT translated in place. Untranslated fragment: ${f.slice(0, 120)}`);
   }
@@ -2684,7 +2941,10 @@ function tableauFormulaIsRls(formula) {
   return /\b(USERNAME|FULLNAME|USERDOMAIN|ISMEMBEROF|ISUSERNAME|USERATTRIBUTE)\s*\(/i.test(formula || "");
 }
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/tableau.js
+// ../../../../../../../../../../../Users/tjwells/sigma-data-model-mcp/build/tableau.js
+function paramControlId(rawName) {
+  return "ctl-" + rawName.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+}
 var xmlParser = new import_fast_xml_parser.XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -2703,7 +2963,19 @@ var xmlParser = new import_fast_xml_parser.XMLParser({
     "rows",
     "cols"
   ].includes(name),
-  trimValues: true
+  trimValues: true,
+  // fast-xml-parser caps total entity expansions at 1000 by default (a
+  // billion-laughs DoS guard). Real Tableau .twb files are large, trusted,
+  // first-party input dense with predefined entities (&quot; &amp; &gt; in
+  // formulas/captions) — a 5MB workbook hit 1018 and failed to parse at all,
+  // blocking the entire data-model build. These workbooks are not adversarial;
+  // raise the limits well past any real file so big (and bigger) ones parse.
+  processEntities: {
+    enabled: true,
+    maxTotalExpansions: 5e7,
+    maxEntityCount: 5e6,
+    maxExpandedLength: 5e8
+  }
 });
 function asArray(val) {
   if (!val)
@@ -2712,6 +2984,38 @@ function asArray(val) {
 }
 function attr(node, key) {
   return node && node[`@_${key}`] || "";
+}
+function connRelations(conn) {
+  if (!conn)
+    return [];
+  if (conn.relation)
+    return asArray(conn.relation);
+  const nsKeys = Object.keys(conn).filter((k) => k.endsWith("...relation"));
+  if (nsKeys.length === 0)
+    return [];
+  const pick = nsKeys.find((k) => k.includes(".true...")) || nsKeys[0];
+  return asArray(conn[pick]);
+}
+function nsChild(obj, suffix) {
+  if (!obj)
+    return void 0;
+  if (obj[suffix] != null)
+    return obj[suffix];
+  const keys = Object.keys(obj).filter((k) => k.endsWith(`...${suffix}`));
+  if (keys.length === 0)
+    return void 0;
+  return obj[keys.find((k) => k.includes(".true...")) || keys[0]];
+}
+function nsAttr(node, key) {
+  if (!node)
+    return "";
+  const bare = node[`@_${key}`];
+  if (bare != null && bare !== "")
+    return bare;
+  const keys = Object.keys(node).filter((k) => k.startsWith("@_") && k.endsWith(`...${key}`));
+  if (keys.length === 0)
+    return "";
+  return node[keys.find((k) => k.includes(".true...")) || keys[0]] || "";
 }
 function _tableauInnerToSql(expr) {
   let s = expr;
@@ -3127,6 +3431,119 @@ function _buildWorksheetIndex(parsed) {
 function normalizeColumnName(name) {
   return name.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").toUpperCase();
 }
+var _qid = (name) => `"${String(name).replace(/"/g, '""')}"`;
+var _isNumericType = (t) => t === "integer" || t === "real";
+function qualifyTwoPartFqns(sql, db) {
+  if (!sql || !db)
+    return sql;
+  const qdb = /[^A-Za-z0-9_$]/.test(db) ? `"${db}"` : db;
+  const part = `(?:"[^"]+"|[A-Za-z_$][\\w$]*)`;
+  const re = new RegExp(`(\\b(?:FROM|JOIN)\\s+)(${part}(?:\\.${part})*)`, "gi");
+  return sql.replace(re, (m, kw, ref) => {
+    const parts = ref.match(new RegExp(part, "g")) || [];
+    return parts.length === 2 ? `${kw}${qdb}.${ref}` : m;
+  });
+}
+function collapseCustomSqlBlend(elements, connId, colSqlNameById, colTypeById, warnings) {
+  const elById = new Map(elements.map((e) => [e.id, e]));
+  const fact = elements.find((e) => e.source?.kind === "sql" && Array.isArray(e.relationships) && e.relationships.some((r) => elById.get(r.targetElementId)?.source?.kind === "sql"));
+  if (!fact)
+    return null;
+  const sqlName = (colId) => colSqlNameById[colId] || colId.split("/").slice(1).join("/") || colId;
+  const cleanAlias = (col) => {
+    const m = typeof col.formula === "string" && col.formula.match(/\/([^\]]+)\]$/);
+    return (m ? m[1] : col.name || sqlName(col.id)).trim();
+  };
+  const seen = /* @__PURE__ */ new Set();
+  const rels = fact.relationships.filter((r) => elById.get(r.targetElementId)?.source?.kind === "sql").filter((r) => {
+    const sig = r.targetElementId + "|" + (r.keys || []).map((k) => `${k.sourceColumnId}=${k.targetColumnId}`).sort().join(",");
+    if (seen.has(sig))
+      return false;
+    seen.add(sig);
+    return true;
+  });
+  if (rels.length < 2)
+    return null;
+  const ctes = [`__f AS (
+${fact.source.statement}
+)`];
+  const joins = [];
+  const outSelect = [];
+  const mergedColumns = [];
+  const order = [];
+  const usedOut = /* @__PURE__ */ new Set();
+  const uniq = (base) => {
+    let a = base, i = 2;
+    while (usedOut.has(a.toUpperCase()))
+      a = `${base}_${i++}`;
+    usedOut.add(a.toUpperCase());
+    return a;
+  };
+  const emit = (sqlRef, col) => {
+    const out = uniq(cleanAlias(col));
+    outSelect.push(`  ${sqlRef} AS ${_qid(out)}`);
+    mergedColumns.push({ id: col.id, name: out, formula: `[Custom SQL/${out}]` });
+    order.push(col.id);
+  };
+  for (const col of fact.columns || [])
+    emit(`__f.${_qid(sqlName(col.id))}`, col);
+  rels.forEach((r, i) => {
+    const sec = elById.get(r.targetElementId);
+    if (!sec)
+      return;
+    const cte = `__s${i}`;
+    const keyPairs = (r.keys || []).map((k) => ({
+      factSql: sqlName(k.sourceColumnId),
+      secSql: sqlName(k.targetColumnId)
+    }));
+    const keySecNames = new Set(keyPairs.map((p) => p.secSql));
+    const nonKeyCols = (sec.columns || []).filter((c) => !keySecNames.has(sqlName(c.id)));
+    const subSel = [];
+    for (const p of keyPairs)
+      subSel.push(`    ${_qid(p.secSql)} AS ${_qid(p.secSql)}`);
+    for (const c of nonKeyCols) {
+      const sn = sqlName(c.id);
+      const agg = _isNumericType(colTypeById[c.id]) ? "SUM" : "MAX";
+      subSel.push(`    ${agg}(${_qid(sn)}) AS ${_qid(sn)}`);
+    }
+    const grpBy = keyPairs.map((p) => _qid(p.secSql)).join(", ");
+    ctes.push(`${cte} AS (
+  SELECT
+${subSel.join(",\n")}
+  FROM (
+${sec.source.statement}
+) ${_qid(`__src_${i}`)}
+  GROUP BY ${grpBy}
+)`);
+    joins.push(`LEFT JOIN ${cte} ON ` + keyPairs.map((p) => `__f.${_qid(p.factSql)} = ${cte}.${_qid(p.secSql)}`).join(" AND "));
+    const partitionExpr = keyPairs.length ? `PARTITION BY ${keyPairs.map((p) => `__f.${_qid(p.factSql)}`).join(", ")}` : "";
+    let deFanned = 0;
+    for (const c of sec.columns || []) {
+      const sn = sqlName(c.id);
+      const isKey = keySecNames.has(sn);
+      const isMeasure = !isKey && _isNumericType(colTypeById[c.id]);
+      const ref = isMeasure && partitionExpr ? `${cte}.${_qid(sn)} / NULLIF(COUNT(*) OVER (${partitionExpr}), 0)` : `${cte}.${_qid(sn)}`;
+      if (isMeasure && partitionExpr)
+        deFanned++;
+      emit(ref, c);
+    }
+    if (deFanned > 0) {
+      warnings.push(`\u2139 Blend secondary "${sec.name || cte}": ${deFanned} measure(s) de-fanned (value \xF7 link-group row count) so Sum aggregates once per link key \u2014 coarse-grain goal/target measures now read correctly against fact-grain measures.`);
+    }
+  });
+  const statement = `WITH ${ctes.join(",\n")}
+SELECT
+${outSelect.join(",\n")}
+FROM __f
+${joins.join("\n")}`;
+  const factFrom = String(fact.source?.statement || "").match(/\bFROM\s+(?:"[^"]+"|[\w$]+)(?:\.(?:"[^"]+"|([\w$]+)))*/i);
+  const mergedName = fact.name || (factFrom && factFrom[1] ? factFrom[1].replace(/"/g, "") : "BLEND") || "BLEND";
+  warnings.push(`\u2139 Multi-source blend collapsed into one wide JOIN element: fact + ${rels.length} pre-aggregated secondary island(s) (link-grain SUM/MAX) \u2192 ${mergedColumns.length} columns. Charts can now resolve every column locally.`);
+  return {
+    mergedElement: { id: fact.id, name: mergedName, kind: "table", source: { connectionId: connId, kind: "sql", statement }, columns: mergedColumns, order },
+    consumedIds: [fact.id, ...rels.map((r) => r.targetElementId)]
+  };
+}
 function extractPath(rel, dbOverride, schOverride) {
   const rawTable = attr(rel, "table") || attr(rel, "name") || "";
   const cleaned = rawTable.replace(/[\[\]]/g, "").replace(/\s*\([^)]*\)/g, "");
@@ -3216,7 +3633,7 @@ function blendColumns(dsEntry) {
     push(remote, isMeasure);
   }
   if (out.length === 0) {
-    const rel = asArray(conn?.relation || [])[0];
+    const rel = connRelations(conn)[0];
     for (const col of asArray(rel?.columns?.column || [])) {
       const dt = (attr(col, "datatype") || "").toLowerCase();
       push(attr(col, "name"), ["integer", "real"].includes(dt));
@@ -3248,7 +3665,7 @@ function tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connId
   const primary = dsById[primaryId];
   if (!primary)
     return null;
-  const primaryRel = asArray(primary.ds?.connection?.relation || [])[0];
+  const primaryRel = connRelations(primary.ds?.connection)[0];
   if (!primaryRel)
     return null;
   const links = [];
@@ -3257,7 +3674,7 @@ function tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connId
       continue;
     const secId = attr(br, "target");
     const sec = dsById[secId];
-    if (!sec || !asArray(sec.ds?.connection?.relation || [])[0]) {
+    if (!sec || !connRelations(sec.ds?.connection)[0]) {
       warnings.push(`\u26A0 Blend secondary '${secId}' has no warehouse table \u2014 skipped (publish/repoint it to a warehouse to include)`);
       continue;
     }
@@ -3300,7 +3717,7 @@ function tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connId
   const pMeasures = pCols.filter((c) => c.isMeasure);
   const secMeasureDisplay = {};
   for (const link of links) {
-    const sPath = extractPath(asArray(link.sec.ds.connection.relation)[0], dbOverride, schOverride);
+    const sPath = extractPath(connRelations(link.sec.ds.connection)[0], dbOverride, schOverride);
     const sTable = sPath[sPath.length - 1] || "SECONDARY";
     const sCols = blendColumns(link.sec);
     const sLinkWh = new Set(link.pairs.map((p) => p.s));
@@ -3508,7 +3925,8 @@ function convertTableauToSigma(xmlContent, options = {}) {
         const rawName = attr(col, "name") || "";
         const colType = attr(col, "datatype") || "string";
         const domainType = attr(col, "param-domain-type") || "all";
-        const members = asArray(col.member).map((m) => attr(m, "value")).filter(Boolean);
+        const unq = (v) => decodeXmlEntities(v).replace(/\\(.)/g, "$1").replace(/^"|"$/g, "");
+        const members = asArray(col.members?.member).map((m) => unq(attr(m, "value"))).filter(Boolean);
         const calcEl = col.calculation;
         parameters.push({
           name: colName.replace(/^\[|\]$/g, ""),
@@ -3516,6 +3934,7 @@ function convertTableauToSigma(xmlContent, options = {}) {
           type: colType,
           domainType,
           members,
+          currentValue: unq(attr(col, "value")),
           defaultVal: calcEl ? attr(calcEl, "formula") : ""
         });
       }
@@ -3532,8 +3951,24 @@ function convertTableauToSigma(xmlContent, options = {}) {
     throw new Error("No data sources found in the Tableau file");
   }
   const blendResult = tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connectionId || "<CONNECTION_ID>");
-  if (blendResult)
+  if (blendResult) {
+    try {
+      const stripped = xmlContent.replace(/<datasource-relationships>[\s\S]*?<\/datasource-relationships>/g, "");
+      if (stripped !== xmlContent) {
+        const single = convertTableauToSigma(stripped, options);
+        const harvest = (single.workbookPatterns || []).map(({ elementId, elementName, ...rest }) => rest);
+        const base = blendResult.workbookPatterns || [];
+        const merged = [...base, ...harvest.filter((p) => !base.some((b) => b.name === p.name && b.kind === p.kind))];
+        if (merged.length)
+          blendResult.workbookPatterns = merged;
+        const n = merged.length - base.length;
+        if (n > 0)
+          blendResult.warnings.push(`\u2139 Native-blend workbook: recovered ${n} chart-context pattern(s) (param-switch/window/LOD/percent-of-total) from the primary datasource that the blend path would otherwise drop \u2014 reported in result.workbookPatterns (bead y9rd.7).`);
+      }
+    } catch {
+    }
     return blendResult;
+  }
   const dsIdx = Math.min(datasourceIndex, datasources.length - 1);
   const ds = datasources[dsIdx];
   const warnings = [];
@@ -3570,7 +4005,9 @@ function convertTableauToSigma(xmlContent, options = {}) {
   const elements = [];
   const connId = connectionId || "<CONNECTION_ID>";
   const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const colTypeById = {};
   const guidCaption = {};
+  const physicalGuidCaption = {};
   const guidOwnerRel = {};
   {
     for (const mp of asArray(ds.ds?.cols?.map || [])) {
@@ -3595,13 +4032,30 @@ function convertTableauToSigma(xmlContent, options = {}) {
       if (!guid)
         continue;
       const cap = (attr(col, "caption") || "").replace(/\s*\([^()]*\([^)]*\)\)\s*$/, "").trim();
-      if (cap && !guidCaption[guid.toLowerCase()])
-        guidCaption[guid.toLowerCase()] = cap;
+      if (!cap)
+        continue;
+      const g = guid.toLowerCase();
+      if (!guidCaption[g])
+        guidCaption[g] = cap;
+      if (!col.calculation && !physicalGuidCaption[g])
+        physicalGuidCaption[g] = cap;
     }
   }
+  const calcNameToCaption = {};
+  for (const col of asArray(ds.ds?.column || [])) {
+    if (!col.calculation)
+      continue;
+    const nm = (attr(col, "name") || "").replace(/^\[|\]$/g, "");
+    if (!nm)
+      continue;
+    const emitted = (attr(col, "caption") || nm).trim();
+    if (emitted)
+      calcNameToCaption[nm] = emitted;
+  }
+  const CALC_REF_RE = /^(Calculation_\d+|.+_\d{6,})$/;
   let factRelName = null;
   const derivedRelColGuids = /* @__PURE__ */ new Set();
-  for (const rel of asArray(ds.connection?.relation || [])) {
+  for (const rel of connRelations(ds.connection)) {
     const scanRel = (r) => {
       for (const col of asArray(r?.columns?.column || [])) {
         const nm = (attr(col, "name") || "").replace(/^\[|\]$/g, "");
@@ -3614,11 +4068,16 @@ function convertTableauToSigma(xmlContent, options = {}) {
     };
     scanRel(rel);
   }
-  const rewriteGuidRefs = (formula) => formula.replace(/\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, (m, g) => {
+  const rewriteGuidRefs = (formula) => decodeXmlEntities(formula).replace(/\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, (m, g) => {
     const cap = guidCaption[g.toLowerCase()];
     return cap ? `[${cap}]` : m;
+  }).replace(/\[([^\]]+)\]/g, (m, name) => {
+    if (!CALC_REF_RE.test(name))
+      return m;
+    const cap = calcNameToCaption[name];
+    return cap ? `[${cap}]` : m;
   });
-  const rootRelation = ds.connection ? asArray(ds.connection.relation || [])[0] : null;
+  const rootRelation = ds.connection ? connRelations(ds.connection)[0] || null : null;
   if (rootRelation) {
     const relType = attr(rootRelation, "type") || "table";
     if (relType === "table") {
@@ -3728,18 +4187,31 @@ function convertTableauToSigma(xmlContent, options = {}) {
         warnings.push("\u26A0 Collection datasource has no child relations \u2014 skipped");
       } else {
         const metaByObjId = {};
+        const metaByParent = {};
+        const colSqlNameById = {};
         const metaRecords = asArray(ds.connection?.["metadata-records"]?.["metadata-record"] || []);
+        const stripBrackets = (s) => s.replace(/^\[|\]$/g, "");
         for (const mr of metaRecords) {
           if (attr(mr, "class") !== "column")
             continue;
           const uuid = (mr["remote-name"] || "").trim();
-          const cap = (mr["caption"] || "").trim();
-          const objIdRaw = (mr["object-id"] || "").replace(/^\[|\]$/g, "");
-          if (!uuid || !cap || !objIdRaw)
+          let cap = (mr["caption"] || mr["remote-alias"] || stripBrackets(mr["local-name"] || "") || uuid).trim();
+          const objIdRaw = stripBrackets((mr["object-id"] || nsChild(mr, "object-id") || "").trim());
+          const parentRaw = stripBrackets((mr["parent-name"] || "").trim());
+          const localType = (mr["local-type"] || "").trim().toLowerCase();
+          const remoteAlias = (mr["remote-alias"] || stripBrackets(mr["local-name"] || "") || "").trim();
+          if (!uuid || !cap)
             continue;
-          if (!metaByObjId[objIdRaw])
-            metaByObjId[objIdRaw] = [];
-          metaByObjId[objIdRaw].push({ uuid, caption: cap });
+          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cap)) {
+            const known = physicalGuidCaption[uuid.toLowerCase()];
+            warnings.push(known ? `\u26A0 Dropped column "${known}" (Tableau-renamed to internal GUID ${uuid}): its warehouse identity is the GUID, so a [TABLE/${known}] ref won't resolve in Sigma. Re-add manually if needed (needs warehouse-column\u2192display aliasing).` : `\u26A0 Dropped column "${uuid}" \u2014 referenced only by an internal Tableau GUID with no recoverable caption; emitting it would produce an unresolvable [TABLE/${uuid}] reference.`);
+            continue;
+          }
+          const entry = { uuid, caption: cap, objId: objIdRaw || void 0, localType: localType || void 0, remoteAlias: remoteAlias || void 0 };
+          if (objIdRaw)
+            (metaByObjId[objIdRaw] ||= []).push(entry);
+          if (parentRaw)
+            (metaByParent[parentRaw] ||= []).push(entry);
         }
         const elementMap = {};
         const factChild = childRels.find((r) => asArray(r?.columns?.column || []).length > 0);
@@ -3759,12 +4231,21 @@ function convertTableauToSigma(xmlContent, options = {}) {
               matchingObjId = cands[idx];
             }
           }
-          const metaCols = matchingObjId ? metaByObjId[matchingObjId] : [];
-          for (const { uuid, caption } of metaCols) {
+          let metaCols = matchingObjId ? metaByObjId[matchingObjId] : [];
+          if (!metaCols.length)
+            metaCols = metaByParent[fullName] || [];
+          const relObjId = matchingObjId || metaCols.find((c) => c.objId)?.objId || null;
+          const isCustomSqlRel = attr(rel, "type") === "text";
+          const colPrefix = isCustomSqlRel ? "Custom SQL" : cleanName;
+          for (const { uuid, caption, localType, remoteAlias } of metaCols) {
             const cleanCaption = caption.replace(/\s*\(.*\)$/, "").trim();
             const idKey = uuid.toUpperCase();
             const id = sigmaInodeId(idKey);
-            columns.push({ id, formula: `[${cleanName}/${cleanCaption}]`, name: cleanCaption });
+            if (localType)
+              colTypeById[id] = localType;
+            const rawSqlName = (remoteAlias || caption).replace(/\s*\([^)]*\)\s*$/, "").trim();
+            colSqlNameById[id] = rawSqlName || cleanCaption;
+            columns.push({ id, formula: `[${colPrefix}/${cleanCaption}]`, name: cleanCaption });
             order.push(id);
             colIdMap[idKey] = id;
             colIdMap[uuid.toUpperCase().replace(/-/g, "_")] = id;
@@ -3781,23 +4262,23 @@ function convertTableauToSigma(xmlContent, options = {}) {
               const id = sigmaInodeId(key);
               const capAttr = attr(col, "caption");
               const displayName = isUuid ? capAttr || rawCol : sigmaDisplayName(key);
-              columns.push({ id, formula: `[${cleanName}/${displayName}]` });
+              columns.push({ id, formula: `[${colPrefix}/${displayName}]` });
               order.push(id);
               colIdMap[rawCol.toUpperCase()] = id;
               colIdMap[key] = id;
             }
           }
-          const el = {
-            id: sigmaShortId(),
-            kind: "table",
-            source: { connectionId: connId, kind: "warehouse-table", path },
-            columns,
-            order
-          };
-          elementMap[fullName] = { element: el, colIdMap, cleanName, objId: matchingObjId || null };
+          const isCustomSql = isCustomSqlRel;
+          const sqlText = isCustomSql ? qualifyTwoPartFqns(String(rel["#text"] ?? "").trim(), dbOverride) : "";
+          const source = isCustomSql && sqlText ? { connectionId: connId, kind: "sql", statement: sqlText } : { connectionId: connId, kind: "warehouse-table", path };
+          if (isCustomSql && !sqlText) {
+            warnings.push(`\u26A0 Custom SQL relation "${fullName}" has no inline SQL text \u2014 emitted as a table path "${path.join(".")}"; verify or replace with the query.`);
+          }
+          const el = { id: sigmaShortId(), kind: "table", source, columns, order };
+          elementMap[fullName] = { element: el, colIdMap, cleanName, objId: relObjId };
           elements.push(el);
         }
-        const objGraph = ds.ds?.["object-graph"];
+        const objGraph = nsChild(ds.ds, "object-graph");
         const relsList = asArray(objGraph?.relationships?.relationship || []);
         const getCleanSeg = (name) => name.replace(/[\[\]]/g, "").split(".").pop()?.replace(/_[0-9A-Fa-f]{16,}$/, "").toUpperCase() || "";
         const findEntry = (objId) => {
@@ -3827,24 +4308,6 @@ function convertTableauToSigma(xmlContent, options = {}) {
           const secondEntry = findEntry(attr(secondEp, "object-id"));
           if (!firstEntry || !secondEntry || firstEntry === secondEntry)
             continue;
-          const outerExprs = asArray(rel.expression || []);
-          const eqExpr = outerExprs.find((e) => attr(e, "op") === "=") || outerExprs[0];
-          if (!eqExpr)
-            continue;
-          const innerExprs = asArray(eqExpr.expression || []);
-          if (innerExprs.length < 2)
-            continue;
-          const srcOpRaw = attr(innerExprs[0], "op") || "";
-          const tgtOpRaw = attr(innerExprs[1], "op") || "";
-          const srcKey = parseOpRef(srcOpRaw);
-          const tgtKey = parseOpRef(tgtOpRaw);
-          if (!srcKey || !tgtKey)
-            continue;
-          const isFnWrappedKey = (op) => /^[A-Za-z_]\w*\(\s*\[?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]?\s*\)$/i.test(op.trim());
-          if (isFnWrappedKey(srcOpRaw) || isFnWrappedKey(tgtOpRaw)) {
-            warnings.push(`\u26A0 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName} joins on a computed key (${(srcOpRaw || tgtOpRaw).slice(0, 40)}); Sigma joins on physical columns only \u2014 skipped, needs manual authoring.`);
-            continue;
-          }
           const ensureCol = (entry, key) => {
             let id = entry.colIdMap[key] || entry.colIdMap[key.replace(/-/g, "_")];
             if (!id) {
@@ -3865,32 +4328,190 @@ function convertTableauToSigma(xmlContent, options = {}) {
             }
             return id;
           };
-          const srcColId = ensureCol(firstEntry, srcKey);
-          const tgtColId = ensureCol(secondEntry, tgtKey);
+          const collectEqs = (expr, acc) => {
+            const op = nsAttr(expr, "op");
+            const kids = asArray(expr.expression || []);
+            if (op === "=" && kids.length >= 2) {
+              acc.push(expr);
+              return;
+            }
+            for (const k of kids)
+              collectEqs(k, acc);
+          };
+          const eqExprs = [];
+          for (const oe of asArray(rel.expression || []))
+            collectEqs(oe, eqExprs);
+          if (eqExprs.length === 0)
+            continue;
+          const isPhysical = (op) => /^\[[^\]]+\]$/.test(op.trim());
+          const keys = [];
+          let skippedComputed = 0;
+          for (const eq of eqExprs) {
+            const inner = asArray(eq.expression || []);
+            if (inner.length < 2)
+              continue;
+            const srcOpRaw = nsAttr(inner[0], "op") || "";
+            const tgtOpRaw = nsAttr(inner[1], "op") || "";
+            if (!isPhysical(srcOpRaw) || !isPhysical(tgtOpRaw)) {
+              skippedComputed++;
+              continue;
+            }
+            const srcKey = parseOpRef(srcOpRaw), tgtKey = parseOpRef(tgtOpRaw);
+            if (!srcKey || !tgtKey)
+              continue;
+            keys.push({
+              sourceColumnId: ensureCol(firstEntry, srcKey),
+              targetColumnId: ensureCol(secondEntry, tgtKey)
+            });
+          }
+          if (keys.length === 0) {
+            warnings.push(`\u26A0 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName} joins only on computed key(s) (e.g. IF/DATETRUNC expression); Sigma joins on physical columns only \u2014 NOT wired. Needs a computed join column or manual authoring.`);
+            continue;
+          }
+          if (skippedComputed > 0) {
+            warnings.push(`\u26A0 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName}: wired ${keys.length} physical key(s); ${skippedComputed} computed condition(s) dropped \u2014 verify join grain in Sigma.`);
+          }
           if (!firstEntry.element.relationships)
             firstEntry.element.relationships = [];
           firstEntry.element.relationships.push({
             id: sigmaShortId(),
             targetElementId: secondEntry.element.id,
-            keys: [{ sourceColumnId: srcColId, targetColumnId: tgtColId }],
+            keys,
             name: secondEntry.cleanName
           });
-          warnings.push(`\u2139 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName} on ${srcKey} = ${tgtKey}`);
+          warnings.push(`\u2139 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName} wired on ${keys.length} physical key(s).`);
         }
         elements.sort((a, b) => {
           const aR = !!a.relationships?.length;
           const bR = !!b.relationships?.length;
           return aR === bR ? 0 : aR ? 1 : -1;
         });
+        const blend = collapseCustomSqlBlend(elements, connId, colSqlNameById, colTypeById, warnings);
+        if (blend) {
+          const consumed = new Set(blend.consumedIds);
+          for (let i = elements.length - 1; i >= 0; i--) {
+            if (consumed.has(elements[i].id))
+              elements.splice(i, 1);
+          }
+          elements.push(blend.mergedElement);
+        } else {
+          const sqlEls = elements.filter((e) => e.source?.kind === "sql");
+          if (sqlEls.length === 1) {
+            const el = sqlEls[0];
+            if (!el.name)
+              el.name = "Custom SQL";
+            for (const c of el.columns || []) {
+              const raw = colSqlNameById[c.id];
+              if (raw)
+                c.formula = `[Custom SQL/${raw}]`;
+            }
+          }
+        }
         if (!dbOverride || !schOverride) {
           warnings.push("\u26A0 Virtual connection: pass database and schema parameters to set the full warehouse path.");
+        }
+      }
+    } else if (relType === "text") {
+      const decodeNumericEntities = (s) => s.replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)));
+      const statement = decodeNumericEntities((rootRelation["#text"] || "").toString()).trim();
+      if (!statement) {
+        warnings.push("\u26A0 Custom SQL relation carried no SQL text \u2014 no element emitted.");
+      } else {
+        const capByName = {};
+        for (const col of asArray(ds.ds?.column || [])) {
+          const nm = (attr(col, "name") || "").replace(/^\[|\]$/g, "");
+          const cap = attr(col, "caption");
+          if (nm && cap)
+            capByName[nm.toUpperCase()] = cap;
+        }
+        const rawCols = [];
+        for (const col of asArray(rootRelation?.columns?.column || [])) {
+          const nm = attr(col, "name");
+          if (nm)
+            rawCols.push({ name: nm });
+        }
+        if (rawCols.length === 0) {
+          for (const mr of asArray(ds.connection?.["metadata-records"]?.["metadata-record"] || [])) {
+            if (attr(mr, "class") !== "column")
+              continue;
+            const remote = (mr["remote-name"] || "").trim();
+            if (remote)
+              rawCols.push({ name: remote });
+          }
+        }
+        const columns = [], order = [];
+        const seen = /* @__PURE__ */ new Set();
+        for (const rc of rawCols) {
+          const clean = rc.name.replace(/^\[|\]$/g, "");
+          const upper = clean.toUpperCase();
+          if (!clean || seen.has(upper))
+            continue;
+          seen.add(upper);
+          const colKey = clean.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+          const display = capByName[upper] || sigmaDisplayName(clean);
+          const id = sigmaInodeId(colKey);
+          columns.push({ id, formula: `[Custom SQL/${colKey}]`, name: display });
+          order.push(id);
+        }
+        elements.push({
+          id: sigmaShortId(),
+          kind: "table",
+          source: { connectionId: connId, kind: "sql", statement },
+          columns,
+          order
+        });
+        if (columns.length === 0) {
+          warnings.push("\u26A0 Custom SQL element emitted with no columns (no <columns> projection or column metadata-records found) \u2014 add columns from the query output.");
+        } else {
+          warnings.push(`\u2139 Custom SQL datasource \u2192 Sigma SQL element (source.kind:'sql', ${columns.length} column(s)). The SQL statement is preserved verbatim; verify column display names resolve against the query output.`);
         }
       }
     }
   }
   const factEl = elements.find((e) => e.relationships?.length > 0) || (elements.length > 0 ? elements.reduce((best, e) => (e.columns?.length || 0) > (best.columns?.length || 0) ? e : best, elements[0]) : null);
   if (factEl) {
-    let _resolveDimDisplayName2 = function(dimNameRaw) {
+    let _baseFromExpr2 = function() {
+      const fe = factEl;
+      if (fe?.source?.kind === "sql" && fe.source.statement) {
+        const stmt = fe.source.statement;
+        const upperStmt = stmt.trimStart();
+        if (/^WITH\s/i.test(upperStmt)) {
+          let depth = 0;
+          let lastTopSelectIdx = -1;
+          for (let i = 0; i < stmt.length; i++) {
+            const ch = stmt[i];
+            if (ch === "(") {
+              depth++;
+              continue;
+            }
+            if (ch === ")") {
+              depth--;
+              continue;
+            }
+            if (depth === 0 && /^SELECT\b/i.test(stmt.slice(i))) {
+              lastTopSelectIdx = i;
+            }
+          }
+          if (lastTopSelectIdx > 0) {
+            const ctePart = stmt.slice(0, lastTopSelectIdx).replace(/^\s*WITH\s+/i, "").replace(/,?\s*$/, "");
+            const selectPart = stmt.slice(lastTopSelectIdx);
+            return {
+              ctePrefix: `${ctePart},
+__lod_base AS (
+${selectPart}
+),
+`,
+              fromClause: "__lod_base"
+            };
+          }
+        }
+        return { fromClause: `(
+${stmt}
+) __base`, ctePrefix: "" };
+      }
+      const fqPath = fe?.source?.path && fe.source.path.length >= 2 ? fe.source.path.join(".") : factTableName;
+      return { fromClause: fqPath, ctePrefix: "" };
+    }, _resolveDimDisplayName2 = function(dimNameRaw) {
       const found = displayNameMap[dimNameRaw.toUpperCase()] || displayNameMap[sigmaDisplayName(dimNameRaw).toUpperCase()];
       if (!found)
         return null;
@@ -3934,6 +4555,7 @@ function convertTableauToSigma(xmlContent, options = {}) {
       lodHelpers[signatureKey] = {
         element: helperEl,
         groupDimNames: effectiveDims.slice(),
+        groupDimDisplayNames: dimResolved.map((d) => d.displayName),
         groupDimColIds,
         aggsByExpr: {},
         relationshipName: relNameSuggestion
@@ -3977,23 +4599,25 @@ function convertTableauToSigma(xmlContent, options = {}) {
       rec.element.order.push(calcId);
       return { alias, caption };
     }, _finalizeHelpers2 = function() {
-      const fe = factEl;
-      const baseFqTable = fe?.source?.path && fe.source.path.length >= 2 ? fe.source.path.join(".") : factTableName;
+      const { fromClause, ctePrefix } = _baseFromExpr2();
+      const useBase = fromClause === "__lod_base";
       for (const sigKey of Object.keys(lodHelpers)) {
         const rec = lodHelpers[sigKey];
-        const dimList = rec.groupDimNames.join(", ");
+        const dimList = useBase ? rec.groupDimDisplayNames.map((dn) => physToQuotedAlias[dn.replace(/\s+/g, "_").toUpperCase()] || `"${dn}"`).join(", ") : rec.groupDimNames.join(", ");
         const aggParts = [];
         for (const k of Object.keys(rec.aggsByExpr)) {
           const a = rec.aggsByExpr[k];
+          const safeExpr = useBase ? rewriteBaseExpr(a.aggExpr) : a.aggExpr;
           let sqlAggFunc = a.aggFunc;
           if (sqlAggFunc === "COUNTD")
-            sqlAggFunc = "COUNT(DISTINCT " + a.aggExpr + ")";
+            sqlAggFunc = "COUNT(DISTINCT " + safeExpr + ")";
           else
-            sqlAggFunc = `${sqlAggFunc}(${a.aggExpr})`;
+            sqlAggFunc = `${sqlAggFunc}(${safeExpr})`;
           aggParts.push(`${sqlAggFunc} AS ${a.alias}`);
         }
         const groupByIdx = rec.groupDimNames.map((_d, i) => i + 1).join(", ");
-        rec.element.source.statement = `SELECT ${dimList}, ${aggParts.join(", ")} FROM ${baseFqTable} GROUP BY ${groupByIdx}`;
+        const withPrefix = ctePrefix ? `WITH ${ctePrefix.replace(/,\s*$/, "\n")}` : "";
+        rec.element.source.statement = `${withPrefix}SELECT ${dimList}, ${aggParts.join(", ")} FROM ${fromClause} GROUP BY ${groupByIdx}`;
       }
     }, _emitTopNHelper2 = function(top) {
       const keyResolved = _resolveDimDisplayName2(top.dimField);
@@ -4063,21 +4687,23 @@ function convertTableauToSigma(xmlContent, options = {}) {
       cols.push({ id: isTopNColId, formula: isTopNFormula, name: isTopNName });
       order.push(isTopNColId);
       const fe = factEl;
-      const baseFqTable = fe?.source?.path && fe.source.path.length >= 2 ? fe.source.path.join(".") : factTableName;
-      const groupCols = [keyResolved.dimUpper, ...partResolved.map((p) => p.dimUpper)];
+      const { fromClause: topNFrom, ctePrefix: topNCtePrefix } = _baseFromExpr2();
+      const topNUseBase = topNFrom === "__lod_base";
+      const groupCols = [keyResolved.dimUpper, ...partResolved.map((p) => p.dimUpper)].map((c) => topNUseBase ? physToQuotedAlias[c] || c : c);
       const groupByIdx = groupCols.map((_g, i) => i + 1).join(", ");
       let aggSql = top.byAggFunc;
+      const safeByField = topNUseBase ? rewriteBaseExpr(top.byField) : top.byField;
       if (aggSql === "COUNTD")
-        aggSql = `COUNT(DISTINCT ${top.byField})`;
+        aggSql = `COUNT(DISTINCT ${safeByField})`;
       else
-        aggSql = `${aggSql}(${top.byField})`;
+        aggSql = `${aggSql}(${safeByField})`;
       const partBy = top.partitionBy.length > 0 ? `PARTITION BY ${top.partitionBy.join(", ")} ` : "";
       const overClause = `RANK() OVER (${partBy}ORDER BY s ${dirSql})`;
-      const innerSelect = `SELECT ${groupCols.join(", ")}, ${aggSql} AS s FROM ${baseFqTable} GROUP BY ${groupByIdx}`;
+      const innerSelect = `SELECT ${groupCols.join(", ")}, ${aggSql} AS s FROM ${topNFrom} GROUP BY ${groupByIdx}`;
       const rankedSelect = `SELECT ${groupCols.join(", ")}, s, ${overClause} AS RNK FROM agg`;
       const outerCols = emitIsTopNInSql ? `${groupCols.join(", ")}, s AS TOTAL, RNK, (RNK <= ${nLiteral}) AS IS_TOP_N` : `${groupCols.join(", ")}, s AS TOTAL, RNK`;
       const outerSelect = `SELECT ${outerCols} FROM ranked`;
-      const statement = `WITH agg AS (${innerSelect}), ranked AS (${rankedSelect}) ${outerSelect}`;
+      const statement = topNCtePrefix ? `WITH ${topNCtePrefix}agg AS (${innerSelect}), ranked AS (${rankedSelect}) ${outerSelect}` : `WITH agg AS (${innerSelect}), ranked AS (${rankedSelect}) ${outerSelect}`;
       const helperEl = {
         id: helperId,
         kind: "table",
@@ -4289,43 +4915,46 @@ function convertTableauToSigma(xmlContent, options = {}) {
       rec.element.order.push(calcId);
       return { ok: true };
     }, _finalizeWindowHelpers2 = function() {
-      const fe = factEl;
-      const baseFqTable = fe?.source?.path && fe.source.path.length >= 2 ? fe.source.path.join(".") : factTableName;
+      const { fromClause: winFrom, ctePrefix: winCtePrefix } = _baseFromExpr2();
+      const winUseBase = winFrom === "__lod_base";
       for (const key of Object.keys(windowHelpers)) {
         const rec = windowHelpers[key];
         const selectParts = [];
-        for (const d of rec.partitionDimNames)
-          selectParts.push(d);
+        for (const d of rec.partitionDimNames) {
+          selectParts.push(winUseBase ? physToQuotedAlias[d] || d : d);
+        }
         if (rec.orderDimRaw && rec.orderDimAlias) {
+          const rawRef = winUseBase ? rewriteBaseExpr(rec.orderDimRaw) : rec.orderDimRaw;
           if (rec.orderDimDateTrunc) {
-            selectParts.push(`DATE_TRUNC('${rec.orderDimDateTrunc}', ${rec.orderDimRaw}) AS ${rec.orderDimAlias}`);
+            selectParts.push(`DATE_TRUNC('${rec.orderDimDateTrunc}', ${rawRef}) AS ${rec.orderDimAlias}`);
           } else {
-            selectParts.push(`${rec.orderDimRaw} AS ${rec.orderDimAlias}`);
+            selectParts.push(`${rawRef} AS ${rec.orderDimAlias}`);
           }
         }
         for (const k of Object.keys(rec.innerAggs)) {
           const [aggFunc, exprSql] = k.split("::");
+          const safeExpr = winUseBase ? rewriteBaseExpr(exprSql) : exprSql;
           const a = rec.innerAggs[k];
           let sqlFn = aggFunc;
           if (sqlFn === "COUNTD")
-            sqlFn = `COUNT(DISTINCT ${exprSql})`;
+            sqlFn = `COUNT(DISTINCT ${safeExpr})`;
           else
-            sqlFn = `${sqlFn}(${exprSql})`;
+            sqlFn = `${sqlFn}(${safeExpr})`;
           selectParts.push(`${sqlFn} AS ${a.alias}`);
         }
         const groupByCount = rec.partitionDimNames.length + (rec.orderDimRaw ? 1 : 0);
         const groupByIdx = Array.from({ length: groupByCount }, (_, i) => i + 1).join(", ");
-        const baseSelect = `SELECT ${selectParts.join(", ")} FROM ${baseFqTable} GROUP BY ${groupByIdx}`;
+        const baseSelect = `SELECT ${selectParts.join(", ")} FROM ${winFrom} GROUP BY ${groupByIdx}`;
         const innerProjection = [
           ...rec.partitionDimNames,
           ...rec.orderDimAlias ? [rec.orderDimAlias] : [],
           ...Object.values(rec.innerAggs).map((v) => v.alias)
         ];
         const outerProjection = innerProjection.concat(rec.windowOverParts);
-        rec.element.source.statement = `WITH base AS (${baseSelect}) SELECT ${outerProjection.join(", ")} FROM base`;
+        rec.element.source.statement = winCtePrefix ? `WITH ${winCtePrefix}base AS (${baseSelect}) SELECT ${outerProjection.join(", ")} FROM base` : `WITH base AS (${baseSelect}) SELECT ${outerProjection.join(", ")} FROM base`;
       }
     };
-    var _resolveDimDisplayName = _resolveDimDisplayName2, _ensureHelper = _ensureHelper2, _ensureRelationship = _ensureRelationship2, _addAggToHelper = _addAggToHelper2, _finalizeHelpers = _finalizeHelpers2, _emitTopNHelper = _emitTopNHelper2, _ensureWindowHelper = _ensureWindowHelper2, _registerInnerAgg = _registerInnerAgg2, _emitWindowOverClause = _emitWindowOverClause2, _finalizeWindowHelpers = _finalizeWindowHelpers2;
+    var _baseFromExpr = _baseFromExpr2, _resolveDimDisplayName = _resolveDimDisplayName2, _ensureHelper = _ensureHelper2, _ensureRelationship = _ensureRelationship2, _addAggToHelper = _addAggToHelper2, _finalizeHelpers = _finalizeHelpers2, _emitTopNHelper = _emitTopNHelper2, _ensureWindowHelper = _ensureWindowHelper2, _registerInnerAgg = _registerInnerAgg2, _emitWindowOverClause = _emitWindowOverClause2, _finalizeWindowHelpers = _finalizeWindowHelpers2;
     const globalColMap = {};
     const displayNameMap = {};
     for (const el of elements) {
@@ -4342,6 +4971,19 @@ function convertTableauToSigma(xmlContent, options = {}) {
       }
     }
     const factTableName = factEl.source?.path?.[factEl.source.path.length - 1] || "FACT";
+    const physToQuotedAlias = {};
+    if (factEl?.source?.kind === "sql") {
+      for (const col of factEl?.columns || []) {
+        const dn = col.name || "";
+        if (!dn)
+          continue;
+        const physUpper = dn.replace(/\s+/g, "_").toUpperCase();
+        physToQuotedAlias[physUpper] = `"${dn}"`;
+        physToQuotedAlias[dn.toUpperCase()] = `"${dn}"`;
+      }
+    }
+    const resolveBaseToken = (token) => physToQuotedAlias[token] || physToQuotedAlias[token.toUpperCase()] || token;
+    const rewriteBaseExpr = (expr) => expr.replace(/\b([A-Z][A-Z0-9_]*)\b/g, (_m, tok) => resolveBaseToken(tok));
     const lodChildElements = [];
     const wsIndex = _buildWorksheetIndex(parsed);
     const lodHelpers = {};
@@ -4443,6 +5085,8 @@ function convertTableauToSigma(xmlContent, options = {}) {
         const physCol = normalizeColumnName(fieldKey);
         const displayName = caption || sigmaDisplayName(physCol);
         if (!displayNameMap[displayName.toUpperCase()] && !displayNameMap[physCol]) {
+          if (factEl.source?.kind === "sql")
+            continue;
           const colId = sigmaInodeId(physCol);
           factEl.columns.push({ id: colId, formula: `[${factTableName}/${displayName}]` });
           factEl.order.push(colId);
@@ -4643,11 +5287,43 @@ function convertTableauToSigma(xmlContent, options = {}) {
         }
         if (_reportChartWindowPattern(caption, formula, "no DM-safe SQL OVER lowering for this pattern"))
           continue;
+        const paramRef = formula.match(/\[Parameters?\]\s*\.\s*\[([^\]]+)\]/i);
+        if (paramRef) {
+          const ctlId = paramControlId(paramRef[1]);
+          const sw = tableauParamSwitchToSigma(formula, ctlId, warnings);
+          if (sw) {
+            workbookPatterns.push({
+              kind: "param-switch",
+              name: caption,
+              source: formula.trim(),
+              paramName: sw.paramName,
+              controlId: ctlId,
+              formula: sw.switchFormula,
+              cases: sw.cases,
+              elseExpr: sw.elseExpr,
+              requires: "WORKBOOK element: a single-select list control + a Switch calc column on the master; charts referencing this calc plot the Switch column.",
+              note: `Tableau parameter measure-picker \u2192 Sigma control-driven Switch. Build control [${ctlId}] (values from parameter "${sw.paramName}") and master calc ${caption} = ${sw.switchFormula.slice(0, 120)}.`
+            });
+            warnings.push(`\u{1F500} "${caption}" \u2192 control-driven Switch over [${ctlId}] (param "${sw.paramName}", ${sw.cases.length} case(s)) \u2014 reported in result.workbookPatterns for the workbook layer.`);
+            continue;
+          }
+          workbookPatterns.push({
+            kind: "param-filter",
+            name: caption,
+            source: formula.trim(),
+            paramName: paramRef[1],
+            controlId: ctlId,
+            requires: "WORKBOOK control bound as a filter on the source element/table (not on a viz \u2014 control\u2192viz filters 400).",
+            note: `Formula references Tableau parameter "${paramRef[1]}"; build a control [${ctlId}] and apply it as a filter on the master/source element.`
+          });
+          warnings.push(`\u2139 "${caption}" references Tableau parameter "${paramRef[1]}" \u2192 reported as a param-filter control [${ctlId}] for the workbook layer; NOT a DM column.`);
+          continue;
+        }
         const sigmaFormula = tableauFormulaToSigma(formula, warnings);
         if (!sigmaFormula || sigmaFormula.startsWith("/*"))
           continue;
-        if (SIGMA_CHART_ONLY_WINDOW_RE.test(sigmaFormula) || TABLEAU_TABLE_CALC_TOKEN_RE.test(sigmaFormula)) {
-          const clean = !TABLEAU_TABLE_CALC_TOKEN_RE.test(sigmaFormula);
+        if (SIGMA_CHART_ONLY_WINDOW_RE.test(sigmaFormula) || formulaHasUntranslatableFragment(sigmaFormula)) {
+          const clean = !formulaHasUntranslatableFragment(sigmaFormula);
           workbookPatterns.push({
             kind: clean ? "window" : "unsupported",
             name: caption,
@@ -4705,6 +5381,184 @@ function convertTableauToSigma(xmlContent, options = {}) {
           factEl.order.push(colId);
           warnings.push(`\u2139 "${caption}" \u2192 calculated column. Review: ${sigmaFormula.slice(0, 60)}`);
         }
+      }
+    }
+    {
+      const normKey = (s) => s.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+      const stripSuffix = (s) => s.replace(/\s*\([^()]*\)\s*$/, "").trim();
+      const exactNames = /* @__PURE__ */ new Set();
+      const normIndex = {};
+      for (const c of factEl.columns || []) {
+        if (!c.name)
+          continue;
+        exactNames.add(c.name.toLowerCase());
+        const k = normKey(c.name);
+        if (k && !(k in normIndex))
+          normIndex[k] = c.name;
+      }
+      let rewrites = 0;
+      const reconcile = (formula, ownName) => {
+        if (typeof formula !== "string")
+          return formula;
+        return formula.replace(/\[([^\]]+)\]/g, (m, ref) => {
+          if (ref.includes("/"))
+            return m;
+          if (ownName && ref.toLowerCase() === ownName.toLowerCase()) {
+            const alt = normIndex[normKey(ref)];
+            if (alt && alt.toLowerCase() !== ownName.toLowerCase()) {
+              rewrites++;
+              return `[${alt}]`;
+            }
+            return m;
+          }
+          if (exactNames.has(ref.toLowerCase()))
+            return m;
+          const hit = normIndex[normKey(ref)] || normIndex[normKey(stripSuffix(ref))];
+          if (hit) {
+            rewrites++;
+            return `[${hit}]`;
+          }
+          return m;
+        });
+      };
+      const isAliasFormula = (f) => typeof f === "string" && /^\[(Custom SQL|[^\]\/]+)\/[^\]]+\]$/.test(f);
+      for (const c of factEl.columns || []) {
+        if (isAliasFormula(c.formula))
+          continue;
+        c.formula = reconcile(c.formula, c.name);
+      }
+      for (const m of factEl.metrics || []) {
+        m.formula = reconcile(m.formula, m.name);
+      }
+      if (rewrites > 0) {
+        warnings.push(`\u2139 Reconciled ${rewrites} calc-formula field reference(s) to their SQL-alias column names (caption\u2194alias) on "${factEl.name}".`);
+      }
+      {
+        const typeByName = {};
+        for (const c of factEl.columns || []) {
+          if (c.name && colTypeById[c.id])
+            typeByName[c.name.toLowerCase()] = colTypeById[c.id];
+        }
+        const isTextRef = (name) => typeByName[name.toLowerCase()] === "string";
+        for (const c of factEl.columns || []) {
+          if (isAliasFormula(c.formula))
+            continue;
+          c.formula = tableauTextConcatToSigma(c.formula, isTextRef);
+        }
+        for (const m of factEl.metrics || [])
+          m.formula = tableauTextConcatToSigma(m.formula, isTextRef);
+      }
+      {
+        const before = (factEl.columns || []).length;
+        factEl.columns = (factEl.columns || []).filter((c) => {
+          const self = c.name && typeof c.formula === "string" && c.formula.trim().toLowerCase() === `[${c.name}]`.toLowerCase();
+          if (self) {
+            factEl.order = (factEl.order || []).filter((id) => id !== c.id);
+          }
+          return !self;
+        });
+        const n = before - factEl.columns.length;
+        if (n)
+          warnings.push(`\u2139 Dropped ${n} self-referential rename calc(s) on "${factEl.name}" (redundant \u2014 the physical column is already present).`);
+      }
+      {
+        const metricNames = new Set((factEl.metrics || []).map((m) => (m.name || "").toLowerCase()));
+        const validNames = /* @__PURE__ */ new Set();
+        for (const c of factEl.columns || [])
+          if (c.name)
+            validNames.add(c.name.toLowerCase());
+        for (const n of metricNames)
+          validNames.add(n);
+        const sib = (f) => typeof f === "string" ? (f.match(/\[([^\]]+)\]/g) || []).map((s) => s.slice(1, -1)).filter((r) => !r.includes("/")) : [];
+        const isDimLike = (f) => {
+          if (typeof f !== "string")
+            return false;
+          const s = f.trim();
+          if (/^(If|Iif|Case|Switch)\b/i.test(s) && /"[^"]*"/.test(s))
+            return true;
+          if (/^\[[^\]]+\]\s*(<=|>=|<>|!=|<|>|=)\s*-?[\d.]+\s*$/.test(s))
+            return true;
+          return false;
+        };
+        let promoted = 0, aggDims = 0, moved = true;
+        while (moved) {
+          moved = false;
+          for (let i = (factEl.columns || []).length - 1; i >= 0; i--) {
+            const c = factEl.columns[i];
+            if (isAliasFormula(c.formula))
+              continue;
+            const refs = sib(c.formula);
+            if (refs.length && refs.every((r) => validNames.has(r.toLowerCase())) && refs.some((r) => metricNames.has(r.toLowerCase()))) {
+              if (isDimLike(c.formula)) {
+                const aggRefs = refs.filter((r) => metricNames.has(r.toLowerCase()));
+                workbookPatterns.push({
+                  kind: "aggregate-dimension",
+                  name: c.name,
+                  source: c.formula,
+                  formula: c.formula,
+                  requires: "GROUPED workbook element: bucket the referenced aggregate metric(s) at the chart grain in the grouping context \u2014 NOT valid as a DM column or as a metric (a metric cannot be a grouping dimension).",
+                  note: `Aggregate-derived dimension: buckets aggregate metric(s) [${aggRefs.join("], [")}]. Group the chart by this binned aggregate (compute the metric at the viz grain, then bucket); the DM cannot express it row-level.`
+                });
+                factEl.columns.splice(i, 1);
+                factEl.order = (factEl.order || []).filter((id) => id !== c.id);
+                aggDims++;
+                moved = true;
+                continue;
+              }
+              if (!factEl.metrics)
+                factEl.metrics = [];
+              factEl.metrics.push({ id: c.id, formula: c.formula, name: c.name, ...c.format ? { format: c.format } : {} });
+              metricNames.add((c.name || "").toLowerCase());
+              factEl.columns.splice(i, 1);
+              factEl.order = (factEl.order || []).filter((id) => id !== c.id);
+              promoted++;
+              moved = true;
+            }
+          }
+        }
+        if (promoted)
+          warnings.push(`\u2139 Promoted ${promoted} aggregate-ratio calc column(s) to metrics on "${factEl.name}" (they reference aggregate metrics \u2014 invalid as row-level columns).`);
+        if (aggDims)
+          warnings.push(`\u2139 "${factEl.name}": ${aggDims} aggregate-derived dimension(s) (bucket an aggregate metric) \u2192 reported in result.workbookPatterns \u2014 CHART/grouped-element context only; group the viz by the binned aggregate (NOT a DM column or metric).`);
+      }
+      const valid = /* @__PURE__ */ new Set();
+      for (const c of factEl.columns || [])
+        if (c.name)
+          valid.add(c.name.toLowerCase());
+      for (const mt of factEl.metrics || [])
+        if (mt.name)
+          valid.add(mt.name.toLowerCase());
+      const siblingRefs = (f) => typeof f === "string" ? (f.match(/\[([^\]]+)\]/g) || []).map((s) => s.slice(1, -1)).filter((r) => !r.includes("/")) : [];
+      const dropped = [];
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const dropCol = (arr, isMetric) => {
+          for (let i = arr.length - 1; i >= 0; i--) {
+            const c = arr[i];
+            if (!isMetric && isAliasFormula(c.formula))
+              continue;
+            const bad = siblingRefs(c.formula).find((r) => !valid.has(r.toLowerCase()));
+            if (bad) {
+              dropped.push({ name: c.name || "(unnamed)", bad });
+              if (c.name)
+                valid.delete(c.name.toLowerCase());
+              if (!isMetric)
+                factEl.order = (factEl.order || []).filter((id) => id !== c.id);
+              arr.splice(i, 1);
+              changed = true;
+            }
+          }
+        };
+        dropCol(factEl.columns || [], false);
+        if (factEl.metrics)
+          dropCol(factEl.metrics, true);
+      }
+      for (const d of dropped) {
+        warnings.push(`\u26A0 Dropped calc "${d.name}" \u2014 references [${d.bad}] which is not a resolvable column in the collapsed model (param-driven or field absent from the SQL). NOT migrated; recreate in the workbook layer if needed.`);
+      }
+      if (dropped.length) {
+        warnings.push(`\u2139 Dropped ${dropped.length} unresolvable calc column(s)/metric(s) on "${factEl.name}" after caption\u2194alias reconciliation (see per-calc warnings above).`);
       }
     }
     _finalizeHelpers2();
@@ -4908,6 +5762,7 @@ function convertTableauToSigma(xmlContent, options = {}) {
     warnings,
     ...security.length ? { security } : {},
     ...workbookPatterns.length ? { workbookPatterns } : {},
+    ...parameters.length ? { parameters } : {},
     stats: {
       datasources: datasources.length,
       elements: elements.length,
@@ -4921,5 +5776,6 @@ function convertTableauToSigma(xmlContent, options = {}) {
   };
 }
 export {
+  collapseCustomSqlBlend,
   convertTableauToSigma
 };
