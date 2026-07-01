@@ -183,7 +183,11 @@ unless opts[:skip_content]
               twb_path = File.join(opts[:out], 'workbook-content.twb')
               atomic_write(twb_path, File.binread(inner))
               log "extracted workbook-content.twb  (#{File.size(twb_path)} bytes) from .twbx"
-              twb_xml = File.read(twb_path)
+              # Force UTF-8: a bare File.read uses the locale default (US-ASCII on
+              # many systems) and raises "invalid byte sequence in US-ASCII" on the
+              # first non-ASCII byte (em-dash, @handles, curly quotes). The direct-
+              # download branch below already force_encodes; the .twbx path must too.
+              twb_xml = File.read(twb_path, encoding: 'UTF-8')
             else
               log '.twbx contained no inner .twb — odd'
             end

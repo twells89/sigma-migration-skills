@@ -106,7 +106,19 @@ INVENTORY = [
   { name: 'Show/hide containers',                      pat: /show-hide-container|is-modal='true'/,
     status: :unhandled, blurb: 'Sigma containers can be conditionally hidden via a control; needs manual wiring.' },
   { name: 'Sets (computed / manual)',                  pat: /<groupfilter function='set'|<set\s/,
-    status: :unhandled, blurb: 'No Sigma direct equivalent. Approximate with a calculated boolean column.' }
+    status: :unhandled, blurb: 'No Sigma direct equivalent. Approximate with a calculated boolean column.' },
+
+  # DESIGN / COMPOSITION — surfaced so a design-heavy dashboard no longer reports
+  # "0 unhandled" (false comfort). See TABLEAU_TO_SIGMA_SKILL_GAPS.md. These are
+  # regex-tokenizable; the STRUCTURAL design gaps (repeated per-category container
+  # cards / card-trellis B1, 1-D strip/jitter plots C1) are detected in
+  # parse-twb-layout.rb (Phase 1) — a raw-text regex can't reliably spot them.
+  { name: 'Container background tint / colored header band', pat: /<format\s+attr='background-color'\s+value='#(?!(?:fff(?:fff)?|FFF(?:FFF)?)')/,
+    status: :hint, blurb: 'Gap B2: a dashboard zone/container has a non-white background fill (region-card tints, colored title bands). NOT yet auto-emitted — parse-twb-layout should surface the fill and build-charts should emit container.style.backgroundColor + borderRadius (+ a header-bar element). Until then, recreate the tint manually.' },
+  { name: 'Custom categorical color palette (discrete)', pat: /<encoding[^>]+(?:class|attr)='color'[\s\S]{0,400}?<map>/,
+    status: :hint, blurb: "Gap D1: a color encoding carries an explicit value→color map (custom categorical palette, e.g. per-region teal/pink/purple/orange). NOT yet auto-extracted — build-charts should emit themeOverrides.categoricalScheme + per-chart color.scheme in category sort order. Until then, Sigma defaults apply and per-category color won't match." },
+  { name: 'Viz-in-tooltip (embedded chart in tooltip)', pat: /visual-tooltip|show-viz-in-tooltip/i,
+    status: :manual, blurb: 'Gap F3: worksheet embeds a viz inside its tooltip. Sigma has no spec-API path for viz-in-tooltip (no persistence) — recreate manually post-publish or drop. Surfaced here so it is not silently lost.' }
 ].freeze
 
 def categorize(content)
