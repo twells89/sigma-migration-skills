@@ -497,7 +497,7 @@ shapes so you recognize a regression:
 > bug. Verify metric values via the **raw aggregate** (`Sum(...)`, `CountDistinct(...)`), not via
 > `metric()`.
 
-### Phase 2.5 — Reuse an existing DM? (run BEFORE 2c — avoid sprawl, mirrors tableau Phase 1.5 / powerbi Phase 3.5)
+### Phase 2.5 — Reuse an existing DM? (run BEFORE 2c — avoid sprawl; the reuse-first DM gate every converter runs before building)
 
 Before POSTing a NEW data model, check whether an existing Sigma DM already covers the
 same warehouse tables (don't add a 4th near-identical "Orders" DM):

@@ -108,7 +108,7 @@ resume with `--converter-out`. The hosted MCP is a fallback, not the default pat
 - **Known gap `j89`**: the Snowflake `Snowflake.Databases(...) + Navigation` M pattern isn't parsed → pass `database`/`schema` explicitly until fixed.
 - **DAX gaps → gap-scout**: for measures the converter buckets `b` (restructure) or `c` (no-equivalent) — `RANKX`, `ALLEXCEPT`, `SUMMARIZE`, `USERELATIONSHIP`, `PATH*` — spawn the **gap-scout** sub-agent (`scripts/gap-scout.md`): it proposes a Sigma translation, validates it against the live API (`scripts/scout-validate.py`), and persists the rule to `~/.powerbi-to-sigma/learned-rules.yaml` (loaded by `scripts/learned-rules.py`) so future conversions auto-apply it. Time-intelligence (YTD/SPLY) is usually translatable — see `refs/measure-patterns.md`, not the scout.
 
-## Phase 3.5 — Reuse an existing DM? (avoid sprawl — mirrors tableau Phase 1.5)
+## Phase 3.5 — Reuse an existing DM? (avoid sprawl — the reuse-first DM gate every converter runs before building)
 Before posting a NEW data model, check whether an existing Sigma DM already
 covers the same warehouse tables (don't add a 4th near-identical "Orders" DM):
 ```

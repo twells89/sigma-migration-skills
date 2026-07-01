@@ -176,7 +176,7 @@ Emits the Sigma data-model JSON on stdout; stats + warnings on stderr. Read the
 warnings aloud to the user — they are the parts that need manual authoring
 (running-totals, cross-element metrics, FIXED-LOD-style calcs, localization).
 
-## Phase 1.5 — Reuse an existing DM? (avoid sprawl — mirrors tableau Phase 1.5 / powerbi Phase 3.5)
+## Phase 1.5 — Reuse an existing DM? (avoid sprawl — the reuse-first DM gate every converter runs before building)
 
 Before POSTing a NEW data model in Phase 2, check whether an existing Sigma DM already
 covers the same warehouse tables (don't add a 4th near-identical DM for the same module):

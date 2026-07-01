@@ -131,7 +131,7 @@ What the converter handles vs. what it doesn't (see `refs/migration-test-slate.m
 
 For an untranslated calc-field expression, spawn the **gap-scout subagent** (see `scripts/gap-scout.md`): it proposes a Sigma formula, validates it against the live DM via `scripts/scout-validate-and-persist.rb`, and on success persists a rule to `~/.quicksight-to-sigma/learned-rules.yaml` (customer home — `git pull` can't clobber; the build script auto-applies it next run via `LearnedRules.load`). On failure the scout returns an **opt-in** `escalate-gap.py` command — filing a tracking issue is never automatic: run the returned `escalation.dry_run_cmd` to draft the issue (shows target repo + dedupe), show the user, and only re-run with `--yes` if they accept. Calc-field gaps route to the converter repos (`sigma-data-model-manager` + `sigma-data-model-mcp`, mirrored) with a cross-linked bead.
 
-## Phase 3.5 — Reuse an existing DM? (avoid sprawl — mirrors tableau Phase 1.5 / powerbi Phase 3.5)
+## Phase 3.5 — Reuse an existing DM? (avoid sprawl — the reuse-first DM gate every converter runs before building)
 
 Before Phase 4 POSTs a NEW data model, check whether an existing Sigma DM already covers
 the same warehouse tables (don't add a 4th near-identical "Orders" DM):

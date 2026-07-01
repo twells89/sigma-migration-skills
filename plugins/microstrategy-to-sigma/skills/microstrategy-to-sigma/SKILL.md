@@ -248,7 +248,7 @@ the converter emits a deterministic SQL element reproducing the grid. Read
 the live validation, so the bundled fixture runs end-to-end without a
 Strategy One instance.)
 
-## Phase 2.6 — Reuse an existing DM? (avoid sprawl — mirrors tableau Phase 1.5 / cognos Phase 1.5)
+## Phase 2.6 — Reuse an existing DM? (avoid sprawl — the reuse-first DM gate every converter runs before building)
 
 Before POSTing a new data model, score the org's existing Sigma DMs against this
 dossier's tables/columns and reuse on a strong match — don't create a 4th

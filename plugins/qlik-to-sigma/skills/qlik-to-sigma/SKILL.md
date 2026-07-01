@@ -213,7 +213,7 @@ POST-block the whole DM), inter-record `Above/Below/Peek/Previous/RowNo`, rankin
 converter emits an `ℹ … references fields from N elements` warning — host that metric on
 the **denormalized element** (which carries all fields) or it errors as cross-element.
 
-## Phase 2.5 — Reuse an existing DM? (avoid sprawl — mirrors tableau Phase 1.5)
+## Phase 2.5 — Reuse an existing DM? (avoid sprawl — the reuse-first DM gate every converter runs before building)
 Before building a NEW data model in Phase 3, check whether an existing Sigma DM already
 covers the same warehouse tables (don't add a 4th near-identical "Orders" DM):
 ```bash

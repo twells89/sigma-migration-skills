@@ -212,7 +212,7 @@ python3 scripts/migrate.py --model-tml fixtures/retail-analytics-model.tml \
       then **re-render and re-read**.
    3. Loop until the render passes inspection.
 
-## Step 2.5 — Reuse an existing DM? (between convert and POST — mirrors tableau Phase 1.5 / powerbi Phase 3.5)
+## Step 2.5 — Reuse an existing DM? (between convert and POST — the reuse-first DM gate every converter runs before building)
 
 Before step 2 POSTs a NEW data model, check whether an existing Sigma DM already covers
 the same warehouse tables (don't add a 4th near-identical DM for the same star):
