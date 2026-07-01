@@ -54,6 +54,29 @@ require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub saf
 HERE = __dir__
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
 
+# Converter resolution (issue #227). The pinned VENDORED bundle is the DEFAULT so a
+# developer machine and a customer machine produce identical output for the same
+# input. A local sigma-data-model-mcp build is used ONLY when EXPLICITLY opted in
+# via --mcp-dir / QS_MCP_DIR — there is NO silent auto-discovery of ~/… checkouts
+# (that was the "works in my demo, differs for the customer" footgun). Returns
+# [conv_module, mcp_build_dir_or_nil, loud_provenance_line].
+def resolve_converter(mcp_dir, vendored, build_basename)
+  build_dir = (mcp_dir && File.exist?(File.join(mcp_dir, 'build', build_basename))) ? mcp_dir : nil
+  conv = build_dir ? File.join(build_dir, 'build', build_basename) :
+         (File.exist?(vendored) ? vendored : nil)
+  desc =
+    if conv && conv == vendored
+      prov = File.join(File.dirname(vendored), 'PROVENANCE.json')
+      commit = (JSON.parse(File.read(prov))['source_commit'] rescue nil)
+      "VENDORED #{File.basename(vendored)}#{commit ? " (pinned #{commit})" : ''} — no data egress"
+    elsif conv
+      "DEV BUILD #{conv} (explicit opt-in via --mcp-dir/QS_MCP_DIR)"
+    else
+      'NONE — vendored bundle missing; convert_quicksight_to_sigma MCP / --converted fallback applies'
+    end
+  [conv, build_dir, desc]
+end
+
 opts = { region: 'us-east-1' }
 OptionParser.new do |o|
   o.on('--analysis-id ID')  { |v| opts[:analysis] = v }
@@ -81,7 +104,18 @@ OptionParser.new do |o|
   o.on('--actuals PATH')    { |v| opts[:actuals]  = File.expand_path(v) }
   o.on('--extract-mode')    {     opts[:extract]  = true }
   o.on('--extract-tol F', Float) { |v| opts[:tol] = v }
+  # Resolve + print which converter would run (vendored vs explicit dev build), then
+  # exit 0 — no creds/args needed. Used by the converter-default regression test.
+  o.on('--print-converter') {     opts[:print_converter] = true }
 end.parse!
+
+VENDORED_QS = File.expand_path('../converter/quicksight.mjs', __dir__)
+if opts[:print_converter]
+  conv, _bd, desc = resolve_converter(opts[:mcp_dir] || ENV['QS_MCP_DIR'], VENDORED_QS, 'quicksight.js')
+  puts(conv || 'none')
+  puts desc
+  exit 0
+end
 
 abort 'missing --analysis-id (or --from-fixtures)' unless opts[:analysis] || opts[:fixtures]
 abort 'missing --account-id (live discovery)' if opts[:analysis] && !opts[:fixtures] && !opts[:account]
@@ -93,24 +127,15 @@ if opts[:conn] !~ /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
   abort "FATAL: --connection must be a FULL Sigma connection UUID (8-4-4-4-12 hex); got #{opts[:conn].inspect}"
 end
 
-# Local converter build. The skill defers DM conversion to the sigma-data-model-mcp
-# `convert_quicksight_to_sigma` tool; that tool is an ESM module not loadable from a
-# plain shell, so we import its exported convertQuickSightToSigma() directly via a tiny
-# node shim. No hardcoded developer paths (mirrors migrate-powerbi.rb): resolve from
-# --mcp-dir / QS_MCP_DIR, else probe common clone locations under $HOME. When NONE is
-# found, Phase 2 does NOT abort — it prints the convert-model.rb --emit-mcp request and
-# gates; resume with --converted <mcp tool result> (the default route without a build).
-MCP_DIR = [opts[:mcp_dir], ENV['QS_MCP_DIR'],
-           File.expand_path('~/Desktop/sigma-data-model-mcp'),
-           File.expand_path('~/sigma-data-model-mcp')]
-          .compact.find { |d| File.exist?(File.join(d, 'build', 'quicksight.js')) }
-# ZERO-config local converter: a dev's build (above) wins, else the self-contained
-# bundle VENDORED in the skill (converter/quicksight.mjs) — no clone, no npm, no
-# network, no MCP. CONV_MODULE is what the Phase-2 shim imports; nil only if the
-# bundle is also absent (then --converted / the MCP gate applies).
-VENDORED_QS = File.expand_path('../converter/quicksight.mjs', __dir__)
-CONV_MODULE = MCP_DIR ? File.join(MCP_DIR, 'build', 'quicksight.js') :
-              (File.exist?(VENDORED_QS) ? VENDORED_QS : nil)
+# Converter resolution (issue #227): the pinned VENDORED bundle is the DEFAULT so a
+# dev machine and a customer machine convert identically. A local sigma-data-model-mcp
+# build is used ONLY via explicit --mcp-dir / QS_MCP_DIR — no silent auto-discovery of
+# ~/… checkouts (that was the "works in my demo, differs for the customer" footgun).
+# CONV_MODULE is what the Phase-2 shim imports; nil only if the bundle is also absent
+# (then --converted / the convert_quicksight_to_sigma MCP tool gate applies).
+CONV_MODULE, MCP_DIR, CONVERTER_DESC =
+  resolve_converter(opts[:mcp_dir] || ENV['QS_MCP_DIR'], VENDORED_QS, 'quicksight.js')
+warn "converter: #{CONVERTER_DESC}"
 
 name_slug = (opts[:analysis] || File.basename(opts[:fixtures].to_s)).gsub(/[^A-Za-z0-9_-]/, '-')
 WORK = opts[:out] || File.expand_path("~/quicksight-migration/#{name_slug}")

@@ -82,11 +82,40 @@ from build_workbook import build_field_index, parse_join_aliases, disp, leaf
 HERE = os.path.dirname(os.path.abspath(__file__))
 T0 = time.time()
 MCP_TOOL = "mcp__sigma-data-model__convert_lookml_to_sigma"
-# ~/sigma-data-model-mcp FIRST: the Desktop copy is routinely a stale clone
-# (version-skew footgun, bead 8nq5) — prefer the canonical checkout and warn
-# loudly (warn_converter_skew) when whichever one resolves is behind origin/main.
-CONVERTER_HOMES = [os.path.expanduser(p) for p in
-                   ("~/sigma-data-model-mcp", "~/Desktop/sigma-data-model-mcp")]
+VENDORED_CONVERTER = os.path.join(HERE, "..", "converter", "lookml.mjs")
+
+
+def resolve_converter():
+    """Converter resolution (issue #227). The pinned VENDORED bundle is the
+    DEFAULT so a developer machine and a customer machine produce identical
+    output for the same input. A local sigma-data-model-mcp checkout/build is
+    used ONLY when EXPLICITLY opted in via CONVERTER_SRC (src/lookml.ts, run via
+    tsx) or CONVERTER_PATH (build/lookml.js) — there is NO silent auto-discovery
+    of ~/sigma-data-model-mcp or ~/Desktop/sigma-data-model-mcp checkouts (that
+    was the "works in my demo, differs for the customer" footgun).
+
+    Returns (kind, path, desc) where kind is one of "src", "build", "vendored",
+    or None (no converter resolvable — the MCP-request fallback applies)."""
+    src = os.environ.get("CONVERTER_SRC")
+    build = os.environ.get("CONVERTER_PATH")
+    if not src and not build and os.path.exists(VENDORED_CONVERTER):
+        build = VENDORED_CONVERTER
+    if src:
+        return "src", src, f"DEV SRC {src} (explicit opt-in via CONVERTER_SRC)"
+    if build:
+        if build == VENDORED_CONVERTER:
+            prov_path = os.path.join(os.path.dirname(VENDORED_CONVERTER), "PROVENANCE.json")
+            commit = None
+            try:
+                commit = json.load(open(prov_path)).get("source_commit")
+            except Exception:
+                pass
+            return ("vendored", build,
+                    f"VENDORED {os.path.basename(VENDORED_CONVERTER)}"
+                    f"{f' (pinned {commit})' if commit else ''} — no data egress")
+        return "build", build, f"DEV BUILD {build} (explicit opt-in via CONVERTER_PATH)"
+    return None, None, ("NONE — vendored bundle missing; convert_lookml_to_sigma "
+                        "MCP / --converted fallback applies")
 
 
 def warn_converter_skew(resolved_path):
@@ -451,7 +480,17 @@ def main():
                          "build-new (reuse only via explicit --reuse-dm).")
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--print-converter", action="store_true",
+                    help="Resolve the converter (CONVERTER_SRC -> CONVERTER_PATH -> "
+                         "vendored bundle), print the resolved path + a one-line "
+                         "provenance description, and exit 0. No other args, Sigma "
+                         "creds, or network access required.")
     a = ap.parse_args()
+    if a.print_converter:
+        _kind, _path, _desc = resolve_converter()
+        print(_path or "none")
+        print(_desc)
+        return 0
     if not a.dashboard and not a.dashboard_id:
         ap.error("--dashboard (offline .dashboard.lookml) or --dashboard-id (live) required")
     if not a.lookml_dir and not a.project:
@@ -588,23 +627,15 @@ def main():
         json.dump(spec, open(dm_spec_path, "w"), indent=2)
         print(f"   using MCP converter output {a.converted} -> {dm_spec_path}")
     else:
-        src = os.environ.get("CONVERTER_SRC") or next(
-            (os.path.join(h, "src", "lookml.ts") for h in CONVERTER_HOMES
-             if os.path.exists(os.path.join(h, "src", "lookml.ts"))
-             and os.path.exists(os.path.join(h, "node_modules", ".bin", "tsx"))), None)
-        build = os.environ.get("CONVERTER_PATH") or next(
-            (os.path.join(h, "build", "lookml.js") for h in CONVERTER_HOMES
-             if os.path.exists(os.path.join(h, "build", "lookml.js"))), None)
-        # Zero-config fallback: the converter is VENDORED in the skill as a
-        # self-contained ESM bundle (converter/lookml.mjs) — no clone, no MCP, no
-        # network. A dev's CONVERTER_SRC/CONVERTER_PATH (or a CONVERTER_HOMES
-        # checkout) still wins above; this is the guaranteed floor so conversion
-        # runs locally out of the box. Imported by the same `build` node shim below.
-        vendored = os.path.join(HERE, "..", "converter", "lookml.mjs")
-        if not src and not build and os.path.exists(vendored):
-            build = vendored
+        # Converter resolution (issue #227): the pinned VENDORED bundle is the
+        # DEFAULT so a dev machine and a customer machine convert identically. A
+        # local checkout/build is used ONLY via explicit CONVERTER_SRC /
+        # CONVERTER_PATH — no silent auto-discovery of ~/… checkouts.
+        kind, path, desc = resolve_converter()
+        src = path if kind == "src" else None
+        build = path if kind in ("build", "vendored") else None
+        print(f"   converter: {desc}", file=sys.stderr)
         if src or build:
-            print(f"   converter: {src or build}")
             warn_converter_skew(src or build)
         if src:
             repo = os.path.dirname(os.path.dirname(src))

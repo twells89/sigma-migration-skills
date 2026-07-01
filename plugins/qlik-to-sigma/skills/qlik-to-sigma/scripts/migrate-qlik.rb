@@ -133,7 +133,41 @@ OptionParser.new do |o|
   o.on('--no-reuse')          {     opts[:no_reuse] = true }
   o.on('--dry-run')           {     opts[:dry_run]  = true }
   o.on('--skip-layout-lint')  {     opts[:skip_layout_lint] = true }
+  # Resolve + print which converter would run (vendored vs explicit dev build), then
+  # exit 0 — no creds/args needed. Used by the converter-default regression test.
+  o.on('--print-converter')   {     opts[:print_converter] = true }
 end.parse!
+
+# Converter resolution (issue #227). The pinned VENDORED bundle is the DEFAULT so a
+# developer machine and a customer machine produce identical output for the same
+# input. A local sigma-data-model-mcp build is used ONLY when EXPLICITLY opted in
+# via QLIK_MCP_DIR — there is NO silent auto-discovery of ~/… checkouts (that was
+# the "works in my demo, differs for the customer" footgun). Returns
+# [conv_module, mcp_build_dir_or_nil, loud_provenance_line].
+def resolve_converter(mcp_dir, vendored, build_basename)
+  build_dir = (mcp_dir && File.exist?(File.join(mcp_dir, 'build', build_basename))) ? mcp_dir : nil
+  conv = build_dir ? File.join(build_dir, 'build', build_basename) :
+         (File.exist?(vendored) ? vendored : nil)
+  desc =
+    if conv && conv == vendored
+      prov = File.join(File.dirname(vendored), 'PROVENANCE.json')
+      commit = (JSON.parse(File.read(prov))['source_commit'] rescue nil)
+      "VENDORED #{File.basename(vendored)}#{commit ? " (pinned #{commit})" : ''} — no data egress"
+    elsif conv
+      "DEV BUILD #{conv} (explicit opt-in via QLIK_MCP_DIR)"
+    else
+      'NONE — vendored bundle missing; convert_qlik_to_sigma MCP / --converter-out (converter-out.json) resume applies'
+    end
+  [conv, build_dir, desc]
+end
+
+VENDORED_QLIK = File.expand_path('../converter/qlik.mjs', __dir__)
+if opts[:print_converter]
+  conv, _bd, desc = resolve_converter(ENV['QLIK_MCP_DIR'], VENDORED_QLIK, 'qlik.js')
+  puts(conv || 'none')
+  puts desc
+  exit 0
+end
 
 abort 'missing --app (or --from-discovery)' unless opts[:app] || opts[:from]
 # intake.rb (front-door) caches the resolved connection in <out>/connection.json; honor it
@@ -141,21 +175,14 @@ abort 'missing --app (or --from-discovery)' unless opts[:app] || opts[:from]
 opts[:conn] ||= (JSON.parse(File.read(File.join(opts[:out], 'connection.json')))['connection_id'] rescue nil) if opts[:out]
 abort 'missing --connection (pass --connection <id>, or run intake.rb first and point --out at its --workdir)' unless opts[:conn]
 
-# Converter (exports convertQlikToSigma) — ZERO-config, local, no MCP. A dev's
-# own build wins via QLIK_MCP_DIR (or a local sigma-data-model-mcp checkout);
-# otherwise the self-contained bundle VENDORED in the skill (converter/qlik.mjs)
-# is used — no clone, no npm install, no network. Refresh it with
-# tools/vendor-converters.sh (see converter/PROVENANCE.json).
-MCP_DIR = ENV['QLIK_MCP_DIR'] || %w[
-  /Users/tjwells/Desktop/sigma-data-model-mcp
-  /Users/tjwells/sigma-data-model-mcp
-].find { |d| File.exist?(File.join(d, 'build', 'qlik.js')) }
-VENDORED_QLIK = File.expand_path('../converter/qlik.mjs', __dir__)
-# The converter module the Phase-2 shim imports: a dev build if present, else the
-# vendored bundle. nil only if BOTH are somehow absent (a prior converter-out.json
-# may then still be reused).
-CONV_MODULE = MCP_DIR ? File.join(MCP_DIR, 'build', 'qlik.js') :
-              (File.exist?(VENDORED_QLIK) ? VENDORED_QLIK : nil)
+# Converter resolution (issue #227): the pinned VENDORED bundle is the DEFAULT so a
+# dev machine and a customer machine convert identically. A local build is used ONLY
+# via explicit QLIK_MCP_DIR — no silent auto-discovery of ~/… checkouts. CONV_MODULE
+# is what the Phase-2 shim imports; nil only if the bundle is also absent (then
+# --converter-out / the convert_qlik_to_sigma MCP gate applies).
+CONV_MODULE, MCP_DIR, CONVERTER_DESC =
+  resolve_converter(ENV['QLIK_MCP_DIR'], VENDORED_QLIK, 'qlik.js')
+warn "converter: #{CONVERTER_DESC}"
 
 name_slug = (opts[:app] || File.basename(opts[:from].to_s)).gsub(/[^A-Za-z0-9_-]/, '-')
 WORK = opts[:out] || File.expand_path("~/qlik-migration/#{name_slug}")

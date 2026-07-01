@@ -25,6 +25,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate every corpus case against its golden
         run: ./corpus/run-corpus.sh --check
+      - name: Converter-default regression (issue #227 — vendored default, no silent dev-checkout)
+        # Creds-free, network-free: proves each orchestrator defaults to the pinned
+        # vendored bundle and only uses a local build via an explicit env/flag.
+        run: ./corpus/converter-default-test.sh
 
   script-syntax:
     name: syntax-check every script (ruby -c / py_compile / bash -n)

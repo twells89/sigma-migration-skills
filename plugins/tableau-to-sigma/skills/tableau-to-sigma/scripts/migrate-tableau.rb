@@ -692,26 +692,28 @@ if mechanical
     line "WARN: TABLEAU_MCP_BUILD=#{mcp_build} does not exist — ignoring"
     mcp_build = nil
   end
-  # Auto-discover a LOCAL converter build when TABLEAU_MCP_BUILD is unset, so the
+  # Resolve the LOCAL converter build when TABLEAU_MCP_BUILD is unset, so the
   # no-egress local path is the ZERO-config default — the mechanical path runs
   # without any setup instead of dropping to the manual STOP. The VENDORED build
-  # (converter/tableau.js, shipped inside this skill) is the guaranteed final
+  # (converter/tableau.mjs, shipped inside this skill) is the guaranteed final
   # fallback: no clone, no npm install, no network. The local converter is NOT a
   # server — it's a pure function (XML → Sigma JSON) run via `node`; nothing
   # leaves the box. First hit wins; purely filesystem (never the network), so a
-  # miss just falls through to the consent/STOP logic below. Earlier entries (env
-  # override, a local sigma-data-model-mcp checkout) win when present, so a dev
-  # with a fresher converter still uses it. Set TABLEAU_MCP_BUILD to override.
+  # miss just falls through to the consent/STOP logic below.
+  #
+  # issue #227: a local dev checkout is used ONLY when EXPLICITLY pointed at —
+  # TABLEAU_MCP_BUILD, SIGMA_DATA_MODEL_MCP, or the fetch-converter.sh vendor
+  # target. There is NO silent auto-discovery of ~/… checkouts (that made a dev's
+  # machine convert differently from a customer's). Otherwise the pinned vendored
+  # bundle runs, so output is identical everywhere.
   # Explicit `--converter hosted` is a deliberate opt-in to off-box conversion —
-  # don't let local auto-discovery (esp. the always-present vendored build)
-  # silently override it. SIGMA_CONVERTER_ALLOW_HOSTED is only a *permission*, not
-  # a preference, so it still prefers local when a build is found.
+  # don't let local resolution (esp. the always-present vendored build) silently
+  # override it. SIGMA_CONVERTER_ALLOW_HOSTED is only a *permission*, not a
+  # preference, so it still prefers local when a build is found.
   if mcp_build.nil? && opts[:converter] != 'hosted'
     auto = [
       (ENV['SIGMA_DATA_MODEL_MCP'] && File.join(ENV['SIGMA_DATA_MODEL_MCP'], 'build', 'tableau.js')),
-      File.join(HERE, 'vendor', 'sigma-data-model-mcp', 'build', 'tableau.js'), # fetch-converter.sh target (gitignored)
-      File.expand_path('~/sigma-data-model-mcp/build/tableau.js'),
-      File.expand_path('~/Desktop/sigma-data-model-mcp/build/tableau.js'),
+      File.join(HERE, 'vendor', 'sigma-data-model-mcp', 'build', 'tableau.js'), # fetch-converter.sh target (gitignored, explicit dev opt-in)
       File.expand_path('../converter/tableau.mjs', HERE) # vendored in-skill — always present
     ].compact.find { |p| File.exist?(p) }
     if auto
