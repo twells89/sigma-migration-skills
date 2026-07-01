@@ -207,6 +207,64 @@ def current_period_bounds(period, now = Time.now)
   relative_period_bounds(period, 0, 0, now)
 end
 
+# Tableau period-type → Sigma date-range `unit` enum. Sigma has no bare "week"
+# (it splits Sunday/Monday anchored) and no "weekday"/other Tableau grains.
+# Returns nil for grains Sigma's rolling modes can't express (caller falls back).
+def sigma_date_unit(period)
+  case period.to_s.downcase
+  when 'year'    then 'year'
+  when 'quarter' then 'quarter'
+  when 'month'   then 'month'
+  when 'week'    then 'week-starting-sunday'
+  when 'day'     then 'day'
+  when 'hour'    then 'hour'
+  when 'minute'  then 'minute'
+  end
+end
+
+# Map a Tableau relative-date filter (period-type + first/last period offsets) to
+# a ROLLING Sigma date-range filter fragment — the fields that sit flat alongside
+# `mode` (verified shapes in sigma-workbooks reference/specification/controls.md).
+#
+# Tableau offsets are period counts relative to now (first=-2,last=0 = "last 3
+# months"; first=0,last=0 = "this month"). We preserve the window LENGTH and
+# whether it reaches the current period, and emit a filter that ROLLS instead of
+# freezing to concrete dates (the old mode:between behaviour broke at every
+# period rollover and rendered empty when the frozen window missed the data).
+#
+# Returns [fragment_hash, kind] where kind ∈ :current/:last/:next/:frozen and the
+# fragment excludes columnId/id/includeNulls (the caller adds those). Returns
+# [nil, :unsupported] only when no Sigma shape fits at all.
+def relative_date_filter_fields(period, first, last, now = Time.now)
+  first = first.to_i
+  last  = last.to_i
+  unit  = sigma_date_unit(period)
+
+  # "This <period>" — rolls automatically (bead z135). Works for every grain.
+  return [{ 'mode' => 'current', 'unit' => (unit || period.to_s.downcase) }, :current] if first.zero? && last.zero?
+
+  if unit
+    # Trailing window that ends at now (last=0) or at the last complete period
+    # (last=-1): "last N <unit>". includeToday distinguishes the two.
+    if last == 0 || last == -1
+      value = last - first + 1
+      return [{ 'mode' => 'last', 'value' => value, 'unit' => unit, 'includeToday' => (last == 0) }, :last] if value >= 1
+    end
+    # Leading (future) window that starts at now (first=0) or the next period
+    # (first=1): "next N <unit>".
+    if first == 0 || first == 1
+      value = last - first + 1
+      return [{ 'mode' => 'next', 'value' => value, 'unit' => unit, 'includeToday' => (first == 0) }, :next] if value >= 1
+    end
+  end
+
+  # Shifted/spanning window (or a grain Sigma can't roll): fall back to explicit
+  # frozen bounds so at least the range is right at build time.
+  start_d, end_d = relative_period_bounds(period, first, last, now)
+  return [{ 'mode' => 'between', 'startDate' => start_d, 'endDate' => end_d }, :frozen] if start_d
+  [nil, :unsupported]
+end
+
 def render_agg(agg, master_col_ref)
   return master_col_ref if agg.nil?
   if agg.include?('%s')
@@ -3443,39 +3501,33 @@ layout.each do |dash|
           'values' => f['members'], 'includeNulls' => 'never'
         }
       when 'relative-date'
-        # Tableau first-period=0, last-period=0 + period-type=year means
-        # "this <period>" → Sigma mode:"current" + unit:<period>. E2E
-        # re-verified 2026-06-10 (bead z135) that mode:current filters the
-        # chart-data SQL — it rolls over automatically instead of freezing.
-        # Offset windows (first/last ≠ 0, e.g. "last 3 months") fall back to
-        # explicit between-bounds (frozen — re-run to refresh).
+        # Tableau relative-date filters → ROLLING Sigma date-range filters:
+        #   "this <period>" (first=last=0)      → mode:current unit:<unit>
+        #   "last N <period>" (e.g. first=-5,0) → mode:last  value:N unit includeToday
+        #   "next N <period>"                   → mode:next  value:N unit includeToday
+        # Only genuinely shifted/spanning windows (which no rolling mode fits)
+        # fall back to frozen mode:between bounds. This replaces the old code
+        # that froze EVERY offset window to static dates (broke at rollover and
+        # rendered empty when the frozen range missed the data — Wendy's dash).
         period   = (f['period_type'] || 'year').downcase
         inc_null = (f['include_null'].to_s == 'true' ? 'always' : 'never')
         fcol = el_filter_col_for.call(m)
         next if fcol.nil? # helper-sourced chart, column unreachable (warned in el_filter_col_for)
-        if f['first_period'].to_i.zero? && f['last_period'].to_i.zero?
-          el_filters << {
-            'columnId' => fcol, 'kind' => 'date-range', 'mode' => 'current',
-            'unit' => period, 'includeNulls' => inc_null
-          }
-          warnings << "'#{cap}' relative-date 'this #{period}' → element filter mode:current unit:#{period} (rolls over automatically; verified to filter chart-data SQL, bead z135)"
-        else
-          start_d, end_d = relative_period_bounds(period, f['first_period'], f['last_period'])
-          if start_d
-            el_filters << {
-              'columnId' => fcol, 'kind' => 'date-range', 'mode' => 'between',
-              'startDate' => start_d, 'endDate' => end_d,
-              'includeNulls' => inc_null
-            }
-            warnings << "'#{cap}' relative-date window #{f['first_period']}..#{f['last_period']} #{period}s → element filter mode:between (#{start_d[0..9]}..#{end_d[0..9]}); FROZEN — re-run to refresh"
-          else
-            el_filters << {
-              'columnId' => fcol, 'kind' => 'date-range', 'mode' => 'relative',
-              'unit' => period, 'count' => 1,
-              'includeNulls' => inc_null
-            }
-            warnings << "'#{cap}' relative-date '#{period}' kept as mode:relative (no bounds computable for '#{period}') — verify it filters the SQL"
-          end
+        fields, kind = relative_date_filter_fields(period, f['first_period'], f['last_period'])
+        if fields.nil?
+          warnings << "'#{cap}' relative-date on '#{fcap}' (period=#{period}, window #{f['first_period']}..#{f['last_period']}) — no Sigma date-range mode fits; filter DROPPED, wire it by hand"
+          next
+        end
+        el_filters << { 'columnId' => fcol, 'kind' => 'date-range', 'includeNulls' => inc_null }.merge(fields)
+        case kind
+        when :current
+          warnings << "'#{cap}' relative-date 'this #{period}' → element filter mode:current unit:#{fields['unit']} (rolls automatically; bead z135)"
+        when :last
+          warnings << "'#{cap}' relative-date → element filter mode:last value:#{fields['value']} unit:#{fields['unit']} includeToday:#{fields['includeToday']} (ROLLS — no frozen dates)"
+        when :next
+          warnings << "'#{cap}' relative-date → element filter mode:next value:#{fields['value']} unit:#{fields['unit']} includeToday:#{fields['includeToday']} (rolls)"
+        when :frozen
+          warnings << "'#{cap}' relative-date window #{f['first_period']}..#{f['last_period']} #{period}s is shifted/spanning — no rolling mode fits → mode:between (#{fields['startDate'][0..9]}..#{fields['endDate'][0..9]}); FROZEN — re-run to refresh"
         end
       when 'number-range'
         fcol = el_filter_col_for.call(m)
@@ -4018,33 +4070,33 @@ if opts[:auto_controls]
       }
       spec['filters'] = targets
     when 'relative-date'
-      # Tableau "this year" / "this month" / "this quarter" → Sigma date-range
-      # control with `mode: "current"` + `unit: <period>`. E2E re-verified
-      # 2026-06-10 (bead z135): mode:current DOES filter the chart-data SQL
-      # when the control's `filters` target wiring is present — the earlier
-      # "render-time only" finding that drove hardcoded between-bounds was
-      # wrong, and the hardcoded dates froze the filter (broke at rollover).
-      # mode:between is kept ONLY for genuinely fixed/offset windows
-      # (first/last period ≠ 0, e.g. "last 3 months"), which Sigma has no
-      # verified rolling-control shape for yet.
+      # Tableau relative-date → ROLLING Sigma date-range control (same rolling
+      # mode vocabulary as an element filter; shapes verified in sigma-workbooks
+      # reference/specification/controls.md, live 2026-06-15):
+      #   "this <period>"  → mode:current unit
+      #   "last N <period>"→ mode:last value:N unit includeToday
+      #   "next N <period>"→ mode:next value:N unit includeToday
+      # Only shifted/spanning windows fall back to frozen mode:between. This
+      # replaces freezing every offset window to static dates (bead z135).
       spec['controlType'] = 'date-range'
       period = (f['period_type'] || 'year').downcase
       spec['filters'] = targets
-      if f['first_period'].to_i.zero? && f['last_period'].to_i.zero?
-        spec['mode'] = 'current'
-        spec['unit'] = period
-        warnings << "shared filter '#{cap}' relative-date 'this #{period}' → date-range control mode:current unit:#{period} (rolls over automatically; no frozen dates)"
+      fields, kind = relative_date_filter_fields(period, f['first_period'], f['last_period'])
+      if fields.nil?
+        # Nothing Sigma can express — leave the picker open rather than emit an invalid mode.
+        spec['mode'] = 'between'
+        warnings << "shared filter '#{cap}' relative-date (period=#{period}, window #{f['first_period']}..#{f['last_period']}) — no Sigma mode fits; emitted an empty date-range picker, set it by hand"
       else
-        start_d, end_d = relative_period_bounds(period, f['first_period'], f['last_period'])
-        if start_d
-          spec['mode']      = 'between'
-          spec['startDate'] = start_d
-          spec['endDate']   = end_d
-          warnings << "shared filter '#{cap}' relative-date window #{f['first_period']}..#{f['last_period']} #{period}s → mode:between (#{start_d[0..9]}..#{end_d[0..9]}); FROZEN — re-run to refresh"
-        else
-          spec['mode'] = 'current'
-          spec['unit'] = period
-          warnings << "shared filter '#{cap}' relative-date '#{period}' window not boundable — emitted mode:current unit:#{period}; verify the window manually"
+        spec.merge!(fields)
+        case kind
+        when :current
+          warnings << "shared filter '#{cap}' relative-date 'this #{period}' → date-range control mode:current unit:#{fields['unit']} (rolls automatically; no frozen dates)"
+        when :last
+          warnings << "shared filter '#{cap}' relative-date → date-range control mode:last value:#{fields['value']} unit:#{fields['unit']} includeToday:#{fields['includeToday']} (ROLLS — no frozen dates)"
+        when :next
+          warnings << "shared filter '#{cap}' relative-date → date-range control mode:next value:#{fields['value']} unit:#{fields['unit']} includeToday:#{fields['includeToday']} (rolls)"
+        when :frozen
+          warnings << "shared filter '#{cap}' relative-date window #{f['first_period']}..#{f['last_period']} #{period}s is shifted/spanning → mode:between (#{fields['startDate'][0..9]}..#{fields['endDate'][0..9]}); FROZEN — re-run to refresh"
         end
       end
     when 'number-range'

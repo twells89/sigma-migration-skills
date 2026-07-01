@@ -145,13 +145,17 @@ Optional `--enhance [--enhance-accept <ids|all-low-risk>]` runs Phase E
   field like `master/ship speed category`, translate the Tableau calc (see
   `calc-fields.json`) and re-run the same command with
   `--master-col 'Name=<Sigma formula>'`.
-- **Shared relative-date filters** — a dashboard-wide filter like
-  `'Order Date ' = this year` only surfaces as a uniform parity DIVERGE (every
-  Sigma value too big). Fix: expose the date key on the DM if the converter
-  consumed it, add a master boolean (e.g. `[Order Year] = Year(Today())`) plus a
-  master `filters: [{id, columnId, kind: list, mode: include, values: [true]}]`
-  entry — it propagates to every chart sourcing the master — then re-query and
-  re-`--finalize`. (Validated live on Orders Conversion Test, 2026-06-10.)
+- **Shared relative-date filters** — `build-charts-from-signals.rb` now maps
+  these to Sigma's native ROLLING date-range modes directly:
+  `this <period>` → `mode:current`, `last N <period>` → `mode:last`
+  (`value:N`, `unit`, `includeToday`), `next N` → `mode:next`. They roll with the
+  clock — no frozen dates and no manual master-boolean workaround. Only a
+  shifted/spanning window (one that doesn't anchor to now) falls back to a frozen
+  `mode:between`, flagged `FROZEN — re-run to refresh`. If a shared relative-date
+  filter still shows a uniform parity DIVERGE (every Sigma value too big),
+  confirm the date key survived into the DM and the control's `filters` target
+  wiring reached the chart's source. (Rolling emission verified 2026-07-01;
+  shapes per `sigma-authoring` controls.md, live 2026-06-15.)
 - **❌-unhandled gap features** — gap-scout subagent or `--force` (degraded).
 - **DM-reuse shape preflight** — when `--reuse-dm` hits a differently-shaped DM
   the workbook gate exits 4; run Phase 1.5b (`inspect-dm-shape.rb`) and the
