@@ -240,14 +240,13 @@
       "targets": [
         "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/get-token.sh",
         "plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/get-token.sh",
-        {
-          "path": "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/get-token.sh",
-          "exception": "Intentional: credential sanity-check additions (looker postmortem 2026-06-18)."
-        },
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/get-token.sh",
         "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/get-token.sh",
         "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/get-token.sh",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/vendor/get-token.sh",
         "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/get-token.sh",
+        "plugins/sigma-authoring/skills/custom-sql-to-data-model/scripts/get-token.sh",
+        "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/get-token.sh",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/get-token.sh",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-assessment/scripts/get-token.sh",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/get-token.sh"
