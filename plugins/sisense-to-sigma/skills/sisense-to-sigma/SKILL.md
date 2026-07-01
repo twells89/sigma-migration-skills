@@ -67,6 +67,17 @@ widgets) — never emit confidently-wrong logic.
   pointing both tools at it — see `refs/design-notes.md` ("Snowflake-parity").
 - **Python 3** (stdlib only).
 
+## Converter architecture (read if you know the other migration skills)
+
+Unlike the **Group-A** converters (tableau, powerbi, qlik, quicksight, looker,
+thoughtspot, cognos) — which share the vendored `sigma-data-model-mcp` engine
+(`converter/*.mjs`, with the hosted `convert_*` MCP tool as a fallback) — this
+skill uses a **self-contained Python converter that ships in `scripts/`**
+(`convert.py` + `jaql_expr.py`). It runs locally via `python3`; there is **no
+vendored `.mjs` bundle, no `convert_sisense_to_sigma` MCP tool, and no
+`--converter` / `*_MCP_DIR` override** — those concepts do not apply here. Nothing
+about the model conversion leaves your machine.
+
 ## Phase 0 — Assess (optional)
 Run the `sisense-assessment` skill for an estate inventory + converter-coverage
 scoring before committing to conversions.

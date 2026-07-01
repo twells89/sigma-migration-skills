@@ -42,6 +42,17 @@ and all data-model authoring to **sigma-data-models**.
 - `refs/viz-type-mapping.md` — insight + dashboard → Sigma element mapping.
 - `refs/design-notes.md` — full architecture, parity, RLS, risks, build order.
 
+## Converter architecture (read if you know the other migration skills)
+
+Unlike the **Group-A** converters (tableau, powerbi, qlik, quicksight, looker,
+thoughtspot, cognos) — which share the vendored `sigma-data-model-mcp` engine
+(`converter/*.mjs`, with the hosted `convert_*` MCP tool as a fallback) — this
+skill uses a **self-contained Python converter that ships in `scripts/`**
+(`convert.py` + `maql.py`). It runs locally via `python3`; there is **no vendored
+`.mjs` bundle, no `convert_gooddata_to_sigma` MCP tool, and no `--converter` /
+`*_MCP_DIR` override** — those concepts do not apply here. Nothing about the model
+conversion leaves your machine.
+
 ## Phases
 
 **Phase 0 — Assess.** Run the `gooddata-assessment` skill for an inventory +

@@ -21,6 +21,17 @@ user-invocable: true
 
 Before POSTing any workbook spec, run `ruby scripts/lib/preflight_lint.rb <spec.json>` — it exits 1 with a precise message on the two migration-killer bugs: a `table` with aggregate columns + dimensions but **no `groupings`** (renders raw detail rows), and a malformed `control` (missing `id`/`controlId`/`controlType` or nesting value fields under a `value` object instead of flat, a non-double-nested `source`, or a list control wired to neither `source` nor `filters` — a filters-only list control is valid). Fix every violation first — never POST past it, and **never conclude a feature is "unsupported" from an `Invalid kind` error** (it means the inner fields are wrong). Verified shapes: `sigma-workbooks` `controls.md` / `tables.md`.
 
+## Converter architecture (read if you know the other migration skills)
+
+Unlike the **Group-A** converters (tableau, powerbi, qlik, quicksight, looker,
+thoughtspot, cognos) — which share the vendored `sigma-data-model-mcp` engine
+(`converter/*.mjs`, with the hosted `convert_*` MCP tool as a fallback) — this
+skill uses a **self-contained Python converter that ships in `scripts/`**
+(`convert.py`). It runs locally via `python3`; there is **no vendored `.mjs`
+bundle, no `convert_microstrategy_to_sigma` MCP tool, and no `--converter` /
+`*_MCP_DIR` override** — those concepts do not apply here. Nothing about the model
+conversion leaves your machine.
+
 ## Phase 0a — Choose where to build (ask first; `--folder-id` is required downstream)
 
 Don't pick the destination folder for the user. `convert.py` requires `--folder-id`,
