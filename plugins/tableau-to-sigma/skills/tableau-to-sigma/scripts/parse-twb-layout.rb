@@ -891,6 +891,40 @@ end
 # column, and `children` (direct-child zones only). This is ADDITIVE: the flat
 # `zones` list (below) is preserved for every downstream consumer that wants the
 # geometry-banded path; the layout builder prefers the tree when present.
+# ── Phase-1 style extraction (composition/style layer, gaps B2/D1/E1) ────────
+# Tableau stores a dashboard zone's fill/border on the zone's DIRECT <zone-style>
+# child (NOT a <style-rule element='dash-zone'> — that scope does not exist):
+#   <zone …><zone-style>
+#     <format attr='background-color' value='#RRGGBBAA'/>   ← region-card tint / canvas
+#     <format attr='border-color' value='#hex'/> …
+#   </zone-style></zone>
+# Values may be 8-digit alpha hex (#rrggbbaa) — Sigma style.backgroundColor accepts
+# them verbatim. Returns {} when the zone has no explicit styling (→ plain container,
+# never worse than today's output). Verified against the "Job Loss from Mass
+# Deportations" benchmark (region tints #07b4a2/#e8519a/#827bb8/#f28e2b at alpha).
+def zone_style_fields(z)
+  out = {}
+  z.elements.each('zone-style/format') do |f|
+    a = f.attributes['attr']; v = f.attributes['value']
+    next if v.nil? || v.empty?
+    case a
+    when 'background-color'
+      out['fill_color'] = v unless v.downcase == '#00000000' # skip fully-transparent
+    when 'border-color'  then out['border_color'] = v
+    when 'border-style'  then out['border_style'] = v
+    end
+  end
+  out
+end
+
+# Tableau quick-filter / parameter display mode (zone `mode` attr) → E1 control-style
+# hint. mode='compact' → dropdown (Sigma controlType:list); 'type_in' → text input;
+# absent → default button/radio (Sigma segmented). Returns nil when unset.
+def zone_control_display(z)
+  m = z.attributes['mode']
+  m && !m.empty? ? m : nil
+end
+
 def build_zone_tree(z)
   type_v2 = z.attributes['type-v2']
   caption = z.attributes['name']
@@ -908,6 +942,10 @@ def build_zone_tree(z)
   # layout-flow's `param` is the stack direction; a vertical flow stacks its
   # children top-to-bottom (the classic left filter-rail), horizontal L→R.
   node['direction'] = (param == 'vert' ? 'vert' : 'horz') if type_v2 == 'layout-flow'
+  # Phase-1 style: per-zone fill/border (region-card tints, canvas) + control mode.
+  node.merge!(zone_style_fields(z))
+  cd = zone_control_display(z)
+  node['control_display'] = cd if cd
   # filter/param zones resolve their target column from `param` (a column GUID).
   if kind == 'filter' || kind == 'parameter'
     g = guid_from_param(param)
@@ -958,6 +996,10 @@ xml.elements.each('//dashboard') do |d|
       filter_col_datatype = info && info[:datatype]
     end
 
+    # Phase-1 style: per-zone fill/border (tints, canvas) + control display mode.
+    zstyle = zone_style_fields(z)
+    zdisp  = zone_control_display(z)
+
     zones << {
       'id'           => z.attributes['id'],
       'kind'         => kind,
@@ -990,7 +1032,11 @@ xml.elements.each('//dashboard') do |d|
       'is_kpi'       => (kind == 'chart' ? ws_meta&.dig(:is_kpi)        : nil),
       # Resolved filter target (filter/parameter zones only)
       'filter_column_caption'  => (kind == 'filter' || kind == 'parameter' ? filter_col_caption  : nil),
-      'filter_column_datatype' => (kind == 'filter' || kind == 'parameter' ? filter_col_datatype : nil)
+      'filter_column_datatype' => (kind == 'filter' || kind == 'parameter' ? filter_col_datatype : nil),
+      # Phase-1 composition/style signals (gaps B2/E1; nil when the zone is unstyled)
+      'fill_color'      => zstyle['fill_color'],
+      'border_color'    => zstyle['border_color'],
+      'control_display' => zdisp
     }
   end
   # A "storyboard" dashboard is Tableau's story container (sequential story
