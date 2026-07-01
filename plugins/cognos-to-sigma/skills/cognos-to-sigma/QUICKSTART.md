@@ -49,8 +49,12 @@ Duration: 2
   `scripts/get-cognos-session.sh`.
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Cognos content reports on (for true parity).
-- The **`convert_cognos_to_sigma`** + **`convert_cognos_report_to_sigma`** converters (part of
-  the sigma-data-model MCP), or the bundled `converter/` (Node + `fast-xml-parser`).
+- The **Cognos → Sigma converter** — ships **inside the skill** as a prebuilt local bundle
+  (`converter/cli.mjs`, Node + `fast-xml-parser`) and runs via plain `node` (no clone, no
+  `npm install`, no `tsx`, no network, **no data egress**). This is the default and works out
+  of the box; it requires only `node` on PATH. The hosted `sigma-data-model` MCP
+  (`convert_cognos_to_sigma` / `convert_cognos_report_to_sigma`) is only a fallback if the
+  local bundle can't run.
 
 negative
 : CAoC (Cognos on Cloud) sessions are short-lived and sit behind Akamai bot-protection — a copied session can return **HTTP 441** within minutes (the SPA's `X-CA-SSO: 441` header is the re-auth signal), and curl replay may be rejected outright. Re-login + re-copy a *hot* session, or use a **CA API key / service credential** where the tenant allows it (the durable path).

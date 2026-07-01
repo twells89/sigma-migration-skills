@@ -1,6 +1,6 @@
 ---
 name: quicksight-to-sigma
-description: Convert an Amazon QuickSight analysis or dashboard into a Sigma data model and matching dashboard. Use when the user has a QuickSight analysis/dashboard and wants to recreate it in Sigma. Covers AWS-CLI extraction of the analysis definition + datasets + data sources, calc-field / data-prep translation via the convert_quicksight_to_sigma MCP, posting the data model + workbook via the Sigma REST API, layout, and parity verification against the same warehouse.
+description: Convert an Amazon QuickSight analysis or dashboard into a Sigma data model and matching dashboard. Use when the user has a QuickSight analysis/dashboard and wants to recreate it in Sigma. Covers AWS-CLI extraction of the analysis definition + datasets + data sources, calc-field / data-prep translation via the local vendored converter (the convert_quicksight_to_sigma MCP tool is a manual fallback only), posting the data model + workbook via the Sigma REST API, layout, and parity verification against the same warehouse.
 user-invocable: true
 ---
 
@@ -29,13 +29,13 @@ If a destination is already supplied, honor it silently — don't ask.
 
 > Status: **foundation** (converter MCP + browser shipped 2026-05-28).
 > Beads: converter = `beads-sigma-j5e`; CustomSql/DIRECT_QUERY fixup = `beads-sigma-vy4k`.
-> Defers to: `sigma-workbooks` (canonical workbook spec), `sigma-data-models` (DM spec), the `convert_quicksight_to_sigma` MCP tool, and the shared vendor-neutral Sigma-side scripts (`post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `verify-parity.rb`) reused across the migration skills.
+> Defers to: `sigma-workbooks` (canonical workbook spec), `sigma-data-models` (DM spec), the local vendored converter (`converter/quicksight.mjs`, exporting `convertQuickSightToSigma` — the `convert_quicksight_to_sigma` MCP tool is a manual fallback only), and the shared vendor-neutral Sigma-side scripts (`post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `verify-parity.rb`) reused across the migration skills.
 
 ## What's proven (the happy path)
 ```
 1. AUTH      AWS CLI → QuickSight (Enterprise edition REQUIRED); Sigma creds via get-token.sh
 2. DISCOVER  describe-analysis-definition + describe-data-set(s) + describe-data-source(s)  → quicksight-discover.py → signals.json
-3. CONVERT   convert_quicksight_to_sigma MCP (analysis.json + dataset jsons + connectionId)  → Sigma DM JSON      [MCP gate]
+3. CONVERT   local vendored converter (converter/quicksight.mjs via node) — analysis.json + dataset jsons + connectionId → Sigma DM JSON   [MCP only as manual fallback]
 4. POST DM   fixup (name elements + passthrough cols, rewrite sql refs, schemaVersion=1) → validate → POST /v2/dataModels/spec
 5. WORKBOOK  master tables per DM element + chart elements mirroring the QS visuals → POST /v2/workbooks/spec
 6. LAYOUT    QS grid x,y,w,h → 24-col layout XML → put-layout.rb
@@ -108,7 +108,13 @@ Pulls `describe-analysis-definition` (or `-dashboard-definition`) + `describe-da
 - **Batch mode**: `--analysis-ids a,b,c --pool 4` (cap 8) runs per-analysis discovery in parallel into `<out-dir>/<id>/`, sharing the estate cache with single-flight de-duplication (concurrent threads needing the same dataset trigger exactly one describe).
 - **Test coverage (live AWS is IAM-blocked — see below)**: `python3 scripts/tests/test-quicksight-discover.py` — 11 tests covering both transports (fake-boto3 injection + stubbed CLI), datetime normalization, cache hit/invalidation/single-flight, batch mode, and the offline fixture path. **Still awaiting live-AWS validation**: real boto3 session/profile auth, real `list-data-sets` pagination + permissions, Enterprise-edition `describe-*-definition` latency, and measured before/after numbers on a real estate. The mocked harness + the `--from-fixtures` E2E (`migrate-quicksight.rb`, parity 5/5 strict) are the offline proof.
 
-## Phase 3 — Convert (MCP gate)
+## Phase 3 — Convert (local, zero-config)
+
+The conversion runs **locally by default**: `migrate-quicksight.rb` executes the vendored
+converter bundle (`converter/quicksight.mjs`, `convertQuickSightToSigma`) in-process via a
+`node` shim over `analysis.json` + each `datasets/*.json` — no clone, no `npm install`, no
+network, **no MCP, no data egress**. A dev's own build wins via `--mcp-dir` / `$QS_MCP_DIR`.
+Only if the bundle is **also** absent does it gate (exit 10):
 
 ```bash
 ruby scripts/convert-model.rb --emit-mcp \
@@ -117,7 +123,7 @@ ruby scripts/convert-model.rb --emit-mcp \
   [--database <DB> --schema <SCHEMA>]
 ```
 
-This prints the exact `convert_quicksight_to_sigma` MCP-tool call — `files` = `analysis.json` + each `datasets/*.json`, plus `connection_id` (and `database`/`schema` overrides if a dataset's source path is incomplete). **The agent then runs that MCP tool** and saves the returned Sigma data-model JSON (e.g. `converter-out.json`).
+This prints the exact `convert_quicksight_to_sigma` MCP-tool call — `files` = `analysis.json` + each `datasets/*.json`, plus `connection_id` (and `database`/`schema` overrides if a dataset's source path is incomplete). Run that MCP tool **manually** — it is a fallback, not the default path — save its result, and resume with `--converted <mcp-tool-result.json>` (e.g. `converter-out.json`).
 
 What the converter handles vs. what it doesn't (see `refs/migration-test-slate.md` for the full taxonomy):
 - **Handled**: RelationalTable, CustomSql, JoinInstruction, DataTransforms (CreateColumns/Rename/Cast/Filter/Project), ~40 calc-field functions (`ifelse`→`If`, `switch`→nested `If`), parameters → Sigma controls. KPI / bar / line / donut/pie visuals on the workbook side.

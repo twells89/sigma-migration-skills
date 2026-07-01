@@ -47,7 +47,7 @@ Duration: 2
 - **An Enterprise-edition QuickSight account** + the analysis (or dashboard) id you want to migrate.
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the datasets use (its `connection_id` feeds the converter), and a target **folder id**.
-- The **`convert_quicksight_to_sigma`** converter (part of the sigma-data-model MCP).
+- The **QuickSight → Sigma converter** — ships **inside the skill** as a prebuilt local bundle (`converter/quicksight.mjs`) and runs **in-process via `node`** (no clone, no `npm install`, no network, **no data egress** — your analysis/dataset JSON never leaves your machine). This is the default and works out of the box; it requires only `node` on PATH. A dev's own converter build wins via `--mcp-dir` / `$QS_MCP_DIR`. The hosted `sigma-data-model` MCP's `convert_quicksight_to_sigma` tool is **only** a manual fallback: if the bundle *and* `node` are both unavailable the orchestrator stops (exit 10) and prints the exact MCP call for you to run, then resume with `--converted`.
 
 ## The two-skill ecosystem
 Duration: 2
@@ -97,9 +97,13 @@ Point the `quicksight-to-sigma` skill at an analysis. Phases:
 
 1. **Discover** (`quicksight-discover.py`) — AWS CLI → `describe-analysis-definition`
    + datasets + data sources → `signals.json` and raw JSON.
-2. **Convert** — `convert-model.rb --emit-mcp` prints the exact
-   `convert_quicksight_to_sigma` MCP call (analysis + dataset jsons + your Sigma
-   `connection_id`); run it and save the returned Sigma data-model JSON.
+2. **Convert** — runs **locally by default**: the vendored converter bundle
+   (`converter/quicksight.mjs`, `convertQuickSightToSigma`) executes in-process via
+   `node` over the analysis + dataset jsons + your Sigma `connection_id` — no clone,
+   no network, no MCP. Only if that bundle (and a dev's `--mcp-dir`/`$QS_MCP_DIR`
+   build) are both absent does `convert-model.rb --emit-mcp` print the
+   `convert_quicksight_to_sigma` MCP call as a **manual fallback**; run it yourself
+   and save the returned Sigma data-model JSON, then resume with `--converted`.
 3. **Build the data model** — `convert-model.rb --fixup` (names elements, rewrites
    sql refs, `schemaVersion: 1`, folder) → validate → POST to `/v2/dataModels/spec`;
    verify every column has a concrete type (no `error` columns).

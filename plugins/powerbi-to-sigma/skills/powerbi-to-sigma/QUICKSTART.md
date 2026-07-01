@@ -52,7 +52,7 @@ Duration: 2
 - **Power BI / Fabric access** — you do **not** need to register an Entra app. The skill uses **device-code auth** with the well-known Power BI Desktop public client, which works against *My workspace* and any workspace you can access.
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`)
 - A **Sigma connection to the same warehouse** the model uses (for parity)
-- The **`convert_powerbi_to_sigma`** converter (part of the sigma-data-model MCP)
+- The **Power BI → Sigma converter** — ships **inside the skill** as a prebuilt local bundle (`converter/powerbi.mjs`) and runs **in-process via `node`** (no clone, no `npm install`, no network, **no data egress** — your `model.bim` never leaves your machine). This is the default and works out of the box; it requires only `node` on PATH. A dev's own converter build wins via `--mcp-dir` / `$PBI_MCP_DIR`. The hosted `sigma-data-model` MCP is **only** a manual fallback: if the bundle *and* `node` are both unavailable the orchestrator stops (exit 10) and prints the exact `convert_powerbi_to_sigma` call for you to run, then resume with `--converter-out`.
 
 negative
 : Two API audiences are involved — **Fabric** (`api.fabric.microsoft.com`) for `getDefinition` (TMSL/PBIR) and **Power BI REST** (`analysis.windows.net/powerbi`) for refresh history, Activity Events, and `executeQueries` (DAX parity). The skill acquires both from one device-code session; corporate TLS requires `truststore.inject_into_ssl()`.

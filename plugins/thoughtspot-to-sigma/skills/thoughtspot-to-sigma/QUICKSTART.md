@@ -45,11 +45,16 @@ python3 scripts/ts_discover.py <LIVEBOARD_ID> LIVEBOARD   # viz chart types + li
 ```
 
 ## 3. Convert the model
-Feed the model's TML to the **`convert_thoughtspot_to_sigma`** MCP tool (or point
-`CONVERTER_PATH` at a `sigma-data-model-mcp` build for the one-shot path). With
-neither, `migrate.py` writes `<workdir>/convert-request.json` (the exact MCP
-arguments) and exits 3 — call the tool, save its JSON output, and re-run with
-`--converted <file>`. The converter emits a Sigma data model with a denormalized
+Conversion runs **locally by default**: the skill ships a self-contained
+converter bundle (`converter/thoughtspot.mjs`), and `migrate.py` defaults
+`CONVERTER_PATH` to it, so `convert_model.mjs` runs the bundle in-process via
+`node` — no clone, no `npm install`, no network, **no MCP, no data egress**. A
+dev's own build wins via an explicit `CONVERTER_PATH`. The hosted
+**`convert_thoughtspot_to_sigma`** MCP tool is **only** a manual fallback: if
+the bundle is also unavailable, `migrate.py` writes
+`<workdir>/convert-request.json` (the exact MCP arguments) and exits 3 — call
+the tool yourself, save its JSON output, and re-run with `--converted <file>`.
+The converter emits a Sigma data model with a denormalized
 **"<root> View"** element that surfaces joined-dim columns — the workbook master
 reads from it. Rules: `refs/model-conversion-rules.md`.
 

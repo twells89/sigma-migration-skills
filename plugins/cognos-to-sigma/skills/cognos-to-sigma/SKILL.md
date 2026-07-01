@@ -21,7 +21,7 @@ user-invocable: true
 
 Before POSTing any workbook spec, run `ruby scripts/lib/preflight_lint.rb <spec.json>` — it exits 1 with a precise message on the two migration-killer bugs: a `table` with aggregate columns + dimensions but **no `groupings`** (renders raw detail rows), and a malformed `control` (missing `id`/`controlId`/`controlType` or nesting value fields under a `value` object instead of flat, a non-double-nested `source`, or a list control wired to neither `source` nor `filters` — a filters-only list control is valid). Fix every violation first — never POST past it, and **never conclude a feature is "unsupported" from an `Invalid kind` error** (it means the inner fields are wrong). Verified shapes: `sigma-workbooks` `controls.md` / `tables.md`.
 
-## Phase 0 — Choose where to build (ask first when no destination given)
+## Phase 0a — Choose where to build (ask first when no destination given)
 
 Don't silently land the migrated data model + workbook in My Documents.
 If the user didn't supply a destination (no `--folder <id>`), ASK before building:
@@ -124,7 +124,7 @@ checkpoint, never silently ported or dropped).
 
 ---
 
-## Phase 0 — Discover (CA REST)
+## Phase 0b — Discover (CA REST)
 
 **Work in batch windows.** CAoC sessions die in MINUTES — never walk an estate one
 object per agent turn (each re-auth costs the human a browser round-trip). The moment

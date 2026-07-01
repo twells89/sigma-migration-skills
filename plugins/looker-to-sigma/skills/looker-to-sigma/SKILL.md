@@ -6,7 +6,8 @@ description: >-
   LookML projects, explores, or dashboards (user-defined OR LookML-defined) —
   and wants to recreate it in Sigma. Discovery via the Looker REST API 4.0 /
   Looker MCP server (or LookML files offline), model conversion via the
-  convert_lookml_to_sigma converter, dashboard → workbook conversion from the
+  local vendored LookML converter (convert_lookml_to_sigma MCP tool as a
+  manual fallback), dashboard → workbook conversion from the
   Looker Dashboard API JSON, build via the Sigma REST API, and 3-way parity
   verification against the source warehouse — driven by `scripts/*`.
 user-invocable: true
@@ -22,7 +23,7 @@ user-invocable: true
 
 Before POSTing any workbook spec, run `ruby scripts/lib/preflight_lint.rb <spec.json>` — it exits 1 with a precise message on the two migration-killer bugs: a `table` with aggregate columns + dimensions but **no `groupings`** (renders raw detail rows), and a malformed `control` (missing `id`/`controlId`/`controlType` or nesting value fields under a `value` object instead of flat, a non-double-nested `source`, or a list control wired to neither `source` nor `filters` — a filters-only list control is valid). Fix every violation first — never POST past it, and **never conclude a feature is "unsupported" from an `Invalid kind` error** (it means the inner fields are wrong). Verified shapes: `sigma-workbooks` `controls.md` / `tables.md`.
 
-## Phase 0 — Choose where to build (ask first when no destination given)
+## Phase 0a — Choose where to build (ask first when no destination given)
 
 Don't silently land the migrated data model + workbook in an auto-picked folder.
 If the user didn't supply a destination (no `--folder <id>` and no `SIGMA_FOLDER_ID`), ASK before building:
@@ -54,7 +55,7 @@ Looker has two independent layers; convert them separately.
 
 | Layer | Source (production = API-first) | Converter | Sigma output |
 |---|---|---|---|
-| **Semantic model** | LookML views+model (Looker API/MCP, or files offline) | `mcp__sigma-data-model__convert_lookml_to_sigma` | data model |
+| **Semantic model** | LookML views+model (Looker API/MCP, or files offline) | local vendored `converter/lookml.mjs` (run in-process via `node`; the `convert_lookml_to_sigma` MCP tool is a manual fallback only) | data model |
 | **Dashboards** | `GET /dashboards/{id}` JSON — covers **user-defined (UDD) AND LookML dashboards** | `fetch_looker_dashboard.py` → contract → `build_workbook.py` | workbook |
 
 **Critical — UDD is the primary path.** Most real Looker dashboards are **user-defined
@@ -227,7 +228,7 @@ unusable for Looker. To stand up an end-to-end test pointed at the same warehous
 
 ---
 
-## Phase 0 — Assess the Looker estate
+## Phase 0b — Assess the Looker estate
 
 Scope the migration before converting anything — inventory models/explores/dashboards, score
 complexity, and rank a migration shortlist. This is handled by the **`looker-assessment`**
@@ -401,26 +402,46 @@ plain DM/element filter; `access_grant` → the recorded note. (Team mode =
 LookML views + model → Sigma data model. Resolve the explore's join graph, convert, POST,
 **register the model**, and verify.
 
-### 2a. Convert with `convert_lookml_to_sigma`
+### 2a. Convert — local by default, MCP only as a manual fallback
 
-The MCP tool `mcp__sigma-data-model__convert_lookml_to_sigma(files, connectionId, exploreName,
-joinStrategy)` is the primary path. Feed it the **LookML model**, NOT the warehouse tables —
-the converter walks the explore's `join`s to resolve `view.field` prefixes (alias vs `from:`
-view) and emits one element per resolved view plus a denormalized explore element.
+Feed it the **LookML model**, NOT the warehouse tables — the converter walks the explore's
+`join`s to resolve `view.field` prefixes (alias vs `from:` view) and emits one element per
+resolved view plus a denormalized explore element.
 
-> **Converter-build gotcha.** The long-running MCP server serves the **deployed** build. After
-> editing `src/lookml.ts` + `npm run build`, the running MCP tool still serves the OLD code
-> until it restarts. For fixed output against an edited source tree, run the converter directly:
->
-> ```bash
-> LOOKML_DIR=/path/to/lookml \
-> CONVERTER_SRC=/path/to/sigma-data-model-mcp/src/lookml.ts \
->   node --import tsx/esm scripts/convert_dm.mjs <exploreName> /tmp/<name>/dm-spec.json
-> ```
->
-> `convert_dm.mjs` reads `<model>.model.lkml` + every `views/*.view.lkml`, converts the explore
-> with `joinStrategy: 'relationships'`, and writes `res.model` (the return property is `.model`,
-> **not** `.sigmaDataModel`). It prints stats + warnings — **read every warning.**
+**Default: the converter runs locally, in-process, no MCP, no data egress.** The skill ships a
+self-contained vendored bundle at `converter/lookml.mjs`; `migrate-looker.py` (and
+`scripts/convert_dm.mjs` directly) run it via a `node` shim — no clone, no `npm install`, no
+network call, and your LookML never leaves the machine:
+
+```bash
+LOOKML_DIR=/path/to/lookml \
+  node --import tsx/esm scripts/convert_dm.mjs <exploreName> /tmp/<name>/dm-spec.json
+```
+
+`convert_dm.mjs` reads `<model>.model.lkml` + every `views/*.view.lkml`, converts the explore
+with `joinStrategy: 'relationships'`, and writes `res.model` (the return property is `.model`,
+**not** `.sigmaDataModel`). It prints stats + warnings — **read every warning.**
+
+A dev's own checkout wins automatically when present: `migrate-looker.py` first checks
+`CONVERTER_SRC` (a `src/lookml.ts` + `tsx`, for fixed output against a patched source tree —
+see the build gotcha below) or `CONVERTER_PATH` (a built `build/lookml.js`), resolved from
+`~/sigma-data-model-mcp` or `~/Desktop/sigma-data-model-mcp` (`CONVERTER_HOMES`) if set. The
+vendored `converter/lookml.mjs` bundle is the guaranteed floor underneath both — it is what runs
+out of the box with nothing configured.
+
+**Fallback only — no local converter and no `node`:** `migrate-looker.py` writes
+`convert-request.json` (the exact `mcp__sigma-data-model__convert_lookml_to_sigma(files,
+connectionId, exploreName, joinStrategy)` arguments) and **exits 3**. Call the MCP tool by hand
+with those arguments, save its JSON output to `<workdir>/converted.json`, and resume with
+`--converted <workdir>/converted.json`. Reach for this only when the vendored bundle is missing —
+routing through the hosted MCP by default means your LookML leaves the machine and you're at the
+mercy of whatever converter version the MCP happens to be running (version drift vs the vendored
+bundle / a patched source tree).
+
+> **Converter-build gotcha (only relevant when using `CONVERTER_SRC`).** The long-running MCP
+> server serves the **deployed** build. After editing `src/lookml.ts` + `npm run build`, the
+> running MCP tool still serves the OLD code until it restarts — another reason the local
+> `CONVERTER_SRC`/vendored-bundle path is preferred over calling the MCP tool.
 
 ### 2b. Converter coverage (all live-validated 2026-06-10) — and what's still lossy
 

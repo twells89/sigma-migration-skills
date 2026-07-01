@@ -81,14 +81,27 @@ summary (never silently drop RLS). Validated live with exact 3-way parity ($38,9
 
 ## 3. Convert the semantic model
 
-Feed the LookML **model** (not the warehouse tables) to the **`convert_lookml_to_sigma`** MCP
-tool — it resolves the explore's join graph. For fixed output against a patched converter
-source tree (the MCP server serves the *deployed* build), run it directly:
+Feed the LookML **model** (not the warehouse tables) to the converter — it resolves the
+explore's join graph. **This runs locally by default**: the skill ships a self-contained
+vendored bundle (`converter/lookml.mjs`) and `scripts/convert_dm.mjs` runs it in-process via
+`node` — no clone, no `npm install`, no network call, and your LookML never leaves the machine:
+```bash
+LOOKML_DIR=/path/to/lookml \
+  node --import tsx/esm scripts/convert_dm.mjs <explore> /tmp/look/dm-spec.json
+```
+A dev's own checkout wins automatically when set — point `CONVERTER_SRC` at a patched
+`sigma-data-model-mcp/src/lookml.ts` (the long-running MCP server only serves its *deployed*
+build, so a source-tree fix needs this direct path to take effect):
 ```bash
 LOOKML_DIR=/path/to/lookml \
 CONVERTER_SRC=/path/to/sigma-data-model-mcp/src/lookml.ts \
   node --import tsx/esm scripts/convert_dm.mjs <explore> /tmp/look/dm-spec.json
 ```
+The hosted **`convert_lookml_to_sigma`** MCP tool is a **manual fallback only** — reached when
+neither the vendored bundle nor a local build is available. In that case
+`scripts/migrate-looker.py` writes `convert-request.json` (the exact MCP arguments) and exits
+`3`; call the tool by hand, save its JSON output, and resume with `--converted <file>`.
+
 Read the printed warnings. Before POSTing, run the **DM-reuse check** (SKILL.md Phase 2.5):
 `lookml-dm-signature.py` + `find-or-pick-dm.rb --auto-pick` score the org's existing data
 models against the explore's tables/columns — on a strong match the skill asks reuse-vs-new

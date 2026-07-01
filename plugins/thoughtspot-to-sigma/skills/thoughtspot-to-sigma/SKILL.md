@@ -123,17 +123,20 @@ prefix applied to BOTH the data model and every workbook; workbooks and pages
 are named after the Liveboard's **display name** (resolved from its TML, never
 the UUID).
 
-**Converter — zero-config, local, no MCP.** A self-contained converter bundle
-ships in the skill at `converter/thoughtspot.mjs` and is the default: conversion
-runs locally via `node` with no clone, no `npm install`, no network, no MCP.
-`CONVERTER_PATH` defaults to it; a dev's own `build/thoughtspot.js` still wins when
-set. Refresh the bundle with `tools/vendor-converters.sh` (see
-`converter/PROVENANCE.json`). Only if the bundle is missing AND `CONVERTER_PATH` is
-unset does migrate.py fall back to the **MCP path**: it writes `<workdir>/model.tml`
-+ `<workdir>/convert-request.json` (the exact
-`mcp__sigma-data-model__convert_thoughtspot_to_sigma` arguments) and exits 3 — call
-the tool, save its JSON to `<workdir>/converted.json`, and re-run with
-`--converted <workdir>/converted.json`.
+**Converter — local by default, MCP is a fallback.** Conversion runs **locally
+by default**: the skill ships a self-contained converter bundle at
+`converter/thoughtspot.mjs`, and both `migrate.py` and `migrate-thoughtspot.py`
+default `CONVERTER_PATH` to it, so `convert_model.mjs` runs the bundle
+in-process via `node` — no clone, no `npm install`, no network, **no MCP, no
+data egress**. A dev's own build (`build/thoughtspot.js`) still wins via an
+explicit `CONVERTER_PATH`. Refresh the bundle with `tools/vendor-converters.sh`
+(see `converter/PROVENANCE.json`). The hosted `sigma-data-model` MCP is
+**only** a manual fallback: if the bundle is **also** missing AND
+`CONVERTER_PATH` is unset, `migrate.py` writes `<workdir>/model.tml` +
+`<workdir>/convert-request.json` (the exact
+`mcp__sigma-data-model__convert_thoughtspot_to_sigma` arguments) and exits 3 —
+call the tool yourself, save its JSON to `<workdir>/converted.json`, and re-run
+with `--converted <workdir>/converted.json`.
 
 **Offline mode** (no live ThoughtSpot needed): `--model-tml <file>` +
 `--liveboard-tml <file>` read exported TML from disk — `fixtures/` ships a real
@@ -149,9 +152,13 @@ python3 scripts/migrate.py --model-tml fixtures/retail-analytics-model.tml \
 1. **Discover** — `ts_discover.py [<id> <type>]` lists models + Liveboards or
    summarizes one (chart types, search queries, lineage). `metadata/search` +
    `metadata/tml/export`.
-2. **Convert the model** — export the model TML and run it through
-   `convert_thoughtspot_to_sigma` (`convert_model.mjs` imports the built converter;
-   the browser tool / MCP also work). ThoughtSpot exports the **`model:`** format
+2. **Convert the model** — export the model TML and convert it **locally by
+   default**: `convert_model.mjs` runs the vendored converter bundle
+   (`converter/thoughtspot.mjs`) in-process via `node` — no clone, no `npm
+   install`, no network, **no MCP, no data egress**. Only if that bundle (and
+   any dev-supplied `CONVERTER_PATH`) is unavailable does it fall back to the
+   **`convert_thoughtspot_to_sigma`** MCP tool, called manually. ThoughtSpot
+   exports the **`model:`** format
    (joins inline on `model_tables[].joins[]`, `[TABLE::COL]` formula refs,
    `col.properties.column_type`) — the converter handles it. POST to
    `/v2/dataModels/spec`; then read the posted DM spec to find the denormalized
@@ -290,8 +297,11 @@ region, quarter all match to the cent). Per-run ids land in `<workdir>/migrate_o
   converter's regression diet.
 
 ## Notes
-- `convert_thoughtspot_to_sigma` is the converter (MCP github.com/twells89/sigma-data-model-mcp
-  + browser sigma-data-model-manager) — keep both in lockstep.
+- The vendored bundle (`converter/thoughtspot.mjs`) is the local, default path for
+  conversion. It's built from the same `convert_thoughtspot_to_sigma` logic as the
+  hosted MCP (github.com/twells89/sigma-data-model-mcp) and the browser
+  sigma-data-model-manager — keep all three in lockstep; the MCP tool itself is only
+  a manual fallback when the local bundle is unavailable.
 - **Rename gotcha**: `PATCH /v2/workbooks/{id}` silently no-ops for renames
   (200, name unchanged) — rename via `PATCH /v2/files/{id} {"name": …}`
   (delete and unarchive are files-side too).

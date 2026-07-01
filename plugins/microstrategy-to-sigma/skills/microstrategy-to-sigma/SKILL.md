@@ -21,7 +21,7 @@ user-invocable: true
 
 Before POSTing any workbook spec, run `ruby scripts/lib/preflight_lint.rb <spec.json>` — it exits 1 with a precise message on the two migration-killer bugs: a `table` with aggregate columns + dimensions but **no `groupings`** (renders raw detail rows), and a malformed `control` (missing `id`/`controlId`/`controlType` or nesting value fields under a `value` object instead of flat, a non-double-nested `source`, or a list control wired to neither `source` nor `filters` — a filters-only list control is valid). Fix every violation first — never POST past it, and **never conclude a feature is "unsupported" from an `Invalid kind` error** (it means the inner fields are wrong). Verified shapes: `sigma-workbooks` `controls.md` / `tables.md`.
 
-## Phase 0 — Choose where to build (ask first; `--folder-id` is required downstream)
+## Phase 0a — Choose where to build (ask first; `--folder-id` is required downstream)
 
 Don't pick the destination folder for the user. `convert.py` requires `--folder-id`,
 so resolve it WITH the user before building:
@@ -82,7 +82,7 @@ logic.
   gate stack: `put-layout.rb`, `assert-phase6-ran.rb`, `probe-controls.rb`,
   `scripts/lib/*.rb` — vendored byte-identical across the sibling plugins).
 
-## Phase 0 — Discover
+## Phase 0b — Discover
 
 Run the sibling **`microstrategy-assessment`** skill for an estate-wide
 inventory (reports/dossiers, viz histogram, complexity tags) — its

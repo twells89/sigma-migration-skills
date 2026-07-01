@@ -4,8 +4,9 @@ description: >-
   Convert a Qlik Sense / Qlik Cloud app into a Sigma data model and matching
   workbook. Use when the user has a Qlik Cloud tenant/app and wants to recreate
   it in Sigma. Discovery via qlik-cli (Engine + REST), Qlik-expression →
-  Sigma-formula translation via the convert_qlik_to_sigma converter, data model
-  + workbook creation via the Sigma REST API, and parity verification against
+  Sigma-formula translation via the local vendored convert_qlik_to_sigma
+  converter (MCP tool only as a manual fallback), data model + workbook
+  creation via the Sigma REST API, and parity verification against
   the source warehouse. Requires qlik-cli + a Sigma SIGMA_API_TOKEN.
 user-invocable: true
 ---
@@ -84,12 +85,15 @@ independently runnable script if you need to intervene mid-pipeline.
 
 ## The one big idea
 
-Qlik's calc language (master measures/dimensions, Set Analysis) translates via the
-existing **`mcp__sigma-data-model__convert_qlik_to_sigma`** tool. But the decisive
-move is **what you feed it**: the Qlik *in-memory model* (post-LOAD-script field
-names), NOT the raw warehouse tables. The Qlik LOAD script's renames/drops are
-exactly what disambiguate a clean star; raw warehouse column names collide
-(CITY/STATE/REGION/UNIT_COST shared across dims → spurious relationships).
+Qlik's calc language (master measures/dimensions, Set Analysis) translates via
+`convertQlikToSigma` — run **locally by default** (the vendored `converter/qlik.mjs`
+bundle, in-process via a `node` shim, no clone/npm/network/MCP/data-egress); the
+hosted `mcp__sigma-data-model__convert_qlik_to_sigma` tool is only a manual fallback
+when no converter is available. But the decisive move is **what you feed it**: the
+Qlik *in-memory model* (post-LOAD-script field names), NOT the raw warehouse tables.
+The Qlik LOAD script's renames/drops are exactly what disambiguate a clean star; raw
+warehouse column names collide (CITY/STATE/REGION/UNIT_COST shared across dims →
+spurious relationships).
 
 The Qlik LOAD script ≈ a Sigma **custom-SQL element**. Reproduce it as SQL and
 every Qlik field name resolves.
@@ -178,14 +182,16 @@ staleness) blocks GREEN.
 > same Phase-2 translation. No row counts in a `-prj` folder → relationships are by shared
 > field name only; review join directions.
 
-## Phase 2 — Translate (convert_qlik_to_sigma)
-**Converter — zero-config, local, no MCP.** `migrate-qlik.rb` runs
+## Phase 2 — Convert (convert_qlik_to_sigma)
+**Local by default, zero-config, no MCP.** `migrate-qlik.rb` runs
 `convertQlikToSigma` in-process via a `node` shim against the self-contained bundle
-VENDORED in the skill (`converter/qlik.mjs`) — no clone, no npm, no network, no MCP.
-A dev's own build still wins via `QLIK_MCP_DIR` (or a local `sigma-data-model-mcp`
-checkout); refresh the bundle with `tools/vendor-converters.sh`. (The
-`mcp__sigma-data-model__convert_qlik_to_sigma` MCP tool produces the same
-`model_json → Sigma DM spec` and remains available for manual/agent use.)
+VENDORED in the skill (`converter/qlik.mjs`) — no clone, no npm, no network, **no
+MCP, no data egress**. A dev's own build wins via `QLIK_MCP_DIR` (or a local
+`sigma-data-model-mcp` checkout); refresh the bundle with `tools/vendor-converters.sh`.
+Only if the vendored bundle is **also** missing (and `QLIK_MCP_DIR` unset) does
+`migrate-qlik.rb` abort, at which point run the `mcp__sigma-data-model__convert_qlik_to_sigma`
+MCP tool **manually** (same `model_json → Sigma DM spec` contract) and feed its output
+back in as `converter-out.json`. The hosted MCP is a fallback, not the default path.
 Output = Sigma DM spec (warehouse-table elements + relationships on shared keys +
 metrics from measures + auto "Dim View" denormalized elements).
 

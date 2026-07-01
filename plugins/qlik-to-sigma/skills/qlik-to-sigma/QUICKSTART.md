@@ -59,7 +59,7 @@ Duration: 2
 - **Qlik Cloud access** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible).
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity).
-- The **`convert_qlik_to_sigma`** converter (part of the sigma-data-model MCP).
+- The **`convert_qlik_to_sigma`** converter — ships inside the skill as a local vendored bundle (`converter/qlik.mjs`, run in-process via `node`, no clone/npm/network); the sigma-data-model MCP tool of the same name is only a manual fallback if the bundle is somehow missing.
 
 negative
 : A *plain* M2M OAuth client can authenticate and discover apps, but it (a) only sees content in spaces it's a member of and (b) cannot reload apps that use space data-connections. Use an API key or an M2M-impersonation client for anything beyond read-only discovery.
@@ -167,8 +167,11 @@ it chains these phases (each also independently runnable from `scripts/*`):
    stale and Sigma (live warehouse) will show more data.
 2. **Reconcile** (`reconcile-columns.py`) — auto-derive the Qlik-field → real-warehouse
    column map from the load script's `AS` aliases (`ORDER_STORE_KEY AS STORE_KEY`).
-3. **Translate** — `convert_qlik_to_sigma` turns master measures into Sigma metrics and
-   builds relationships from shared keys. **Set Analysis** → Sigma `SumIf`/`CountIf`.
+3. **Convert** — the local vendored converter (`converter/qlik.mjs` via `node`, no clone/
+   npm/network/MCP/data-egress) runs `convertQlikToSigma`, turning master measures into
+   Sigma metrics and building relationships from shared keys. **Set Analysis** → Sigma
+   `SumIf`/`CountIf`. A dev build wins via `QLIK_MCP_DIR`; the hosted
+   `convert_qlik_to_sigma` MCP tool is only a manual fallback if no converter is found.
 4. **Build the data model** (`gen-denorm-sql.py` + `build-sigma-dm.py`) — a clean star
    plus a denormalized SQL element; POST to `/v2/dataModels/spec`.
 5. **Build the workbook** (`build-sigma-workbook.py`) — one Sigma page per Qlik sheet,

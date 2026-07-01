@@ -84,8 +84,10 @@ ruby scripts/migrate-tableau.rb --workbook "<name>" \
 > it yourself" (that skips preflight/control lint, Phase-6 parity, and the
 > `assert-phase6-ran` hard gate — the exact way a workbook ships with missing controls and
 > an unverified parity claim). Instead author the specs *once* and let the scripts run them:
-> 1. Get the **DM spec** — call the `sigma-data-model` MCP's `convert_tableau_to_sigma` on
->    the `.twb` if it's available to you, else author it by hand (see `sigma-data-models`).
+> 1. Get the **DM spec** — normally the vendored local converter (`converter/tableau.mjs`)
+>    produces this automatically; reach here only if even that can't run. In that case call
+>    the hosted `sigma-data-model` MCP's `convert_tableau_to_sigma` on the `.twb` if it's
+>    available to you, else author it by hand (see `sigma-data-models`).
 > 2. Author the **workbook spec** (see the companion `sigma-workbooks` skill). Reference the
 >    data model with placeholders the orchestrator binds to the live readback ids:
 >    `"__DM_ID__"` (top-level `dataModelId`) and `"__DM_ELEMENT__:<ElementName>"` per element

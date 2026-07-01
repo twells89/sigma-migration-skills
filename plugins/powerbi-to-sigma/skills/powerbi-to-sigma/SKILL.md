@@ -35,7 +35,7 @@ If a destination is already supplied, honor it silently — don't ask.
 ```
 1. CONNECT   device-code login, well-known PowerBI-Desktop client, NO Entra app   → scripts/fabric-extract.py
 2. EXTRACT   Fabric getDefinition?format=TMSL → model.bim   (+ .pbix Report/Layout for visuals)
-3. CONVERT   convert_powerbi_to_sigma MCP (model.bim + connectionId + db/schema) → Sigma DM JSON
+3. CONVERT   local vendored converter (converter/powerbi.mjs via node) — model.bim + connectionId + db/schema → Sigma DM JSON   [MCP only as manual fallback]
 4. POST DM   fix spec (schemaVersion + folderId/ownerId + element names) → POST /v2/dataModels/spec
 5. WORKBOOK  Data page (master tables per DM element) + chart elements → POST /v2/workbooks/spec
 6. LAYOUT    PBIX/PBIR visual x,y,w,h → 24-col grid XML → put-layout.rb
@@ -83,11 +83,19 @@ Import-mode PBI models are **frozen snapshots**; Sigma reads the LIVE warehouse.
 
 Pulls the refresh history (`GET datasets/{id}/refreshes` via the cached token) — last successful refresh + **FAILED refreshes** (expired warehouse creds are the classic cause; surfaced loudly) — plus a cheap `executeQueries` row-count/max-date snapshot per table (the per-table probes run **4-wide in parallel** — a 6-table model snapshots in one round-trip's wall time). The preflight is **NON-BLOCKING**: it is only CONSUMED at Phase 6/7 parity, so `run.sh` (stage 1.5) and `migrate-powerbi.rb` (Phase 1.5) launch it as a **background lane concurrent with Convert/Build** and join it (replaying its log) right before parity — 3-8s of Power BI round-trips off the critical path. A run that stops at a gate leaves the detached probe to finish; the resume run reuses the written `freshness.json`. Phase 6/7 parity is then **LED by the staleness banner**, and deltas classify **MATCH / STALE-EXPLAINED / DIVERGENT — only DIVERGENT blocks** (a "Sigma shows more data" delta on a stale snapshot is explained, not a conversion error). `migrate-powerbi.rb` also always writes per-phase **`timings.json`** and prints a `PHASE TIMINGS` line at every terminal exit.
 
-## Phase 3 — Convert (MCP)
-`convert_powerbi_to_sigma(model_json, connection_id, database, schema)`.
+## Phase 3 — Convert (local, zero-config)
+The conversion runs **locally by default**: `migrate-powerbi.rb` executes the vendored
+converter bundle (`converter/powerbi.mjs`, `convertPowerBIToSigma`) in-process via a `node`
+shim — no clone, no `npm install`, no network, **no MCP, no data egress**. A dev's own build
+wins via `--mcp-dir` / `$PBI_MCP_DIR`. Only if the bundle is **also** absent does it gate
+(exit 10) with instructions to run the `convert_powerbi_to_sigma` MCP tool **manually** and
+resume with `--converter-out`. The hosted MCP is a fallback, not the default path.
 
-> ⚠️ **`--converter-out` takes the MCP converter's output — never a hand-authored spec.**
-> The flag exists so you can run the `convert_powerbi_to_sigma` MCP tool, save its
+`convertPowerBIToSigma(model_json, connection_id, database, schema)`.
+
+> ⚠️ **`--converter-out` takes the converter's output — never a hand-authored spec.**
+> The flag exists so you can run the converter (the fallback `convert_powerbi_to_sigma`
+> MCP tool when the local bundle is unavailable), save its
 > result, and resume the pipeline with it (`convert-model.rb --converter-out <that file>`).
 > It is **not** an invitation to write `dm-raw.json` by hand. Hand-authored specs skip
 > the converter's column-name/SQL/formula-prefix guarantees and reliably produce
