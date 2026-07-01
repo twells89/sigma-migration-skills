@@ -146,6 +146,19 @@ views = wb.dig('views', 'view') || []
 views = [views] unless views.is_a?(Array)
 log "wrote get-workbook.json  (id=#{wb['id']} views=#{views.size})"
 
+# --- 1b. Capability banner ---------------------------------------------------
+# Tableau Server can lack VDS and the Metadata API that Cloud always exposes.
+# Announce the mode up front so an operator isn't left debugging why
+# ds-metadata.json / graphql-fields.json never appeared — the .twb XML path
+# covers both calc-formula sources when those services are off.
+caps = (Tableau.capabilities rescue {})
+if caps.any?
+  meta_state = caps['metadata_api'] ? 'available' : 'OFF → calc formulas from .twb XML'
+  log "capabilities: product=#{caps['product_version'] || '?'} " \
+      "REST API=#{caps['rest_api_version'] || '?'}  Metadata API: #{meta_state}"
+  log 'note: VDS is probed per-datasource below; on failure discovery falls back to the .twb XML.' unless caps['metadata_api']
+end
+
 # --- 2. Build the task queue -------------------------------------------------
 queue = Queue.new
 twb_done = Queue.new # signals twb completion (for auto-ds fallback)

@@ -34,12 +34,24 @@ puts "Tableau credential setup"
 puts "Values are stored in #{SETTINGS_PATH} and loaded automatically into every Claude Code session."
 puts
 
-print "Server URL [https://10ay.online.tableau.com]: "
-server = $stdin.gets.chomp
-server = "https://10ay.online.tableau.com" if server.empty?
+print "Deployment — [c]loud or self-hosted [s]erver? [c]: "
+is_server = $stdin.gets.to_s.strip.downcase.start_with?("s")
+
+if is_server
+  print "Server URL (e.g. https://tableau.mycompany.com): "
+  server = $stdin.gets.chomp
+else
+  print "Server URL [https://10ay.online.tableau.com]: "
+  server = $stdin.gets.chomp
+  server = "https://10ay.online.tableau.com" if server.empty?
+end
 server = server.sub(%r{/+$}, '')
 
-print "Site contentUrl (the path segment after /site/ in the Tableau URL, e.g. 'dataflow'): "
+if is_server
+  print "Site contentUrl (path segment after /site/ in the URL; LEAVE BLANK for the Default site): "
+else
+  print "Site contentUrl (the path segment after /site/ in the Tableau URL, e.g. 'dataflow'): "
+end
 content_url = $stdin.gets.chomp
 
 print "PAT name (the label you typed when creating the token in Tableau): "
@@ -49,8 +61,10 @@ print "PAT secret (will be hidden): "
 pat_secret = $stdin.noecho(&:gets).chomp
 puts
 
-if [server, content_url, pat_name, pat_secret].any?(&:empty?)
-  abort "All four values are required. Aborting without writing settings."
+# contentUrl is intentionally allowed to be empty — that's the Tableau Server
+# "Default" site. Everything else is required.
+if [server, pat_name, pat_secret].any?(&:empty?)
+  abort "Server URL, PAT name, and PAT secret are required. Aborting without writing settings."
 end
 
 settings = File.exist?(SETTINGS_PATH) ? JSON.parse(File.read(SETTINGS_PATH)) : {}

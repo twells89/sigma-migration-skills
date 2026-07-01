@@ -175,6 +175,41 @@ module Tableau
     list.first
   end
 
+  # ---- server capabilities -------------------------------------------------
+  # Tableau Cloud always exposes the latest REST API, VDS, and the Metadata API.
+  # A self-hosted Tableau Server is pinned to its installed release and ships
+  # with VDS (2024.2+) and the Metadata API OFF by default — so the discovery
+  # path must know which capabilities are live before it leans on them.
+
+  # Server-level info (no site scope). Returns e.g.
+  #   {"productVersion"=>{"value"=>"2024.2", ...}, "restApiVersion"=>"3.23"}
+  def serverinfo
+    request(:get, "/api/#{api_version}/serverinfo")['serverInfo']
+  end
+
+  # Is the Metadata API (GraphQL) turned on? Always on in Cloud; DISABLED BY
+  # DEFAULT on Tableau Server (admin enables via `tsm maintenance
+  # metadata-services enable`). When off the endpoint 404s and calc-formula
+  # extraction falls back to parsing the .twb XML.
+  def metadata_api_available?
+    r = graphql('{ __typename }')
+    !r.nil? && (r['errors'].nil? || r['errors'].empty?)
+  rescue Error
+    false
+  end
+
+  # Best-effort capability summary for the discovery banner. `vds` is left nil:
+  # VDS has no auth-free ping, so the discover pool detects it per datasource and
+  # falls back to .twb on failure. Never raises.
+  def capabilities
+    info = (serverinfo rescue nil) || {}
+    {
+      'product_version'  => info.dig('productVersion', 'value'),
+      'rest_api_version' => info['restApiVersion'] || api_version,
+      'metadata_api'     => (metadata_api_available? rescue false),
+    }
+  end
+
   # VizQL Data Service — full field list with calc formulas. This is the REST equivalent
   # of mcp__tableau__get-datasource-metadata.
   def read_metadata(datasource_luid)
