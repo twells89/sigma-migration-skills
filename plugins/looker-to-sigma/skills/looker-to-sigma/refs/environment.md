@@ -14,7 +14,7 @@ Exit 0 = good to go. Exit 1 = a required tool is missing (each ✗/[X] line has 
 |---|---|---|
 | **ruby** | the `*-to-sigma` orchestrators (tableau, qlik, powerbi, quicksight, cognos) | not preinstalled on Windows |
 | **python 3** | looker / thoughtspot / microstrategy / sisense entrypoints + all discovery scripts | **Windows: the Store-alias stub bites — see below** |
-| **node 18+** | the vendored converters (`converter/*.mjs`) and `*.mjs` build steps | |
+| **node 18+** | the vendored converters (`converter/*.mjs`) and `*.mjs` build steps | **Windows: see #5 for the no-admin install** |
 | **bash** | `get-token.sh`, `*-auth.sh` (Sigma token minting) | **Windows: needs Git Bash or WSL** |
 
 ## Windows footguns (and fixes)
@@ -40,6 +40,28 @@ Exit 0 = good to go. Exit 1 = a required tool is missing (each ✗/[X] line has 
 
 4. **Ruby not on PATH.** Install **RubyInstaller** (https://rubyinstaller.org), tick
    *Add Ruby to PATH*, reopen the shell.
+
+5. **No `node`, no admin rights.** Node is a hard prerequisite (the converters are
+   ESM run via `node`), but the nodejs.org MSI and `winget install OpenJS.NodeJS.LTS`
+   both want admin — which locked-down corporate machines don't grant. Sanctioned
+   options, in order:
+   - **If you have admin:** install Node LTS from **https://nodejs.org** or
+     `winget install OpenJS.NodeJS.LTS`, reopen the shell.
+   - **No admin — user-scoped version manager (preferred):**
+     `winget install Schniz.fnm` then `fnm install --lts && fnm use --lts`. fnm is a
+     single user-scoped binary; no admin, and it persists across sessions.
+   - **No admin, no winget — portable zip (last resort):** download the **LTS** zip
+     from nodejs.org, extract to `%USERPROFILE%\node`, and add it to PATH. Pin an
+     explicit LTS version (do **not** grab whatever is "latest"), and prefer a build
+     that is at least a few days old. This is a *documented, deliberate* step — not
+     something to improvise mid-run.
+
+> **Agents: do not silently install runtimes.** If the doctor reports a missing
+> runtime, surface its fix and get the user's OK before downloading binaries or
+> editing PATH. Never munge the machine's PATH or fetch an unpinned installer on your
+> own initiative — a self-directed download/PATH change is exactly the kind of action
+> to confirm first. The doctor tells you *what's* missing and *how* to fix it; the
+> human decides *whether* to run it.
 
 > The converters themselves need **no clone, no `npm install`, no network, no MCP** —
 > each skill ships a self-contained `converter/*.mjs` bundle run via `node`. So on

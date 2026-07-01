@@ -69,7 +69,7 @@ fi
 if command -v node >/dev/null 2>&1; then
   ok "node — $(node --version 2>/dev/null)"
 else
-  bad "node not found" "Install Node 18+ from https://nodejs.org (the vendored converters/*.mjs run via node)."
+  bad "node not found (required — the vendored converters/*.mjs run via node)" "macOS/Linux: install Node 18+ from https://nodejs.org or your package manager. Windows no-admin: 'winget install Schniz.fnm' then 'fnm install --lts && fnm use --lts'. See refs/environment.md #5 — don't auto-download an unpinned Node, ask first."
 fi
 
 # --- bash (token minting + *.sh helpers) -----------------------------------

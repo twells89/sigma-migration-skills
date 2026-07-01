@@ -11,9 +11,19 @@ user-invocable: true
 
 # Tableau → Sigma Conversion
 
-> **Windows / first run — run the environment doctor before anything else:**
-> `bash scripts/doctor.sh` (macOS/Linux/Git Bash) or `powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1` (Windows).
-> It checks Ruby/Python/Node/bash and flags the Python "Store stub" + CRLF with exact fixes. Details: `refs/environment.md`.
+> ## ⛔ STEP 0 — MANDATORY environment preflight (do this before any other step)
+> On the **first run in a session**, run the doctor and read its output **before**
+> touching Tableau discovery or the converter:
+> - macOS / Linux / Git Bash: `bash scripts/doctor.sh`
+> - Windows PowerShell: `powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1`
+>
+> It checks Ruby/Python/Node/bash and flags the Python "Store stub" + CRLF with exact fixes.
+> **If the doctor reports a missing runtime (exit 1): STOP.** Present its fix to the user
+> and get their OK — **do not** self-install a runtime, download an unpinned binary, or
+> edit the machine's PATH on your own initiative. That is a hard-to-reverse, outward-facing
+> action to confirm first, not improvise mid-run. Node in particular: on locked-down
+> Windows use the no-admin path in `refs/environment.md` (#5), and let the **user** run it.
+> Details: `refs/environment.md`.
 
 Convert a Tableau datasource into a Sigma data model, then build a Sigma workbook
 that mirrors the Tableau dashboard layout as closely as possible.

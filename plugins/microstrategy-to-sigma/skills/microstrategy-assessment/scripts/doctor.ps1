@@ -56,7 +56,8 @@ else {
 # --- node ------------------------------------------------------------------
 $node = Get-Command node -ErrorAction SilentlyContinue
 if ($node) { Ok "node - $((& node --version 2>$null))" }
-else { Bad "node not found" "Install Node 18+ from https://nodejs.org (the vendored converters/*.mjs run via node)." }
+else { Bad "node not found (required - the vendored converters/*.mjs run via node)" `
+           "Admin: install Node LTS from https://nodejs.org or 'winget install OpenJS.NodeJS.LTS'. NO admin: 'winget install Schniz.fnm' then 'fnm install --lts; fnm use --lts' (user-scoped, no admin). See refs/environment.md #5. Don't auto-download an unpinned Node - ask first." }
 
 # --- bash (REQUIRED for get-token.sh / *-auth.sh token minting) ------------
 $bash = Get-Command bash -ErrorAction SilentlyContinue
