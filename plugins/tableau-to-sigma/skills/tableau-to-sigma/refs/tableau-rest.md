@@ -13,6 +13,33 @@ Use PAT mode when:
 - You want to **download the workbook's `.twb` XML** for layout-hint extraction (the MCP
   doesn't expose this).
 - The workbook uses an **embedded datasource** the MCP can't see (REST + `.twb` parsing can).
+- You're on **self-hosted Tableau Server** (see below) — the hosted Tableau MCP targets Cloud.
+
+## Tableau Server vs Cloud
+
+The REST signin and the core endpoints (workbooks, views, view-data CSV, view-image PNG,
+`.twb`/`.twbx` content) are **identical** on Cloud and self-hosted Server, so PAT mode works
+on both. Four differences matter:
+
+| | Tableau Cloud | Self-hosted Tableau Server |
+|---|---|---|
+| **REST API version** | always the latest | pinned to the installed release |
+| **VDS** (`/api/v1/vizql-data-service`) | always on | needs **2024.2+** AND admin-enabled |
+| **Metadata API** (`/api/metadata/graphql`) | always on | **OFF by default** (`tsm maintenance metadata-services enable`) |
+| **Default site `contentUrl`** | n/a (always a named site) | the Default site uses an **empty** contentUrl |
+
+Handled automatically:
+
+- **Version negotiation** — `get-tableau-token.sh` reads the server's max `restApiVersion`
+  from `/api/2.4/serverinfo` (no auth, so it can't trip the 4-strike PAT lockout) and signs
+  in against that. Set `TABLEAU_API_VERSION` to override.
+- **Default site** — `setup-tableau.rb` accepts an empty contentUrl; leave it blank when
+  prompted on Server.
+- **Capability banner** — `tableau-discover.rb` prints product version, REST API version,
+  and Metadata-API on/off up front. When VDS/Metadata are off, calc formulas come from the
+  downloaded `.twb` XML instead of `ds-metadata.json`/`graphql-fields.json` — discovery
+  degrades gracefully rather than failing, but the banner tells you which mode you're in so
+  a thin `ds-metadata.json` isn't mistaken for a bug.
 
 ## One-time setup
 
@@ -24,10 +51,10 @@ Prompts for:
 
 | Value | Where to find it |
 |---|---|
-| Server URL | The hostname only (e.g. `https://10ay.online.tableau.com`). No trailing slash needed. |
-| Site contentUrl | The path segment after `/site/` in any Tableau URL — e.g. `dataflow`. |
+| Server URL | The hostname only — Cloud `https://10ay.online.tableau.com` or Server `https://tableau.mycompany.com`. No trailing slash needed. |
+| Site contentUrl | The path segment after `/site/` in any Tableau URL — e.g. `dataflow`. **Leave blank** for a Tableau Server "Default" site. |
 | PAT name | The label you typed when creating the token in **Account Settings → Personal Access Tokens**. Case-sensitive. |
-| PAT secret | The string shown at creation time. Copy verbatim — Tableau Cloud secrets are formatted as `base64==:base64`, the colon is part of the secret. |
+| PAT secret | The string shown at creation time. Copy verbatim — Tableau secrets are formatted as `base64==:base64`, the colon is part of the secret. |
 
 Stored in `~/.claude/settings.json` as `TABLEAU_SERVER_URL`, `TABLEAU_SITE_CONTENT_URL`,
 `TABLEAU_PAT_NAME`, `TABLEAU_PAT_SECRET`. Open a new Claude Code session (or

@@ -6,8 +6,9 @@ user-invocable: true
 
 # Tableau Assessment
 
-Surveys a Tableau Cloud site via the Tableau Admin Insights project (MCP) and the
-workbook-content REST endpoint (PAT). Emits a markdown readout + JSON inventory
+Surveys a Tableau **Cloud** site via the Tableau Admin Insights project (MCP) and the
+workbook-content REST endpoint (PAT) — or a self-hosted **Tableau Server** site via REST
+only (`inventory-rest.rb`; no Admin Insights, so no usage/refresh stats). Emits a markdown readout + JSON inventory
 the user can hand to a Sigma rep, a Hakkoda engagement, or directly to the
 `tableau-to-sigma` skill for conversion of the shortlisted workbooks.
 
@@ -69,6 +70,7 @@ permissions audit, dataset similarity at depth). Those still live in Hakkoda.
 | `scripts/setup-tableau.sh` | Symlink to the tableau-to-sigma PAT setup wizard |
 | `scripts/get-tableau-token.sh` | Symlink to the tableau-to-sigma token-refresh wrapper |
 | `scripts/probe-admin-insights.rb` | Confirm the Admin Insights project is visible (gates whether license/refresh/usage sections run) |
+| `scripts/inventory-rest.rb` | **Tableau Server fallback** for Phases 1–2: build `inventory.json` (`mode: rest-server`, counts + per-workbook sheet_count, `usage_available: false`) from the plain REST workbooks/views/datasources endpoints. No usage/refresh (needs Admin Insights or the Server repository DB). |
 | `scripts/fetch-all-twbs.rb` | Parallel download of all workbook `.twb` files via REST (PAT mode only) |
 | `scripts/aggregate-complexity.rb` | Run `scan-workbook-gaps.rb` (from tableau-to-sigma) against every `.twb`; emit `complexity.json`. Also derives a **predicted-parity %** + A–D band per workbook (y9rd.6): an occurrence-weighted roll-up of the gap-scanner's status tiers (`auto`=1.0, `hint`=0.85, `manual`=0.5, `unhandled`=0.0) — a *pre-migration prediction* from static `.twb` signal, NOT the post-migration measured value-parity score (`verify-parity.rb`). Flags hard workbooks (band C/D) before any conversion. |
 | `scripts/build-shortlist.rb` | Cross-tabulate usage × complexity; rank by `value / (1 + cost)`; emit `shortlist.json` (carries `predicted_parity_pct` + `parity_band`) |
@@ -159,6 +161,26 @@ mcp__tableau__list-views                                         # → view coun
 ```
 
 Write the rolled-up counts to `inventory.json`'s `environment_overview` key.
+
+### Self-hosted Tableau Server (no MCP / no Admin Insights)
+
+Tableau Server has **no Admin Insights project** (that's a Cloud feature) and the hosted
+Tableau MCP targets Cloud, so Phases 1–2 above don't apply. Instead build the inventory
+from the standard REST endpoints with a PAT:
+
+```bash
+eval "$(scripts/get-tableau-token.sh)"            # negotiates the Server's REST API version
+ruby scripts/inventory-rest.rb --out /tmp/assessment-<site>
+```
+
+This writes `inventory.json` (`mode: "rest-server"`) with workbook/datasource/view counts,
+a per-workbook `sheet_count`, and `usage_available: false`. **Usage, license, and refresh
+history are NOT available** over plain REST — they require Admin Insights (Cloud) or the
+Tableau Server **repository** (the "workgroup" Postgres DB an admin must enable). Phase 3
+complexity (`fetch-all-twbs.rb` + `scan-workbook-gaps.rb`) is already REST/PAT and runs
+unchanged. `build-shortlist.rb` detects `usage_available: false` and ranks by complexity
+(easiest first) — it will **not** tag zero-usage workbooks `retire`, since on Server a
+missing access count is not evidence of disuse.
 
 ---
 

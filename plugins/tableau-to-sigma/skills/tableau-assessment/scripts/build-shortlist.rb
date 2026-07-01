@@ -7,12 +7,18 @@
 #   cost  = 10·unhandled + 3·manual + 1·hint
 #   score = value / (1 + cost)
 #
-# Tags:
+# Tags (when usage IS known — Cloud / Admin Insights):
 #   accesses == 0                                 → "retire"
 #   unhandled >= 1                                → "needs-gap-scout"
 #   score >= 20 and (manual + unhandled) == 0     → "migrate-first"
 #   score >= 10                                   → "easy-win"
 #   else                                          → "moderate"
+#
+# When usage is NOT known (inventory 'usage_available' == false, e.g. a Tableau
+# Server REST-only inventory with no Admin Insights / repository DB), we must NOT
+# tag zero-access workbooks "retire" — a missing access count is not proof of
+# disuse. In that mode we rank by inverse complexity (easiest first) and tag on
+# complexity alone.
 #
 # Usage:
 #   ruby scripts/build-shortlist.rb --out /tmp/assessment-<site>
@@ -48,6 +54,11 @@ if usage_by_name.empty?
   end
 end
 
+# usage_available is set explicitly by inventory-rest.rb (Server); for older
+# Cloud inventory.json shapes that predate the flag, infer it from whether any
+# usage rows survived.
+usage_known = inventory.key?('usage_available') ? inventory['usage_available'] : !usage_by_name.empty?
+
 rows = []
 complexity.each do |luid, r|
   name = r['name']
@@ -57,21 +68,36 @@ complexity.each do |luid, r|
   actors   = (usage && usage['actors'])   || 0
 
   cost  = r['n_unhandled'] * 10 + r['n_manual'] * 3 + r['n_hint'] * 1
-  value = accesses * Math.sqrt([actors, 1].max).to_f
-  score = value / (1 + cost).to_f
 
-  tag =
-    if accesses.zero?
-      'retire'
-    elsif r['n_unhandled'] >= 1
-      'needs-gap-scout'
-    elsif score >= 20 && (r['n_manual'] + r['n_unhandled']).zero?
-      'migrate-first'
-    elsif score >= 10
-      'easy-win'
-    else
-      'moderate'
-    end
+  if usage_known
+    value = accesses * Math.sqrt([actors, 1].max).to_f
+    score = value / (1 + cost).to_f
+    tag =
+      if accesses.zero?
+        'retire'
+      elsif r['n_unhandled'] >= 1
+        'needs-gap-scout'
+      elsif score >= 20 && (r['n_manual'] + r['n_unhandled']).zero?
+        'migrate-first'
+      elsif score >= 10
+        'easy-win'
+      else
+        'moderate'
+      end
+  else
+    # No usage signal: rank by inverse complexity (easiest first), tag on
+    # complexity alone. Never "retire" — absence of a count is not disuse.
+    value = nil
+    score = 100.0 / (1 + cost)
+    tag =
+      if r['n_unhandled'] >= 1
+        'needs-gap-scout'
+      elsif (r['n_manual'] + r['n_unhandled']).zero?
+        'easy-win'
+      else
+        'moderate'
+      end
+  end
 
   rows << {
     'name'                 => name,
@@ -86,7 +112,7 @@ complexity.each do |luid, r|
     # Pre-migration parity PREDICTION (y9rd.6) carried through from complexity.json.
     'predicted_parity_pct' => r['predicted_parity_pct'],
     'parity_band'          => r['parity_band'],
-    'value'                => value.round(1),
+    'value'                => value&.round(1),
     'cost'                 => cost,
     'score'                => score.round(2),
     'tag'                  => tag
@@ -97,6 +123,10 @@ rows.sort_by! { |r| -r['score'] }
 
 File.write(File.join(opts[:out], 'shortlist.json'), JSON.pretty_generate(rows))
 puts "wrote shortlist.json (#{rows.size} workbooks)"
+unless usage_known
+  puts "NOTE: no usage data (Tableau Server REST-only inventory) — ranked by complexity"
+  puts "      (easiest first); 'acc' column is 0 for all rows and NOT a retire signal."
+end
 puts
 printf "%-46s %5s %5s %5s %5s %6s %7s %s\n", 'Workbook', 'acc', 'view', 'manl', 'unhd', 'parity', 'score', 'tag'
 rows.each do |r|
