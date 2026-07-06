@@ -160,6 +160,32 @@ check(tbl_conn.attributes['class'] == 'snowflake' && tbl_conn.attributes['dbname
 # Neither should still look like a sqlproxy placeholder.
 check(!pdoc.to_s.include?('[sqlproxy]'), 'no [sqlproxy] placeholder remains after hydration', fails)
 
+puts 'Part H — text splice preserves cached type/class, fills the full column set'
+htwb = <<~XML
+  <workbook><datasources>
+    <datasource caption='PDS'>
+      <repository-location id='PDS_X'/>
+      <connection class='sqlproxy' dbname='PDS_X'>
+        <relation name='sqlproxy' table='[sqlproxy]' type='table'/>
+        <metadata-records>
+          <metadata-record class='measure'><remote-name>Amount USD</remote-name><local-name>[Amount USD]</local-name><local-type>real</local-type><aggregation>Sum</aggregation><caption>Amount USD</caption></metadata-record>
+        </metadata-records>
+      </connection>
+    </datasource>
+  </datasources></workbook>
+XML
+hdoc = REXML::Document.new(htwb)
+# workbook cached only 1 of 3 output columns; parsed SQL has all 3
+H.hydrate_pds!(hdoc, descriptors: [{'contentUrl'=>'PDS_X','relationType'=>'text',
+  'sql'=>%q{SELECT "Sales Region","Amount USD","SFDC Oppty ID" FROM T},'db'=>'RAW','schema'=>'ING',
+  'columns'=>['Sales Region','Amount USD','SFDC Oppty ID']}], db: 'CSA', schema: 'TJ')
+hrecs = {}
+hdoc.each_element("//metadata-record") { |m| hrecs[m.get_text('remote-name').value] = m }
+check(hrecs.keys.sort == %w[AMOUNT_USD SALES_REGION SFDC_OPPTY_ID], 'full 3-column set emitted (not just the 1 cached)', fails)
+check(hrecs['AMOUNT_USD'].attributes['class'] == 'measure', 'cached measure class PRESERVED', fails)
+check(hrecs['AMOUNT_USD'].get_text('local-type').value == 'real', 'cached local-type=real PRESERVED (not downgraded to string)', fails)
+check(hrecs['SALES_REGION'].get_text('local-type').value == 'string' && hrecs['SALES_REGION'].attributes['class'] == 'column', 'uncached column defaults to string/column', fails)
+
 puts
 if fails.empty?
   puts "ALL PASS (#{`grep -c 'check(' #{__FILE__}`.to_i - 1} assertions)"

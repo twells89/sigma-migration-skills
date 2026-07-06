@@ -571,7 +571,15 @@ module MechanicalSpecs
       # fall back to the mini-blocklist in unknown_functions
     end
     real = {}
-    (real_columns || {}).each { |t, cols| real[t.to_s.upcase] = cols.map { |c| c.to_s.upcase }.to_set }
+    # Index each real warehouse column under BOTH its space-preserved upper form
+    # ("SALES REGION") and its underscore-folded upper form ("SALES_REGION"). The
+    # phantom check derives `phys` by folding spaces→underscores, but the catalog
+    # column may genuinely contain spaces (a quoted mixed-case Snowflake column
+    # like "Sales Region"), so a single form would false-drop it. Additive only —
+    # never drops a column that either form matches.
+    (real_columns || {}).each do |t, cols|
+      real[t.to_s.upcase] = cols.flat_map { |c| [c.to_s.upcase, c.to_s.gsub(/\s+/, '_').upcase] }.to_set
+    end
     # Column-rename map (--column-mapping): a genuine extract-caption → warehouse
     # rename ("State" → STATE_PROVINCE) that separator-folding can't recover.
     # Keyed by the UPPER extract caption; value = the real warehouse column.

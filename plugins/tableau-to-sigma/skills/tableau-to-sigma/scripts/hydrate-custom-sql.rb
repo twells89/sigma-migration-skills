@@ -280,18 +280,33 @@ module HydrateCustomSql
       if columns && !columns.empty?
         # The parsed Custom SQL output is the AUTHORITATIVE column set — build a
         # full metadata-records block from it (remote-name = upper-snake output
-        # alias, caption = display name). This replaces whatever the workbook
-        # cached (usually a partial set, or none), so the element exposes every
-        # Custom SQL column, not just the ones this workbook happened to use.
+        # alias, caption = display name), so the element exposes every Custom SQL
+        # column, not just the ones this workbook happened to use. PRESERVE the
+        # workbook's cached type/class per column when it matches (by alias or
+        # caption) — only default to string/column for columns the workbook
+        # didn't cache. (Sigma still re-resolves real types from the warehouse;
+        # this just keeps Desktop's measure/dimension hints intact.)
+        cached = {}
+        existing&.each_element('metadata-record') do |m|
+          rn = (m.get_text('remote-name')&.value || '').strip
+          cap = (m.get_text('caption')&.value || '').strip
+          info = { 'class' => (m.attributes['class'] || 'column'),
+                   'ltype' => (m.get_text('local-type')&.value || '').strip,
+                   'agg'   => (m.get_text('aggregation')&.value || '').strip }
+          cached[alias_for(rn)] = info unless rn.empty?
+          cached[cap.downcase] = info unless cap.empty?
+        end
         existing&.remove
         mrs = REXML::Element.new('metadata-records')
         columns.each do |c|
-          rec = mrs.add_element('metadata-record', 'class' => 'column')
+          info = cached[alias_for(c)] || cached[c.to_s.downcase] || {}
+          rec = mrs.add_element('metadata-record', 'class' => (info['class'] || 'column'))
           rec.add_element('remote-name').text = alias_for(c)
           rec.add_element('local-name').text = "[#{c}]"
           rec.add_element('parent-name').text = "[#{rel_name}]"
           rec.add_element('remote-alias').text = alias_for(c)
-          rec.add_element('local-type').text = 'string'
+          rec.add_element('local-type').text = (info['ltype'].to_s.empty? ? 'string' : info['ltype'])
+          rec.add_element('aggregation').text = info['agg'] unless info['agg'].to_s.empty?
           rec.add_element('caption').text = c
         end
         conn.add_element(mrs) # after the <relation> (canonical order)
