@@ -353,6 +353,12 @@ def build_page_from_tree(dashboard, page, opts)
   if title_el
     children << header_band_xml(hdr_id, title_el['id'])
     ctx[:title_used] = true
+    # Mark the title element as PLACED so the unplaced-elements safety net below
+    # doesn't append it a SECOND time in the bottom band — a duplicate element id
+    # makes Sigma reject the whole layout PUT ("Duplicate layout element id"),
+    # dropping the page to a stacked fallback. (The banded path is immune: its
+    # text-band selector only matches ids starting "text-", never "title".)
+    ctx[:placed] << title_el['id']
   else
     txt_id = "tc-#{page['id']}-hdrtext"
     extra_els << header_text_el(txt_id, page['name'], hdr_dark ? '#FFFFFF' : nil)
