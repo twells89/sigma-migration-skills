@@ -566,7 +566,7 @@ lane_done = lambda do
 end
 print_lane_log = lambda do
   next if lane[:reused] # prior run's log — already shown on the run that fetched
-  File.read(disc_log).each_line { |l| puts "   │ #{l.rstrip}" } if File.exist?(disc_log)
+  File.read(disc_log, encoding: 'UTF-8').each_line { |l| puts "   │ #{l.rstrip}" } if File.exist?(disc_log)
 end
 # Wait for a lane artifact (tableau-discover writes them atomically). Returns
 # false when the lane exits without producing it.
@@ -791,38 +791,60 @@ if mechanical
   end
   # ── Published-datasource (sqlproxy) hydration ──────────────────────────────
   # A workbook that connects to a PUBLISHED data source carries only a
-  # <connection class='sqlproxy'> placeholder — the real Custom SQL lives in the
-  # published DS on Tableau Server, not the .twb. Left as-is the converter emits a
-  # 0-column element → POST "Source not found". Pull the Custom SQL
-  # (extract-custom-sql.rb, via Metadata GraphQL — it traverses INTO the published
-  # DS) and splice it into the .twb as a real Custom SQL relation
-  # (hydrate-custom-sql.rb) BEFORE conversion, so the converter's normal kind:sql
-  # path builds the model. No-ops for non-sqlproxy workbooks.
+  # <connection class='sqlproxy'> placeholder — the real relation (a warehouse
+  # TABLE or a Custom SQL <relation type='text'>) lives in the PDS object on
+  # Tableau Server, not the .twb. Left as-is the converter fabricates a phantom
+  # table (e.g. CSA.TJ.SQLPROXY) → POST "Source not found".
+  #
+  # PRIMARY: resolve-published-ds.rb resolves each PDS by contentUrl (== the
+  # sqlproxy `dbname`), downloads GET /datasources/{id}/content, and reads the
+  # inner .tds's real relation — reliable regardless of Metadata-API lineage lag.
+  # FALLBACK: extract-custom-sql.rb (Metadata GraphQL) for Custom SQL. Then
+  # hydrate-custom-sql.rb splices the real relation (table or SQL) so the
+  # converter's normal path builds the model. No-ops for non-sqlproxy workbooks.
   conv_twb = twb
   if have_twb && HydrateCustomSql.twb_has_sqlproxy?(twb)
-    line 'published-datasource (sqlproxy) connection detected — pulling Custom SQL to hydrate before conversion'
+    line 'published-datasource (sqlproxy) connection detected — chasing the published DS to hydrate before conversion'
+    pds_json = File.join(WORK, 'pds.json')
     hcsql = File.join(WORK, 'hydrate-custom-sql.json')
-    if wb_luid
-      ext = ['ruby', File.join(HERE, 'extract-custom-sql.rb'),
-             '--workbook-luid', wb_luid, '--twb', twb, '--out', hcsql]
+    if wb_luid || true # resolution + GraphQL both need a Tableau token; get-*-token guards if absent
+      # PRIMARY — REST content chase (covers table + Custom SQL PDSes).
       run!(['bash', '-c', "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && " +
-            ext.map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
-    else
-      line '  (no workbook LUID — cannot query Metadata GraphQL; hydration relies on any SQL already in the .twb)'
-    end
-    if File.exist?(hcsql)
-      hyd_twb = File.join(WORK, 'workbook-hydrated.twb')
-      _out, hst = run!(['ruby', File.join(HERE, 'hydrate-custom-sql.rb'),
-                        '--twb', twb, '--custom-sql', hcsql,
-                        '--db', (opts[:db] || 'CSA'), '--schema', (opts[:schema] || 'TJ'),
-                        '--out', hyd_twb], allow_fail: true)
-      if hst.success? && File.exist?(hyd_twb) && File.read(hyd_twb) != File.read(twb)
-        conv_twb = hyd_twb
-        line "  hydrated → workbook-hydrated.twb (converter will build a Custom SQL element from the published DS)"
-      else
-        line '  ⚠ could not hydrate (no Custom SQL retrieved, or no output columns) — converting the sqlproxy .twb as-is.'
-        line '     Expect "Source not found"; provide the Custom SQL manually (copy it into a <relation type=text>) or materialize the published DS as a warehouse view.'
+            ['ruby', File.join(HERE, 'resolve-published-ds.rb'), '--twb', twb, '--out', pds_json]
+              .map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
+      # FALLBACK — GraphQL Custom SQL blocks (only helps the text case).
+      if wb_luid
+        run!(['bash', '-c', "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && " +
+              ['ruby', File.join(HERE, 'extract-custom-sql.rb'), '--workbook-luid', wb_luid, '--twb', twb, '--out', hcsql]
+                .map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
       end
+    end
+    hyd_twb = File.join(WORK, 'workbook-hydrated.twb')
+    hyd_args = ['ruby', File.join(HERE, 'hydrate-custom-sql.rb'), '--twb', twb,
+                '--db', (opts[:db] || 'CSA'), '--schema', (opts[:schema] || 'TJ'), '--out', hyd_twb]
+    hyd_args += ['--pds', pds_json] if File.exist?(pds_json)
+    hyd_args += ['--custom-sql', hcsql] if File.exist?(hcsql)
+    if hyd_args.include?('--pds') || hyd_args.include?('--custom-sql')
+      _out, hst = run!(hyd_args, allow_fail: true)
+      conv_twb = hyd_twb if hst.success? && File.exist?(hyd_twb) && File.read(hyd_twb, encoding: 'UTF-8') != File.read(twb, encoding: 'UTF-8')
+    end
+    # Phantom guard: if any sqlproxy datasource is STILL unresolved, do NOT let the
+    # converter fabricate a bogus warehouse table (CSA.TJ.SQLPROXY) that POSTs and
+    # then fails at the API. Stop with an actionable message instead.
+    if HydrateCustomSql.twb_has_sqlproxy?(conv_twb)
+      sleep 0.1 until lane_done.call rescue nil
+      print_lane_log.call rescue nil
+      abort <<~MSG
+        FATAL: workbook is bound to a PUBLISHED data source (sqlproxy) that could not be resolved.
+        The real table / Custom SQL lives in the published DS on Tableau Server, and it could not be
+        fetched (not found by contentUrl, no permission, or no Tableau token). Converting as-is would
+        fabricate a nonexistent "SQLPROXY" table and fail at DM POST. To proceed, either:
+          • ensure the PAT can read the published DS (GET /datasources/{id}/content), then re-run; or
+          • provide the Custom SQL manually (paste it into a <relation type='text'> in the .twb); or
+          • materialize the published DS as a warehouse view and point a table datasource at it.
+      MSG
+    elsif conv_twb != twb
+      line '  hydrated → workbook-hydrated.twb (converter will build from the published DS\'s real relation)'
     end
   end
 
@@ -1054,7 +1076,7 @@ end
 # workbook: hard-stop here, before any Sigma object is created. (Parser-free raw
 # count so the guard doesn't depend on the same path that just failed.)
 if have_twb && calcs.empty?
-  raw_calc_nodes = (File.read(twb).scan(/<calculation\s+class=['"]tableau['"]/i).size rescue 0)
+  raw_calc_nodes = (File.read(twb, encoding: 'UTF-8').scan(/<calculation\s+class=['"]tableau['"]/i).size rescue 0)
   if raw_calc_nodes.positive?
     puts
     puts '==================== CALC-EXTRACTION STOP (empty result) ===================='
@@ -1484,7 +1506,7 @@ elsif mechanical
   # key column, or via the physical "<X>_KEY" FK when the wrapped column is
   # VDS-only — so date axes resolve instead of NULL-bucketing.
   if have_twb
-    MechanicalSpecs.recover_computed_key_joins!(dm, File.read(twb), real_cols, dim_catalogs)
+    MechanicalSpecs.recover_computed_key_joins!(dm, File.read(twb, encoding: 'UTF-8'), real_cols, dim_catalogs)
                    .each { |m| line m }
   end
   # Relationship reachability guard (bead ovud): duplicate relationship names /

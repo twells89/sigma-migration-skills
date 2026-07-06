@@ -134,6 +134,22 @@ jobs:
             echo "::endgroup::"
           done
           exit $fail
+      - name: Lint — File.read on .twb/XML must set encoding (F5 crash class)
+        # `File.read(path)` uses the locale's default external encoding; on a CI
+        # runner (US-ASCII) it raises Encoding::CompatibilityError on any non-ASCII
+        # .twb/XML — which has silently crashed migrations 3+ times. Any read of a
+        # .twb / xml / layout file MUST pass `encoding: 'UTF-8'`.
+        run: |
+          set -uo pipefail
+          hits=$(grep -rnE "File\.read\(([^)]*\b(twb|INP|disc_log)\b[^)]*)\)" \
+                   plugins/tableau-to-sigma/skills/*/scripts/*.rb 2>/dev/null \
+                   | grep -v "encoding:" | grep -viE "JSON\.parse|\.json|\.rb'|File\.write" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::File.read on a .twb without encoding: 'UTF-8' (F5 crash class):"
+            echo "$hits"
+            exit 1
+          fi
+          echo "OK: no unencoded .twb/XML File.read sites."
       - name: Run offline test_*.py suites
         # EXPLICIT allow-list — creds-free, network-free Python tests only.
         # PyYAML is needed by the looker offline dashboard parser

@@ -114,6 +114,52 @@ c3 = doc3.elements["/workbook/datasources/datasource[@caption='Dormant Accounts'
 rel3 = nil; c3.each_element('.//relation') { |r| rel3 = r if r.attributes['type'] == 'text' }
 check(rel3.text.to_s.include?('"Only One Col" AS ONLY_ONE_COL'), 'probe columns override cached metadata', fails)
 
+puts 'Part F — parse_sql_columns (published-DS Custom SQL is its own column source)'
+check(H.parse_sql_columns(%q{SELECT "Order ID","Sub-Category","SFDC Oppty ID" FROM T}) == ['Order ID', 'Sub-Category', 'SFDC Oppty ID'],
+      'parses a flat quoted projection', fails)
+check(H.parse_sql_columns('SELECT a, b AS "Foo Bar", SUM(c) AS total FROM t GROUP BY 1,2') == ['a', 'Foo Bar', 'total'],
+      'handles AS aliases + expressions', fails)
+check(H.parse_sql_columns('WITH m AS (SELECT x FROM y) SELECT "Region", SUM(z) AS s FROM m GROUP BY 1') == ['Region', 's'],
+      'finds the FINAL top-level SELECT past a WITH CTE', fails)
+check(H.parse_sql_columns('SELECT t."Col A", u.col_b FROM t JOIN u ON t.id=u.id') == ['Col A', 'col_b'],
+      'strips table qualifiers', fails)
+check(H.parse_sql_columns('SELECT * FROM t') == [], 'SELECT * → [] (caller falls back to a probe)', fails)
+check(H.qualify_table('[STATE_FACT]', 'DB', 'SC') == '[DB].[SC].[STATE_FACT]', 'qualify 1-part table', fails)
+check(H.qualify_table('[JOBLOSSES].[STATE_FACT]', 'DB', 'SC') == '[DB].[JOBLOSSES].[STATE_FACT]', 'qualify 2-part table (schema kept)', fails)
+check(H.qualify_table('[DB].[SC].[T]', 'X', 'Y') == '[DB].[SC].[T]', 'leave 3-part table alone', fails)
+
+puts 'Part G — hydrate_pds! descriptor-driven (REST chase, table + text)'
+pds_twb = <<~XML
+  <workbook><datasources>
+    <datasource caption='CSQL'>
+      <repository-location id='PDS_CSQL'/>
+      <connection class='sqlproxy' dbname='PDS_CSQL' server='10ay'><relation name='sqlproxy' table='[sqlproxy]' type='table'/></connection>
+    </datasource>
+    <datasource caption='TableDS'>
+      <repository-location id='PDS_TABLE'/>
+      <connection class='sqlproxy' dbname='PDS_TABLE' server='10ay'><relation name='sqlproxy' table='[sqlproxy]' type='table'/></connection>
+    </datasource>
+  </datasources></workbook>
+XML
+pdoc = REXML::Document.new(pds_twb)
+descs = [
+  {'contentUrl'=>'PDS_CSQL','relationType'=>'text','sql'=>%q{SELECT "SFDC Oppty ID","Region" FROM RAW.MC},'db'=>'RAW','schema'=>'ING','columns'=>['SFDC Oppty ID','Region']},
+  {'contentUrl'=>'PDS_TABLE','relationType'=>'table','table'=>'[JOBLOSSES].[STATE_FACT]','db'=>'RAW','schema'=>'ING','columns'=>[]},
+]
+ph = H.hydrate_pds!(pdoc, descriptors: descs, db: 'CSA', schema: 'TJ')
+check(ph.size == 2, 'both sqlproxy datasources hydrated via descriptors', fails)
+csql_conn = pdoc.elements["/workbook/datasources/datasource[@caption='CSQL']/connection"]
+csql_rel = nil; csql_conn.each_element('.//relation') { |r| csql_rel = r }
+check(csql_rel.attributes['type'] == 'text', 'Custom SQL PDS → text relation', fails)
+check(csql_rel.text.to_s.include?('"SFDC Oppty ID" AS SFDC_OPPTY_ID'), 'Custom SQL wrapped + aliased', fails)
+tbl_conn = pdoc.elements["/workbook/datasources/datasource[@caption='TableDS']/connection"]
+tbl_rel = nil; tbl_conn.each_element('.//relation') { |r| tbl_rel = r }
+check(tbl_rel.attributes['type'] == 'table', 'table PDS → table relation (not text, no phantom)', fails)
+check(tbl_rel.attributes['table'] == '[RAW].[JOBLOSSES].[STATE_FACT]', 'table relation qualified from PDS db', fails)
+check(tbl_conn.attributes['class'] == 'snowflake' && tbl_conn.attributes['dbname'] == 'RAW', 'table PDS connection presented as warehouse', fails)
+# Neither should still look like a sqlproxy placeholder.
+check(!pdoc.to_s.include?('[sqlproxy]'), 'no [sqlproxy] placeholder remains after hydration', fails)
+
 puts
 if fails.empty?
   puts "ALL PASS (#{`grep -c 'check(' #{__FILE__}`.to_i - 1} assertions)"

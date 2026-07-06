@@ -175,6 +175,38 @@ module Tableau
     list.first
   end
 
+  # A sqlproxy connection's `dbname` (and <repository-location id>) is the
+  # published data source's contentUrl. Resolve it to the DS record (→ LUID) so
+  # we can download the PDS's real definition. Try the server-side filter first
+  # (fast); fall back to a paged scan since some sites don't index contentUrl.
+  def find_datasource_by_content_url(content_url)
+    encoded = CGI.escape("contentUrl:eq:#{content_url}")
+    j = request(:get, "#{base_path}/datasources?filter=#{encoded}")
+    list = j.dig('datasources', 'datasource') || []
+    list = [list] unless list.is_a?(Array)
+    return list.first if list.first
+    # Fallback: scan pages and match contentUrl exactly.
+    page = 1
+    loop do
+      jj = list_datasources(page_size: 100, page: page)
+      ds = jj.dig('datasources', 'datasource') || []
+      ds = [ds] unless ds.is_a?(Array)
+      hit = ds.find { |d| d['contentUrl'].to_s == content_url.to_s }
+      return hit if hit
+      total = jj.dig('pagination', 'totalAvailable').to_i
+      break if ds.empty? || page * 100 >= total
+      page += 1
+    end
+    nil
+  end
+
+  # Download a published datasource's content (.tdsx zip, or bare .tds).
+  def download_datasource_content(datasource_id, include_extract: false)
+    qs = include_extract ? '' : '?includeExtract=false'
+    request(:get, "#{base_path}/datasources/#{datasource_id}/content#{qs}",
+            accept: '*/*', binary: true)
+  end
+
   # ---- server capabilities -------------------------------------------------
   # Tableau Cloud always exposes the latest REST API, VDS, and the Metadata API.
   # A self-hosted Tableau Server is pinned to its installed release and ships

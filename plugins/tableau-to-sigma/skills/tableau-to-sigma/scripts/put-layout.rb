@@ -43,7 +43,7 @@ def http(method, path, body = nil)
   Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
 end
 
-xml = File.read(opts[:layout])
+xml = File.read(opts[:layout], encoding: 'UTF-8')
 abort "FATAL: empty elementId in layout XML" if xml.match?(/elementId=""/)
 
 spec = JSON.parse(http(:get, "/v2/workbooks/#{opts[:wb]}/spec").body)

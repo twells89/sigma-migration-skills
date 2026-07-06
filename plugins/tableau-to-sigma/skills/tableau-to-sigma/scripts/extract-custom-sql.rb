@@ -108,7 +108,7 @@ end
 
 # --- .twb fallback (embedded Custom SQL) ---
 if opts[:twb] && File.exist?(opts[:twb])
-  twb = TwbXml.parse(File.read(opts[:twb]))
+  twb = TwbXml.parse(File.read(opts[:twb], encoding: 'UTF-8'))
   # Top-level datasource definitions only — `//datasource` also matches the
   # `<datasource>` REFERENCE blocks inside every worksheet, and walking those
   # repeats the same custom-SQL `<relation>` once per worksheet that uses it.

@@ -383,7 +383,7 @@ require 'twb_xml'
 
 def fetch_via_twb_xml(twb_path)
   return { ok: false, error: "twb not found: #{twb_path}" } unless File.file?(twb_path)
-  doc = TwbXml.parse(File.read(twb_path))
+  doc = TwbXml.parse(File.read(twb_path, encoding: 'UTF-8'))
 
   calcs = []
   # In a .twb, each <datasource> has a <column> children with optional

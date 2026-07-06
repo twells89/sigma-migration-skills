@@ -67,12 +67,97 @@ module HydrateCustomSql
     "SELECT #{proj} FROM (\n#{query.to_s.strip}\n) t"
   end
 
+  # Derive the OUTPUT column names of a SELECT. A published DS's Custom SQL is the
+  # authoritative source of its own columns (the .tds carries no <metadata-records>
+  # / <cols> map, and the sqlproxy workbook doesn't cache them), so we read them
+  # off the query itself. Finds the FINAL top-level SELECT (after any WITH CTEs),
+  # splits its projection on top-level commas, and takes each item's output name:
+  # `expr AS alias` → alias; `"Quoted"` / `t."Quoted"` → Quoted; `t.col`/`col` → col.
+  # `SELECT *` (or an unnameable expr) → returns [] so the caller falls back to a
+  # column probe rather than guessing.
+  def parse_sql_columns(sql)
+    s = sql.to_s.gsub(/\s+/, ' ').strip
+    # Locate the last top-level SELECT and its matching FROM (paren depth 0).
+    depth = 0; sel_at = nil; from_at = nil
+    i = 0
+    while i < s.length
+      ch = s[i]
+      if ch == "'" || ch == '"'
+        q = ch; i += 1
+        i += 1 while i < s.length && s[i] != q
+      elsif ch == '('
+        depth += 1
+      elsif ch == ')'
+        depth -= 1
+      elsif depth.zero? && s[i, 7] =~ /\ASELECT\b/i && (i.zero? || s[i - 1] =~ /[^A-Za-z0-9_]/)
+        sel_at = i; from_at = nil
+      elsif depth.zero? && sel_at && s[i, 5] =~ /\AFROM\b/i && (s[i - 1] =~ /[^A-Za-z0-9_]/)
+        from_at = i; break
+      end
+      i += 1
+    end
+    return [] unless sel_at && from_at
+    proj = s[(sel_at + 6)...from_at].strip
+    return [] if proj == '*' || proj.start_with?('DISTINCT *')
+    # Split the projection on top-level commas.
+    items = []; buf = +''; d = 0; j = 0
+    while j < proj.length
+      c = proj[j]
+      if c == "'" || c == '"'
+        q = c; buf << c; j += 1
+        while j < proj.length && proj[j] != q
+          buf << proj[j]; j += 1
+        end
+        buf << (proj[j] || '')
+      elsif c == '('
+        d += 1; buf << c
+      elsif c == ')'
+        d -= 1; buf << c
+      elsif c == ',' && d.zero?
+        items << buf.strip; buf = +''
+      else
+        buf << c
+      end
+      j += 1
+    end
+    items << buf.strip unless buf.strip.empty?
+    items.map { |it| output_name_of(it) }.compact
+  end
+
+  # Output name of a single SELECT-list item.
+  def output_name_of(item)
+    it = item.strip
+    return nil if it.empty? || it == '*'
+    if (m = it.match(/\s+AS\s+("?)([^"]+)\1\s*\z/i)) || (m = it.match(/\s+AS\s+(\[)([^\]]+)\]\s*\z/i))
+      return m[2].strip
+    end
+    # trailing quoted identifier: ... "Foo"  or  t."Foo"
+    if (m = it.match(/"([^"]+)"\s*\z/))
+      return m[1]
+    end
+    # bare dotted/simple identifier with no expression chars
+    if it =~ /\A[A-Za-z_][\w.]*\z/
+      return it.split('.').last
+    end
+    nil # an unaliased expression — can't name it safely
+  end
+
+  # The published-datasource contentUrl a sqlproxy connection points at
+  # (<connection dbname='...'> and the sibling <repository-location id='...'>).
+  def pds_content_url(ds)
+    conn = ds.elements['connection']
+    dbname = conn && conn.attributes['dbname'].to_s
+    return dbname unless dbname.to_s.empty?
+    rl = ds.elements['repository-location'] || ds.elements['.//repository-location']
+    rl && rl.attributes['id'].to_s
+  end
+
   # Quick check (cheap, offline): does this .twb have any top-level datasource on
   # a sqlproxy connection with no real relation? Used by the migrate orchestrator
   # to decide whether to run the (Tableau-token-requiring) hydration path at all.
   def twb_has_sqlproxy?(twb_path)
     return false unless File.exist?(twb_path)
-    doc = REXML::Document.new(File.read(twb_path))
+    doc = REXML::Document.new(File.read(twb_path, encoding: 'UTF-8'))
     doc.each_element('/workbook/datasources/datasource') do |ds|
       conn = ds.elements['connection']
       return true if conn && sqlproxy_connection?(conn) && !has_real_relation?(conn)
@@ -142,45 +227,128 @@ module HydrateCustomSql
     [nil, nil]
   end
 
-  # Rewrite one datasource's connection in place: swap the sqlproxy placeholder
-  # for a <relation type='text'> carrying the wrapped SQL, present the connection
-  # as the warehouse, and rewrite metadata-record remote-names to the aliases.
-  # Returns true if hydrated.
-  def hydrate_datasource!(ds, query:, columns:, db:, schema:, warehouse_class: 'snowflake')
+  # Splice a resolved published-datasource relation into `ds`'s connection,
+  # replacing the sqlproxy placeholder so the converter builds a real element.
+  # Handles BOTH published-DS shapes:
+  #   relation_type 'text'  → wrapped+aliased Custom SQL (columns required)
+  #   relation_type 'table' → a real <relation type='table' table='[db].[schema].[T]'>
+  # `db`/`schema` present the connection as a live warehouse (for text, they scope
+  # the Sigma connection; for table, they qualify the table path when it isn't
+  # already 3-part). Returns true if spliced.
+  def splice_pds!(ds, relation_type:, db:, schema:, sql: nil, table_path: nil,
+                  columns: [], warehouse_class: 'snowflake')
     conn = ds.elements['connection']
     return false unless conn
-    return false if query.to_s.strip.empty? || columns.nil? || columns.empty?
+    rel_name = conn.elements['.//relation']&.attributes&.[]('name')
+    rel_name = nil if rel_name.to_s.empty? || rel_name.to_s.downcase == 'sqlproxy'
+    rel_name ||= (ds.attributes['caption'] || 'PublishedDS').to_s
 
-    wrapped = wrap_sql(query, columns)
-
-    # Present as the real warehouse (the converter treats sqlproxy/extract
-    # placeholders as no-schema; a concrete class + db/schema makes it a live source).
+    # Present as the real warehouse — sqlproxy/extract placeholders carry no schema.
     conn.attributes['class'] = warehouse_class
     conn.attributes['dbname'] = db if db && !db.empty?
     conn.attributes['schema'] = schema if schema && !schema.empty?
+    conn.attributes.delete('channel'); conn.attributes.delete('directory')
+    conn.attributes.delete('port');    conn.attributes.delete('server')
 
-    rel_name = conn.elements['.//relation']&.attributes&.[]('name') || ds.attributes['caption'] || 'CustomSQL'
-
-    # Drop existing placeholder relations, insert the text relation.
+    # Drop placeholder relation(s), splice the real one.
     conn.elements.each('.//relation') { |r| r.parent.delete_element(r) }
     rel = REXML::Element.new('relation')
     rel.add_attribute('name', rel_name)
-    rel.add_attribute('type', 'text')
-    rel.text = wrapped
+
+    if relation_type == 'table'
+      return false if table_path.to_s.strip.empty?
+      rel.add_attribute('type', 'table')
+      rel.add_attribute('table', qualify_table(table_path, db, schema))
+    else
+      return false if sql.to_s.strip.empty? || columns.nil? || columns.empty?
+      rel.add_attribute('type', 'text')
+      rel.text = wrap_sql(sql, columns)
+    end
     conn.add_element(rel)
-    # Keep <relation> ahead of <metadata-records> (canonical Tableau order).
     mr = conn.elements['metadata-records']
     conn.delete_element(rel) && conn.insert_before(mr, rel) if mr
 
-    # Rewrite metadata-record remote-names to the upper-snake aliases so the
-    # converter's fact columns resolve against the SQL output identifiers, while
-    # the caption (display name) is preserved.
-    conn.each_element('.//metadata-records/metadata-record') do |m|
-      rn = m.get_text('remote-name')
-      next unless rn
-      m.elements['remote-name'].text = alias_for(rn.value.strip)
+    # For Custom SQL, the converter builds the element's columns from
+    # <metadata-records>. A workbook on a published DS usually has NONE cached
+    # (the columns live in the PDS), so we SYNTHESIZE them from the resolved
+    # output columns — remote-name = the upper-snake output alias (matches the
+    # wrapped SELECT), caption = the original display name. If a block already
+    # exists we realign its remote-names instead. Without this the element POSTs
+    # with 0 columns and every calc/LOD referencing it fails to resolve.
+    if relation_type != 'table'
+      existing = conn.elements['metadata-records']
+      if existing && existing.get_elements('metadata-record').any?
+        existing.each_element('metadata-record') do |m|
+          rn = m.get_text('remote-name')
+          next unless rn
+          m.elements['remote-name'].text = alias_for(rn.value.strip)
+        end
+      elsif columns && !columns.empty?
+        existing&.remove
+        mrs = REXML::Element.new('metadata-records')
+        columns.each do |c|
+          rec = mrs.add_element('metadata-record', 'class' => 'column')
+          rec.add_element('remote-name').text = alias_for(c)
+          rec.add_element('local-name').text = "[#{c}]"
+          rec.add_element('parent-name').text = "[#{rel_name}]"
+          rec.add_element('remote-alias').text = alias_for(c)
+          rec.add_element('local-type').text = 'string'
+          rec.add_element('caption').text = c
+        end
+        conn.add_element(mrs) # after the <relation> (canonical order)
+      end
     end
     true
+  end
+
+  # Ensure a table ref is fully qualified [db].[schema].[table] using the PDS's
+  # db/schema when the ref has fewer than 3 parts.
+  def qualify_table(table_path, db, schema)
+    parts = table_path.to_s.scan(/\[([^\]]*)\]/).flatten
+    parts = table_path.to_s.split('.').map { |p| p.gsub(/\A\[|\]\z/, '') } if parts.empty?
+    parts = parts.reject(&:empty?)
+    case parts.length
+    when 1 then parts = [db, schema, parts[0]]
+    when 2 then parts = [db, parts[0], parts[1]]
+    end
+    parts = parts.reject { |p| p.to_s.empty? }
+    '[' + parts.join('].[') + ']'
+  end
+
+  # Back-compat: the original text-only splice (GraphQL-block path).
+  def hydrate_datasource!(ds, query:, columns:, db:, schema:, warehouse_class: 'snowflake')
+    splice_pds!(ds, relation_type: 'text', sql: query, columns: columns,
+                db: db, schema: schema, warehouse_class: warehouse_class)
+  end
+
+  # Descriptor-driven hydration (the REST-chase path). `descriptors` is an array of
+  #   { 'contentUrl'=>, 'relationType'=>'text'|'table', 'sql'=>, 'table'=>,
+  #     'db'=>, 'schema'=>, 'columns'=>[...] }
+  # produced by resolve-published-ds.rb (which downloads GET /datasources/{id}/content
+  # and reads the inner .tds). Matches each sqlproxy datasource to a descriptor by
+  # contentUrl (== the connection's dbname / repository-location id). This is the
+  # PRIMARY path — reliable regardless of Metadata-API lineage lag.
+  def hydrate_pds!(doc, descriptors:, db:, schema:, warehouse_class: 'snowflake')
+    by_url = {}
+    (descriptors || []).each { |d| by_url[d['contentUrl'].to_s.downcase] = d if d['contentUrl'] }
+    hydrated = []
+    doc.each_element('/workbook/datasources/datasource') do |ds|
+      conn = ds.elements['connection']
+      next unless conn && sqlproxy_connection?(conn) && !has_real_relation?(conn)
+      url = pds_content_url(ds).to_s.downcase
+      d = by_url[url]
+      next unless d
+      rtype = d['relationType'].to_s == 'table' ? 'table' : 'text'
+      cols = d['columns'] || (rtype == 'text' ? parse_sql_columns(d['sql']) : [])
+      d_db = d['db'].to_s.empty? ? db : d['db']
+      d_schema = d['schema'].to_s.empty? ? schema : d['schema']
+      ok = splice_pds!(ds, relation_type: rtype, sql: d['sql'], table_path: d['table'],
+                       columns: cols, db: d_db, schema: d_schema, warehouse_class: warehouse_class)
+      next unless ok
+      hydrated << { 'caption' => (ds.attributes['caption'] || '').to_s, 'contentUrl' => d['contentUrl'],
+                    'relationType' => rtype, 'columns' => cols.size, 'source' => 'rest-content' }
+    end
+    hydrated
   end
 
   # Walk all top-level datasources; hydrate every sqlproxy one we can resolve.
@@ -219,37 +387,49 @@ if __FILE__ == $PROGRAM_NAME
   opts = {}
   OptionParser.new do |o|
     o.on('--twb PATH')         { |v| opts[:twb] = v }
-    o.on('--custom-sql PATH')  { |v| opts[:csql] = v }
+    o.on('--pds PATH')         { |v| opts[:pds] = v }   # descriptors from resolve-published-ds.rb (PRIMARY)
+    o.on('--custom-sql PATH')  { |v| opts[:csql] = v }  # GraphQL blocks (fallback)
     o.on('--columns PATH')     { |v| opts[:cols] = v }
     o.on('--db NAME')          { |v| opts[:db] = v }
     o.on('--schema NAME')      { |v| opts[:schema] = v }
     o.on('--warehouse-class C'){ |v| opts[:wcls] = v }
     o.on('--out PATH')         { |v| opts[:out] = v }
   end.parse!
-  abort 'usage: --twb PATH --custom-sql PATH --db DB --schema SCHEMA --out PATH [--columns PATH]' \
-    unless opts[:twb] && opts[:csql] && opts[:out]
+  abort 'usage: --twb PATH --out PATH (--pds DESCRIPTORS.json  and/or  --custom-sql BLOCKS.json) [--db DB --schema SCHEMA]' \
+    unless opts[:twb] && opts[:out] && (opts[:pds] || opts[:csql])
 
-  blocks = JSON.parse(File.read(opts[:csql])) rescue []
-  blocks = [] unless blocks.is_a?(Array)
-  cols_by_key = {}
-  if opts[:cols] && File.exist?(opts[:cols])
-    (JSON.parse(File.read(opts[:cols])) rescue {}).each { |k, v| cols_by_key[k.to_s.downcase] = v }
+  wcls = opts[:wcls] || 'snowflake'
+  doc = REXML::Document.new(File.read(opts[:twb], encoding: 'UTF-8'))
+  hydrated = []
+
+  # PRIMARY: REST-content descriptors (table + custom SQL, no lineage dependency).
+  if opts[:pds] && File.exist?(opts[:pds])
+    descriptors = JSON.parse(File.read(opts[:pds], encoding: 'UTF-8')) rescue []
+    descriptors = [] unless descriptors.is_a?(Array)
+    hydrated += HydrateCustomSql.hydrate_pds!(doc, descriptors: descriptors,
+                                              db: opts[:db], schema: opts[:schema], warehouse_class: wcls)
   end
 
-  doc = REXML::Document.new(File.read(opts[:twb]))
-  hydrated = HydrateCustomSql.hydrate!(
-    doc, blocks: blocks, columns_by_key: cols_by_key,
-    db: opts[:db], schema: opts[:schema], warehouse_class: opts[:wcls] || 'snowflake'
-  )
+  # FALLBACK: GraphQL Custom SQL blocks (only for any sqlproxy DS still unresolved).
+  if opts[:csql] && File.exist?(opts[:csql])
+    blocks = JSON.parse(File.read(opts[:csql], encoding: 'UTF-8')) rescue []
+    blocks = [] unless blocks.is_a?(Array)
+    cols_by_key = {}
+    if opts[:cols] && File.exist?(opts[:cols])
+      (JSON.parse(File.read(opts[:cols], encoding: 'UTF-8')) rescue {}).each { |k, v| cols_by_key[k.to_s.downcase] = v }
+    end
+    hydrated += HydrateCustomSql.hydrate!(doc, blocks: blocks, columns_by_key: cols_by_key,
+                                          db: opts[:db], schema: opts[:schema], warehouse_class: wcls)
+  end
 
   if hydrated.empty?
-    warn 'hydrate-custom-sql: no sqlproxy datasource could be hydrated (none found, or no matching Custom SQL / columns). .twb copied unchanged.'
-    File.write(opts[:out], File.read(opts[:twb]))
+    warn 'hydrate-custom-sql: no sqlproxy datasource could be hydrated (none found, or PDS/Custom SQL/columns unresolved). .twb copied unchanged.'
+    File.write(opts[:out], File.read(opts[:twb], encoding: 'UTF-8'))
   else
     File.open(opts[:out], 'w') { |f| doc.write(f) }
     hydrated.each do |h|
-      warn "  hydrated datasource #{h['caption'].inspect} (published DS #{h['published_ds'].inspect}) " \
-           "→ Custom SQL element, #{h['columns']} cols from #{h['column_source']}"
+      tag = h['contentUrl'] ? "PDS #{h['contentUrl'].inspect} (#{h['relationType']})" : "published DS #{h['published_ds'].inspect}"
+      warn "  hydrated datasource #{h['caption'].inspect} → #{tag}, #{h['columns']} col(s) from #{h['source'] || h['column_source']}"
     end
   end
   puts "wrote #{opts[:out]} (#{hydrated.size} datasource(s) hydrated)"

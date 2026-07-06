@@ -88,7 +88,7 @@ def dashboard_in_scope?(name, page_id)
   name_hit || page_hit
 end
 
-TWB_TEXT = File.read(INP)
+TWB_TEXT = File.read(INP, encoding: 'UTF-8')
 xml = TwbXml.parse(TWB_TEXT)
 
 # ---- Brand palette (Phase-1 D1, general) ----------------------------------
