@@ -41,6 +41,7 @@
 require 'json'
 require 'optparse'
 require_relative 'lib/layout'
+require_relative 'lib/zone_census'
 include SigmaLayout
 
 # ---- Source-derived header chrome -----------------------------------------
@@ -97,6 +98,7 @@ OptionParser.new do |p|
   p.on('--layout PATH')        { |v| opts[:layout] = v }
   p.on('--wb-ids PATH')        { |v| opts[:wb_ids] = v }
   p.on('--out PATH')           { |v| opts[:out] = v }
+  p.on('--census-out PATH', 'per-page fill/coverage census for gate 8c (default: layout-census.json beside --out)') { |v| opts[:census_out] = v }
   p.on('--page-cols N',  Integer) { |v| opts[:page_cols] = v }
   p.on('--page-rows N',  Integer) { |v| opts[:page_rows] = v }
   p.on('--row-scale F',  Float, 'row-height multiplier (default 1.5; min label-safe ~1.43)') { |v| opts[:row_scale] = v }
@@ -357,12 +359,17 @@ def build_page_from_tree(dashboard, page, opts)
     children << header_band_xml(hdr_id, txt_id)
   end
 
-  # Top-level zones → page children, shifted below the header band.
+  # Top-level zones → page children, shifted below the header band. Collect the
+  # PAGE-absolute footprint of every top-level node that actually placed (gate
+  # 8c fill numerator — a top-level container's rect covers its nested tiles).
+  content_rects = []
   tree.each do |node|
     c0, c1, r0, r1 = place_in_parent(node, page_pseudo, body_rows)
     r0 += HEADER_ROWS; r1 += HEADER_ROWS
     xml = emit_node(node, c0, c1, r0, r1, ctx)
-    children << xml if xml
+    next unless xml
+    children << xml
+    content_rects << [c0, c1, r0, r1]
   end
 
   # Safety net: any chart/control element NOT placed by the tree (an unmatched
@@ -391,11 +398,24 @@ def build_page_from_tree(dashboard, page, opts)
     end.join("\n")
     bid = "tc-#{page['id']}-extra"
     extra_els << container_el(bid)
-    children << gc(bid, 1, 25, [page_rows - 4, HEADER_ROWS + 1].max, page_rows + 1, inner)
+    band_r0 = [page_rows - 4, HEADER_ROWS + 1].max
+    children << gc(bid, 1, 25, band_r0, page_rows + 1, inner)
+    content_rects << [1, 25, band_r0, page_rows + 1] # safety band holds real tiles → counts as filled
     warn "WARN: #{n} element(s) had no Tableau zone — appended in a bottom band: #{unplaced.map { |e| e['name'] || e['id'] }.join(', ')}"
   end
 
-  [page_xml(page['id'], *children), extra_els, ctx[:placed].size, tree.length, ctl_by_name.size]
+  # ---- Layout census (gate 8c, #259) ----------------------------------------
+  # zones from the authoritative flat source list; placed = content zones whose
+  # element made it into ctx[:placed]. Header band excluded from the fill rects.
+  content_zones = ZoneCensus.content_zones(dashboard['zones'])
+  placed = content_zones.count do |z|
+    e = els_by_name[opts[:renames][z['caption']] || z['caption']]
+    e && ctx[:placed].include?(e['id'])
+  end
+  fill = ZoneCensus.grid_fill_pct(content_rects, opts[:page_cols], page_rows)
+  census = ZoneCensus.page_record(page['name'], content_zones.size, placed, fill)
+
+  [page_xml(page['id'], *children), extra_els, ctx[:placed].size, tree.length, ctl_by_name.size, census]
 end
 
 # Build one container-banded page for a single dashboard. Returns
@@ -516,7 +536,21 @@ def build_page_for_dashboard(dashboard, page, opts)
          "#{text_els.map { |e| e['id'] }.join(', ')}"
   end
 
-  [page_xml(page['id'], *children), extra_els, chart_layouts.length, bands.length, ctl_els.length]
+  # ---- Layout census (gate 8c, #259) ----------------------------------------
+  # zones  = non-furniture source content zones (real plotting tiles).
+  # placed = those that resolved to a Sigma element (chart_pos always places a
+  #          resolved zone, so a resolved content zone == a placed tile).
+  # rects  = PAGE-absolute grid footprints of the placed tiles (charts shifted
+  #          by band_offset) plus the control band — furniture (header band,
+  #          styled-text band) excluded from the fill numerator.
+  content_zones = ZoneCensus.content_zones(dashboard['zones'])
+  placed = content_zones.count { |z| els_by_name[o[:renames][z['caption']] || z['caption']] }
+  content_rects = chart_layouts.map { |c| [c[:c1], c[:c2], c[:r1] + band_offset, c[:r2] + band_offset] }
+  content_rects << [1, o[:page_cols] + 1, 1 + HEADER_ROWS, 1 + HEADER_ROWS + ctl_rows] if ctl_els.length.positive?
+  fill = ZoneCensus.grid_fill_pct(content_rects, o[:page_cols], o[:page_rows])
+  census = ZoneCensus.page_record(page['name'], content_zones.size, placed, fill)
+
+  [page_xml(page['id'], *children), extra_els, chart_layouts.length, bands.length, ctl_els.length, census]
 end
 
 data_page_xml = page_xml('page-data',
@@ -524,6 +558,7 @@ data_page_xml = page_xml('page-data',
 
 page_xmls = [data_page_xml]
 sidecar = {}
+census_pages = []
 totals = { charts: 0, bands: 0, controls: 0 }
 dash_layout.each do |d|
   page = page_for_dash[d['dashboard']]
@@ -532,17 +567,18 @@ dash_layout.each do |d|
              (tree_has_controls?(d['zone_tree']) || tree_has_styled_containers?(d['zone_tree']))
   if use_tree
     begin
-      pxml, extra_els, n_charts, n_bands, n_ctls = build_page_from_tree(d, page, opts)
+      pxml, extra_els, n_charts, n_bands, n_ctls, census = build_page_from_tree(d, page, opts)
       warn "container-tree layout: #{d['dashboard'].inspect} → nested Sigma containers (filters/params placed in their Tableau container)"
     rescue StandardError => e
       warn "WARN: container-tree layout failed for #{d['dashboard'].inspect} (#{e.class}: #{e.message}) — falling back to banded layout"
-      pxml, extra_els, n_charts, n_bands, n_ctls = build_page_for_dashboard(d, page, opts)
+      pxml, extra_els, n_charts, n_bands, n_ctls, census = build_page_for_dashboard(d, page, opts)
     end
   else
-    pxml, extra_els, n_charts, n_bands, n_ctls = build_page_for_dashboard(d, page, opts)
+    pxml, extra_els, n_charts, n_bands, n_ctls, census = build_page_for_dashboard(d, page, opts)
   end
   page_xmls << pxml
   sidecar[page['id']] = extra_els
+  census_pages << census if census
   totals[:charts] += n_charts
   totals[:bands] += n_bands
   totals[:controls] += n_ctls
@@ -550,6 +586,16 @@ end
 
 File.write(opts[:out], assemble(*page_xmls) + "\n")
 File.write("#{opts[:out]}.elements.json", JSON.pretty_generate(sidecar))
+
+# ---- layout-census.json (gate 8c producer, #259) --------------------------
+# One record per dashboard page (zones / placed / dropped / grid_fill_pct).
+# assert-phase6-ran.rb gate 8c hard-fails on a page with dropped tiles
+# (placed < zones) or a mostly-empty grid (grid_fill_pct < --min-grid-fill).
+census_out = opts[:census_out] || File.join(File.dirname(opts[:out]), 'layout-census.json')
+File.write(census_out, JSON.pretty_generate({ 'pages' => census_pages }) + "\n")
+
 puts "wrote #{opts[:out]} (#{page_for_dash.size} dashboard page(s): #{totals[:charts]} charts in #{totals[:bands]} band container(s), " \
      "#{totals[:controls]} controls, header bands, gap-closing applied, row-scale #{opts[:row_scale]}× → #{opts[:page_rows]} rows)"
 puts "wrote #{opts[:out]}.elements.json (#{sidecar.values.sum(&:length)} container/header spec element(s) — put-layout.rb injects these)"
+puts "wrote #{census_out} (#{census_pages.size} page census record(s): " \
+     "#{census_pages.map { |c| "#{c['page']} #{c['placed']}/#{c['zones']} tiles, fill #{(c['grid_fill_pct'] * 100).round}%" }.join('; ')})"

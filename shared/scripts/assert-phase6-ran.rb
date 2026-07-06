@@ -104,6 +104,11 @@
 #      the source-vs-target comparison is mandatory. Run record-visual-check.rb after
 #      reading the rendered page against the source dashboard PNG, then re-run.
 #      Escape hatch (source image genuinely unobtainable): --skip-visual-comparison "<reason>".
+#  14  Layout fill / grid coverage failed (gate 8c; #259 item 1) — a page in
+#      layout-census.json dropped a tile (placed < zones) or ships under-filled
+#      (grid_fill_pct < --min-grid-fill, default 0.45), OR a dashboard layout was
+#      built but no census was emitted. build-dashboard-layout.rb produces the
+#      census. Escape hatch: --skip-layout-fill "<reason>".
 #
 # Prints a per-gate summary to stdout regardless of exit code.
 
@@ -114,7 +119,7 @@ require 'optparse'
 require 'rbconfig'
 
 opts = { min_pass_rate: 1.0, allow_extract: false, min_layout_elements: 2,
-         allow_missing_tiles: 0, min_parity_score: 0.0 }
+         allow_missing_tiles: 0, min_parity_score: 0.0, min_grid_fill: 0.45 }
 OptionParser.new do |p|
   p.on('--tableau DIR')              { |v| opts[:tab] = v }
   p.on('--workdir DIR', 'alias of --tableau for non-Tableau converters') { |v| opts[:tab] = v }
@@ -139,6 +144,8 @@ OptionParser.new do |p|
   p.on('--require-visual-comparison', 'DEPRECATED — gate 8b is now enforced by default; this flag is a no-op kept for back-compat.') { opts[:require_visual_cmp] = true }
   p.on('--skip-visual-comparison REASON', 'waive gate 8b (source-vs-target visual verdict) — REQUIRED reason string. Use ONLY when the source dashboard image is genuinely unobtainable (no source render/export access). The reason MUST be named in your migration report.') { |v| opts[:skip_visual_cmp] = v }
   p.on('--skip-visual-tiles REASON', 'waive gate 9 (build-from-signals tile image-verification) — REQUIRED reason string. The reason MUST be named in your migration report.') { |v| opts[:skip_visual_tiles] = v }
+  p.on('--min-grid-fill F', Float, 'gate 8c: minimum per-page grid_fill_pct (0..1, default 0.45) — pages below fail as mostly-empty') { |v| opts[:min_grid_fill] = v }
+  p.on('--skip-layout-fill REASON', 'waive gate 8c (layout fill / grid coverage) — REQUIRED reason string. Use ONLY when a sparse/partial page is intentional. The reason MUST be named in your migration report.') { |v| opts[:skip_layout_fill] = v }
   p.on('--skip-telemetry-gate REASON', 'waive gate 10 (telemetry consent decision) — REQUIRED reason string. Use ONLY when the run genuinely cannot prompt (e.g. unattended CI). The reason MUST be named in your migration report.') { |v| opts[:skip_telemetry] = v }
 end.parse!
 abort('--workdir (or --tableau) required') unless opts[:tab]
@@ -718,6 +725,66 @@ else
     warn '       then re-run. If the source image is genuinely unobtainable, waive with'
     warn '       --skip-visual-comparison "<reason>" and name it in your migration report.'
     exit 13
+  end
+end
+
+# ---------------------------------------------------------------------------
+# Gate 8c — layout fill / grid coverage (#259 item 1). A workbook can pass
+# every structural + visual gate above and still ship a page that is mostly
+# empty: tiles silently dropped, or a sparse default stack. build-dashboard-
+# layout.rb emits <workdir>/layout-census.json (one record per page: zones /
+# placed / dropped / grid_fill_pct). This gate hard-fails when any page dropped
+# a tile (placed < zones) OR its grid is under-filled (grid_fill_pct <
+# --min-grid-fill, default 0.45).
+#
+# Absent census: CONDITIONAL fail. If a dashboard layout was built
+# (dashboard-layout.json present, or a tile_census landed in parity-final.json)
+# but no fill census exists, the gate couldn't run on a page it should have ⇒
+# FAIL. When no dashboard layout was built at all — a non-dashboard migration
+# or a converter that doesn't emit a census — the gate is N/A ⇒ SKIP (stated,
+# never a silent pass).
+# ---------------------------------------------------------------------------
+census_fill_path = File.join(opts[:tab], 'layout-census.json')
+if opts[:skip_layout_fill]
+  record_waiver.call('--skip-layout-fill', 'gate 8c (layout fill / grid coverage)', opts[:skip_layout_fill])
+elsif File.exist?(census_fill_path)
+  doc = JSON.parse(File.read(census_fill_path)) rescue nil
+  pages = doc.is_a?(Hash) ? Array(doc['pages']) : (doc.is_a?(Array) ? doc : nil)
+  if pages.nil?
+    warn "[FAIL] gate 8c: #{census_fill_path} is malformed (expected {\"pages\":[{page,zones,placed,grid_fill_pct}...]})."
+    exit 14
+  end
+  min_fill = opts[:min_grid_fill]
+  bad = pages.select { |p| p['placed'].to_i < p['zones'].to_i || p['grid_fill_pct'].to_f < min_fill }
+  if bad.any?
+    warn "[FAIL] gate 8c: layout fill/coverage — #{bad.length} page(s) dropped tiles or ship under-filled:"
+    bad.each do |p|
+      reasons = []
+      if p['placed'].to_i < p['zones'].to_i
+        reasons << "#{p['zones'].to_i - p['placed'].to_i} dropped tile(s) (placed #{p['placed']}/#{p['zones']})"
+      end
+      reasons << "grid fill #{(p['grid_fill_pct'].to_f * 100).round}% < #{(min_fill * 100).round}%" if p['grid_fill_pct'].to_f < min_fill
+      warn "         - #{p['page'].inspect}: #{reasons.join('; ')}"
+    end
+    warn '       A dropped tile means a source zone never made it into the Sigma layout (empty'
+    warn '       view CSV, unhandled rename); an under-filled grid means the page ships mostly'
+    warn '       empty. Check build-dashboard-layout.rb WARN lines for dropped/unmatched zones,'
+    warn '       rebuild the layout, re-PUT, and re-render. Tune with --min-grid-fill F.'
+    warn '       Escape hatch (intentionally sparse page): --skip-layout-fill "<reason>" (name it in your report).'
+    exit 14
+  end
+  puts "[OK] gate 8c: layout fill — #{pages.length} page(s), all tiles placed (no drops), grid fill >= #{(min_fill * 100).round}%"
+else
+  dash_built = File.exist?(File.join(opts[:tab], 'dashboard-layout.json')) ||
+               (defined?(summary) && summary.is_a?(Hash) && summary['tile_census'])
+  if dash_built
+    warn "[FAIL] gate 8c: a dashboard layout was built but #{census_fill_path} is missing —"
+    warn '       the layout fill/coverage gate could not run on a page it should have.'
+    warn '       Re-run build-dashboard-layout.rb (it emits layout-census.json beside layout.xml),'
+    warn '       then re-run this gate. Escape hatch: --skip-layout-fill "<reason>".'
+    exit 14
+  else
+    puts "[SKIP] gate 8c: no layout-census.json and no dashboard layout built — fill gate N/A"
   end
 end
 

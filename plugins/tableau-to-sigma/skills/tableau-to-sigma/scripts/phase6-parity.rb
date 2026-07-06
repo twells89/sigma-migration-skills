@@ -33,6 +33,7 @@ require 'optparse'
 require 'base64'
 require 'open3'
 require 'time'
+require_relative 'lib/zone_census'
 
 opts = { extract_mode: false, extract_tol: 0.30, renames: [], finalize: false }
 OptionParser.new do |p|
@@ -253,17 +254,12 @@ if File.exist?(dash_layout_path)
     # disclaimers), NOT a real tile. Counting those inflated `zones_total` and
     # made coverage read far worse than reality (the ~30 phantom "missing tiles").
     # Exclude them from the parity denominator. KPI "title" zones DO carry a
-    # measure, so they're correctly kept.
-    plots = lambda do |zz|
-      return false unless zz['kind'] == 'chart' && !zz['caption'].to_s.strip.empty?
-      rs = zz['rows_shelf'] || {}; cs = zz['cols_shelf'] || {}
-      shelf = rs['dim_count'].to_i + rs['measure_count'].to_i + cs['dim_count'].to_i + cs['measure_count'].to_i
-      !Array(zz['measures']).empty? || shelf.positive?
-    end
+    # measure, so they're correctly kept. The furniture predicate lives in
+    # ZoneCensus (shared with build-dashboard-layout's layout-census, #259).
     all_chart_zones = dash_layout.flat_map { |d| d['zones'] || [] }
-                                 .select { |zz| zz['kind'] == 'chart' && !zz['caption'].to_s.strip.empty? }
-    label_zones = all_chart_zones.reject(&plots).map { |zz| zz['caption'].strip }.uniq
-    zone_names  = all_chart_zones.select(&plots).map { |zz| zz['caption'].strip }.uniq
+                                 .select { |zz| ZoneCensus.chart_zone?(zz) }
+    label_zones = all_chart_zones.reject { |zz| ZoneCensus.plots?(zz) }.map { |zz| zz['caption'].strip }.uniq
+    zone_names  = all_chart_zones.select { |zz| ZoneCensus.plots?(zz) }.map { |zz| zz['caption'].strip }.uniq
     norm = ->(s) { s.to_s.downcase.gsub(/[^a-z0-9]/, '') }
     matched = plan['charts'].flat_map { |c| [c['tableau_view'], c['chart']] }.compact.map(&norm)
     unmatched = zone_names.reject { |zn| matched.include?(norm.call(zn)) }

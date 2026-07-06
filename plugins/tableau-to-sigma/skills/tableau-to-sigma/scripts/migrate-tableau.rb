@@ -382,6 +382,27 @@ if opts[:finalize]
     puts '============================================================================='
   end
 
+  if gst.exitstatus == 14
+    fill = (JSON.parse(File.read(census_path))['pages'] rescue []) || []
+    bad = fill.select { |p| p['placed'].to_i < p['zones'].to_i || p['grid_fill_pct'].to_f < 0.45 }
+    puts
+    puts '==================== FILL STOP (agent action required) ======================'
+    puts 'A page shipped with dropped tiles or a mostly-empty grid (gate 8c). Structural'
+    puts 'and value parity passing does NOT mean every source tile made it onto the page.'
+    bad.each do |p|
+      drop = p['zones'].to_i - p['placed'].to_i
+      puts "  - #{p['page'].inspect}: #{drop.positive? ? "#{drop} dropped tile(s) (#{p['placed']}/#{p['zones']}), " : ''}grid fill #{(p['grid_fill_pct'].to_f * 100).round}%"
+    end
+    puts 'Do this, then re-run this exact --finalize command:'
+    puts '  1. Check build-dashboard-layout.rb WARN lines for dropped/unmatched zones; a drop'
+    puts '     usually means an empty view CSV or an unhandled --rename. Rebuild the missing'
+    puts '     tile, re-PUT the layout, re-render.'
+    puts '  2. If the page is INTENTIONALLY sparse, waive with'
+    puts '     assert-phase6-ran.rb --skip-layout-fill "<reason>" (name it in your report),'
+    puts '     or lower the bar with --min-grid-fill F.'
+    puts '============================================================================='
+  end
+
   # With an explicit --min-pass-rate (honest NAMED divergences), the census-
   # aware gate is the parity authority — phase6's own exit stays strict-100%.
   parity_ok = p6st.success? || (opts[:min_pass_rate] && gst.success?)
@@ -1779,18 +1800,34 @@ end
 # ---------------------------------------------------------------------------
 hdr(5, 'Layout')
 layout_path = File.join(WORK, 'layout.xml')
+census_path = File.join(WORK, 'layout-census.json') # gate 8c reads this (default: <WORK>)
 if layout_xml
   File.write(layout_path, layout_xml)
   line 'layout from spec generator'
+  # The spec generator's layout XML doesn't emit a fill census, so gate 8c
+  # would have nothing to check on a dashboard build. Derive one from the
+  # parsed zone tree (best-effort, scratch --out so the shipped layout.xml is
+  # untouched) — the placed/zones drop count is layout-source-independent and
+  # the grid-fill is a faithful proxy for these dense hand-composed layouts.
+  if File.exist?(layout_json)
+    run!(['ruby', File.join(HERE, 'build-dashboard-layout.rb'),
+          '--layout', layout_json, '--wb-ids', wb_ids_path,
+          '--out', File.join(WORK, 'layout-census-scratch.xml'),
+          '--census-out', census_path,
+          '--row-scale', (opts[:row_scale] || 1.5).to_s],
+         allow_fail: true)
+  end
 elsif File.exist?(layout_json)
   _, lst = run!(['ruby', File.join(HERE, 'build-dashboard-layout.rb'),
                  '--layout', layout_json, '--wb-ids', wb_ids_path, '--out', layout_path,
+                 '--census-out', census_path,
                  '--row-scale', (opts[:row_scale] || 1.5).to_s],
                 allow_fail: true)
   line 'WARN: layout build failed — workbook will render in default stacked order' unless lst.success?
 else
   line 'no layout source — skipping (workbook renders single-column stack)'
 end
+line "layout fill census → #{census_path}" if File.exist?(census_path)
 # Layout is cosmetic: a bad grid PUT must NOT fail an otherwise-good migration
 # (the workbook still renders + queries). Apply best-effort.
 if File.exist?(layout_path)
