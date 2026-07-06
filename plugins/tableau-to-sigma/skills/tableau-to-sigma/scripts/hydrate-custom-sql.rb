@@ -277,13 +277,12 @@ module HydrateCustomSql
     # with 0 columns and every calc/LOD referencing it fails to resolve.
     if relation_type != 'table'
       existing = conn.elements['metadata-records']
-      if existing && existing.get_elements('metadata-record').any?
-        existing.each_element('metadata-record') do |m|
-          rn = m.get_text('remote-name')
-          next unless rn
-          m.elements['remote-name'].text = alias_for(rn.value.strip)
-        end
-      elsif columns && !columns.empty?
+      if columns && !columns.empty?
+        # The parsed Custom SQL output is the AUTHORITATIVE column set — build a
+        # full metadata-records block from it (remote-name = upper-snake output
+        # alias, caption = display name). This replaces whatever the workbook
+        # cached (usually a partial set, or none), so the element exposes every
+        # Custom SQL column, not just the ones this workbook happened to use.
         existing&.remove
         mrs = REXML::Element.new('metadata-records')
         columns.each do |c|
@@ -296,6 +295,14 @@ module HydrateCustomSql
           rec.add_element('caption').text = c
         end
         conn.add_element(mrs) # after the <relation> (canonical order)
+      elsif existing
+        # No parsed columns (e.g. SELECT * we couldn't expand) — best-effort:
+        # realign whatever the workbook cached to the upper-snake output aliases.
+        existing.each_element('metadata-record') do |m|
+          rn = m.get_text('remote-name')
+          next unless rn
+          m.elements['remote-name'].text = alias_for(rn.value.strip)
+        end
       end
     end
     true
