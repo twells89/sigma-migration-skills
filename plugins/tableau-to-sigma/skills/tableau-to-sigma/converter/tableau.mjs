@@ -4423,8 +4423,10 @@ function convertTableauToSigma(xmlContent, options = {}) {
           const eqExprs = [];
           for (const oe of asArray(rel.expression || []))
             collectEqs(oe, eqExprs);
-          if (eqExprs.length === 0)
+          if (eqExprs.length === 0) {
+            warnings.push(`\u26A0 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName} carries no serialized join key \u2014 Tableau auto-matches these at query time; Sigma needs an explicit key. NOT wired: pick a join key and wire manually (LEFT from fact\u2192dim), and verify the dimension is unique on the key to avoid measure fan-out.`);
             continue;
+          }
           const isPhysical = (op) => /^\[[^\]]+\]$/.test(op.trim());
           const keys = [];
           let skippedComputed = 0;
@@ -4462,6 +4464,11 @@ function convertTableauToSigma(xmlContent, options = {}) {
             name: secondEntry.cleanName
           });
           warnings.push(`\u2139 Relationship ${firstEntry.cleanName} \u2192 ${secondEntry.cleanName} wired on ${keys.length} physical key(s).`);
+        }
+        const joinableEls = elements.filter((e) => e.source?.kind === "warehouse-table" || e.source?.kind === "sql");
+        const wiredRelCount = elements.reduce((n, e) => n + (e.relationships?.length || 0), 0);
+        if (joinableEls.length > 1 && wiredRelCount === 0) {
+          warnings.push(relsList.length === 0 ? `\u26A0 Tableau logical (relationship / noun) datasource: ${joinableEls.length} tables but NO relationships were serialized in <object-graph> \u2014 nothing to derive a join key from (Tableau matches these at query time). The DM is a set of disconnected tables. Pick an explicit join key for each table pair and wire relationships manually (LEFT from fact\u2192dim), and verify each dimension is unique on the key to avoid measure fan-out.` : `\u26A0 Tableau logical (relationship / noun) datasource: ${joinableEls.length} tables and ${relsList.length} relationship(s), but 0 could be wired \u2014 all lacked a physical equality key (auto-matched or computed-only; see per-relationship warnings above). The DM is a set of disconnected tables. Pick an explicit join key per pair and wire manually (LEFT from fact\u2192dim); verify dimension uniqueness on the key.`);
         }
         elements.sort((a, b) => {
           const aR = !!a.relationships?.length;
