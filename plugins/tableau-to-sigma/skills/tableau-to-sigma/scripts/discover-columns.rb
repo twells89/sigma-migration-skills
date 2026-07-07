@@ -57,7 +57,24 @@ def http(method, path, body = nil)
     req['Content-Type'] = 'application/json'
     req.body = body
   end
-  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
+  # Bound every call. Sigma's warehouse-catalog lookup/columns endpoints make the
+  # warehouse introspect the table; a cold warehouse or a very wide view (e.g. a
+  # 300+-column view) can otherwise leave this blocked with NO client-side cap —
+  # the "migration stuck for hours" hang. Fail loud instead of hanging forever.
+  # Override with SIGMA_HTTP_TIMEOUT (seconds) if a legitimately huge catalog read
+  # needs longer.
+  timeout = (ENV['SIGMA_HTTP_TIMEOUT'] || '90').to_i
+  begin
+    res = Net::HTTP.start(uri.host, uri.port, use_ssl: true,
+                          open_timeout: [timeout, 30].min, read_timeout: timeout) do |h|
+      h.request(req)
+    end
+  rescue Net::OpenTimeout, Net::ReadTimeout, Timeout::Error => e
+    abort "TIMEOUT after #{timeout}s calling #{method.to_s.upcase} #{path} (#{e.class}). " \
+          "Sigma's warehouse catalog lookup did not return — often a cold warehouse or a very " \
+          "wide view. Retry, raise SIGMA_HTTP_TIMEOUT, or source this table via Custom SQL " \
+          "(SKILL.md Phase 1e.1) to skip per-column catalog introspection."
+  end
   [res.code.to_i, res.body]
 end
 

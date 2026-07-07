@@ -1107,7 +1107,20 @@ mark('phase2-columns')
 # ---------------------------------------------------------------------------
 puts
 puts '── Phase 1 (join) · Tableau discovery lane ──'
-sleep 0.1 until lane_done.call
+# Bound the join so a wedged discovery lane (e.g. a Tableau REST call that never
+# returns) can't leave the whole migration "stuck" indefinitely. Generous default
+# for large sites; override with TABLEAU_LANE_TIMEOUT (seconds).
+_lane_timeout = (ENV['TABLEAU_LANE_TIMEOUT'] || '1800').to_i
+_lane_t0 = Time.now
+until lane_done.call
+  if Time.now - _lane_t0 > _lane_timeout
+    print_lane_log.call
+    abort "FATAL: Tableau discovery lane did not finish within #{_lane_timeout}s — likely a " \
+          "wedged Tableau REST call (see lane log above). Re-run, raise TABLEAU_LANE_TIMEOUT, " \
+          "or pass the .twb directly with --twb to skip live discovery."
+  end
+  sleep 0.1
+end
 mark('join-wait')
 print_lane_log.call
 unless lane[:status].success?
