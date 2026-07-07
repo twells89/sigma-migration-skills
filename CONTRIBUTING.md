@@ -46,6 +46,23 @@ Intentional per-tool forks are allowlisted in `shared/manifest.json` (`exception
 + reason). **Shared-lib changes go in their own PR**, merged before dependent
 work — so concurrent feature PRs never both touch a copy.
 
+## Per-agent instruction variants — edit SKILL.md, never a generated copy
+
+Some skills ship non-Claude agent variants under `<skill>/generated/{cursor,codex,
+cline,continue}/`. These are **generated from the skill's `SKILL.md`** so every
+coding agent reads the SAME instructions. Never hand-edit a file under
+`generated/` — edit `SKILL.md` and regenerate:
+
+```bash
+ruby tools/gen-agent-variants.rb --all   # regenerate every skill's variants
+git add plugins/                         # commit SKILL.md + the regenerated variants
+```
+
+CI (`tools/check-agent-variants.rb`) fails if any committed variant drifts from
+what `SKILL.md` would generate. Use the `<!-- agents:claude-only -->` /
+`<!-- agents:non-claude … agents:end -->` markers in `SKILL.md` for the rare
+content that must differ per agent.
+
 ## Adding a new converter
 
 ```bash

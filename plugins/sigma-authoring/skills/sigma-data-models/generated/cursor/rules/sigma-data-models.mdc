@@ -4,8 +4,8 @@ alwaysApply: false
 ---
 
 <!--
-Auto-generated from SKILL.md by ~/sigma-skills/scripts/sync-targets.rb.
-Do not edit by hand — edit SKILL.md and re-run the script.
+Auto-generated from SKILL.md by tools/gen-agent-variants.rb.
+Do not edit by hand — edit SKILL.md and re-run: ruby tools/gen-agent-variants.rb --all
 -->
 
 > Author, retrieve, or modify a Sigma data model spec (the JSON/YAML semantic-layer definition with sources, columns, metrics, relationships, filters, controls, folder groupings, and column-level security) by calling the Sigma REST API directly. Use when the user wants to build a new data model from existing warehouse tables, add metrics or relationships to an existing model, change a model's source, edit columns, or round-trip a data model spec through code. **Out of scope: converting from another BI tool's format (dbt, LookML, Tableau, Power BI, Alteryx, etc.).** Those conversions are handled by the Sigma data-model converter (browser tool + MCP) — point users there when they paste source-format input. Requires an SIGMA_API_TOKEN — obtain via the sigma-api skill first.
@@ -69,7 +69,7 @@ Call out any of these before presenting the final spec:
 
 - **Building a workbook on top of this model** → load the `sigma-workbooks` skill. Its `sources.md` documents the `{ "kind": "data-model", "dataModelId": "...", "elementId": "..." }` source shape.
 - **Repointing existing workbooks to a newly-created model** → see `sigma-workbooks/reference/workflows/crud.md` and the swap-sources endpoint.
-- **Auth, base URLs, regions, token refresh** → always defer to the `sigma-api` skill rather than restating.
+- **Auth, base URLs, regions, token refresh** → always defer to the `sigma-api` skill rather than restating. For automatic 401-retry-with-refresh in Ruby long-running scripts (DM-build loops that outlive the 1-hour token TTL), see `sigma-workbooks/SKILL.md` "401 Unauthorized" — same pattern applies here.
 
 ## Out of Scope (use a different tool)
 

@@ -84,6 +84,11 @@ jobs:
         # C8 parity / C9 RLS gates and appear in docs/phase-schema.md. Known
         # gaps are tracked in tools/skill-lint-baseline.json (WARN, not fail).
         run: ruby tools/lint-skills.rb
+      - name: Check agent variants are in sync with SKILL.md
+        # The Cursor/Codex/Cline/Continue instruction files are generated from
+        # each skill's SKILL.md by tools/gen-agent-variants.rb. Fail if a
+        # committed variant drifted, so EVERY coding agent reads the same steps.
+        run: ruby tools/check-agent-variants.rb
 
   unit-tests:
     name: offline unit/regression tests (creds-free)
