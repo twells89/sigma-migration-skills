@@ -82,7 +82,54 @@ update_id = opts[:update_id] || (prior_ids.last if opts[:type] == 'workbook' && 
 
 if update_id
   warn "UPDATE mode: PUT #{opts[:type]} #{update_id} (no new #{opts[:type]} created)"
-  resp = http(:put, format(GET_PATH, update_id), File.read(opts[:spec]))
+  put_body = File.read(opts[:spec])
+  # Layout preservation (bead: layout-wipe-on-re-PUT). A workbook's applied layout
+  # lives at top-level spec['layout'] (put-layout.rb writes it there). PUTting a
+  # spec WITHOUT that field REPLACES the whole spec and wipes the layout, so the
+  # workbook falls back to a single-column stack. If the outgoing spec carries no
+  # layout, carry over the LIVE workbook's current layout so this PUT is
+  # layout-preserving. put-layout.rb (the intended LAST write) still overrides.
+  if opts[:type] == 'workbook'
+    out_spec = (YAML.safe_load(put_body, permitted_classes: [Date, Time]) rescue nil)
+    if out_spec.is_a?(Hash) && out_spec['layout'].to_s.strip.empty?
+      live = http(:get, format(GET_PATH, update_id))
+      live_spec = (YAML.safe_load(live.body, permitted_classes: [Date, Time]) rescue nil)
+      live_layout = live_spec.is_a?(Hash) ? live_spec['layout'].to_s : ''
+      unless live_layout.strip.empty?
+        # The layout XML references element ids. Banded layouts reference container
+        # + header elements that put-layout.rb injects from its `.elements.json`
+        # sidecar — they live in the LIVE spec's pages but NOT in this outgoing
+        # spec, so blindly copying the layout 400s ("Dependency not found"). Pull
+        # any layout-referenced elements this spec lacks from the live spec (match
+        # page by id, then name) so the refs resolve, then carry the layout.
+        ref_ids  = live_layout.scan(/elementId="([^"]+)"/).flatten.uniq
+        have_ids = (out_spec['pages'] || []).flat_map { |p| (p['elements'] || []).map { |e| e['id'] } }.compact
+        missing  = ref_ids - have_ids
+        if missing.any? && live_spec['pages'].is_a?(Array)
+          live_by_id = {}
+          live_spec['pages'].each { |p| (p['elements'] || []).each { |e| live_by_id[e['id']] = [p, e] } }
+          out_by_id  = (out_spec['pages'] || []).each_with_object({}) { |p, h| h[p['id']] = p }
+          missing.dup.each do |mid|
+            lp, le = live_by_id[mid]
+            next unless le
+            tgt = out_by_id[lp['id']] || (out_spec['pages'] || []).find { |p| p['name'] == lp['name'] } || (out_spec['pages'] || []).last
+            next unless tgt
+            (tgt['elements'] ||= []) << le
+            missing.delete(mid)
+          end
+        end
+        if missing.empty?
+          out_spec['layout'] = live_layout
+          put_body = JSON.generate(out_spec)
+          warn 'layout-preserve: carried the live workbook layout (+ its container/header elements) into the PUT.'
+        else
+          warn "layout NOT auto-preserved: #{missing.size} layout-referenced element(s) missing and unrecoverable " \
+               "(#{missing.first(3).join(', ')}) — run put-layout.rb AFTER this PUT or it renders single-column."
+        end
+      end
+    end
+  end
+  resp = http(:put, format(GET_PATH, update_id), put_body)
   parsed = YAML.safe_load(resp.body, permitted_classes: [Date, Time])
   oid = parsed[ID_FIELD] || update_id
   abort("PUT failed (HTTP #{resp.code}): #{parsed.inspect}") unless resp.is_a?(Net::HTTPSuccess)

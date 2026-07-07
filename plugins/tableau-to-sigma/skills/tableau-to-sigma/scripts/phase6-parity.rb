@@ -76,6 +76,18 @@ end
 
 plan_path = File.join(opts[:tab], 'parity-plan.json')
 
+# Finalize does NOT rebuild the plan (that would divorce it from the actuals just
+# collected), but a plan built against OLDER CSVs carries stale `expected` values
+# → a false FAIL. Warn loudly so it isn't mistaken for a real divergence.
+if opts[:finalize] && File.exist?(plan_path)
+  built = (JSON.parse(File.read(plan_path))['source_csv_max_mtime'] rescue nil) || File.mtime(plan_path).to_i
+  newest = Dir.glob(File.join(opts[:tab], 'views', '*.csv')).map { |f| File.mtime(f).to_i }.max || 0
+  if newest > built
+    warn '⚠️  Phase 6 finalize: parity-plan.json is STALE (view CSVs are newer than the plan it was built from). ' \
+         'Expected values may be from OLD data — a FAIL here can be a false alarm. Re-run PASS 1 with --regen-plan, then re-collect actuals.'
+  end
+end
+
 if !opts[:finalize]
   # PASS 1 — build plan + emit per-chart MCP instructions
   warn "Phase 6 PASS 1: reading workbook spec #{opts[:wb]}"
@@ -90,9 +102,22 @@ if !opts[:finalize]
   # That turned finalize into an unwinnable fight (edits wiped before the
   # actuals step). Reusing preserves those edits; --regen-plan forces a rebuild
   # (use after a workbook re-POST changes element ids).
+  # Staleness guard (bead: stale-parity-plan): reuse preserves operator edits,
+  # but a plan built against OLDER discovery CSVs carries stale `expected` values
+  # → a false FAIL at finalize (the current data matches Sigma, not the plan).
+  # If the view CSVs are newer than the data this plan was built from, rebuild.
+  plan_stale = false
   if File.exist?(plan_path) && !opts[:regen_plan]
+    built_mtime = (JSON.parse(File.read(plan_path))['source_csv_max_mtime'] rescue nil) ||
+                  File.mtime(plan_path).to_i
+    csv_mtime = Dir.glob(File.join(opts[:tab], 'views', '*.csv'))
+                   .map { |f| File.mtime(f).to_i }.max || 0
+    plan_stale = csv_mtime > built_mtime
+  end
+  if File.exist?(plan_path) && !opts[:regen_plan] && !plan_stale
     warn "Phase 6 PASS 1: REUSING existing #{plan_path} (operator waives/edits preserved; pass --regen-plan to rebuild from scratch)"
   else
+    warn 'Phase 6 PASS 1: existing plan is STALE — view CSVs are newer than the data it was built from; REBUILDING so expected values match current data (prior operator edits on this plan are discarded — the source data changed underneath them).' if plan_stale
     warn "Phase 6 PASS 1: building parity plan"
     plan_args = ['ruby', File.join(__dir__, 'auto-parity-plan.rb'),
                  '--tableau', opts[:tab],

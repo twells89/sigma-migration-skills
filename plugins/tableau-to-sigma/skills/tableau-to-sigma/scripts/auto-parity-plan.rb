@@ -355,12 +355,20 @@ plan_status = unresolved_hf.any? ? 'needs_review' : 'green'
 warn "plan status: #{plan_status}" \
      "#{unresolved_hf.any? ? " (#{unresolved_hf.size} unresolved hidden calc-filter(s))" : ''}"
 
-# Wrap output
+# Wrap output. Stamp freshness (bead: stale-parity-plan): record the newest
+# discovery-CSV mtime this plan's expected values were derived from, so a later
+# reuse (phase6-parity.rb) can detect a plan built against OLDER data than the
+# current CSVs and rebuild instead of shipping a false FAIL.
+require 'time'
+csv_mtime = Dir.glob(File.join(opts[:tab], 'views', '*.csv'))
+               .map { |f| File.mtime(f).to_i }.max || 0
 output = {
-  'extract'        => extract,
-  'charts'         => plan_entries,
-  'hidden_filters' => hidden_filters_gate,
-  'plan_status'    => plan_status
+  'extract'              => extract,
+  'charts'               => plan_entries,
+  'hidden_filters'       => hidden_filters_gate,
+  'plan_status'          => plan_status,
+  'generated_at'         => Time.now.utc.iso8601,
+  'source_csv_max_mtime' => csv_mtime
 }
 File.write(opts[:out], JSON.pretty_generate(output))
 
