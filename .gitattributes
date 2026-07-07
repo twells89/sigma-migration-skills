@@ -1,0 +1,67 @@
+# Encoding + line-ending normalization.
+#
+# WHY: coding agents read SKILL.md / refs as raw text and models are sensitive to
+# byte differences (CRLF vs LF, a stray BOM); scripts break outright if a shebang
+# line carries a CRLF on unix. With no .gitattributes, Git on Windows (default
+# core.autocrlf=true) checks these files out with CRLF, so a mac and a Windows
+# user run DIFFERENT bytes of the same skill. Pinning eol=lf makes every OS check
+# out byte-identical files, so every agent reads and every interpreter runs the
+# same instructions. (doctor.sh already flags CRLF — this prevents it at source.)
+
+# Default: treat everything as text and store/checkout with LF. Git still
+# auto-detects genuine binaries and leaves them untouched.
+* text=auto eol=lf
+
+# --- Scripts: MUST be LF (a CRLF shebang breaks the interpreter on unix) ---
+*.rb   text eol=lf
+*.py   text eol=lf
+*.sh   text eol=lf
+*.mjs  text eol=lf
+*.js   text eol=lf
+*.ts   text eol=lf
+
+# PowerShell is Windows-native; keep it CRLF so it runs cleanly there.
+*.ps1  text eol=crlf
+
+# --- OUR instruction / config text: LF, UTF-8 ---
+*.md   text eol=lf
+*.mdc  text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.html text eol=lf
+*.txt  text eol=lf
+
+# --- EXTERNAL source-tool input artifacts / data fixtures: preserve bytes ---
+# These are real exports from the source BI tools (Tableau saves .twb as CRLF on
+# Windows) or captured data fixtures. Do NOT normalize them: forcing LF would
+# rewrite committed corpus goldens and make the fixtures unlike real customer
+# inputs (which the parsers must handle either way). `-text` = leave bytes exactly
+# as committed. If you add a NEW authored file with one of these extensions, that
+# is fine — it just won't be eol-normalized.
+*.twb   -text
+*.twbx  -text
+*.tml   -text
+*.lkml  -text
+*.lookml -text
+*.bim   -text
+*.pbir  -text
+*.qvs   -text
+*.xml   -text
+*.csv   -text
+
+# --- Binaries: never normalize (defensive — none tracked today) ---
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.hyper binary
+*.twbx binary
+*.zip  binary
+*.xlsx binary
+*.parquet binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
