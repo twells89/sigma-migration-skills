@@ -4625,7 +4625,7 @@ ${stmt}
       const dispName = dn;
       const dimUpper = dispName.replace(/\s+/g, "_").toUpperCase();
       const physicalUpper = (fm ? fm[1] : dispName).replace(/\s+/g, "_").toUpperCase();
-      return { dimUpper: physicalUpper, displayName: dispName, baseColId: found.colId, onFact: found.el === factEl };
+      return { dimUpper: physicalUpper, displayName: dispName, baseColId: found.colId, onFact: found.el === factEl, el: found.el };
     }, _ensureHelper2 = function(effectiveDims, dimResolved, relNameSuggestion) {
       if (effectiveDims.length === 0)
         return null;
@@ -4707,6 +4707,60 @@ ${stmt}
       rec.element.columns.push({ id: calcId, formula: `[Custom SQL/${alias}]`, name: caption });
       rec.element.order.push(calcId);
       return { alias, caption };
+    }, _suggestCrossTableLodSql2 = function(lod, dimsResolved, caption) {
+      const fe = factEl;
+      if (fe?.source?.kind !== "warehouse-table" || !(fe.source.path?.length >= 1))
+        return null;
+      const physNameOf = (el, colId) => {
+        const c = (el?.columns || []).find((x) => x.id === colId);
+        if (!c)
+          return null;
+        const nm = c.name || typeof c.formula === "string" && (c.formula.match(/\/([^\]]+)\]$/) || [])[1];
+        return nm ? String(nm).replace(/\s+/g, "_").toUpperCase() : null;
+      };
+      const qFact = (u) => physToRealQuoted[u] || u;
+      const factPath = fe.source.path.join(".");
+      const factPhys = new Set((fe.columns || []).map((c) => physNameOf(fe, c.id)).filter(Boolean));
+      const joins = [];
+      const joinByEl = /* @__PURE__ */ new Map();
+      const dimSel = [];
+      for (const d of dimsResolved) {
+        if (!d.el || d.el === fe) {
+          dimSel.push(`__f.${qFact(d.dimUpper)} AS ${d.dimUpper}`);
+          continue;
+        }
+        const dimEl = d.el;
+        if (dimEl.source?.kind !== "warehouse-table" || !(dimEl.source.path?.length >= 1))
+          return null;
+        const rel = (fe.relationships || []).find((r) => r.targetElementId === dimEl.id);
+        if (!rel || !rel.keys?.length)
+          return null;
+        let alias = joinByEl.get(dimEl.id);
+        if (!alias) {
+          alias = `__d${joins.length}`;
+          const on = [];
+          for (const k of rel.keys) {
+            const fp = physNameOf(fe, k.sourceColumnId), dp = physNameOf(dimEl, k.targetColumnId);
+            if (!fp || !dp)
+              return null;
+            on.push(`__f.${qFact(fp)} = ${alias}.${dp}`);
+          }
+          joins.push({ alias, path: dimEl.source.path.join("."), on });
+          joinByEl.set(dimEl.id, alias);
+        }
+        dimSel.push(`${alias}.${d.dimUpper} AS ${d.dimUpper}`);
+      }
+      if (joins.length === 0)
+        return null;
+      const aggExpr = String(lod.aggExpr || "").replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m, tok) => factPhys.has(tok.toUpperCase()) ? `__f.${qFact(tok.toUpperCase())}` : m);
+      const aggAlias = (caption || "LOD_VALUE").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase() || "LOD_VALUE";
+      const aggFn = lod.aggFunc === "COUNTD" ? `COUNT(DISTINCT ${aggExpr})` : `${lod.aggFunc}(${aggExpr})`;
+      const gb = dimSel.map((_s, i) => i + 1).join(", ");
+      const joinSql = joins.map((j) => `    LEFT JOIN ${j.path} ${j.alias} ON ${j.on.join(" AND ")}`).join("\n");
+      return `    SELECT ${dimSel.join(", ")}, ${aggFn} AS ${aggAlias}
+    FROM ${factPath} __f
+${joinSql}
+    GROUP BY ${gb}`;
     }, _finalizeHelpers2 = function() {
       const { fromClause, ctePrefix } = _baseFromExpr2();
       const useBase = fromClause === "__lod_base";
@@ -5083,7 +5137,7 @@ ${stmt}
         rec.element.source.statement = winCtePrefix ? `WITH ${winCtePrefix}base AS (${baseSelect}) SELECT ${outerProjection.join(", ")} FROM base` : `WITH base AS (${baseSelect}) SELECT ${outerProjection.join(", ")} FROM base`;
       }
     };
-    var _baseFromExpr = _baseFromExpr2, _resolveDimDisplayName = _resolveDimDisplayName2, _ensureHelper = _ensureHelper2, _ensureRelationship = _ensureRelationship2, _addAggToHelper = _addAggToHelper2, _finalizeHelpers = _finalizeHelpers2, _emitTopNHelper = _emitTopNHelper2, _ensureWindowHelper = _ensureWindowHelper2, _registerInnerAgg = _registerInnerAgg2, _emitWindowOverClause = _emitWindowOverClause2, _finalizeWindowHelpers = _finalizeWindowHelpers2;
+    var _baseFromExpr = _baseFromExpr2, _resolveDimDisplayName = _resolveDimDisplayName2, _ensureHelper = _ensureHelper2, _ensureRelationship = _ensureRelationship2, _addAggToHelper = _addAggToHelper2, _suggestCrossTableLodSql = _suggestCrossTableLodSql2, _finalizeHelpers = _finalizeHelpers2, _emitTopNHelper = _emitTopNHelper2, _ensureWindowHelper = _ensureWindowHelper2, _registerInnerAgg = _registerInnerAgg2, _emitWindowOverClause = _emitWindowOverClause2, _finalizeWindowHelpers = _finalizeWindowHelpers2;
     const globalColMap = {};
     const displayNameMap = {};
     for (const el of elements) {
@@ -5294,7 +5348,14 @@ ${stmt}
             }
           }
           if (dimOffFact) {
-            warnings.push(`\u26A0 LOD "${caption}" (${lod.lodType}) groups by a dimension-table column (cross-table grain); not mechanizable as a single-table helper \u2014 needs manual Sigma authoring. Skipped.`);
+            const suggestion = _suggestCrossTableLodSql2(lod, lodDimsResolved, caption);
+            if (suggestion) {
+              warnings.push(`\u26A0 LOD "${caption}" (${lod.lodType}) groups by a dimension-table column (cross-table grain) \u2014 not auto-wired yet. Create a Custom SQL element in Sigma with:
+${suggestion}
+  then relate it back to the base on the grouping column(s). (Auto-wiring tracked: beads-sigma-hnx0.)`);
+            } else {
+              warnings.push(`\u26A0 LOD "${caption}" (${lod.lodType}) groups by a dimension-table column (cross-table grain); not mechanizable as a single-table helper \u2014 needs manual Sigma authoring. Skipped.`);
+            }
             continue;
           }
           const fieldKeyUpper = fieldKey.toUpperCase();
