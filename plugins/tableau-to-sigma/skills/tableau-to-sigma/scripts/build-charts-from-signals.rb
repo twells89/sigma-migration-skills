@@ -2732,9 +2732,14 @@ layout.each do |dash|
       dim_i   = ([0, 1, 2] - [mn_i, mv_i]).first
       dim_hdr = headers[dim_i].to_s.strip
       labels  = rows.map { |r| r[mn_i] }.compact.map(&:strip).reject(&:empty?).uniq
-      dimm = map_column(dim_hdr, mmap) ||
-             { 'id' => "m-#{dim_hdr.downcase.gsub(/\W+/, '-')}", 'name' => dim_hdr }
       mm_trunc = (hm = dim_hdr.match(/^(second|minute|hour|day|week|month|quarter|year) of /i)) && hm[1].downcase
+      # For a date-grain header the DateTrunc below must wrap the BASE date column
+      # ([Master/Order Date]); resolve the grain-stripped name FIRST so we don't
+      # bind the converter's broken passthrough "Month of Order Date" master column
+      # (formula [Fact/Month of Order Date] — no such fact column). See Path B.
+      mm_base_hdr = mm_trunc ? dim_hdr.sub(/^(?:second|minute|hour|day|week|month|quarter|year) of /i, '') : dim_hdr
+      dimm = (mm_trunc && map_column(mm_base_hdr, mmap)) || map_column(dim_hdr, mmap) ||
+             { 'id' => "m-#{dim_hdr.downcase.gsub(/\W+/, '-')}", 'name' => dim_hdr }
       el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
       mm_dim_formula =
         if mm_trunc == 'week'
@@ -2859,7 +2864,17 @@ layout.each do |dash|
     # formula (which would resolve to a non-existent column). dim_trunc below
     # still carries the grain. Strips only when the full header didn't match.
     dim_hdr_base = dim_hdr.sub(/^(?:second|minute|hour|day|week|month|quarter|year) of /i, '')
-    dim  = map_column(dim_hdr, mmap) || (dim_hdr_base != dim_hdr ? map_column(dim_hdr_base, mmap) : nil)
+    # When a grain prefix is present, resolve the BASE date column FIRST so the
+    # DateTrunc wraps [Master/Order Date]. Matching the full "Month of Order Date"
+    # first binds the converter's passthrough master column whose formula is
+    # [Fact/Month of Order Date] — a non-existent fact column — and DateTrunc then
+    # double-wraps a broken ref. The base "Order Date" is on the master via the
+    # reuse-union (#5); fall back to the full header only if the base isn't mapped.
+    dim = if dim_hdr_base != dim_hdr
+            map_column(dim_hdr_base, mmap) || map_column(dim_hdr, mmap)
+          else
+            map_column(dim_hdr, mmap)
+          end
     meas = map_column(meas_hdr, mmap)
     meas_unresolved = meas.nil?
     find_ws_calc = lambda do |hdr|
