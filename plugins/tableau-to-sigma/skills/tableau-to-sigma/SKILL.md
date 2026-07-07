@@ -1191,9 +1191,24 @@ What the build script auto-handles (no agent action needed):
 - ✅ Shared-view filters → per-page Sigma controls (list/date-range/number-range)
 - ✅ Parameters (list domain) → segmented controls
 - ✅ Parameter-driven CASE/IF chains → `Switch([ctl-param-X], ...)` calc
+- ✅ Parameter-driven **metric/measure switching** (a "Select Metric" param picking which measure a chart shows) → list control + `Switch()` bound as the chart MEASURE — see the recipe below
 - ✅ Table calcs INDEX/LOOKUP/TOTAL/RANK/ZN/IIF/COUNTD → Sigma equivalents
 - ✅ Synchronized-axis worksheets → `combo-chart` kind w/ two yAxis groups
 - ✅ Customer-discovered learned-rules from `~/.tableau-to-sigma/learned-rules.yaml`
+
+### Parameter-driven metric/measure switching — recipe + gotchas (READ if a chart's measure is param-controlled)
+A very common Tableau idiom: a **parameter** (e.g. "Select Metric": Sales / Profit / Quantity, or Job-Losses "Type": Total / U.S.-born / Immigrant) drives which measure a chart shows, via a calc like
+`SUM(CASE [Parameters].[P] WHEN 0 THEN [A] WHEN 1 THEN [B] END)` or `IF [Parameters].[P]="Rev" THEN SUM([Rev]) ELSE SUM([Cost]) END`.
+
+**Target Sigma shape:** a **list/segmented control** seeded from the parameter's members + a `Switch([ctl-param-<slug>], …)` **bound as the chart's MEASURE** (`build-charts` does this via `rewire_param_switch!`). Two branch shapes, handled differently:
+- branches are **bare columns** (`THEN [A]`) → measure becomes `Sum(Switch([ctl], …, [A], …))` (shelf aggregate wraps the Switch);
+- branches are **already aggregated** (`THEN SUM([A])`) → measure becomes the `Switch(…, Sum([A]), …)` itself (no double aggregation).
+
+**Gotchas that make it "look broken" — verify these:**
+1. **The control must actually drive the measure.** After building, open the chart and pick each control value — the number must change. If it doesn't, the measure is still bound to the DM's param-frozen copy (`Sum([Master/<calc>])`) — the `rewire_param_switch!` fix binds the MEASURE role, but confirm it fired (build log: `… → control-driven Switch over N branch col(s) (M grouping rewired)` with **M ≥ 1**, not an orphan append).
+2. **Numeric-coded params with display aliases** (Tableau member `value='0.'` aliased to "Total Job Losses"). The `Switch` compares the control's VALUE to the `WHEN` keys — so the control's option **values** must equal the `WHEN` literals (`"0"`/`"1"`/…), with the aliases as **labels**. If the control shows friendly labels but the Switch never matches (chart shows blank/else), align the control's option values to the `WHEN` keys (or rewrite the `Switch` keys to the alias labels). This is the #1 cause of a wired-but-blank metric switch — CHECK IT.
+3. **`SUM(CASE …)` (CASE inside the aggregate)** and **per-branch `SUM()`** both translate; the outer aggregate comes from the chart shelf, so don't hand-wrap a second time.
+4. If the calc doesn't auto-translate (compound/inequality condition, LOD-wrapped branch, branch referencing another calc), the build emits a manual note — hand-author the control + `Switch` measure per the shape above, then re-verify with #1 and #2.
 
 ### Migration coverage — WARN vs NOTE (read this before reacting to log volume)
 The build prints two prefixes (bead beads-sigma-59mk). **`NOTE`** = a success

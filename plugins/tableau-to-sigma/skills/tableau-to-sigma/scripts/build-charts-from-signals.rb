@@ -1592,6 +1592,35 @@ def translate_if_chain_on_param(formula, param_captions, mmap = nil, columns_by_
   "Switch(#{parts.join(', ')})"
 end
 
+# Bind a parameter-driven Switch onto the chart column(s) that carry the calc,
+# in place, so the workbook CONTROL actually drives the value. Two column shapes:
+#   • DIMENSION grouping passthrough → bare `[Master/<calc>]`      → replace with the Switch
+#   • MEASURE (the metric-switch case) → `Agg([Master/<calc>])`    → keep the shelf
+#     aggregate around a bare-branch Switch → `Agg(Switch(...))`; but if the
+#     Switch branches are ALREADY aggregated (e.g. IF [P] THEN SUM(x) ELSE SUM(y)),
+#     the Switch replaces the whole formula (no double aggregation).
+# Returns the number of columns rewired. (Before this, only the exact bare form
+# was matched, so measure/metric switches silently missed and the control drove
+# nothing — an orphan un-aggregated Switch was appended instead. bead: param-msw.)
+def rewire_param_switch!(columns, calc_name, switch_sibling)
+  master_ref = "[Master/#{calc_name}]"
+  pre_aggregated = switch_sibling =~ /\b(?:Sum|Avg|Min|Max|Count|CountDistinct|Median|StdDev|StdDevPop|Variance|VariancePop)\s*\(/
+  rewired = 0
+  (columns || []).each do |col|
+    f = col['formula'].to_s.strip
+    if f == master_ref
+      col['formula'] = switch_sibling
+    elsif (mw = f.match(/\A([A-Za-z]\w*)\(\s*#{Regexp.escape(master_ref)}\s*\)\z/))
+      col['formula'] = pre_aggregated ? switch_sibling : "#{mw[1]}(#{switch_sibling})"
+    else
+      next
+    end
+    col.delete('column')
+    rewired += 1
+  end
+  rewired
+end
+
 # ---- Converter param measure-pickers (workbookPatterns kind:param-switch) ----
 # The Tableau→Sigma converter detects a parameter measure-picker
 # (`CASE [Parameters].[P] WHEN v THEN <measure> … END`) and emits a clean
@@ -3923,14 +3952,7 @@ layout.each do |dash|
         # in place to the control-driven Switch (over the materialized siblings)
         # so the grouping itself does the swap; only append a standalone calc
         # column if no passthrough exists.
-        master_ref = "[Master/#{calc_name}]"
-        rewired = 0
-        (element['columns'] || []).each do |col|
-          next unless col['formula'].to_s.strip == master_ref
-          col['formula'] = switch_sibling
-          col.delete('column')
-          rewired += 1
-        end
+        rewired = rewire_param_switch!(element['columns'], calc_name, switch_sibling)
         if rewired.zero?
           calc_id = "calc-#{calc_name.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
           element['columns'] << { 'id' => calc_id, 'name' => calc_name, 'formula' => switch_sibling }

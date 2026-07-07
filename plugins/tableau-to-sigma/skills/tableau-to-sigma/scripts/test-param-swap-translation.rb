@@ -33,8 +33,9 @@ end
 # eval them over stubs, so we test the shipped bodies verbatim.
 src = File.read(BUILD)
 defs = %w[coerce_case_literal remap_param_branch translate_case_on_param
-          translate_if_chain_on_param param_control_ref].map do |fn|
-  m = src.match(/^def #{fn}\b.*?\nend\n/m)
+          translate_if_chain_on_param param_control_ref rewire_param_switch!].map do |fn|
+  boundary = fn =~ /[!?]\z/ ? '' : '\b'
+  m = src.match(/^def #{Regexp.escape(fn)}#{boundary}.*?\nend\n/m)
   abort "test bug: could not extract def #{fn} from build-charts-from-signals.rb" unless m
   m[0]
 end.join("\n")
@@ -70,6 +71,27 @@ check(sw.to_s.include?('[Master/Region]') && sw.to_s.include?('[Master/Customer 
       'branch refs remapped onto [Master/<col>]', fails)
 check(sw.to_s.include?('"1"') && sw.to_s.include?('"4"'),
       'numeric WHEN literals quoted (text control match)', fails)
+
+puts 'Part A2 — measure/metric-switch BINDING (rewire_param_switch!)'
+# The metric-switch bug (bead param-msw): a param-switch used as a chart MEASURE
+# is emitted as Sum([Master/<calc>]) — the old rewire only matched the bare
+# [Master/<calc>] a DIMENSION uses, so measures silently missed and the control
+# drove nothing. These assert all three column shapes now bind.
+sw_bare = 'Switch([ctl-param-type], "0", [Total (level)], "1", [US Born])'   # bare-branch (from SUM(CASE...))
+# (a) dimension grouping passthrough (bare) → replaced with the Switch
+dim_cols = [{ 'id' => 'g', 'name' => 'Metric', 'formula' => '[Master/Metric]', 'column' => 'x' }]
+n1 = mod.rewire_param_switch!(dim_cols, 'Metric', sw_bare)
+check(n1 == 1 && dim_cols[0]['formula'] == sw_bare, 'bare dimension passthrough rewired to the Switch', fails)
+# (b) MEASURE (aggregate-wrapped) with BARE-branch Switch → Sum(Switch(...))  [the core fix]
+meas_cols = [{ 'id' => 'y', 'name' => 'Metric', 'formula' => 'Sum([Master/Metric])' }]
+n2 = mod.rewire_param_switch!(meas_cols, 'Metric', sw_bare)
+check(n2 == 1, 'aggregate-wrapped measure IS rewired (was the silent miss)', fails)
+check(meas_cols[0]['formula'] == "Sum(#{sw_bare})", 'measure keeps its shelf aggregate around the Switch: Sum(Switch(...))', fails)
+# (c) MEASURE with PRE-AGGREGATED-branch Switch (IF [P] THEN SUM(x) ELSE SUM(y)) → Switch(...) (NO double Sum)
+sw_agg = 'Switch([ctl-param-metric], "Revenue", Sum([Revenue]), Sum([Cost]))'
+meas2 = [{ 'id' => 'z', 'name' => 'M', 'formula' => 'Sum([Master/M])' }]
+mod.rewire_param_switch!(meas2, 'M', sw_agg)
+check(meas2[0]['formula'] == sw_agg, 'pre-aggregated-branch Switch replaces the measure whole (no double aggregation)', fails)
 
 puts 'Part A — coerce_case_literal'
 check(mod.coerce_case_literal('1') == '"1"', 'bare number -> quoted', fails)

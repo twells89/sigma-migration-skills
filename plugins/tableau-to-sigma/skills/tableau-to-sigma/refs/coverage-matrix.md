@@ -136,6 +136,7 @@ All 🧩 forms are **chart-context only** — place in a grouped workbook elemen
 | Top-N / Bottom-N set (incl. partitioned) | `kind:sql` RANK helper + relationship | ✅ | exposes `IS_TOP_N`; literal-N computed in SQL |
 | Parameter-driven Top-N | Sigma calc `[Rank] <= [Control]` + number control | ✅ | control default = Tableau parameter default |
 | Parameters | Sigma controls (list / date-range / number-range / text) | ✅ | |
+| Parameter-driven metric/measure switch (`SUM(CASE [P] …)` / `IF [P]=… THEN SUM(x)`) | list control + `Switch()` bound as the chart MEASURE (`rewire_param_switch!`) | ✅ | Measure-role binding fixed (was silently missed — only dimension-swap worked). GOTCHA: numeric-coded params w/ aliases — control option VALUES must equal the `WHEN` keys or the Switch matches nothing. See SKILL.md recipe. |
 | Bins | bucketed `Floor()` calc column | ✅ | |
 
 ## 11. RLS / security
