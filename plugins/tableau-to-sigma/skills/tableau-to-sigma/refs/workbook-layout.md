@@ -497,7 +497,7 @@ Key facts:
 - **`value` is a wrapped object, not a bare number.** Upstream `sigma-workbooks` charts.md shows `value: 1000` — that shape is rejected by the live API. Use `{ "type": "constant", "value": <number> }` or `{ "type": "formula", "formula": "<expr>" }`.
 - `value.type: "column"` (with `columnId`) is also rejected — wrap the column in a `formula` instead.
 - `axis` is `"series"` for the measure axis (Y), `"series2"` for combo-chart's secondary axis, `"axis"` for the X axis.
-- `label.visibility` is `"shown"` or `"hidden"`. `label.text` is optional — Sigma renders a sensible default when absent.
+- `label.visibility` **must be `"shown"`** on a `refMarks` label. Although the UI exposes a hide toggle, the **spec API rejects `"hidden"`** with `Invalid value: object` (verified; the readback shows `shown`). To visually de-emphasize a reference line, keep `visibility: "shown"` and give it a short `label.text` (e.g. `"Avg monthly"`) rather than trying to hide it. `label.text` is optional — Sigma renders a sensible default when absent.
 - For `type: "band"` — wait for engineering to confirm via another UI-built readback (see `beads-sigma-7ak`).
 
 #### Trendlines (verified 2026-05-22)

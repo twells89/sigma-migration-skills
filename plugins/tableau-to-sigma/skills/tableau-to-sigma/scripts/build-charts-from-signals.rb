@@ -3695,6 +3695,27 @@ layout.each do |dash|
       end
       element['yAxis'] = { 'columnIds' => y_column_ids }
 
+      # Bar orientation (bead: bar-orientation). Tableau puts the DIMENSION on
+      # the Rows shelf and the MEASURE on Columns for a HORIZONTAL bar (bars grow
+      # left→right, categories down the y-axis); the default vertical bar is the
+      # opposite. parse-twb-layout already tags each shelf field's `role`, so read
+      # it straight off the zone. Sigma spec: `orientation: "horizontal"` on a
+      # bar-chart (omit for vertical — "vertical" is REJECTED). Round-trips live
+      # (refs/workbook-layout.md, verified 2026-06-15).
+      if kind == 'bar-chart'
+        # rows_shelf/cols_shelf are a Hash ({fields:[…]}) in the rich parse, but
+        # sometimes just the raw shelf STRING — only the Hash form carries roles.
+        rows_sh = z['rows_shelf']
+        cols_sh = z['cols_shelf']
+        rows_f = rows_sh.is_a?(Hash) ? (rows_sh['fields'] || []) : []
+        cols_f = cols_sh.is_a?(Hash) ? (cols_sh['fields'] || []) : []
+        dim_on_rows  = rows_f.any? { |f| %w[dim dimension].include?(f['role']) }
+        meas_on_cols = cols_f.any? { |f| f['role'] == 'measure' }
+        if dim_on_rows && meas_on_cols
+          element['orientation'] = 'horizontal'
+        end
+      end
+
       # Axis format (log scale, fixed min/max). parse-twb-layout extracts these
       # from Tableau's <style-rule element='axis'><encoding attr='space' ...>
       # nodes per worksheet. Sigma side shape verified 2026-05-22:
@@ -4180,14 +4201,38 @@ unless opts[:pages_mode] == :worksheet
     # standalone styled-text zone whose text just repeats a KPI's caption is a
     # redundant duplicate — emitting it (and dumping it in a stray band) is the
     # "orphan labels at the bottom" defect. Drop those; keep real prose/sections.
-    kpi_labels = (dash['zones'] || []).select { |z| z['is_kpi'] && z['caption'] }
-                                      .map { |z| norm_label.call(z['caption']) }
+    kpi_zones = (dash['zones'] || []).select { |z| z['is_kpi'] }
+    kpi_labels = kpi_zones.select { |z| z['caption'] }
+                          .map { |z| norm_label.call(z['caption']) }.reject(&:empty?)
+    # A Tableau KPI card is often a LABEL text zone sitting directly above the
+    # scorecard sheet in the same column band — and its label is the clean measure
+    # name ("Net Revenue"), which does NOT match the scorecard's internal caption
+    # ("OV KPI Revenue"), so the name dedup above misses it and the labels pile
+    # into a stray bottom band (the "orphan labels" defect). Catch them
+    # POSITIONALLY: a short text zone whose x-band overlaps a KPI zone, is about
+    # the same width (not a full-width section title), and sits just above it is
+    # that card's label — Sigma's kpi-chart renders its own title, so drop it.
+    labels_kpi_positionally = lambda do |t|
+      tx, tw, ty, th = %w[x_pct w_pct y_pct h_pct].map { |k| t[k] }
+      return false unless [tx, tw, ty].all? { |v| v.is_a?(Numeric) } && tw > 0
+
+      kpi_zones.any? do |k|
+        kx, kw, ky = %w[x_pct w_pct y_pct].map { |kk| k[kk] }
+        next false unless [kx, kw, ky].all? { |v| v.is_a?(Numeric) } && kw > 0
+        next false if tw > kw * 1.5                        # wider banner/section title, not a per-card label
+        ovl = [tx + tw, kx + kw].min - [tx, kx].max        # horizontal overlap
+        next false unless ovl / [tw, kw].min >= 0.6        # same column band
+        ty < ky && (ky - ty) <= (th.to_f > 0 ? th * 3 : 14.0) # sits just above the card
+      end
+    end
     (dash['zones'] || []).each do |z|
       next unless %w[text title].include?(z['kind']) && z['text_runs']
-      plain = norm_label.call(z['text_runs'].map { |r| r['text'] }.join)
-      if !plain.empty? && kpi_labels.include?(plain)
+      full_text = z['text_runs'].map { |r| r['text'] }.join
+      plain = norm_label.call(full_text)
+      is_short_label = full_text.split.length <= 5 && z['text_runs'].none? { |r| r['break'] }
+      if !plain.empty? && (kpi_labels.include?(plain) || (is_short_label && labels_kpi_positionally.call(z)))
         warnings << "dashboard '#{dash['dashboard']}' text zone #{z['id']} (#{plain.inspect}) " \
-                    'duplicates a KPI title — dropped (the Sigma kpi-chart renders its own title)'
+                    'labels a KPI card — dropped (the Sigma kpi-chart renders its own title)'
         next
       end
       body = text_body_from_runs(z['text_runs'], align: z['text_align'],
