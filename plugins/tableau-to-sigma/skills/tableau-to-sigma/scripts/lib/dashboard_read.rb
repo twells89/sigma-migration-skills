@@ -47,6 +47,64 @@ module DashboardRead
     control text image container
   ].freeze
 
+  # parse-twb-layout chart_kind → a Sigma element kind, for the DRAFT seed only.
+  DRAFT_KIND = {
+    'bar' => 'bar-chart', 'line' => 'line-chart', 'area' => 'area-chart',
+    'pie' => 'pie-chart', 'scatter' => 'scatter-chart', 'kpi' => 'kpi-chart',
+    'pivot-table' => 'pivot-table', 'table' => 'table',
+    'map-region' => 'region-map', 'map-point' => 'point-map',
+    'automatic' => 'bar-chart', 'other' => 'bar-chart'
+  }.freeze
+
+  # Seed a DRAFT png-read.json from the .twb zone tree (dashboard-layout.json),
+  # so the agent EDITS a starting point instead of writing from scratch (finding
+  # #8). The draft is verified:false, so validate() still fails until the agent
+  # Reads the dashboard PNG and confirms/corrects it — the .twb can't tell
+  # bar-vs-pie for 'automatic' marks, what text actually rendered, or the filter
+  # shelf. Returns the written path, or nil if there's no zone tree to seed from.
+  def self.seed_from_layout(dir)
+    layout_path = File.join(dir, 'dashboard-layout.json')
+    return nil unless File.exist?(layout_path)
+
+    layout = (JSON.parse(File.read(layout_path)) rescue nil)
+    return nil unless layout
+
+    dashes = layout.is_a?(Array) ? layout : (layout['dashboards'] || [layout])
+    zones = dashes.flat_map { |d| d.is_a?(Hash) ? (d['zones'] || []) : [] }
+    tiles = []
+    text_elements = []
+    zones.each do |z|
+      if z['is_kpi'] || z['kind'] == 'chart'
+        tiles << { 'title' => z['caption'].to_s,
+                   'kind' => DRAFT_KIND[z['chart_kind'].to_s] || (z['is_kpi'] ? 'kpi-chart' : 'bar-chart') }
+      elsif %w[text title].include?(z['kind']) && z['text_runs']
+        t = z['text_runs'].map { |r| r['text'] }.join.strip
+        text_elements << t unless t.empty?
+      end
+    end
+
+    filter_shelf = []
+    meta_path = layout_path.sub(/\.json\z/, '-meta.json')
+    if File.exist?(meta_path)
+      meta = (JSON.parse(File.read(meta_path)) rescue {})
+      (meta['shared_filters'] || []).each do |f|
+        lbl = (f['caption'] || f['column'] || f['name']).to_s
+        filter_shelf << { 'label' => lbl } unless lbl.empty?
+      end
+    end
+
+    draft = {
+      'verified'      => false,
+      'seeded_from'   => 'twb-parse — UNVERIFIED. Read the dashboard PNG, correct tiles/text/filter_shelf, then set verified:true.',
+      'source_png'    => nil,
+      'tiles'         => tiles,
+      'text_elements' => text_elements,
+      'filter_shelf'  => filter_shelf
+    }
+    File.write(path(dir), JSON.pretty_generate(draft) + "\n")
+    path(dir)
+  end
+
   def self.path(dir)
     File.join(dir, 'png-read.json')
   end
@@ -67,6 +125,18 @@ module DashboardRead
       doc = JSON.parse(File.read(p))
     rescue JSON::ParserError => e
       return [false, ["#{p} is malformed JSON: #{e.message}"]]
+    end
+
+    # A DRAFT seeded from the .twb (seed_from_layout) carries verified:false. The
+    # .twb can't tell bar-vs-pie for 'automatic' marks, what text annotations
+    # rendered, or the filter shelf — so a draft does NOT satisfy the gate until
+    # the agent Reads the dashboard PNG, corrects it, and sets verified:true.
+    # (Hand-written png-read.json omit the field entirely — treated as verified.)
+    if doc['verified'] == false
+      return [false, ["#{p} is a DRAFT seeded from the .twb (\"verified\": false). Read the " \
+                      'dashboard PNG, correct the tiles/text/filter_shelf (esp. bar-vs-pie, ' \
+                      'annotations, and the filter shelf — the .twb cannot see these), then set ' \
+                      '"verified": true.']]
     end
 
     errs = []

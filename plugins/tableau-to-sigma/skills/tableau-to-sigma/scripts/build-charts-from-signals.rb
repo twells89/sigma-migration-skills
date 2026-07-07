@@ -3550,10 +3550,30 @@ layout.each do |dash|
           fagg = tab_to_sigma_agg[rm['formula']]
           if fagg
             label_text = rm['label_type'] == 'custom' ? rm['label'] : "#{fagg} #{meas_name}"
+            # Mark-level vs row-level (bead: refmark-avg / finding #3). Tableau's
+            # reference line aggregates over the plotted MARKS (the per-bin
+            # aggregates), but Sigma evaluates a refMark formula over the raw
+            # ROWS — so `Avg([meas])` yields the row mean (e.g. $163/order), not
+            # the mean of the bars (e.g. mean of monthly sums ≈ $3,500). For an
+            # AVERAGE line the mark-level mean = Sum(meas) / <count of x-axis
+            # bins>; the bins are the chart's x grouping (dim_col_obj's formula:
+            # `[Master/Region]` or `DateTrunc("month", [Master/Order Date])`).
+            dim_grp = dim_col_obj && dim_col_obj['formula'].to_s
+            value_formula =
+              if fagg == 'Avg' && dim_grp && !dim_grp.strip.empty?
+                "Sum([Master/#{meas_name}]) / CountDistinct(#{dim_grp})"
+              else
+                "#{fagg}([Master/#{meas_name}])"
+              end
+            if fagg == 'Avg' && !(dim_grp && !dim_grp.strip.empty?)
+              warnings << "'#{cap}' average reference line fell back to ROW-LEVEL (couldn't resolve the x-axis grouping for a mark-level mean) — verify the line value vs Tableau at Phase 6f"
+            elsif %w[Min Max Median].include?(fagg)
+              warnings << "'#{cap}' #{fagg} reference line emitted ROW-LEVEL; Tableau computes it over the plotted marks — verify vs Tableau at Phase 6f (mark-level Min/Max/Median needs a windowed formula)"
+            end
             ref_emit << {
               'type'  => 'line',
               'axis'  => 'series',
-              'value' => { 'type' => 'formula', 'formula' => "#{fagg}([Master/#{meas_name}])" },
+              'value' => { 'type' => 'formula', 'formula' => value_formula },
               'label' => { 'visibility' => 'shown', 'text' => label_text }.compact
             }
           else

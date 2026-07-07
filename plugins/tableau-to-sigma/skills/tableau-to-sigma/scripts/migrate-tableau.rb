@@ -1517,21 +1517,31 @@ mark('folder-resolve')
 if opts[:skip_dashboard_read]
   line "dashboard-read gate WAIVED (--skip-dashboard-read: #{opts[:skip_dashboard_read]}) — name this in your report"
 elsif DashboardRead.expected?(WORK)
+  # Seed a DRAFT png-read.json from the .twb zone tree if none exists yet, so the
+  # agent EDITS a starting point instead of writing from scratch (finding #8). The
+  # draft is verified:false, so the gate below STILL requires the agent to Read
+  # the dashboard PNG and confirm/correct it — the .twb can't tell bar-vs-pie,
+  # text annotations, or the filter shelf.
+  unless File.exist?(DashboardRead.path(WORK))
+    seeded = DashboardRead.seed_from_layout(WORK)
+    line "seeded a DRAFT png-read.json from the .twb (#{DashboardRead.tile_count(WORK)} tile(s)) — must be verified against the dashboard PNG" if seeded
+  end
   dr_ok, dr_errs = DashboardRead.validate(WORK)
   unless dr_ok
     warn ''
     warn "[FAIL] Phase 1d source dashboard-read gate — #{DashboardRead.path(WORK)}"
     dr_errs.each { |e| warn "       - #{e}" }
     warn ''
-    warn '       The orchestrator cannot read images. Before it can build the workbook you must:'
+    warn '       A DRAFT png-read.json was seeded from the .twb parse. The orchestrator cannot read'
+    warn '       images, so before it can build the workbook you must:'
     warn "         1. Fetch the dashboard view PNG with mcp__tableau__get-view-image (solo) into #{WORK}/views/"
-    warn '         2. Read it and write png-read.json enumerating every tile (with its Sigma `kind`),'
-    warn '            text_elements, and filter_shelf — schema in SKILL.md Phase 1d.'
+    warn '         2. Read it, CORRECT the draft tiles/text_elements/filter_shelf (esp. bar-vs-pie, text'
+    warn '            annotations, and the filter shelf — the .twb cannot see these), and set "verified": true.'
     warn "         3. Re-run this command (discovery artifacts in #{WORK} are reused — no stray DM was posted)."
     warn '       Genuinely no PNG access? Re-run with --skip-dashboard-read "<reason>" (name it in your report).'
-    abort 'FATAL: Phase 1d dashboard-read not done — refusing to build a number-only dashboard.'
+    abort 'FATAL: Phase 1d dashboard-read not verified — refusing to build from an unverified .twb draft.'
   end
-  line "dashboard-read gate: #{DashboardRead.tile_count(WORK)} tile(s) enumerated (png-read.json)"
+  line "dashboard-read gate: #{DashboardRead.tile_count(WORK)} tile(s) verified (png-read.json)"
   RunState.stamp(WORK, 'phase-1d', note: 'source dashboard-read (png-read.json)')
 end
 

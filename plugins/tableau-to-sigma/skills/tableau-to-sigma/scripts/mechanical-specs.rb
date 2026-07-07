@@ -918,6 +918,21 @@ module MechanicalSpecs
     cols = raw_cols.map { |c| [col_display(c), c['format'], label_for[c['id']]] }
     cols.sort_by! { |(dn, _, _)| (dn.to_s.include?('(') ? 1 : 0) }
     cols.each { |(dn, fmt, real_label)| add.call(dn, fmt, real_label) }
+    # Reuse-path completeness (bead: master-map omits reused-DM columns / finding #5).
+    # The columns above come from the .twb-derived CONVERTER fact element. When a
+    # DM is REUSED, its live fact element (real_labels = readback columnLabels) can
+    # carry columns the converter never enumerated — e.g. a raw "Order Date" the
+    # source only used via a "Month of Order Date" calc. Those were silently absent
+    # from the master-map, forcing a manual --master-col override. UNION every
+    # readback column not already covered so the master-map spans ALL fact columns.
+    # Dedup on the suffix-stripped bare name so a converter "Region" already isn't
+    # re-added as "Region (Store Dim)".
+    (real_labels || []).each do |lbl|
+      next if lbl.to_s.strip.empty?
+      bare = lbl.sub(/\s*\([^)]*\)\s*\z/, '').strip
+      next if bare.empty? || seen[bare.downcase]
+      add.call(lbl, nil, lbl)
+    end
     # FIXED-LOD helper surfacing (y9rd.10): a FIXED/INCLUDE/EXCLUDE LOD becomes a
     # separate grouped helper element related to the fact (rel named "FIXED <dims>"),
     # so its output measure (e.g. "Region Revenue LOD") is NOT a fact column and a

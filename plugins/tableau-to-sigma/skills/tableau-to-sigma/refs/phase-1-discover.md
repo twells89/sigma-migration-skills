@@ -105,7 +105,9 @@ If `get-view-data` returns 401 for a view, retry that view solo (the contention 
 
 > **🚧 GATE — read the dashboard image AND record what you saw in `png-read.json` before Phase 5.** The CSV headers tell you a chart's dimensions and measures; they do NOT tell you (a) the chart's *kind* (a `Category, Count` CSV could back a bar OR a pie OR a donut), (b) any text annotations (titles, section headers, footnotes), or (c) the filter shelf. Skipping the image read is the most common Phase 5 mistake — you ship a workbook that has the right numbers but is missing tiles the source dashboard actually rendered.
 >
-> This step was prose-only, so it got skipped under load. It is now gated: after Reading the dashboard PNG, write `<workdir>/png-read.json` capturing your interpretation, then confirm the gate:
+> **The orchestrator seeds a DRAFT for you.** `migrate-tableau.rb` auto-generates `png-read.json` from the `.twb` zone tree (chart kinds, titles, text zones, filter shelf) marked `"verified": false`. That draft does **not** satisfy the gate — the `.twb` can't tell bar-vs-pie for `automatic` marks, what text actually rendered, or the real filter shelf. So you **edit** the draft against the image rather than writing from scratch: Read the dashboard PNG, correct the tiles/text/filters, and set `"verified": true`.
+>
+> This step was prose-only, so it got skipped under load. It is now gated: after Reading the dashboard PNG, write (or verify+correct the seeded) `<workdir>/png-read.json`, then confirm the gate:
 >
 > ```bash
 > ruby scripts/assert-dashboard-read.rb --workdir /tmp/<name>
@@ -115,6 +117,7 @@ If `get-view-data` returns 401 for a view, retry that view solo (the contention 
 >
 > ```json
 > {
+>   "verified": true,
 >   "source_png": "views/<dashboardViewId>.png",
 >   "tiles": [
 >     { "title": "Revenue by Region", "kind": "bar-chart", "measures": ["Gross Revenue"] },
@@ -125,7 +128,7 @@ If `get-view-data` returns 401 for a view, retry that view solo (the contention 
 > }
 > ```
 >
-> `kind` must be a valid Sigma element kind (see the "Sigma spec supports:" list below). Set `text_elements` / `filter_shelf` to `[]` only after confirming from the image that the dashboard genuinely has none. Both build paths enforce this file: `build-charts-from-signals.rb` (Phase 5a) **refuses to build without it**, and the orchestrator (`migrate-tableau.rb`) hard-stops **before posting the data model** if it's missing. The Phase 6 gate sequence re-runs `assert-dashboard-read.rb` as a final belt. Genuinely can't read the PNG? Pass `--skip-dashboard-read "<reason>"` and name the waiver in your report.
+> `"verified": true` is REQUIRED to pass the gate when the file was seeded as a draft (`verified: false`); a hand-written file may omit the field. `kind` must be a valid Sigma element kind (see the "Sigma spec supports:" list below). Set `text_elements` / `filter_shelf` to `[]` only after confirming from the image that the dashboard genuinely has none. Both build paths enforce this file: `build-charts-from-signals.rb` (Phase 5a) **refuses to build without it**, and the orchestrator (`migrate-tableau.rb`) hard-stops **before posting the data model** if it's missing. The Phase 6 gate sequence re-runs `assert-dashboard-read.rb` as a final belt. Genuinely can't read the PNG? Pass `--skip-dashboard-read "<reason>"` and name the waiver in your report.
 
 **Phase 1d checklist — confirm before moving on:**
 
