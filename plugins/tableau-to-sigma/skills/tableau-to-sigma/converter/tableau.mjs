@@ -2153,7 +2153,7 @@ function sigmaInodeId(identifier) {
 }
 function sigmaDisplayName(s) {
   const normalized = (s || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2").replace(/([A-Za-z])([0-9])/g, "$1_$2").replace(/([0-9])([A-Za-z])/g, "$1_$2");
-  const words = normalized.toLowerCase().split(/[_\s]+/).filter(Boolean);
+  const words = normalized.toLowerCase().split(/[_\s/-]+/).filter(Boolean);
   return words.map((w, i) => i === 0 || !SIGMA_LOWERCASE_WORDS.has(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(" ");
 }
 function formatFromMask(mask) {
@@ -3610,6 +3610,20 @@ ${joins.join("\n")}`;
     consumedIds: [fact.id, ...rels.map((r) => r.targetElementId)]
   };
 }
+var _tableMapping = {};
+function resolveTableName(tbl) {
+  if (!tbl)
+    return tbl;
+  const stripped = tbl.replace(/\$+$/, "");
+  const up = tbl.toUpperCase();
+  const strippedUp = stripped.toUpperCase();
+  for (const [k, v] of Object.entries(_tableMapping)) {
+    const ku = k.toUpperCase();
+    if (k === tbl || k === stripped || ku === up || ku === strippedUp)
+      return v;
+  }
+  return stripped;
+}
 function extractPath(rel, dbOverride, schOverride) {
   const rawTable = attr(rel, "table") || attr(rel, "name") || "";
   const cleaned = rawTable.replace(/[\[\]]/g, "").replace(/\s*\([^)]*\)/g, "");
@@ -3617,11 +3631,11 @@ function extractPath(rel, dbOverride, schOverride) {
   const stripHash = (s) => s.replace(/_[0-9A-Fa-f]{16,}$/, "");
   let path;
   if (parts.length >= 2) {
-    path = [...parts.slice(0, -1), stripHash(parts[parts.length - 1])];
+    path = [...parts.slice(0, -1), resolveTableName(stripHash(parts[parts.length - 1]))];
   } else if (parts.length === 1) {
-    path = [schOverride || "SCHEMA", stripHash(parts[0])];
+    path = [schOverride || "SCHEMA", resolveTableName(stripHash(parts[0]))];
   } else {
-    path = [attr(rel, "name").toUpperCase() || "UNKNOWN"];
+    path = [resolveTableName(attr(rel, "name").toUpperCase()) || "UNKNOWN"];
   }
   if (dbOverride) {
     if (path.length >= 3)
@@ -3964,9 +3978,10 @@ function tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connId
 }
 function convertTableauToSigma(xmlContent, options = {}) {
   resetIds();
-  const { connectionId = "", database = "", schema = "", datasourceIndex = 0 } = options;
-  const dbOverride = (database || "").toUpperCase();
-  const schOverride = (schema || "").toUpperCase();
+  const { connectionId = "", database = "", schema = "", datasourceIndex = 0, tableMapping = {} } = options;
+  _tableMapping = tableMapping || {};
+  const dbOverride = database || "";
+  const schOverride = schema || "";
   let parsed;
   try {
     parsed = xmlParser.parse(xmlContent);
@@ -5091,21 +5106,6 @@ ${stmt}
     }
     const resolveBaseToken = (token) => physToQuotedAlias[token] || physToQuotedAlias[token.toUpperCase()] || token;
     const rewriteBaseExpr = (expr) => expr.replace(/\b([A-Z][A-Z0-9_]*)\b/g, (_m, tok) => resolveBaseToken(tok));
-    const sqlExactByUpper = {};
-    if (factEl?.source?.kind === "sql") {
-      for (const col of factEl?.columns || []) {
-        const fm = typeof col.formula === "string" && col.formula.match(/\/([^\]]+)\]$/);
-        const exact = fm ? fm[1] : col.name || "";
-        if (!exact)
-          continue;
-        const upper = exact.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
-        if (exact === upper)
-          continue;
-        sqlExactByUpper[upper] = `"${exact}"`;
-      }
-    }
-    const hasSqlExact = Object.keys(sqlExactByUpper).length > 0;
-    const rewriteSqlExactExpr = (expr) => !hasSqlExact ? expr : expr.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m, tok) => sqlExactByUpper[tok.toUpperCase()] || m);
     const physToRealQuoted = {};
     if (factEl?.source?.kind !== "sql") {
       const _addReal = (remote) => {
@@ -5130,6 +5130,21 @@ ${stmt}
     const hasRealNames = Object.keys(physToRealQuoted).length > 0;
     const quotePhysToken = (tok) => physToRealQuoted[tok] || physToRealQuoted[tok.toUpperCase()] || tok;
     const rewritePhysExpr = (expr) => !hasRealNames ? expr : expr.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m, tok) => physToRealQuoted[tok.toUpperCase()] || m);
+    const sqlExactByUpper = {};
+    if (factEl?.source?.kind === "sql") {
+      for (const col of factEl?.columns || []) {
+        const fm = typeof col.formula === "string" && col.formula.match(/\/([^\]]+)\]$/);
+        const exact = fm ? fm[1] : col.name || "";
+        if (!exact)
+          continue;
+        const upper = exact.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+        if (exact === upper)
+          continue;
+        sqlExactByUpper[upper] = `"${exact}"`;
+      }
+    }
+    const hasSqlExact = Object.keys(sqlExactByUpper).length > 0;
+    const rewriteSqlExactExpr = (expr) => !hasSqlExact ? expr : expr.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m, tok) => sqlExactByUpper[tok.toUpperCase()] || m);
     const lodChildElements = [];
     const wsIndex = _buildWorksheetIndex(parsed);
     const lodHelpers = {};
