@@ -1,8 +1,9 @@
 {
   "source_repo": "twells89/sigma-data-model-mcp",
-  "source_commit": "e7e4fe8",
-  "source_commit_date": "2026-07-05",
+  "source_commit": "d4c102d",
+  "source_commit_date": "2026-07-07",
+  "fast_xml_parser_version": "4.5.6",
+  "artifact": "tableau.mjs",
   "bundler": "esbuild --bundle --format=esm --platform=node",
-  "vendored_modules": "tableau.mjs",
-  "note": "Self-contained bundled artifacts, not source. Refresh with tools/vendor-converters.sh after the converter repo changes."
+  "note": "Self-contained bundled artifact, not source. Refresh with scripts/dev/vendor-converter.sh after the converter changes."
 }

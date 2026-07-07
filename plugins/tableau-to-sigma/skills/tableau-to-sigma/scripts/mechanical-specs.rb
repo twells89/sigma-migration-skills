@@ -176,9 +176,20 @@ module MechanicalSpecs
     shim = File.join(workdir, '_convert_tableau.mjs')
     raw_out = File.join(workdir, 'dm-raw.json')
     meta_out = File.join(workdir, 'conv-meta.json')
+    # Node ESM on Windows rejects a bare drive-letter specifier
+    # (`import ... from "C:/path/tableau.mjs"` → ERR_UNSUPPORTED_ESM_URL_SCHEME,
+    # protocol 'c:'). Absolute paths must be file:// URLs there. POSIX absolute
+    # paths import fine as-is, so we only rewrite on Windows and leave the
+    # (working) macOS/Linux path byte-identical.
+    import_specifier =
+      if Gem.win_platform? && mcp_build.to_s.match?(/\A[A-Za-z]:/)
+        'file:///' + mcp_build.gsub('\\', '/')
+      else
+        mcp_build
+      end
     File.write(shim, <<~JS)
       import { readFileSync, writeFileSync } from 'node:fs';
-      import { convertTableauToSigma } from #{mcp_build.to_json};
+      import { convertTableauToSigma } from #{import_specifier.to_json};
       const xml = readFileSync(#{twb_path.to_json}, 'utf8');
       const out = convertTableauToSigma(xml, {
         connectionId: #{conn.to_json},

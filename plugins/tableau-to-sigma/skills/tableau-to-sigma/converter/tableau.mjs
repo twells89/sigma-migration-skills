@@ -24,9 +24,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js
 var require_util = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js"(exports) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/util.js"(exports) {
     "use strict";
     var nameStartChar = ":A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
     var nameChar = nameStartChar + "\\-.\\d\\u00B7\\u0300-\\u036F\\u203F-\\u2040";
@@ -98,9 +98,9 @@ var require_util = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js
 var require_validator = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js"(exports) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/validator.js"(exports) {
     "use strict";
     var util = require_util();
     var defaultOptions = {
@@ -410,9 +410,9 @@ var require_validator = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
 var require_OptionsBuilder = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js"(exports) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js"(exports) {
     var { DANGEROUS_PROPERTY_NAMES, criticalProperties } = require_util();
     var defaultOnDangerousProperty = (name) => {
       if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
@@ -536,9 +536,9 @@ var require_OptionsBuilder = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
 var require_xmlNode = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js"(exports, module) {
     "use strict";
     var XmlNode = class {
       constructor(tagname) {
@@ -563,9 +563,9 @@ var require_xmlNode = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
 var require_DocTypeReader = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js"(exports, module) {
     var util = require_util();
     var DocTypeReader = class {
       constructor(options) {
@@ -851,9 +851,9 @@ var require_DocTypeReader = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/strnum/strnum.js
+// ../sigma-data-model-mcp/node_modules/strnum/strnum.js
 var require_strnum = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/strnum/strnum.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/strnum/strnum.js"(exports, module) {
     var hexRegex = /^[-+]?0x[a-fA-F0-9]+$/;
     var numRegex = /^([\-\+])?(0*)([0-9]*(\.[0-9]*)?)$/;
     var consider = {
@@ -939,9 +939,9 @@ var require_strnum = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js
 var require_ignoreAttributes = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/ignoreAttributes.js"(exports, module) {
     function getIgnoreAttributesFn(ignoreAttributes) {
       if (typeof ignoreAttributes === "function") {
         return ignoreAttributes;
@@ -964,9 +964,9 @@ var require_ignoreAttributes = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
 var require_OrderedObjParser = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js"(exports, module) {
     "use strict";
     var util = require_util();
     var xmlNode = require_xmlNode();
@@ -1569,9 +1569,9 @@ var require_OrderedObjParser = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js
 var require_node2json = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js"(exports) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/node2json.js"(exports) {
     "use strict";
     function prettify(node, options) {
       return compress(node, options);
@@ -1656,9 +1656,9 @@ var require_node2json = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
 var require_XMLParser = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js"(exports, module) {
     var { buildOptions } = require_OptionsBuilder();
     var OrderedObjParser = require_OrderedObjParser();
     var { prettify } = require_node2json();
@@ -1714,9 +1714,9 @@ var require_XMLParser = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
 var require_orderedJs2Xml = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js"(exports, module) {
     var EOL = "\n";
     function toXml(jArray, options) {
       let indentation = "";
@@ -1847,9 +1847,9 @@ var require_orderedJs2Xml = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
 var require_json2xml = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js"(exports, module) {
     "use strict";
     var buildFromOrderedJs = require_orderedJs2Xml();
     var getIgnoreAttributesFn = require_ignoreAttributes();
@@ -2093,9 +2093,9 @@ var require_json2xml = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js
+// ../sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js
 var require_fxp = __commonJS({
-  "../../../Users/tjwells/sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js"(exports, module) {
+  "../sigma-data-model-mcp/node_modules/fast-xml-parser/src/fxp.js"(exports, module) {
     "use strict";
     var validator = require_validator();
     var XMLParser2 = require_XMLParser();
@@ -2108,10 +2108,10 @@ var require_fxp = __commonJS({
   }
 });
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/tableau.js
+// ../sigma-data-model-mcp/build/tableau.js
 var import_fast_xml_parser = __toESM(require_fxp(), 1);
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/sigma-ids.js
+// ../sigma-data-model-mcp/build/sigma-ids.js
 var SIGMA_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var _usedIds = /* @__PURE__ */ new Set();
 var SIGMA_LOWERCASE_WORDS = /* @__PURE__ */ new Set([
@@ -2153,7 +2153,7 @@ function sigmaInodeId(identifier) {
 }
 function sigmaDisplayName(s) {
   const normalized = (s || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2").replace(/([A-Za-z])([0-9])/g, "$1_$2").replace(/([0-9])([A-Za-z])/g, "$1_$2");
-  const words = normalized.toLowerCase().split(/[_\s/-]+/).filter(Boolean);
+  const words = normalized.toLowerCase().split(/[_\s]+/).filter(Boolean);
   return words.map((w, i) => i === 0 || !SIGMA_LOWERCASE_WORDS.has(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(" ");
 }
 function formatFromMask(mask) {
@@ -2347,7 +2347,7 @@ function buildDerivedElements(elements) {
   return derived;
 }
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/formulas.js
+// ../sigma-data-model-mcp/build/formulas.js
 function decodeXmlEntities(s) {
   if (!s || s.indexOf("&") === -1)
     return s;
@@ -2941,7 +2941,7 @@ function tableauFormulaIsRls(formula) {
   return /\b(USERNAME|FULLNAME|USERDOMAIN|ISMEMBEROF|ISUSERNAME|USERATTRIBUTE)\s*\(/i.test(formula || "");
 }
 
-// ../../../Users/tjwells/sigma-data-model-mcp/build/tableau.js
+// ../sigma-data-model-mcp/build/tableau.js
 function paramControlId(rawName) {
   return "ctl-" + rawName.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
 }
@@ -3074,10 +3074,18 @@ function nsAttr(node, key) {
     return "";
   return node[keys.find((k) => k.includes(".true...")) || keys[0]] || "";
 }
+function _tableauExprToSql(s) {
+  s = s.replace(/"([^"]*)"/g, (_m, inner) => `'${inner.replace(/'/g, "''")}'`);
+  if (/\bIF\b/i.test(s) && /\bEND\b/i.test(s)) {
+    s = s.replace(/\bELSE\s+IF\b/gi, "WHEN").replace(/\bELSEIF\b/gi, "WHEN").replace(/\bIF\b/gi, "CASE WHEN");
+  }
+  return s;
+}
 function _tableauInnerToSql(expr) {
   let s = expr;
   s = s.replace(/\bZN\s*\(([^()]+)\)/gi, "$1");
   s = s.replace(/\[([^\]]+)\]/g, (_m, name) => name.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase());
+  s = _tableauExprToSql(s);
   s = s.replace(/\/\s*([A-Z][A-Z0-9_]*)\b/g, "/NULLIF($1,0)");
   return s;
 }
@@ -3120,6 +3128,7 @@ function _windowInnerToSql(expr) {
   let s = expr;
   s = s.replace(/\bZN\s*\(([^()]+)\)/gi, "$1");
   s = s.replace(/\[([^\]]+)\]/g, (_m, name) => name.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase());
+  s = _tableauExprToSql(s);
   return s;
 }
 function tableauParseWindow(formula) {
@@ -3601,20 +3610,6 @@ ${joins.join("\n")}`;
     consumedIds: [fact.id, ...rels.map((r) => r.targetElementId)]
   };
 }
-var _tableMapping = {};
-function resolveTableName(tbl) {
-  if (!tbl)
-    return tbl;
-  const stripped = tbl.replace(/\$+$/, "");
-  const up = tbl.toUpperCase();
-  const strippedUp = stripped.toUpperCase();
-  for (const [k, v] of Object.entries(_tableMapping)) {
-    const ku = k.toUpperCase();
-    if (k === tbl || k === stripped || ku === up || ku === strippedUp)
-      return v;
-  }
-  return stripped;
-}
 function extractPath(rel, dbOverride, schOverride) {
   const rawTable = attr(rel, "table") || attr(rel, "name") || "";
   const cleaned = rawTable.replace(/[\[\]]/g, "").replace(/\s*\([^)]*\)/g, "");
@@ -3622,11 +3617,11 @@ function extractPath(rel, dbOverride, schOverride) {
   const stripHash = (s) => s.replace(/_[0-9A-Fa-f]{16,}$/, "");
   let path;
   if (parts.length >= 2) {
-    path = [...parts.slice(0, -1), resolveTableName(stripHash(parts[parts.length - 1]))];
+    path = [...parts.slice(0, -1), stripHash(parts[parts.length - 1])];
   } else if (parts.length === 1) {
-    path = [schOverride || "SCHEMA", resolveTableName(stripHash(parts[0]))];
+    path = [schOverride || "SCHEMA", stripHash(parts[0])];
   } else {
-    path = [resolveTableName(attr(rel, "name").toUpperCase()) || "UNKNOWN"];
+    path = [attr(rel, "name").toUpperCase() || "UNKNOWN"];
   }
   if (dbOverride) {
     if (path.length >= 3)
@@ -3969,10 +3964,9 @@ function tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connId
 }
 function convertTableauToSigma(xmlContent, options = {}) {
   resetIds();
-  const { connectionId = "", database = "", schema = "", datasourceIndex = 0, tableMapping = {} } = options;
-  _tableMapping = tableMapping || {};
-  const dbOverride = database || "";
-  const schOverride = schema || "";
+  const { connectionId = "", database = "", schema = "", datasourceIndex = 0 } = options;
+  const dbOverride = (database || "").toUpperCase();
+  const schOverride = (schema || "").toUpperCase();
   let parsed;
   try {
     parsed = xmlParser.parse(xmlContent);
@@ -4514,6 +4508,8 @@ function convertTableauToSigma(xmlContent, options = {}) {
         }
         const columns = [], order = [];
         const seen = /* @__PURE__ */ new Set();
+        const projParts = [];
+        let needsRealias = false;
         for (const rc of rawCols) {
           const clean = rc.name.replace(/^\[|\]$/g, "");
           const upper = clean.toUpperCase();
@@ -4521,15 +4517,28 @@ function convertTableauToSigma(xmlContent, options = {}) {
             continue;
           seen.add(upper);
           const colKey = clean.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+          const colRefRaw = clean === colKey ? colKey : clean;
+          const colRef = colRefRaw.replace(/\//g, "-");
           const display = capByName[upper] || sigmaDisplayName(clean);
-          const id = sigmaInodeId(colKey);
-          columns.push({ id, formula: `[Custom SQL/${colKey}]`, name: display });
+          const id = sigmaInodeId(colRef);
+          columns.push({ id, formula: `[Custom SQL/${colRef}]`, name: display });
           order.push(id);
+          if (colRef !== colRefRaw) {
+            projParts.push(`"${clean}" AS "${colRef}"`);
+            needsRealias = true;
+          } else if (colRefRaw === colKey) {
+            projParts.push(colRefRaw);
+          } else {
+            projParts.push(`"${clean}"`);
+          }
         }
+        const finalStatement = needsRealias ? `SELECT ${projParts.join(", ")} FROM (
+${statement}
+) __cs` : statement;
         elements.push({
           id: sigmaShortId(),
           kind: "table",
-          source: { connectionId: connId, kind: "sql", statement },
+          source: { connectionId: connId, kind: "sql", statement: finalStatement },
           columns,
           order
         });
@@ -4627,7 +4636,12 @@ ${stmt}
       };
       lodHelpers[signatureKey] = {
         element: helperEl,
-        groupDimNames: effectiveDims.slice(),
+        // Use the RESOLVED physical-upper names (aligned 1:1 with effectiveDims),
+        // not the raw effective names. INCLUDE/EXCLUDE worksheet dims arrive as
+        // display strings (e.g. "SALES REGION" with a space); the resolved
+        // dimUpper ("SALES_REGION") is what quotePhysToken maps to the real
+        // quoted warehouse column and what keeps GROUP BY / SELECT consistent.
+        groupDimNames: dimResolved.map((d) => d.dimUpper),
         groupDimDisplayNames: dimResolved.map((d) => d.displayName),
         groupDimColIds,
         aggsByExpr: {},
@@ -4676,11 +4690,14 @@ ${stmt}
       const useBase = fromClause === "__lod_base";
       for (const sigKey of Object.keys(lodHelpers)) {
         const rec = lodHelpers[sigKey];
-        const dimList = useBase ? rec.groupDimDisplayNames.map((dn) => physToQuotedAlias[dn.replace(/\s+/g, "_").toUpperCase()] || `"${dn}"`).join(", ") : rec.groupDimNames.join(", ");
+        const dimList = useBase ? rec.groupDimDisplayNames.map((dn) => physToQuotedAlias[dn.replace(/\s+/g, "_").toUpperCase()] || `"${dn}"`).join(", ") : rec.groupDimNames.map((dn) => {
+          const q = sqlExactByUpper[dn.toUpperCase()] || quotePhysToken(dn);
+          return q === dn ? dn : `${q} AS ${dn}`;
+        }).join(", ");
         const aggParts = [];
         for (const k of Object.keys(rec.aggsByExpr)) {
           const a = rec.aggsByExpr[k];
-          const safeExpr = useBase ? rewriteBaseExpr(a.aggExpr) : a.aggExpr;
+          const safeExpr = useBase ? rewriteBaseExpr(a.aggExpr) : rewriteSqlExactExpr(rewritePhysExpr(a.aggExpr));
           let sqlAggFunc = a.aggFunc;
           if (sqlAggFunc === "COUNTD")
             sqlAggFunc = "COUNT(DISTINCT " + safeExpr + ")";
@@ -4762,19 +4779,28 @@ ${stmt}
       const fe = factEl;
       const { fromClause: topNFrom, ctePrefix: topNCtePrefix } = _baseFromExpr2();
       const topNUseBase = topNFrom === "__lod_base";
-      const groupCols = [keyResolved.dimUpper, ...partResolved.map((p) => p.dimUpper)].map((c) => topNUseBase ? physToQuotedAlias[c] || c : c);
-      const groupByIdx = groupCols.map((_g, i) => i + 1).join(", ");
+      const groupDims = [keyResolved.dimUpper, ...partResolved.map((p) => p.dimUpper)];
+      const _tnSource = (c) => {
+        if (topNUseBase)
+          return physToQuotedAlias[c] || c;
+        const q = quotePhysToken(c);
+        return q === c ? c : `${q} AS ${c}`;
+      };
+      const _tnOut = (c) => topNUseBase ? physToQuotedAlias[c] || c : c;
+      const groupColsSource = groupDims.map(_tnSource);
+      const groupColsOut = groupDims.map(_tnOut);
+      const groupByIdx = groupDims.map((_g, i) => i + 1).join(", ");
       let aggSql = top.byAggFunc;
-      const safeByField = topNUseBase ? rewriteBaseExpr(top.byField) : top.byField;
+      const safeByField = topNUseBase ? rewriteBaseExpr(top.byField) : rewritePhysExpr(top.byField);
       if (aggSql === "COUNTD")
         aggSql = `COUNT(DISTINCT ${safeByField})`;
       else
         aggSql = `${aggSql}(${safeByField})`;
-      const partBy = top.partitionBy.length > 0 ? `PARTITION BY ${top.partitionBy.join(", ")} ` : "";
+      const partBy = top.partitionBy.length > 0 ? `PARTITION BY ${top.partitionBy.map(_tnOut).join(", ")} ` : "";
       const overClause = `RANK() OVER (${partBy}ORDER BY s ${dirSql})`;
-      const innerSelect = `SELECT ${groupCols.join(", ")}, ${aggSql} AS s FROM ${topNFrom} GROUP BY ${groupByIdx}`;
-      const rankedSelect = `SELECT ${groupCols.join(", ")}, s, ${overClause} AS RNK FROM agg`;
-      const outerCols = emitIsTopNInSql ? `${groupCols.join(", ")}, s AS TOTAL, RNK, (RNK <= ${nLiteral}) AS IS_TOP_N` : `${groupCols.join(", ")}, s AS TOTAL, RNK`;
+      const innerSelect = `SELECT ${groupColsSource.join(", ")}, ${aggSql} AS s FROM ${topNFrom} GROUP BY ${groupByIdx}`;
+      const rankedSelect = `SELECT ${groupColsOut.join(", ")}, s, ${overClause} AS RNK FROM agg`;
+      const outerCols = emitIsTopNInSql ? `${groupColsOut.join(", ")}, s AS TOTAL, RNK, (RNK <= ${nLiteral}) AS IS_TOP_N` : `${groupColsOut.join(", ")}, s AS TOTAL, RNK`;
       const outerSelect = `SELECT ${outerCols} FROM ranked`;
       const statement = topNCtePrefix ? `WITH ${topNCtePrefix}agg AS (${innerSelect}), ranked AS (${rankedSelect}) ${outerSelect}` : `WITH agg AS (${innerSelect}), ranked AS (${rankedSelect}) ${outerSelect}`;
       const helperEl = {
@@ -4908,7 +4934,9 @@ ${stmt}
       rec.innerAggs[key] = { alias };
       return alias;
     }, _emitWindowOverClause2 = function(rec, win, windowAlias, innerAlias) {
-      const partBy = rec.partitionDimNames.length > 0 ? `PARTITION BY ${rec.partitionDimNames.join(", ")}` : "";
+      const _winUseBase = _baseFromExpr2().fromClause === "__lod_base";
+      const _emitPartDim = (d) => _winUseBase ? physToQuotedAlias[d] || d : d;
+      const partBy = rec.partitionDimNames.length > 0 ? `PARTITION BY ${rec.partitionDimNames.map(_emitPartDim).join(", ")}` : "";
       const orderBy = rec.orderDimAlias ? `ORDER BY ${rec.orderDimAlias}` : "";
       const windowSpec = (parts) => parts.filter(Boolean).join(" ");
       let overSql = "";
@@ -4993,11 +5021,17 @@ ${stmt}
       for (const key of Object.keys(windowHelpers)) {
         const rec = windowHelpers[key];
         const selectParts = [];
+        const emitPartSource = (d) => {
+          if (winUseBase)
+            return physToQuotedAlias[d] || d;
+          const q = quotePhysToken(d);
+          return q === d ? d : `${q} AS ${d}`;
+        };
         for (const d of rec.partitionDimNames) {
-          selectParts.push(winUseBase ? physToQuotedAlias[d] || d : d);
+          selectParts.push(emitPartSource(d));
         }
         if (rec.orderDimRaw && rec.orderDimAlias) {
-          const rawRef = winUseBase ? rewriteBaseExpr(rec.orderDimRaw) : rec.orderDimRaw;
+          const rawRef = winUseBase ? rewriteBaseExpr(rec.orderDimRaw) : rewritePhysExpr(rec.orderDimRaw);
           if (rec.orderDimDateTrunc) {
             selectParts.push(`DATE_TRUNC('${rec.orderDimDateTrunc}', ${rawRef}) AS ${rec.orderDimAlias}`);
           } else {
@@ -5006,7 +5040,7 @@ ${stmt}
         }
         for (const k of Object.keys(rec.innerAggs)) {
           const [aggFunc, exprSql] = k.split("::");
-          const safeExpr = winUseBase ? rewriteBaseExpr(exprSql) : exprSql;
+          const safeExpr = winUseBase ? rewriteBaseExpr(exprSql) : rewritePhysExpr(exprSql);
           const a = rec.innerAggs[k];
           let sqlFn = aggFunc;
           if (sqlFn === "COUNTD")
@@ -5057,6 +5091,45 @@ ${stmt}
     }
     const resolveBaseToken = (token) => physToQuotedAlias[token] || physToQuotedAlias[token.toUpperCase()] || token;
     const rewriteBaseExpr = (expr) => expr.replace(/\b([A-Z][A-Z0-9_]*)\b/g, (_m, tok) => resolveBaseToken(tok));
+    const sqlExactByUpper = {};
+    if (factEl?.source?.kind === "sql") {
+      for (const col of factEl?.columns || []) {
+        const fm = typeof col.formula === "string" && col.formula.match(/\/([^\]]+)\]$/);
+        const exact = fm ? fm[1] : col.name || "";
+        if (!exact)
+          continue;
+        const upper = exact.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+        if (exact === upper)
+          continue;
+        sqlExactByUpper[upper] = `"${exact}"`;
+      }
+    }
+    const hasSqlExact = Object.keys(sqlExactByUpper).length > 0;
+    const rewriteSqlExactExpr = (expr) => !hasSqlExact ? expr : expr.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m, tok) => sqlExactByUpper[tok.toUpperCase()] || m);
+    const physToRealQuoted = {};
+    if (factEl?.source?.kind !== "sql") {
+      const _addReal = (remote) => {
+        const r = (remote || "").trim();
+        if (!r)
+          return;
+        const snakeUpper = r.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+        const normUpper = r.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").toUpperCase();
+        const spaceUpper = r.replace(/\s+/g, "_").toUpperCase();
+        if (r === snakeUpper && !/^[0-9]/.test(r))
+          return;
+        const quoted = `"${r}"`;
+        for (const k of [snakeUpper, normUpper, spaceUpper]) {
+          if (k && !(k in physToRealQuoted))
+            physToRealQuoted[k] = quoted;
+        }
+      };
+      for (const mr of asArray(rootConn?.["metadata-records"]?.["metadata-record"] || [])) {
+        _addReal(mr["remote-name"] || "");
+      }
+    }
+    const hasRealNames = Object.keys(physToRealQuoted).length > 0;
+    const quotePhysToken = (tok) => physToRealQuoted[tok] || physToRealQuoted[tok.toUpperCase()] || tok;
+    const rewritePhysExpr = (expr) => !hasRealNames ? expr : expr.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m, tok) => physToRealQuoted[tok.toUpperCase()] || m);
     const lodChildElements = [];
     const wsIndex = _buildWorksheetIndex(parsed);
     const lodHelpers = {};
@@ -5505,6 +5578,48 @@ ${stmt}
       }
       if (rewrites > 0) {
         warnings.push(`\u2139 Reconciled ${rewrites} calc-formula field reference(s) to their SQL-alias column names (caption\u2194alias) on "${factEl.name}".`);
+      }
+      if (factEl?.source?.kind === "sql") {
+        const nkey = (s) => s.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+        const refToOutId = {};
+        for (const c of factEl.columns || []) {
+          const fm = typeof c.formula === "string" && c.formula.match(/^\[Custom SQL\/([^\]]+)\]$/);
+          if (!fm)
+            continue;
+          const outId = fm[1];
+          for (const k of [c.name, outId]) {
+            const nk = k && nkey(k);
+            if (nk && !(nk in refToOutId))
+              refToOutId[nk] = outId;
+          }
+        }
+        let qcount = 0;
+        const qualify = (formula, ownName) => {
+          if (typeof formula !== "string")
+            return formula;
+          return formula.replace(/\[([^\]]+)\]/g, (m, ref) => {
+            if (/^Custom SQL\//.test(ref))
+              return m;
+            if (ownName && ref.toLowerCase() === ownName.toLowerCase())
+              return m;
+            const outId = refToOutId[nkey(ref)];
+            if (!outId)
+              return m;
+            qcount++;
+            return `[Custom SQL/${outId}]`;
+          });
+        };
+        const isAlias = (f) => typeof f === "string" && /^\[Custom SQL\/[^\]]+\]$/.test(f);
+        for (const c of factEl.columns || []) {
+          if (isAlias(c.formula))
+            continue;
+          c.formula = qualify(c.formula, c.name);
+        }
+        for (const mtr of factEl.metrics || [])
+          mtr.formula = qualify(mtr.formula, mtr.name);
+        if (qcount > 0) {
+          warnings.push(`\u2139 Qualified ${qcount} sibling reference(s) to [Custom SQL/\u2026] form on "${factEl.name || "Custom SQL"}" (kind:'sql' columns resolve only via the Custom SQL/ prefix).`);
+        }
       }
       {
         const typeByName = {};
