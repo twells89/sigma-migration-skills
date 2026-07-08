@@ -295,7 +295,7 @@ end
 # LOCAL converter (converter/tableau.mjs) collapses every worksheet onto the
 # primary datasource and silently drops the other sources' columns/calcs; the
 # workbook POST then fails with unresolved [Master/...] refs (see
-# MSP-Dashboard failure 2026-07-08). Emit an ❌-unhandled gap so migrate-tableau
+# a real multi-datasource workbook). Emit an ❌-unhandled gap so migrate-tableau
 # HARD-STOPS at the gap gate with the table/sheet breakdown, instead of posting
 # a doomed DM. Fixed for real by the multi-element DM path (Tier 2).
 def detect_multi_datasource(xml)

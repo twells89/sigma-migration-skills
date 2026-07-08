@@ -3,7 +3,7 @@
 # 🚧 GATE — every workbook-spec column reference must resolve against the LIVE
 # data model BEFORE the workbook is POSTed.
 #
-# The failure this prevents (MSP-Dashboard, 2026-07-08): the local converter
+# The failure this prevents (a real multi-datasource workbook): the local converter
 # collapsed a multi-datasource workbook onto its primary datasource, so the DM
 # ended up with ~49 columns while the workbook spec still referenced ~599 —
 # every `[Master/<dropped column>]` formula then POSTed and Sigma rejected it

@@ -225,7 +225,7 @@ else
   warn "WARN: could not fetch /columns for type guard (got HTTP #{res.code}); skipping"
 end
 
-# DM column-DROPPAGE guard (MSP-Dashboard 2026-07-08): the type=error guard above
+# DM column-DROPPAGE guard (a real multi-datasource workbook): the type=error guard above
 # only catches columns that POSTed-then-errored. When a multi-datasource workbook
 # is collapsed onto its primary, the OTHER sources' columns are simply ABSENT from
 # the live DM (never posted) — no error type, so the guard above stays silent while

@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 # Offline test for assert-wb-refs-resolve.rb (Tier 1 #2). Drives the gate as a
-# subprocess against fixture wb-spec + dm-ids files. The MSP-Dashboard failure
+# subprocess against fixture wb-spec + dm-ids files. The a real multi-datasource workbook
 # (2026-07-08): a multi-datasource collapse left workbook [Master/...] refs
 # pointing at columns absent from the live DM; this gate must catch them BEFORE
 # the POST that would otherwise return an opaque "Dependency not found".

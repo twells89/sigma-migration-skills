@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 # Offline test for detect_multi_datasource in scan-workbook-gaps.rb (Tier 1 #1,
-# MSP-Dashboard failure 2026-07-08): a workbook whose worksheets have DIFFERENT
+# a real multi-datasource workbook): a workbook whose worksheets have DIFFERENT
 # primary datasources must be flagged ❌-unhandled (the local converter collapses
 # to the primary and drops the others), while single-primary workbooks and pure
 # blends must NOT be flagged.
@@ -26,7 +26,7 @@ end
 multi = <<~XML
   <?xml version='1.0'?>
   <workbook><datasources>
-    <datasource name='sales' caption='Sales Funnel'><connection class='snowflake' server='x' dbname='EDNA'/></datasource>
+    <datasource name='sales' caption='Sales Funnel'><connection class='snowflake' server='x' dbname='WH'/></datasource>
     <datasource name='sku' caption='SKU Master GA'><connection class='snowflake' server='x' dbname='BBBS'/></datasource>
     <datasource name='Parameters'><connection class='sqlproxy'/></datasource>
   </datasources>
@@ -46,7 +46,7 @@ check(detail && detail.find { |d| d['caption'] == 'Sales Funnel' }['worksheets']
 single = <<~XML
   <?xml version='1.0'?>
   <workbook><datasources>
-    <datasource name='sales' caption='Sales'><connection class='snowflake' server='x' dbname='EDNA'/></datasource>
+    <datasource name='sales' caption='Sales'><connection class='snowflake' server='x' dbname='WH'/></datasource>
   </datasources>
   <worksheet name='A'><table><view><datasources><datasource name='sales'/></datasources></view></table></worksheet>
   <worksheet name='B'><table><view><datasources><datasource name='sales'/></datasources></view></table></worksheet>
@@ -58,7 +58,7 @@ check(!fires?(single)[0], 'single-datasource workbook is NOT flagged')
 param = <<~XML
   <?xml version='1.0'?>
   <workbook><datasources>
-    <datasource name='sales' caption='Sales'><connection class='snowflake' server='x' dbname='EDNA'/></datasource>
+    <datasource name='sales' caption='Sales'><connection class='snowflake' server='x' dbname='WH'/></datasource>
     <datasource name='Parameters'><connection class='sqlproxy'/></datasource>
   </datasources>
   <worksheet name='A'><table><view><datasources><datasource name='sales'/></datasources></view></table></worksheet>
@@ -70,8 +70,8 @@ check(!fires?(param)[0], 'Parameters synthetic source does not count as a second
 blend = <<~XML
   <?xml version='1.0'?>
   <workbook><datasources>
-    <datasource name='sales' caption='Sales'><connection class='snowflake' server='x' dbname='EDNA'/></datasource>
-    <datasource name='sku' caption='SKU'><connection class='snowflake' server='x' dbname='EDNA'/></datasource>
+    <datasource name='sales' caption='Sales'><connection class='snowflake' server='x' dbname='WH'/></datasource>
+    <datasource name='sku' caption='SKU'><connection class='snowflake' server='x' dbname='WH'/></datasource>
   </datasources>
   <worksheet name='Blended'><table><view><datasources>
     <datasource name='sales'/><datasource name='sku'/>
