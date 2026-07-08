@@ -146,6 +146,7 @@ OptionParser.new do |o|
   o.on('--skip-reuse-scan')  {     opts[:skip_reuse] = true }
   o.on('--skip-dashboard-read REASON', 'waive the Phase 1d source dashboard-read gate — REQUIRED reason; name it in your report') { |v| opts[:skip_dashboard_read] = v }
   o.on('--skip-doctor-gate REASON', 'waive the Step-0 environment gate (doctor.json) — REQUIRED reason; name it in your report') { |v| opts[:skip_doctor_gate] = v }
+  o.on('--skip-ref-check REASON', 'waive the pre-POST workbook ref-resolution gate — REQUIRED reason; name it in your report') { |v| opts[:skip_ref_check] = v }
   o.on('--skip-extract-landing REASON', 'proceed although every datasource is an embedded file extract and no ' \
                                         'landing manifest was found (exit 17 otherwise) — you own the DM table paths') { |v| opts[:skip_extract_landing] = v }
   o.on('--skip-postpublish-guide REASON', 'waive the finalize gate that requires POSTPUBLISH_GUIDE.md when the ' \
@@ -2009,6 +2010,15 @@ wb_ids_path = File.join(WORK, 'wb-ids.json')
 begin
   v_log = run_wb!(['ruby', File.join(HERE, 'validate-spec.rb'), '--type', 'workbook',
                    '--dm-context', dm_ids_path, wb_spec_path])
+  # 🚧 Pre-POST ref-resolution gate: every [Element/Column] ref in the wb-spec must
+  # exist in the LIVE DM, or the POST fails one opaque "Dependency not found" at a
+  # time AFTER the DM is created (MSP-Dashboard 2026-07-08: multi-datasource
+  # collapse left 550 refs unresolvable). Catch it here with the full list; the
+  # WorkbookBuildError this raises routes to the friendly rebuild-against-DM handoff.
+  ref_cmd = ['ruby', File.join(HERE, 'assert-wb-refs-resolve.rb'),
+             '--wb-spec', wb_spec_path, '--dm-ids', dm_ids_path]
+  ref_cmd += ['--skip-ref-check', opts[:skip_ref_check]] if opts[:skip_ref_check]
+  run_wb!(ref_cmd)
   par_cmd = ['ruby', File.join(HERE, 'post-and-readback.rb'), '--type', 'workbook',
              '--spec', wb_spec_path, '--out', wb_ids_path, '--workdir', WORK]
   # PUT-append into the targeted existing workbook (instead of POST-create).

@@ -245,6 +245,7 @@ which calc translation, which layout) — not orchestration.
 | `scripts/get_token.py` | Shell-neutral twin of `get-token.sh` (bash/PowerShell/cmd): writes `<WORK>/auth.json` (0600), read automatically by the scripts |
 | `scripts/doctor.sh` / `scripts/doctor.ps1` | Step-0 env check; writes `doctor.json` fingerprint the orchestrator gates on |
 | `scripts/assert-doctor-ran.rb` | 🚧 GATE — refuse to run without a passing `doctor.json` |
+| `scripts/assert-wb-refs-resolve.rb` | 🚧 GATE — every workbook `[Element/Column]` ref must exist in the live DM before POST (catches multi-datasource collapse → "Dependency not found"; waive `--skip-ref-check "<reason>"`) |
 | `scripts/setup-tableau.rb` | One-time Tableau PAT setup (only needed for PAT mode — see `refs/tableau-rest.md`) |
 | `scripts/get-tableau-token.sh` | One-shot signin → exports `TABLEAU_AUTH_TOKEN` + `TABLEAU_SITE_ID` |
 | `scripts/tableau-discover.rb` | PAT-mode Phase 1 discovery in one CLI: workbook + views + VDS metadata + GraphQL + .twb content. ONE unified fetch pool (default 5, `--pool N`, longest-job-first) with 429/timeout backoff + 401 re-mint; always writes per-task `timings.json`. Measured 61.8s → 13.7–18.9s on the 7-view reference workbook |

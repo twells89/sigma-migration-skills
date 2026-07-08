@@ -225,6 +225,27 @@ else
   warn "WARN: could not fetch /columns for type guard (got HTTP #{res.code}); skipping"
 end
 
+# DM column-DROPPAGE guard (MSP-Dashboard 2026-07-08): the type=error guard above
+# only catches columns that POSTed-then-errored. When a multi-datasource workbook
+# is collapsed onto its primary, the OTHER sources' columns are simply ABSENT from
+# the live DM (never posted) — no error type, so the guard above stays silent while
+# the spec declared hundreds more. Surface that gap loudly here; the pre-POST
+# ref-resolution gate (assert-wb-refs-resolve.rb) then hard-stops the workbook.
+if opts[:type] == 'datamodel' && res.is_a?(Net::HTTPSuccess)
+  declared = (spec['pages'] || []).sum { |p| (p['elements'] || []).sum { |e| (e['columns'] || []).size } }
+  live = (cols_json['entries'] || []).size
+  if declared > 20 && live < declared * 0.7
+    pct = ((1.0 - live.to_f / declared) * 100).round
+    warn "\n========================================"
+    warn "WARN — DM column DROPPAGE: spec declared #{declared} column(s), live DM has #{live} " \
+         "(#{pct}% absent, NOT type=error)."
+    warn 'This is the multi-datasource-collapse signature: columns from non-primary datasources'
+    warn 'were dropped. The workbook build will fail ref-resolution downstream. Verify the DM has'
+    warn 'one element per datasource (multi-element DM) before building the workbook.'
+    warn '========================================'
+  end
+end
+
 # Layout-quality lint (shared scripts/lib/layout_lint.rb — vendored byte-
 # identical, md5 discipline): fails loudly on raw-id element display names,
 # input controls outside the GridContainer bands of a banded page, and dead
