@@ -229,6 +229,7 @@ jobs:
             plugins/looker-to-sigma/skills/looker-to-sigma/tests/test_grid_fidelity.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_sigma_rest.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_tableau_rest.py
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_pick_destination.py
           )
           fail=0
           for t in "${tests[@]}"; do
