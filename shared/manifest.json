@@ -2,6 +2,12 @@
   "description": "Canonical shared infra files. Edit the canonical copy under shared/, then run tools/sync-shared.rb. CI (tools/check-shared.rb) fails if any target drifts from canonical (exceptions excluded).",
   "shared": [
     {
+      "canonical": "shared/lib/sigma_rest.py",
+      "targets": [
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/sigma_rest.py"
+      ]
+    },
+    {
       "canonical": "shared/lib/sigma_rest.rb",
       "targets": [
         "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/lib/sigma_rest.rb",
