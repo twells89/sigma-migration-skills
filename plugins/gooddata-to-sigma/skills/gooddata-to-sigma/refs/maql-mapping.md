@@ -43,7 +43,7 @@ by typed id:
 `BY` / `BY ALL` / `WITHIN` redefine the aggregation grain independent of the
 report's grouping — Sigma has no 1:1 keyword. They map to a **combination of
 element grouping + windowed/Level-scoped aggregates**, and the right target
-depends on the consuming insight's buckets. This is exactly the EDNA-class
+depends on the consuming insight's buckets. This is exactly the enterprise-class
 "context-dependent aggregation" trap; expect iteration and lean on parity
 (not structure) to confirm.
 

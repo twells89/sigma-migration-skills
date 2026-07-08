@@ -164,7 +164,7 @@ xml.elements.each('//column') do |c|
     # FULL body — NOT the first word — or multi-word names ("Customer Geo")
     # collapse to "Customer" and never resolve. Plain warehouse columns carry NO
     # caption attribute (their name IS the display name), so fall the caption
-    # back to the body; that is the fix for the ~40 EDNA quick-filters that were
+    # back to the body; that is the fix for the ~40 enterprise quick-filters that were
     # silently dropped ("shared filter has no resolvable column_caption").
     COL_BY_GUID[body] ||= { caption: (cap && !cap.empty? ? cap : body), datatype: dt }
   end
@@ -713,7 +713,7 @@ xml.elements.each('//worksheet') do |ws|
   # Measure Names on a shelf lays measures out as a text grid, and Tableau's
   # DEFAULT "Automatic" mark renders that grid as text — so a crosstab authored
   # without flipping the mark to "Text" reports mark_class="Automatic" (or blank).
-  # Gating only on text/square missed every such table (EDNA's "Metric Partner
+  # Gating only on text/square missed every such table (enterprise's "Metric Partner
   # Closed Won" / "1T.PartnerClosed size&Status" → flat table/kpi, losing the
   # grouped quarter headers + Grand Total).
   #
@@ -972,7 +972,7 @@ def chart_kind_for(meta)
   when 'automatic'
     # An Automatic-mark sheet with the crosstab shape (Measure Names + dims) is
     # a text grid pivot — honor is_crosstab BEFORE the bar/KPI inference, else
-    # the grouped headers + Grand Total are lost to a flat table (EDNA partner
+    # the grouped headers + Grand Total are lost to a flat table (enterprise partner
     # tables). A measure on BOTH axes is unambiguously a scatter (not a
     # big-number KPI), so it overrides the zero-dim KPI heuristic; otherwise
     # zero-dim → KPI.
@@ -1383,7 +1383,7 @@ end
 
 # A global parameter is redeclared in EVERY worksheet's embedded
 # datasource-dependencies — so the raw scan finds the same `[Parameter N]`
-# hundreds of times (EDNA: 604 declarations for ~50 params), and the COPIES
+# hundreds of times (enterprise: 604 declarations for ~50 params), and the COPIES
 # carry empty <members> while the canonical Parameters-datasource declaration
 # carries the real domain. Dedup by internal NAME, keeping the richest entry
 # (most members; tie-break on a non-empty default). Without this the meta is

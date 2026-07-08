@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
-# Regression test for the parameter-driven field-swap path (the EDNA /
+# Regression test for the parameter-driven field-swap path (the enterprise /
 # "Partner Landscape" Choose-Split-Table idiom). Deterministic + offline — no
 # Tableau or Sigma calls. Guards the six fixes that made param swaps migrate
-# end-to-end (proven 7/7 strict on the EDNA-mirror fixture, 2026-06-16):
+# end-to-end (proven 7/7 strict on the enterprise-mirror fixture, 2026-06-16):
 #
 #   1. Switch branch refs remapped UUID/caption -> [Master/<col>]
 #   2. numeric WHEN literals quoted to match the text segmented control

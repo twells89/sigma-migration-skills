@@ -49,7 +49,7 @@ rail = {
     </Page>
   XML
   'pages' => [{ 'id' => 'p1', 'name' => 'Partner Summary', 'elements' => [
-    { 'id' => 'title', 'kind' => 'text', 'body' => '# EDNA Partner Bookings' },
+    { 'id' => 'title', 'kind' => 'text', 'body' => '# enterprise Partner Bookings' },
     { 'id' => 'ctlA', 'kind' => 'control', 'name' => 'Region' },
     { 'id' => 'ctlB', 'kind' => 'control', 'name' => 'Channel' },
     { 'id' => 't1', 'kind' => 'pivot-table', 'name' => 'By Partner' }

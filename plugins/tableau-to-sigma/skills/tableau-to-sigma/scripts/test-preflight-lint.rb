@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
-# Regression test for preflight_lint's rules — the pre-existing EDNA-class
+# Regression test for preflight_lint's rules — the pre-existing enterprise-class
 # checks (T1/C1/C2/C3) plus the v3 rules codified from the 10-workbook live run
 # (SKILL_IMPROVEMENT_PLAN_V3 §D4):
 #

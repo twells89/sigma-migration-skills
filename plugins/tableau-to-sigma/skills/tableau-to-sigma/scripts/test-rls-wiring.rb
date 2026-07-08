@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # Regression test for the RLS surfacing pipeline (2026-06-16). Deterministic +
 # offline — no Tableau/Sigma/converter calls. Guards against the "RLS silently
-# dropped" regression found on the EDNA-mirror fixture:
+# dropped" regression found on the enterprise-mirror fixture:
 #
 #   - mechanical-specs.rb run_converter must CARRY out.security into conv-meta
 #     (it previously captured only model/warnings/stats → RLS vanished).

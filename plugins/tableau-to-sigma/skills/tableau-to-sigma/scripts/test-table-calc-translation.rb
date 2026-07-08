@@ -1,13 +1,13 @@
 #!/usr/bin/env ruby
 # Regression test for Tableau table-calc → Sigma window-function translation
 # (translate_tableau_tc in build-charts-from-signals.rb). Deterministic +
-# offline. Locks the EDNA-relevant table calcs:
+# offline. Locks the enterprise-relevant table calcs:
 #
 #   LOOKUP(expr,-n) → Lag(expr,n)   LOOKUP(expr,n) → Lead(expr,n)   LOOKUP(x,0)→x
 #   INDEX()         → RowNumber()
 #   RANK(expr)      → Rank(expr,"desc")   (Tableau default direction = desc)
 #   RANK_UNIQUE(expr) → RowNumber()       (was claimed in the header but NOT
-#                       implemented — the EDNA top-N idiom fell through to
+#                       implemented — the enterprise top-N idiom fell through to
 #                       "untranslatable"; this guards the fix)
 #   SIZE() / LAST() → left untranslated + a hint (no validated Sigma equivalent)
 #

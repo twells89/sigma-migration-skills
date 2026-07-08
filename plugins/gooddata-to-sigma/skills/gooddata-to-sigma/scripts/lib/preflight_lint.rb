@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 #
-# Preflight lint for a workbook spec — catches the two EDNA-class failure modes
+# Preflight lint for a workbook spec — catches the two enterprise-class failure modes
 # BEFORE POST, with a precise message instead of the opaque "Invalid kind: control"
 # or a silently-detail-rendered table.
 #
@@ -11,7 +11,7 @@
 #
 # Checks:
 #   T1  a `table` with aggregate column(s) + dimension(s) but NO `groupings`
-#       → renders raw detail rows (the 9.6M-row / $0 / duplicate-dim EDNA bug).
+#       → renders raw detail rows (the 9.6M-row / $0 / duplicate-dim enterprise bug).
 #   T2  a `groupings.calculations` column that is a PASSTHROUGH of an aggregate
 #       (re-aggregates to "multiple values"); calc cols must be Sum(...)/etc.
 #   C1  a `control` missing id / controlId / controlType.
@@ -126,7 +126,7 @@ def lint(spec)
         # A COLUMN-BOUND source ({kind:source}) must be double-nested
         # ({kind:source, source:{kind:table,elementId}, columnId}). A MANUAL
         # value-list source ({kind:manual, valueType, values, labels}) — emitted
-        # for segmented parameter controls (e.g. an EDNA measure-switcher) — is a
+        # for segmented parameter controls (e.g. an enterprise measure-switcher) — is a
         # self-contained list and is correct as-is; Sigma accepts it (live-verified
         # 2026-06-25). Only flag the column-bound form when it isn't double-nested.
         if el['source'].is_a?(Hash) && el['source']['kind'] == 'source' && !el['source']['source'].is_a?(Hash)

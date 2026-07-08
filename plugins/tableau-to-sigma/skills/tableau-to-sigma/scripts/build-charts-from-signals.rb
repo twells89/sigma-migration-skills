@@ -996,7 +996,7 @@ def translate_tableau_tc(formula)
   # expression in the matching direction (mirrors the RUNNING_*/INDEX viz-formula
   # contract). Must precede the bare RANK( rewrite — though `\bRANK\(` can't match
   # `RANK_UNIQUE(` (the underscore), handle it explicitly so it stops falling
-  # through to "untranslatable" (the EDNA top-N idiom: RANK_UNIQUE(SUM(x)) <= 25).
+  # through to "untranslatable" (the enterprise top-N idiom: RANK_UNIQUE(SUM(x)) <= 25).
   if s.gsub!(/\bRANK_UNIQUE\s*\(\s*((?:[^,()]|\([^()]*\)|\([^()]*\([^()]*\)[^()]*\))+?)\s*(?:,\s*'(?:asc|desc)'\s*)?\)/, 'RowNumber()')
     hints << 'RANK_UNIQUE(expr)→RowNumber() — unique rank; VERIFY the element is sorted by the ranked expr (RowNumber follows the viz sort). For a top-N filter (RANK_UNIQUE(...)<=N) prefer a Sigma Top-N filter.'
     changed = true
@@ -4450,7 +4450,7 @@ unless opts[:no_auto_controls]   # default-on: never miss a .twb parameter/filte
   # A parameter is typically declared once in the workbook metadata AND again in
   # every worksheet's datasource-dependencies that references it, so
   # meta['parameters'] commonly carries many duplicates of the same caption
-  # (EDNA: ~600 declarations for ~38 params). Emitting one control per
+  # (enterprise: ~600 declarations for ~38 params). Emitting one control per
   # declaration produces colliding element/control ids → "Duplicate id" on POST.
   # Dedup by caption so each parameter yields exactly one control.
   seen_param_caps = {}
@@ -4497,7 +4497,7 @@ unless opts[:no_auto_controls]   # default-on: never miss a .twb parameter/filte
       # control shows "TCV"/"ACV" instead of raw "1"/"3" — the selection VALUE
       # stays the code (what the translated Switch([ctl-param-…], "1", …)
       # compares against), only the display label changes. Without this the
-      # measure-switcher renders as a row of meaningless numbers (EDNA).
+      # measure-switcher renders as a row of meaningless numbers (enterprise).
       alias_pairs = (meta['column_aliases'] || {})[cap] ||
                     (meta['column_aliases'] || {})[p['name'].to_s.gsub(/^\[|\]$/, '')]
       labels = []

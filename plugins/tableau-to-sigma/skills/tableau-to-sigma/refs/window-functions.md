@@ -115,7 +115,7 @@ known Sigma recipe, so apply it rather than leaving the tile empty.
 ### Top-N: `RANK_UNIQUE(<expr>) <= N` / `RANK(<expr>) <= N`
 build-charts detects this idiom in two places (translate_window_calc):
 
-**On the Filters shelf** (the real EDNA "Top 25 Partners" idiom — a boolean calc
+**On the Filters shelf** (the real enterprise "Top 25 Partners" idiom — a boolean calc
 kept on `true`). build-charts now emits a **native Sigma `kind:top-n` element
 filter** — order-independent, the proper fix:
 - **Clean aggregate operand** (`RANK_UNIQUE(SUM(x))<=N`) → a `kind:top-n` filter

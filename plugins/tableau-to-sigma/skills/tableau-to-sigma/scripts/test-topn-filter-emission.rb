@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-# Regression test for the Top-N FILTER idiom (bead pnxp). The real EDNA "Top 25
+# Regression test for the Top-N FILTER idiom (bead pnxp). The real enterprise "Top 25
 # Partners" tile carries a BOOLEAN calc `RANK_UNIQUE(<expr>)<=25` on the Filters
 # shelf, kept on `true`. Tableau's data export hides it (it just thins rows), and
 # the calc never maps to a warehouse column — so the converter used to silently
