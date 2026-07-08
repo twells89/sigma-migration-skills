@@ -29,7 +29,7 @@ import sigma_rest  # noqa: E402
 class Base(unittest.TestCase):
     # env keys we mutate — snapshot + restore so cases don't bleed.
     KEYS = ["SIGMA_BASE_URL", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET",
-            "SIGMA_API_TOKEN", "SIGMA_WORKDIR"]
+            "SIGMA_API_TOKEN", "SIGMA_WORKDIR", "SIGMA_INSECURE_TLS"]
 
     def setUp(self):
         self._saved = {k: os.environ.get(k) for k in self.KEYS}
@@ -285,6 +285,21 @@ class Request(Base):
         self._ready()
         with self.assertRaises(ValueError):
             sigma_rest.request("options", "/v2/x")
+
+
+class SslContext(Base):
+    def test_returns_context_and_verifies_by_default(self):
+        import ssl
+        ctx = sigma_rest._ssl_context()
+        self.assertIsInstance(ctx, ssl.SSLContext)
+        self.assertEqual(ctx.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_insecure_flag_disables_verification(self):
+        import ssl
+        os.environ["SIGMA_INSECURE_TLS"] = "1"
+        ctx = sigma_rest._ssl_context()
+        self.assertEqual(ctx.verify_mode, ssl.CERT_NONE)
+        self.assertFalse(ctx.check_hostname)
 
 
 if __name__ == "__main__":

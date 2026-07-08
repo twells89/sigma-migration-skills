@@ -25,6 +25,8 @@ import base64
 import json
 import os
 import re
+import ssl
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -126,6 +128,32 @@ class _Resp:
         self.reason = reason
 
 
+def _ssl_context():
+    """TLS trust resolution (P1.4). Stock macOS/homebrew Python urllib often
+    fails CERTIFICATE_VERIFY_FAILED where curl/Ruby succeed. Prefer the OS trust
+    store (truststore), then certifi, then the stock verified context. NEVER
+    silently downgrades: an unverified context is used ONLY when
+    SIGMA_INSECURE_TLS is explicitly set, and it logs loudly."""
+    if os.environ.get("SIGMA_INSECURE_TLS"):
+        print("WARNING: SIGMA_INSECURE_TLS set — TLS certificate verification is "
+              "DISABLED for Sigma requests. Do not use in production.", file=sys.stderr)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    try:
+        import truststore  # OS trust store; the faithful match for curl/Ruby reachability
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:
+        pass
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        pass
+    return ssl.create_default_context()
+
+
 def _send(method, url, headers, body, timeout):
     """Low-level HTTP seam (tests monkeypatch this). Returns _Resp with a numeric
     status even for 4xx/5xx (urllib raises HTTPError on those — we normalise)."""
@@ -134,7 +162,7 @@ def _send(method, url, headers, body, timeout):
     for k, v in headers.items():
         req.add_header(k, v)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
             return _Resp(resp.status, resp.read(), getattr(resp, "reason", ""))
     except urllib.error.HTTPError as e:
         return _Resp(e.code, e.read(), e.reason)
