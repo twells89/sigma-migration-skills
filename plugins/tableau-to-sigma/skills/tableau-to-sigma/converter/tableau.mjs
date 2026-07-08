@@ -3124,6 +3124,15 @@ function tableauParseLOD(formula) {
   });
   return { _isLOD: true, lodType, dims, rawAgg, aggFunc, aggExpr, sigmaAgg };
 }
+function _stripOuterAggAroundLod(formula) {
+  const m = formula.trim().match(/^(SUM|MAX|MIN|AVG|COUNT|COUNTD|ATTR)\s*\(\s*(\{\s*(?:FIXED|INCLUDE|EXCLUDE)[\s\S]*\})\s*\)$/i);
+  if (!m)
+    return null;
+  const inner = m[2].trim();
+  if (!/^\{[\s\S]*\}$/.test(inner))
+    return null;
+  return { aggFunc: m[1].toUpperCase(), inner };
+}
 function _windowInnerToSql(expr) {
   let s = expr;
   s = s.replace(/\bZN\s*\(([^()]+)\)/gi, "$1");
@@ -5418,7 +5427,15 @@ ${joinSql}
         continue;
       }
       {
-        const lod = tableauParseLOD(formula);
+        let lod = tableauParseLOD(formula);
+        let lodOuterAgg = null;
+        if (!lod) {
+          const wrapped = _stripOuterAggAroundLod(formula);
+          if (wrapped) {
+            lod = tableauParseLOD(wrapped.inner);
+            lodOuterAgg = wrapped.aggFunc;
+          }
+        }
         if (lod) {
           const lodDimsResolved = [];
           let allFound = true;
@@ -5504,6 +5521,8 @@ ${suggestion}
             _ensureRelationship2(helperRes.signatureKey, dimResolved, relName);
             _addAggToHelper2(helperRes.signatureKey, alias, lod.aggFunc, lod.aggExpr, caption);
             warnings.push(`\u2705 LOD "${caption}" (${lod.lodType}) \u2192 helper "${helperRes.helper.name}" alias ${alias}`);
+            if (lodOuterAgg)
+              warnings.push(`\u2139 LOD "${caption}" was wrapped by ${lodOuterAgg}({\u2026}); emitted the row-level LOD value \u2014 apply ${lodOuterAgg} as the measure's aggregation in the workbook (verify the number vs source).`);
           }
           continue;
         }
