@@ -30,6 +30,61 @@ jobs:
         # vendored bundle and only uses a local build via an explicit env/flag.
         run: ./corpus/converter-default-test.sh
 
+  windows-smoke:
+    name: windows PowerShell path (doctor.ps1 + offline corpus)
+    # Proves the Windows/PowerShell path works BEFORE an event does (P0.4):
+    # doctor.ps1 runs, emits a valid + passing doctor.json, and the offline
+    # local-converter corpus converts. Creds-free, network-free. Runtimes are
+    # pinned via setup-* so a runner-image change can't flip doctor's result.
+    runs-on: windows-2022
+    timeout-minutes: 12
+    env:
+      TS_SKILL: plugins/tableau-to-sigma/skills/tableau-to-sigma
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: doctor.ps1 runs and writes a passing doctor.json
+        shell: pwsh
+        run: |
+          $wd = Join-Path $env:RUNNER_TEMP 'wd'
+          New-Item -ItemType Directory -Force -Path $wd | Out-Null
+          powershell -ExecutionPolicy Bypass -File "$env:TS_SKILL\scripts\doctor.ps1" -WorkDir $wd
+          if ($LASTEXITCODE -ne 0) { throw "doctor.ps1 exited $LASTEXITCODE (a REQUIRED runtime is missing)" }
+          $j = Get-Content (Join-Path $wd 'doctor.json') -Raw | ConvertFrom-Json
+          Write-Host "doctor.json -> os=$($j.os) shell=$($j.shell) pass=$($j.pass)"
+          if (-not $j.pass) { throw "doctor.json pass=false: $($j.failures -join '; ')" }
+          foreach ($r in 'ruby','python','node') {
+            if (-not $j.runtimes.$r) { throw "doctor.json runtimes.$r is false" }
+          }
+
+      - name: get_token.py imports + parses under Windows Python
+        shell: pwsh
+        run: |
+          python "$env:TS_SKILL\scripts\get_token.py" --help
+          if ($LASTEXITCODE -ne 0) { throw "get_token.py --help exited $LASTEXITCODE" }
+
+      - name: assert-doctor-ran gate passes on the emitted doctor.json
+        shell: pwsh
+        run: |
+          $wd = Join-Path $env:RUNNER_TEMP 'wd'
+          ruby "$env:TS_SKILL\scripts\assert-doctor-ran.rb" --workdir $wd
+          if ($LASTEXITCODE -ne 0) { throw "assert-doctor-ran gate failed on a passing doctor.json" }
+
+      - name: offline corpus conversion (local converter) under Git Bash
+        shell: bash
+        run: |
+          ./corpus/run-corpus.sh --check
+          ./corpus/converter-default-test.sh
+
   script-syntax:
     name: syntax-check every script (ruby -c / py_compile / bash -n)
     runs-on: ubuntu-24.04
