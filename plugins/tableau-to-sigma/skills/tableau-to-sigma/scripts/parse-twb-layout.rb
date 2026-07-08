@@ -297,31 +297,43 @@ MEASURE_PREFIXES = %w[sum avg min max count countd cntd median stdev stdevp var 
 DATE_TRUNC_PREFIXES = %w[yr qr mn wk dy hr mi sc mdy md qd ymd y q m d w h s].freeze
 
 # Classify a single shelf-field bracketed spec like "none:GUID:qk" or "sum:GUID:qk"
-# or "REGION" (no prefix). Returns [:dim | :measure | :measure_names, derivation_or_nil].
+# or "REGION" (no prefix).
+# Returns [:dim | :measure | :measure_names | :skip, derivation_or_nil, discrete_bool].
+#
+# The trailing type code encodes the pill's data role: `qk`/`ok` = CONTINUOUS
+# (green — a measure that draws a bar/line axis), `nk` = DISCRETE (blue — renders
+# as a text header, never an axis). Dimensions are always discrete; a MEASURE can
+# be either. A discrete measure (e.g. `[usr:Calc:nk]`) is a text-table cell, not a
+# bar — so we surface `discrete` for the chart-kind inference to honor.
+# An optional trailing `:N` is a duplicate-instance index (the same field placed
+# twice on the shelves), NOT part of the type code — strip it before reading the
+# code, or a field like `[usr:Calc:nk:1]` slips past the matcher and is mis-typed
+# as a dimension.
 def classify_shelf_field(field_str)
-  return [:skip, nil] if field_str.nil? || field_str.strip.empty?
+  return [:skip, nil, false] if field_str.nil? || field_str.strip.empty?
   fs = field_str.strip
   # Bare "[Measure Names]" or ".[Measure Names]" → placeholder
-  return [:measure_names, nil] if fs =~ /\bMeasure\s*Names\b/i
+  return [:measure_names, nil, false] if fs =~ /\bMeasure\s*Names\b/i
   # Extract the inner spec — the last `[...]` segment
   spec = fs[/\[([^\[\]]*)\]\s*$/, 1] || fs
-  # Aggregation/trunc prefix form: "prefix:GUID:type"
-  if (m = spec.match(/^([a-z]+):.*?:[a-z]+$/i))
+  # Aggregation/trunc prefix form: "prefix:GUID:type" (+ optional ":N" instance)
+  if (m = spec.match(/^([a-z]+):.*?:([a-z]+)(?::\d+)?$/i))
     pref = m[1].downcase
-    return [:measure, pref] if MEASURE_PREFIXES.include?(pref)
-    return [:dim, pref]     if DATE_TRUNC_PREFIXES.include?(pref)
-    return [:dim, pref]     if pref == 'none'
-    return [:dim, pref]     # unknown prefix → conservative dim
+    discrete = m[2].downcase.start_with?('n')   # nk → discrete; qk/ok → continuous
+    return [:measure, pref, discrete] if MEASURE_PREFIXES.include?(pref)
+    return [:dim, pref, false]        if DATE_TRUNC_PREFIXES.include?(pref)
+    return [:dim, pref, false]        if pref == 'none'
+    return [:dim, pref, false]        # unknown prefix → conservative dim
   end
   # No prefix → dim (e.g. "[REGION]")
-  [:dim, nil]
+  [:dim, nil, false]
 end
 
 # Parse a `<rows>` or `<cols>` shelf string into a structured summary.
 def parse_shelf(shelf_str)
   out = { 'raw' => shelf_str, 'fields' => [], 'dim_count' => 0,
-          'measure_count' => 0, 'has_measure_names' => false,
-          'has_measure_values' => false }
+          'measure_count' => 0, 'cont_measure_count' => 0,
+          'has_measure_names' => false, 'has_measure_values' => false }
   return out if shelf_str.nil? || shelf_str.strip.empty?
   # The Measure-VALUES pill (`[Multiple Values]` / `[Measure Values]`) signals
   # measures placed on this shelf as a VISUAL encoding (bar lengths / line
@@ -341,7 +353,7 @@ def parse_shelf(shelf_str)
     # parens, so this is safe for flat and ≥2-level nested shelves alike.)
     raw_field = f.strip.gsub(/\A[(\s]+/, '').gsub(/[)\s]+\z/, '')
     next if raw_field.empty?
-    role, deriv = classify_shelf_field(raw_field)
+    role, deriv, discrete = classify_shelf_field(raw_field)
     case role
     when :dim
       out['dim_count'] += 1
@@ -349,8 +361,9 @@ def parse_shelf(shelf_str)
                          'guid' => guid_from_param(raw_field) }
     when :measure
       out['measure_count'] += 1
+      out['cont_measure_count'] += 1 unless discrete
       out['fields'] << { 'raw' => raw_field, 'role' => 'measure', 'derivation' => deriv,
-                         'guid' => guid_from_param(raw_field) }
+                         'discrete' => discrete, 'guid' => guid_from_param(raw_field) }
     when :measure_names
       out['has_measure_names'] = true
       out['fields'] << { 'raw' => raw_field, 'role' => 'measure-names' }
@@ -900,27 +913,30 @@ def infer_automatic_kind(meta)
   fields = (rs['fields'] || []) + (cs['fields'] || [])
   dims = fields.select { |f| f['role'] == 'dim' }
   meas = fields.select { |f| f['role'] == 'measure' }
+  # Only CONTINUOUS measures draw an axis (bar length / line value). A DISCRETE
+  # measure (blue pill, type code `nk`) renders as a text cell — for chart-kind
+  # inference it behaves like "no measure on the axis." (Zero-dim + a measure is
+  # already claimed as a KPI upstream, so we only reach here for dim-bearing
+  # sheets.)
+  cont_meas = meas.reject { |f| f['discrete'] }
   has_date_dim = dims.any? { |f| DATE_GRAIN_DERIV.include?(f['derivation'].to_s.downcase) }
   has_measure_values = rs['has_measure_values'] || cs['has_measure_values']
-  # 1) continuous date dimension + a measure → time-series LINE
-  return 'line' if has_date_dim && !meas.empty?
-  # 2) a measure on BOTH axes (rows AND cols), ≤1 dim → SCATTER
-  return 'scatter' if rs['measure_count'].to_i >= 1 && cs['measure_count'].to_i >= 1 && dims.size <= 1
-  # 3) flat detail TABLE: dimension(s) present but NO measure sits on an axis
-  #    shelf (measures live on the Marks/Text card, or the sheet is a pure
-  #    dimension list) and no Measure-VALUES encoding pill. A bar needs a
-  #    continuous measure axis; with none, Tableau's default "Automatic" mark
-  #    renders a text grid, not bars — so route to a Sigma `table` instead of
-  #    blindly defaulting to bar-chart. This is what rescues the common case of
-  #    a detail table left on the default mark (never flipped to "Text"), which
-  #    the Text/Square and crosstab/KPI heuristics above don't claim.
-  #    LIMITATION: does NOT catch a table built by making a measure DISCRETE
-  #    (blue pill) on a shelf — that still reports role=measure here, so it
-  #    reads as a bar. Those remain chart_kind_inferred → verified against the
-  #    PNG in Phase 5g. (Kept narrow on purpose to avoid demoting real bars.)
-  return 'table' if !dims.empty? && meas.empty? && !has_measure_values
-  # 4) categorical dim(s) + measure → BAR (Tableau's default for cat × measure)
-  return 'bar' if !dims.empty? && !meas.empty?
+  # 1) continuous date dimension + a continuous measure → time-series LINE
+  return 'line' if has_date_dim && !cont_meas.empty?
+  # 2) a continuous measure on BOTH axes (rows AND cols), ≤1 dim → SCATTER
+  return 'scatter' if rs['cont_measure_count'].to_i >= 1 && cs['cont_measure_count'].to_i >= 1 && dims.size <= 1
+  # 3) flat detail TABLE: dimension(s) present but NO continuous measure sits on
+  #    an axis (measures live on the Marks/Text card, are DISCRETE blue pills, or
+  #    the sheet is a pure dimension list) and no Measure-VALUES encoding pill. A
+  #    bar needs a continuous measure axis; with none, Tableau's default
+  #    "Automatic" mark renders a text grid, not bars — so route to a Sigma
+  #    `table` instead of blindly defaulting to bar-chart. Rescues detail tables
+  #    left on the default mark (never flipped to "Text"), including the discrete-
+  #    measure-on-a-shelf idiom, which the Text/Square and crosstab/KPI
+  #    heuristics above don't claim.
+  return 'table' if !dims.empty? && cont_meas.empty? && !has_measure_values
+  # 4) categorical dim(s) + continuous measure → BAR (Tableau's default)
+  return 'bar' if !dims.empty? && !cont_meas.empty?
   'bar'
 end
 

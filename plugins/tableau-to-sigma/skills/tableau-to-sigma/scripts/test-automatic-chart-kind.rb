@@ -62,6 +62,8 @@ TWB = <<~XML
       #{ws('Scatter', "[federated.x].[sum:#{NP[1..-2]}:qk]", "[federated.x].[sum:#{GR[1..-2]}:qk]")}
       #{ws('DetailList', "[federated.x].[none:#{RG[1..-2]}:nk] / [federated.x].[none:#{CT[1..-2]}:nk]", "")}
       #{ws('MultiMeasBar', "[federated.x].[none:#{RG[1..-2]}:nk]", "[Multiple Values]")}
+      #{ws('DiscreteMeasTable', "[federated.x].[none:#{RG[1..-2]}:nk] / [federated.x].[sum:#{GR[1..-2]}:nk]", "")}
+      #{ws('DiscreteBAN', "[federated.x].[usr:#{GR[1..-2]}:nk:1]", "")}
     </worksheets>
     <dashboards>
       <dashboard name='Dash'><zones>
@@ -70,6 +72,8 @@ TWB = <<~XML
         <zone id='3' name='Scatter' x='66000' y='0' w='34000' h='100000' />
         <zone id='4' name='DetailList' x='0' y='100000' w='50000' h='100000' />
         <zone id='5' name='MultiMeasBar' x='50000' y='100000' w='50000' h='100000' />
+        <zone id='6' name='DiscreteMeasTable' x='0' y='200000' w='50000' h='100000' />
+        <zone id='7' name='DiscreteBAN' x='50000' y='200000' w='50000' h='100000' />
       </zones></dashboard>
     </dashboards>
   </workbook>
@@ -99,6 +103,10 @@ check(kind(by_name, 'DetailList') == 'table',
       "Automatic + dims only, no measure axis → table (got #{kind(by_name, 'DetailList').inspect})", fails)
 check(kind(by_name, 'MultiMeasBar') == 'bar',
       "Automatic + dim + [Multiple Values] pill → stays bar, not table (got #{kind(by_name, 'MultiMeasBar').inspect})", fails)
+check(kind(by_name, 'DiscreteMeasTable') == 'table',
+      "Automatic + dim + DISCRETE measure (nk) on shelf → table, not bar (got #{kind(by_name, 'DiscreteMeasTable').inspect})", fails)
+check(kind(by_name, 'DiscreteBAN') == 'kpi',
+      "Automatic + zero-dim discrete measure w/ :N instance index → kpi (got #{kind(by_name, 'DiscreteBAN').inspect})", fails)
 
 puts
 if fails.empty?
