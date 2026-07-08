@@ -40,6 +40,10 @@ jobs:
     timeout-minutes: 12
     env:
       TS_SKILL: plugins/tableau-to-sigma/skills/tableau-to-sigma
+      # CI is a shallow checkout — the version-drift probe is meaningless here and
+      # rev-list against a grafted origin/main is unreliable. Skip it explicitly
+      # (the doctors also auto-skip on a shallow clone).
+      SIGMA_SKIP_VERSION_CHECK: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1

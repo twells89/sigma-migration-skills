@@ -118,7 +118,10 @@ if ($here -and (Get-Command git -ErrorAction SilentlyContinue)) {
   $isRepo = (& git -C $here rev-parse --git-dir 2>$null)
   if ($isRepo) {
     $skillSha = (& git -C $here rev-parse --short HEAD 2>$null)
-    if (-not $env:SIGMA_SKIP_VERSION_CHECK) {
+    # Skip on a SHALLOW clone (CI checkout, some installs): rev-list against a
+    # grafted origin/main returns a bogus count (a false "hundreds behind").
+    $shallow = (& git -C $here rev-parse --is-shallow-repository 2>$null)
+    if ($shallow -ne 'true' -and -not $env:SIGMA_SKIP_VERSION_CHECK) {
       & git -C $here -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=6 fetch --quiet origin 2>$null
       $bc = (& git -C $here rev-list --count HEAD..origin/main 2>$null)
       if ($bc -match '^\d+$') { $behindCount = [int]$bc }

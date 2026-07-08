@@ -141,7 +141,10 @@ fi
 SKILL_SHA=""; BEHIND_COUNT="null"
 if command -v git >/dev/null 2>&1 && git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
   SKILL_SHA="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || true)"
-  if [ -z "${SIGMA_SKIP_VERSION_CHECK:-}" ]; then
+  # Skip on a SHALLOW clone (CI checkout, some installs): rev-list against a
+  # grafted origin/main returns a bogus count (a false "hundreds behind").
+  _shallow="$(git -C "$HERE" rev-parse --is-shallow-repository 2>/dev/null)"
+  if [ "$_shallow" != "true" ] && [ -z "${SIGMA_SKIP_VERSION_CHECK:-}" ]; then
     git -C "$HERE" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=6 fetch --quiet origin 2>/dev/null
     _bc="$(git -C "$HERE" rev-list --count HEAD..origin/main 2>/dev/null || true)"
     case "$_bc" in ''|*[!0-9]*) BEHIND_COUNT="null" ;; *) BEHIND_COUNT="$_bc" ;; esac
