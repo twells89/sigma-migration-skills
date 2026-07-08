@@ -85,8 +85,9 @@ fi
 # CERTIFICATE_VERIFY_FAILED where the Ruby path succeeds. `truststore` (uses the
 # OS trust store) fixes it. WARN only when OpenSSL is 3.x AND truststore is
 # absent — the exact combination that bites.
-if [ -n "$PY_ARGV" ] && $PY_ARGV -c 'import ssl,sys; sys.exit(0 if ssl.OPENSSL_VERSION.startswith("OpenSSL 3") else 1)' 2>/dev/null; then
-  if ! $PY_ARGV -c 'import truststore' 2>/dev/null; then
+if [ -n "$PY_ARGV" ]; then
+  TLS_PROBE="$($PY_ARGV -c "import ssl,importlib.util as iu; print('TRUSTWARN' if ssl.OPENSSL_VERSION.startswith('OpenSSL 3') and iu.find_spec('truststore') is None else '')" 2>/dev/null)"
+  if [ "$TLS_PROBE" = "TRUSTWARN" ]; then
     warn "python uses OpenSSL 3.x without 'truststore' — TLS verification may fail against some servers (e.g. Tableau Cloud) where curl/Ruby succeed" \
          "Fix: '$PY_ARGV -m pip install truststore' (uses the OS trust store). Do NOT disable TLS verification."
   fi

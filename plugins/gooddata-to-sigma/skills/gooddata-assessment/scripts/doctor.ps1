@@ -67,14 +67,11 @@ else {
 # 3.x AND truststore is absent.
 if ($script:PyExe) {
   $pyArgs = @(); if ($script:PyPre) { $pyArgs += $script:PyPre }
-  & $script:PyExe @pyArgs -c 'import ssl,sys; sys.exit(0 if ssl.OPENSSL_VERSION.startswith("OpenSSL 3") else 1)' 2>$null
-  if ($LASTEXITCODE -eq 0) {
-    & $script:PyExe @pyArgs -c 'import truststore' 2>$null
-    if ($LASTEXITCODE -ne 0) {
-      $fix = "$script:PyExe"; if ($script:PyPre) { $fix = "$script:PyExe $script:PyPre" }
-      Warn "python uses OpenSSL 3.x without 'truststore' - TLS verification may fail against some servers (e.g. Tableau Cloud) where curl/Ruby succeed" `
-           "Fix: '$fix -m pip install truststore' (uses the OS trust store). Do NOT disable TLS verification."
-    }
+  $probe = (& $script:PyExe @pyArgs -c "import ssl,importlib.util as iu; print('TRUSTWARN' if ssl.OPENSSL_VERSION.startswith('OpenSSL 3') and iu.find_spec('truststore') is None else '')" 2>$null | Out-String).Trim()
+  if ($probe -eq 'TRUSTWARN') {
+    $fix = "$script:PyExe"; if ($script:PyPre) { $fix = "$script:PyExe $script:PyPre" }
+    Warn "python uses OpenSSL 3.x without 'truststore' - TLS verification may fail against some servers (e.g. Tableau Cloud) where curl/Ruby succeed" `
+         "Fix: '$fix -m pip install truststore' (uses the OS trust store). Do NOT disable TLS verification."
   }
 }
 
