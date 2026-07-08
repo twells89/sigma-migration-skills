@@ -122,7 +122,10 @@ function Write-DoctorJson([string]$dest) {
   try {
     $dir = Split-Path -Parent $dest
     if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    Set-Content -Path $dest -Value $json -Encoding UTF8 -NoNewline
+    # UTF-8 WITHOUT BOM. Windows PowerShell 5.1's `Set-Content -Encoding UTF8`
+    # prepends a BOM, which makes Ruby's JSON.parse (the gate reader) fail with
+    # "unexpected token". Write via .NET so it's BOM-less on both 5.1 and 7.
+    [System.IO.File]::WriteAllText($dest, $json, (New-Object System.Text.UTF8Encoding($false)))
   } catch { }
 }
 Write-DoctorJson (Join-Path $env:USERPROFILE ".sigma-migration\doctor.json")

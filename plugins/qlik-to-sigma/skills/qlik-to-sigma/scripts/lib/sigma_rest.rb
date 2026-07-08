@@ -52,7 +52,7 @@ if ENV['SIGMA_API_TOKEN'].nil?
   _auth_path = _auth_candidates.find { |p| File.exist?(p) }
   if _auth_path
     begin
-      _auth = JSON.parse(File.read(_auth_path))
+      _auth = JSON.parse(File.read(_auth_path, encoding: 'bom|utf-8'))
       ENV['SIGMA_API_TOKEN'] ||= _auth['SIGMA_API_TOKEN'] if _auth['SIGMA_API_TOKEN']
       ENV['SIGMA_BASE_URL']  ||= _auth['SIGMA_BASE_URL']  if _auth['SIGMA_BASE_URL']
     rescue JSON::ParserError

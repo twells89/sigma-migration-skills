@@ -59,7 +59,9 @@ unless path
 end
 
 begin
-  d = JSON.parse(File.read(path))
+  # 'bom|utf-8' strips a UTF-8 BOM if present — Windows PowerShell writes one and
+  # JSON.parse otherwise fails with "unexpected token".
+  d = JSON.parse(File.read(path, encoding: 'bom|utf-8'))
 rescue JSON::ParserError => e
   warn "[FAIL] environment gate — doctor.json at #{path} is unreadable: #{e.message}"
   remediate

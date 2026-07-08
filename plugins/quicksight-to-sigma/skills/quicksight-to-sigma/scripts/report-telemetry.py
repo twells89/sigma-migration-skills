@@ -109,7 +109,8 @@ def _load_doctor(workdir):
     candidates.append(os.path.expanduser('~/.sigma-migration/doctor.json'))
     for p in candidates:
         try:
-            with open(p, encoding='utf-8') as fh:
+            # utf-8-sig strips a UTF-8 BOM if present (Windows PowerShell writes one).
+            with open(p, encoding='utf-8-sig') as fh:
                 return json.load(fh)
         except (OSError, ValueError):
             continue
