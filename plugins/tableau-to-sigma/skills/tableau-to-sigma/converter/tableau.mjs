@@ -3976,9 +3976,93 @@ function tryBuildBlendModel(parsed, datasources, dbOverride, schOverride, connId
     }
   };
 }
+function buildMultiDatasourceModel(xmlContent, options, datasources) {
+  const dataElements = [];
+  const controls = [];
+  const controlNames = /* @__PURE__ */ new Set();
+  const workbookPatterns = [];
+  const patternKeys = /* @__PURE__ */ new Set();
+  const security = [];
+  const parameters = [];
+  const paramNames = /* @__PURE__ */ new Set();
+  const warnings = [];
+  const usedElementNames = /* @__PURE__ */ new Set();
+  const perDs = [];
+  datasources.forEach((dsMeta, i) => {
+    const sub = convertTableauToSigma(xmlContent, { ...options, datasourceIndex: i, __multiDsChild: true });
+    const els = sub.model?.pages?.[0]?.elements || [];
+    let kept = 0;
+    for (const el of els) {
+      if (el.kind === "control") {
+        const key = String(el.name ?? el.id);
+        if (!controlNames.has(key)) {
+          controlNames.add(key);
+          controls.push(el);
+        }
+        continue;
+      }
+      if (el.name && usedElementNames.has(el.name)) {
+        const suffix = (dsMeta.caption || dsMeta.name || `DS${i + 1}`).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `DS${i + 1}`;
+        const newName = `${el.name}_${suffix}`;
+        const oldRef = `[${el.name}/`, newRef = `[${newName}/`;
+        const rw = (s) => typeof s === "string" ? s.split(oldRef).join(newRef) : s;
+        for (const c of el.columns || [])
+          if (c.formula)
+            c.formula = rw(c.formula);
+        for (const m of el.metrics || [])
+          if (m.formula)
+            m.formula = rw(m.formula);
+        el.name = newName;
+      }
+      if (el.name)
+        usedElementNames.add(el.name);
+      dataElements.push(el);
+      kept++;
+    }
+    for (const p of sub.workbookPatterns || []) {
+      const k = `${p.kind}::${p.name}`;
+      if (!patternKeys.has(k)) {
+        patternKeys.add(k);
+        workbookPatterns.push(p);
+      }
+    }
+    for (const s of sub.security || [])
+      security.push(s);
+    for (const p of sub.parameters || []) {
+      const k = String(p.name ?? p.id);
+      if (!paramNames.has(k)) {
+        paramNames.add(k);
+        parameters.push(p);
+      }
+    }
+    perDs.push(`${dsMeta.caption || dsMeta.name} (${kept} element${kept === 1 ? "" : "s"})`);
+  });
+  warnings.unshift(`\u2139 Multi-datasource workbook: built a MULTI-ELEMENT data model \u2014 one element set per independent datasource, so no source's columns are dropped. Datasources: ${perDs.join("; ")}. No cross-datasource relationships were inferred; add joins in Sigma if the sources share keys. Charts resolve against their own datasource's element.`);
+  const sigmaModel = {
+    name: datasources[0]?.name || "Workbook",
+    schemaVersion: 1,
+    pages: [{ id: sigmaShortId(), name: "Page 1", elements: [...controls, ...dataElements] }]
+  };
+  const totalCols = dataElements.reduce((s, e) => s + (e.columns?.length || 0), 0);
+  return {
+    model: sigmaModel,
+    warnings,
+    ...security.length ? { security } : {},
+    ...workbookPatterns.length ? { workbookPatterns } : {},
+    ...parameters.length ? { parameters } : {},
+    stats: {
+      datasources: datasources.length,
+      elements: dataElements.length,
+      columns: totalCols,
+      metrics: 0,
+      relationships: 0
+    }
+  };
+}
 function convertTableauToSigma(xmlContent, options = {}) {
   resetIds();
   const { connectionId = "", database = "", schema = "", datasourceIndex = 0, tableMapping = {} } = options;
+  void options.__multiDsChild;
   _tableMapping = tableMapping || {};
   const dbOverride = database || "";
   const schOverride = schema || "";
@@ -4049,6 +4133,9 @@ function convertTableauToSigma(xmlContent, options = {}) {
     } catch {
     }
     return blendResult;
+  }
+  if (!options.__multiDsChild && datasources.length > 1) {
+    return buildMultiDatasourceModel(xmlContent, options, datasources);
   }
   const dsIdx = Math.min(datasourceIndex, datasources.length - 1);
   const ds = datasources[dsIdx];
