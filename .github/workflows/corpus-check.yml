@@ -188,6 +188,7 @@ jobs:
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-zone-census.rb
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-layout-fill-gate.rb
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-layout-dedup.rb
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-multi-datasource-gap.rb
             plugins/tableau-to-sigma/skills/tableau-assessment/scripts/test-predicted-parity.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-dax-restructure.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-telemetry-gate.rb

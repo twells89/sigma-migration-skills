@@ -289,6 +289,47 @@ def detect_blends(xml)
   [features, { 'datasources' => ds_info.values, 'blends' => blends }]
 end
 
+# Detect the "N independent datasources feeding different worksheets" case —
+# DISTINCT from a Tableau blend (2 sources on ONE sheet, handled by
+# detect_blends). Here different sheets have different PRIMARY datasources. The
+# LOCAL converter (converter/tableau.mjs) collapses every worksheet onto the
+# primary datasource and silently drops the other sources' columns/calcs; the
+# workbook POST then fails with unresolved [Master/...] refs (see
+# MSP-Dashboard failure 2026-07-08). Emit an ❌-unhandled gap so migrate-tableau
+# HARD-STOPS at the gap gate with the table/sheet breakdown, instead of posting
+# a doomed DM. Fixed for real by the multi-element DM path (Tier 2).
+def detect_multi_datasource(xml)
+  return [nil, nil] if xml.nil?
+  ds_info = datasource_connections(xml)
+  return [nil, nil] if ds_info.size < 2
+  primaries = {} # ds_name -> [worksheets where it is the PRIMARY source]
+  xml.elements.each('//worksheet') do |ws|
+    ws_name = ws.attributes['name']
+    used = ws.elements.to_a('.//view/datasources/datasource')
+             .map { |d| d.attributes['name'] }.compact.select { |n| ds_info.key?(n) }
+    next if used.empty?
+    (primaries[used.first] ||= []) << ws_name
+  end
+  return [nil, nil] if primaries.size < 2 # single-primary workbook (incl. pure blends) — fine
+
+  detail = primaries.keys.map do |n|
+    { 'datasource'  => n,
+      'caption'     => ds_info[n]['caption'],
+      'connections' => ds_info[n]['connections'],
+      'worksheets'  => primaries[n].uniq.sort }
+  end
+  assigns = detail.map { |d| "#{d['caption']} → #{d['worksheets'].length} sheet(s)" }.join('; ')
+  blurb = "Workbook spans #{primaries.size} INDEPENDENT datasources across worksheets " \
+          "(#{assigns}). The local converter collapses all sheets onto the primary datasource " \
+          'and silently drops the other sources\' columns/calcs, so the workbook POST fails with ' \
+          'unresolved [Master/...] refs. This needs a MULTI-ELEMENT data model (one element per ' \
+          'datasource + relationships) or landing the extras and repointing — it is NOT a Tableau ' \
+          'blend. Per-datasource worksheet assignments are in the gaps JSON (multi_datasource).'
+  feat = { name: 'Multiple independent datasources (converter collapses to primary)',
+           status: :unhandled, count: primaries.size, blurb: blurb }
+  [feat, detail]
+end
+
 # --- Field-usage + calc-dependency analysis --------------------------------
 # Works purely from the .twb — no VDS/metadata graph needed. Produces field
 # statistics (source/calc/param split, used vs dead), calc classification
@@ -509,6 +550,8 @@ def main
   results.concat(detect_point_map_geo_role_gaps(content))
   blend_features, blend_plan = detect_blends(xml)
   results.concat(blend_features)
+  multi_ds_feature, multi_ds_detail = detect_multi_datasource(xml)
+  results << multi_ds_feature if multi_ds_feature
   md_path = out
   json_path = out.sub(/\.md$/, '.json')
 
@@ -533,6 +576,7 @@ def main
     'detected_features' => results.map { |r| r.transform_keys(&:to_s) }
   }
   json_payload['field_statistics'] = fields.reject { |k, _| k == 'components' } if fields
+  json_payload['multi_datasource'] = multi_ds_detail if multi_ds_detail
   File.write(json_path, JSON.pretty_generate(json_payload))
 
   if fields && !fields['components'].empty?
