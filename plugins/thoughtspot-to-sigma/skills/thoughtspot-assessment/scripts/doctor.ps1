@@ -46,15 +46,35 @@ function Test-RealPython($exe, $pre) {
     return "$ver  ($where)"
   } catch { return $null }
 }
+$script:PyExe = $null; $script:PyPre = $null
 $py = Test-RealPython 'py' '-3'
-if ($py) { Ok "python - $py  [launcher: py -3]" }
+if ($py) { Ok "python - $py  [launcher: py -3]"; $script:PyExe = 'py'; $script:PyPre = '-3' }
 else {
   $py = Test-RealPython 'python' $null
-  if (-not $py) { $py = Test-RealPython 'python3' $null }
+  if ($py) { $script:PyExe = 'python' }
+  if (-not $py) { $py = Test-RealPython 'python3' $null; if ($py) { $script:PyExe = 'python3' } }
   if ($py) { Ok "python - $py" }
   else {
     Bad "no real Python (the 'python'/'python3' on PATH is likely the Microsoft Store alias stub)" `
         "Install Python from python.org (tick 'Add Python to PATH'), then use 'py -3'. OR disable the stub: Settings > Apps > Advanced app settings > App execution aliases > turn OFF python.exe / python3.exe. Re-run."
+  }
+}
+
+# --- python TLS trust (P1.4) -----------------------------------------------
+# Python's OpenSSL 3.x is stricter than curl/Ruby and rejects some valid server
+# chains under the default CA bundle (CERTIFICATE_VERIFY_FAILED where curl/Ruby
+# succeed). `truststore` (OS trust store) fixes it. WARN only when OpenSSL is
+# 3.x AND truststore is absent.
+if ($script:PyExe) {
+  $pyArgs = @(); if ($script:PyPre) { $pyArgs += $script:PyPre }
+  & $script:PyExe @pyArgs -c 'import ssl,sys; sys.exit(0 if ssl.OPENSSL_VERSION.startswith("OpenSSL 3") else 1)' 2>$null
+  if ($LASTEXITCODE -eq 0) {
+    & $script:PyExe @pyArgs -c 'import truststore' 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      $fix = "$script:PyExe"; if ($script:PyPre) { $fix = "$script:PyExe $script:PyPre" }
+      Warn "python uses OpenSSL 3.x without 'truststore' - TLS verification may fail against some servers (e.g. Tableau Cloud) where curl/Ruby succeed" `
+           "Fix: '$fix -m pip install truststore' (uses the OS trust store). Do NOT disable TLS verification."
+    }
   }
 }
 

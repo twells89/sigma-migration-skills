@@ -63,8 +63,9 @@ py_real() {
   case "$ver" in Python\ [0-9]*) : ;; *) return 1 ;; esac
   local where; where="$("$exe" "$@" -c 'import sys;print(sys.executable)' 2>/dev/null)" || return 1
   case "$(printf '%s' "$where" | tr 'A-Z' 'a-z')" in *windowsapps*) return 1 ;; esac
-  PY_DESC="$ver  ($where)"; PY_VER="$ver"; return 0
+  PY_DESC="$ver  ($where)"; PY_VER="$ver"; PY_ARGV="$exe${*:+ $*}"; return 0
 }
+PY_ARGV=""
 if   py_real py -3 ; then ok "python — $PY_DESC  [launcher: py -3]"
 elif py_real python3; then ok "python — $PY_DESC  [python3]"
 elif py_real python ; then ok "python — $PY_DESC  [python]"
@@ -74,6 +75,20 @@ else
         "Install Python from python.org (tick 'Add to PATH'), then use 'py -3', OR disable the stub: Settings → Apps → Advanced app settings → App execution aliases → turn OFF python.exe/python3.exe. Re-run."
   else
     bad "python3 not found" "macOS: 'brew install python'  •  Linux: 'apt-get install python3'."
+  fi
+fi
+
+# --- python TLS trust (P1.4) -----------------------------------------------
+# Python's OpenSSL 3.x is stricter than curl/Ruby and rejects some valid server
+# chains (e.g. Tableau Cloud's intermediate — "Basic Constraints not marked
+# critical") under the default CA bundle, so the Python REST path can fail
+# CERTIFICATE_VERIFY_FAILED where the Ruby path succeeds. `truststore` (uses the
+# OS trust store) fixes it. WARN only when OpenSSL is 3.x AND truststore is
+# absent — the exact combination that bites.
+if [ -n "$PY_ARGV" ] && $PY_ARGV -c 'import ssl,sys; sys.exit(0 if ssl.OPENSSL_VERSION.startswith("OpenSSL 3") else 1)' 2>/dev/null; then
+  if ! $PY_ARGV -c 'import truststore' 2>/dev/null; then
+    warn "python uses OpenSSL 3.x without 'truststore' — TLS verification may fail against some servers (e.g. Tableau Cloud) where curl/Ruby succeed" \
+         "Fix: '$PY_ARGV -m pip install truststore' (uses the OS trust store). Do NOT disable TLS verification."
   fi
 fi
 
