@@ -53,7 +53,7 @@ STUB
 
 mmap = {} # unused by the stub, but the signatures expect it
 
-# ---- 1. The prospect's conditional MAX-of-date LOD --------------------------
+# ---- 1. Conditional MAX-of-date LOD (last-sold date) ------------------------
 puts 'Part 1 — conditional MAX-of-date FIXED LOD (last-sold date)'
 f1 = '{ FIXED [Retailer Store ID], [Product Name] : MAX(IF [Sales Units] > 0 THEN [Date] END) }'
 lod = mod.parse_fixed_lod(f1, {})
