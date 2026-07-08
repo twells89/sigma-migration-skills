@@ -121,6 +121,7 @@ def report_migration(
     environment: str = None,
     client_agent: str = None,
     run_id: str = None,
+    doctor: dict = None,
     endpoint: str = TELEMETRY_ENDPOINT,
     timeout: int = 5,
 ) -> bool:
@@ -166,6 +167,19 @@ def report_migration(
         "client_agent":     client_agent or _client_agent(),
         "run_id":           run_id or uuid.uuid4().hex,
     }
+
+    # Environment fingerprint from doctor.json (P0.3) — lets an event's failures
+    # be grouped by environment CLASS (os/shell/sandbox/which-runtimes-present)
+    # instead of anecdotes. Coarse only: no host names, no file paths, no PII.
+    if doctor:
+        rt = doctor.get("runtimes") or {}
+        payload["doctor"] = {
+            "os":           doctor.get("os"),
+            "shell":        doctor.get("shell"),
+            "sandbox_hint": doctor.get("sandbox_hint"),
+            "pass":         doctor.get("pass"),
+            "runtimes":     sorted(k for k, v in rt.items() if v),
+        }
 
     print("\nReporting anonymous migration telemetry (no customer data sent):")
     for k, v in payload.items():

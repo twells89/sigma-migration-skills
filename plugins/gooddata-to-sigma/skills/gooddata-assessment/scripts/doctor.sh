@@ -18,9 +18,21 @@
 #   - bash   : get-token.sh / *-auth.sh (Sigma token minting)
 set -u
 
+# --workdir DIR: also drop doctor.json here (in addition to the stable
+# ~/.sigma-migration/doctor.json). Everything else is positional-agnostic.
+WORKDIR=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --workdir) WORKDIR="${2:-}"; shift 2 ;;
+    --workdir=*) WORKDIR="${1#*=}"; shift ;;
+    *) shift ;;
+  esac
+done
+
 PASS=0; FAIL=0; WARN=0
+FAILURES=()
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; PASS=$((PASS+1)); }
-bad()  { printf '  \033[31m✗\033[0m %s\n     ↳ %s\n' "$1" "$2"; FAIL=$((FAIL+1)); }
+bad()  { printf '  \033[31m✗\033[0m %s\n     ↳ %s\n' "$1" "$2"; FAIL=$((FAIL+1)); FAILURES+=("$1"); }
 warn() { printf '  \033[33m!\033[0m %s\n     ↳ %s\n' "$1" "$2"; WARN=$((WARN+1)); }
 
 case "$(uname -s 2>/dev/null)" in
@@ -51,7 +63,7 @@ py_real() {
   case "$ver" in Python\ [0-9]*) : ;; *) return 1 ;; esac
   local where; where="$("$exe" "$@" -c 'import sys;print(sys.executable)' 2>/dev/null)" || return 1
   case "$(printf '%s' "$where" | tr 'A-Z' 'a-z')" in *windowsapps*) return 1 ;; esac
-  PY_DESC="$ver  ($where)"; return 0
+  PY_DESC="$ver  ($where)"; PY_VER="$ver"; return 0
 }
 if   py_real py -3 ; then ok "python — $PY_DESC  [launcher: py -3]"
 elif py_real python3; then ok "python — $PY_DESC  [python3]"
@@ -104,6 +116,50 @@ if [ -f "$HOME/.sigma-migration/env" ] || [ -n "${SIGMA_API_TOKEN:-}" ] || [ -n 
 else
   warn "no Sigma credentials found" "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET."
 fi
+
+# --- machine-readable fingerprint (doctor.json) ----------------------------
+# Written so (a) the run-state / preflight GATE can refuse to proceed on a
+# broken environment instead of letting the agent improvise, and (b) telemetry
+# can group next event's failures by environment class. Human output above is
+# unchanged. Always to ~/.sigma-migration/doctor.json; also to <WORKDIR> if given.
+jstr() { local s="${1:-}"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; printf '%s' "$s"; }
+
+RUBY_OK=false; RUBY_V=""
+if command -v ruby >/dev/null 2>&1; then RUBY_OK=true; RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"; fi
+NODE_OK=false; NODE_V=""
+if command -v node >/dev/null 2>&1; then NODE_OK=true; NODE_V="$(node --version 2>/dev/null || true)"; fi
+PY_OK=false; PY_VER="${PY_VER:-}"
+if py_real py -3 || py_real python3 || py_real python; then PY_OK=true; fi
+
+case "$OS" in windows-bash) SHELL_KIND="git-bash" ;; *) SHELL_KIND="bash" ;; esac
+SANDBOX_HINT="none"
+[ -f /.dockerenv ] && SANDBOX_HINT="container"
+[ -n "${CLAUDE_CODE_REMOTE:-}${COWORK:-}${CODESPACES:-}" ] && SANDBOX_HINT="remote-sandbox"
+[ "$FAIL" -eq 0 ] && PASS_BOOL=true || PASS_BOOL=false
+
+fj=""
+for f in "${FAILURES[@]:-}"; do
+  [ -z "$f" ] && continue
+  fj="${fj:+$fj,}\"$(jstr "$f")\""
+done
+
+write_doctor_json() {
+  local dest="$1"
+  mkdir -p "$(dirname "$dest")" 2>/dev/null || return 0
+  {
+    printf '{'
+    printf '"os":"%s",' "$(jstr "$OS")"
+    printf '"shell":"%s",' "$(jstr "$SHELL_KIND")"
+    printf '"runtimes":{"ruby":%s,"python":%s,"node":%s,"bash":true},' "$RUBY_OK" "$PY_OK" "$NODE_OK"
+    printf '"versions":{"ruby":"%s","python":"%s","node":"%s"},' "$(jstr "$RUBY_V")" "$(jstr "$PY_VER")" "$(jstr "$NODE_V")"
+    printf '"sandbox_hint":"%s",' "$(jstr "$SANDBOX_HINT")"
+    printf '"pass":%s,' "$PASS_BOOL"
+    printf '"failures":[%s]' "$fj"
+    printf '}\n'
+  } > "$dest" 2>/dev/null || true
+}
+write_doctor_json "$HOME/.sigma-migration/doctor.json"
+[ -n "$WORKDIR" ] && write_doctor_json "$WORKDIR/doctor.json"
 
 echo
 echo "Summary: $PASS ok, $WARN warning(s), $FAIL missing/blocking."

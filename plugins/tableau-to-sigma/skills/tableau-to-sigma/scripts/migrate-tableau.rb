@@ -85,6 +85,7 @@ require 'set'
 require_relative 'lib/scout_gate'
 require_relative 'lib/dashboard_read'
 require_relative 'lib/run_state'
+require_relative 'lib/sigma_rest' # in-process Sigma token minting (no bash/eval)
 require_relative 'hydrate-custom-sql'
 
 $stdout.sync = true # progress lines interleave correctly when piped/captured
@@ -141,6 +142,7 @@ OptionParser.new do |o|
   o.on('--reuse-dm [ID]')    { |v| opts[:reuse_dm] = v || :recommended }
   o.on('--skip-reuse-scan')  {     opts[:skip_reuse] = true }
   o.on('--skip-dashboard-read REASON', 'waive the Phase 1d source dashboard-read gate — REQUIRED reason; name it in your report') { |v| opts[:skip_dashboard_read] = v }
+  o.on('--skip-doctor-gate REASON', 'waive the Step-0 environment gate (doctor.json) — REQUIRED reason; name it in your report') { |v| opts[:skip_doctor_gate] = v }
   o.on('--row-scale F', Float) { |v| opts[:row_scale] = v }
   o.on('--master-col PAIR', "'Name=<Sigma formula>' — extra master column (repeatable). The resume path " \
                             'for the exit-4 handoff when a chart dim is a master-level calc the mechanical ' \
@@ -215,6 +217,19 @@ slug = (opts[:wb_name] || opts[:wb_id]).gsub(/[^A-Za-z0-9_-]/, '-').squeeze('-')
 WORK = opts[:out] || File.expand_path("~/tableau-migration/#{slug}")
 FileUtils.mkdir_p(File.join(WORK, 'views'))
 
+# 🚧 Step-0 environment GATE. The doctor writes a doctor.json fingerprint; this
+# refuses to run on an env that never passed the doctor, instead of letting the
+# pipeline improvise around a missing runtime (the #1 source of cross-user
+# inconsistency at multi-user events). Waive with --skip-doctor-gate "<reason>"
+# or SIGMA_SKIP_DOCTOR_GATE=<reason>. Runs before every path (pass-1 + finalize).
+_dg_skip = opts[:skip_doctor_gate] || ENV['SIGMA_SKIP_DOCTOR_GATE']
+_dg_cmd = ['ruby', File.join(HERE, 'assert-doctor-ran.rb'), '--workdir', WORK]
+_dg_cmd += ['--skip-doctor-gate', _dg_skip] if _dg_skip && !_dg_skip.to_s.empty?
+unless system(*_dg_cmd)
+  abort 'FATAL: environment gate failed — run the doctor first (see remediation above), ' \
+        'or re-run with --skip-doctor-gate "<reason>".'
+end
+
 TOTAL = 6
 def hdr(n, title)
   puts; puts "── Phase #{n}/#{TOTAL} · #{title} ──"
@@ -245,17 +260,27 @@ end
 # Run a child command, indenting its output. token_env: prepend a fresh
 # Sigma/Tableau token via the skill's get-token scripts so long runs survive
 # the ~1h token TTL.
-def run!(cmd, allow_fail: false)
-  out, st = Open3.capture2e(*cmd)
+def run!(cmd, allow_fail: false, env: nil)
+  out, st = env ? Open3.capture2e(env, *cmd) : Open3.capture2e(*cmd)
   out.each_line { |l| puts "   #{l.rstrip}" } unless out.strip.empty?
   abort "FATAL: command failed (#{st.exitstatus}): #{cmd.join(' ')}" unless st.success? || allow_fail
   [out, st]
 end
 
-# Wrap a command so a Sigma token is live for it (eval get-token.sh first).
+# Mint a fresh Sigma bearer token IN-PROCESS (pure Ruby net/http via the Sigma
+# lib) — no bash, no `eval "$(get-token.sh)"`, so this works identically under
+# PowerShell / cmd / a Cowork sandbox. Refreshed per call to match the old
+# per-call get-token.sh behaviour, so a long run never carries a stale token.
+def sigma_token!
+  Sigma.refresh_token!
+rescue StandardError => e
+  abort "FATAL: could not mint a Sigma token: #{e.message}\n" \
+        '  Check SIGMA_BASE_URL / SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (run: ruby scripts/setup.rb).'
+end
+
+# Wrap a command so a Sigma token is live for it (injected via child env).
 def sigma_run!(cmd, allow_fail: false)
-  joined = cmd.map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')
-  run!(['bash', '-c', "eval \"$(#{File.join(HERE, 'get-token.sh')})\" && #{joined}"], allow_fail: allow_fail)
+  run!(cmd, allow_fail: allow_fail, env: { 'SIGMA_API_TOKEN' => sigma_token! })
 end
 
 # Raised when the MECHANICAL WORKBOOK layer (build / validate / POST) fails after
@@ -272,8 +297,8 @@ end
 
 # Like run!, but on failure raises WorkbookBuildError (catchable) instead of
 # abort()ing the process. Captures the child output for field-name mining.
-def run_wb!(cmd)
-  out, st = Open3.capture2e(*cmd)
+def run_wb!(cmd, env: nil)
+  out, st = env ? Open3.capture2e(env, *cmd) : Open3.capture2e(*cmd)
   out.each_line { |l| puts "   #{l.rstrip}" } unless out.strip.empty?
   raise WorkbookBuildError.new("command failed (#{st.exitstatus}): #{cmd.join(' ')}", out) unless st.success?
   out
@@ -281,8 +306,7 @@ end
 
 # sigma_run! variant that raises WorkbookBuildError instead of aborting.
 def sigma_run_wb!(cmd)
-  joined = cmd.map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')
-  run_wb!(['bash', '-c', "eval \"$(#{File.join(HERE, 'get-token.sh')})\" && #{joined}"])
+  run_wb!(cmd, env: { 'SIGMA_API_TOKEN' => sigma_token! })
 end
 
 # Pull likely-offending field/column names out of a failed workbook build/POST log.

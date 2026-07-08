@@ -39,6 +39,28 @@ if ENV['SIGMA_CLIENT_ID'].nil? && File.exist?(_neutral_env)
   end
 end
 
+# File-based token handoff (shell-neutral, kills the `eval "$(get-token.sh)"`
+# bash idiom that PowerShell/cmd cannot run). scripts/get_token.py writes
+# <WORK>/auth.json = {"SIGMA_API_TOKEN": ..., "SIGMA_BASE_URL": ...}. Read it
+# here so any shell/agent can mint once (python) and every downstream Ruby
+# script picks the token up. Precedence: explicit env ALWAYS wins → auth.json →
+# (later) client-credential self-mint via refresh_token!. auth.json is
+# .gitignored and holds a live bearer token — never print it.
+if ENV['SIGMA_API_TOKEN'].nil?
+  _auth_candidates = [ENV['SIGMA_WORKDIR'], Dir.pwd].compact
+                        .map { |d| File.join(d, 'auth.json') }
+  _auth_path = _auth_candidates.find { |p| File.exist?(p) }
+  if _auth_path
+    begin
+      _auth = JSON.parse(File.read(_auth_path))
+      ENV['SIGMA_API_TOKEN'] ||= _auth['SIGMA_API_TOKEN'] if _auth['SIGMA_API_TOKEN']
+      ENV['SIGMA_BASE_URL']  ||= _auth['SIGMA_BASE_URL']  if _auth['SIGMA_BASE_URL']
+    rescue JSON::ParserError
+      # A corrupt auth.json must not wedge the run — fall through to self-mint.
+    end
+  end
+end
+
 module Sigma
   class Error < StandardError; end
   class AuthError < Error; end

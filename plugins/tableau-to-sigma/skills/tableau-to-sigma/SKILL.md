@@ -52,16 +52,47 @@ that mirrors the Tableau dashboard layout as closely as possible.
 
 ---
 
-## Step 0 — Front door: resolve the connection once (`scripts/intake.rb`)
+## Step 0 — Environment doctor (MANDATORY — the orchestrator gates on it)
+
+Run the environment doctor FIRST. It reports missing runtimes with per-OS fixes
+**and** writes a machine-readable `doctor.json` fingerprint (to
+`~/.sigma-migration/doctor.json`, and to `<WORK>/doctor.json` when `--workdir` is
+given). `migrate-tableau.rb` refuses to start until a **passing** `doctor.json`
+exists — so a broken environment stops here with an explicit fix instead of the
+run improvising around a missing runtime (the #1 cause of cross-user drift).
+
+macOS / Linux / Git-Bash:
+```bash
+bash scripts/doctor.sh --workdir <WORK>
+```
+
+Windows PowerShell:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1 -WorkDir <WORK>
+```
+
+If the doctor cannot pass in your environment (e.g. a Cowork sandbox missing a
+runtime) and you must proceed anyway, waive the gate explicitly and name it in
+your report: `migrate-tableau.rb … --skip-doctor-gate "<reason>"`.
+
+## Step 0.1 — Front door: resolve the connection once (`scripts/intake.rb`)
 
 Before the run, resolve the Sigma warehouse connection a SINGLE time so no phase
 free-searches `/v2/connections` (the token sink):
 
 ```bash
-eval "$(scripts/get-token.sh)"
 ruby scripts/intake.rb --workdir <WORK> --tool tableau-to-sigma --mode live \
   [--connection <id>] [--name <connection-name-substring>] [--source "<workbook name>"]
 ```
+
+> **Credentials are shell-neutral now.** The Ruby/Python scripts mint Sigma
+> tokens themselves from `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` (env or
+> `~/.sigma-migration/env`) and auto-refresh on expiry — no `eval` step needed,
+> in any shell. If you hand-drive a raw `curl` and want an explicit token, mint
+> one the same way in every shell (bash, PowerShell, cmd):
+> `python scripts/get_token.py --workdir <WORK>` writes `<WORK>/auth.json`
+> (mode 0600), which the scripts read automatically. (`eval "$(scripts/get-token.sh)"`
+> still works in bash for muscle memory.)
 
 It caches `<WORK>/connection.json` (the orchestrator reads it when `--connection` is
 omitted — just point `--out` at the same `<WORK>`) and writes `intake.json` (run-start +
@@ -72,8 +103,8 @@ multiple connections it lists them and asks you to pick — it never guesses.
 ## One command (orchestrated path)
 
 ```bash
-eval "$(scripts/get-token.sh)"
 # PASS 1 — discover → gap gate → DM-reuse scan → DM → workbook → layout → parity plan
+# (mints its Sigma token in-process — no `eval`/bash token step, works in any shell)
 ruby scripts/migrate-tableau.rb \
   --workbook "<name>" --connection <SIGMA_CONNECTION_ID> --folder <SIGMA_FOLDER_ID> \
   [--db CSA --schema TJ] [--name '<prefix>'] [--row-scale 1.5] \
@@ -202,7 +233,10 @@ which calc translation, which layout) — not orchestration.
 |---|---|
 | `scripts/migrate-tableau.rb` | **The one command** — chains the whole scripted spine (gap gate → DM-reuse scan → DM → workbook → layout → two-pass parity → cleanup + census gate) and stops with exact instructions where agent judgment is required. See "One command" above. |
 | `scripts/setup.rb` | One-time Sigma credential setup |
-| `scripts/get-token.sh` | Exchange `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` for `SIGMA_API_TOKEN` (~1h TTL) |
+| `scripts/get-token.sh` | Exchange `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` for `SIGMA_API_TOKEN` (~1h TTL) — **bash only** |
+| `scripts/get_token.py` | Shell-neutral twin of `get-token.sh` (bash/PowerShell/cmd): writes `<WORK>/auth.json` (0600), read automatically by the scripts |
+| `scripts/doctor.sh` / `scripts/doctor.ps1` | Step-0 env check; writes `doctor.json` fingerprint the orchestrator gates on |
+| `scripts/assert-doctor-ran.rb` | 🚧 GATE — refuse to run without a passing `doctor.json` |
 | `scripts/setup-tableau.rb` | One-time Tableau PAT setup (only needed for PAT mode — see `refs/tableau-rest.md`) |
 | `scripts/get-tableau-token.sh` | One-shot signin → exports `TABLEAU_AUTH_TOKEN` + `TABLEAU_SITE_ID` |
 | `scripts/tableau-discover.rb` | PAT-mode Phase 1 discovery in one CLI: workbook + views + VDS metadata + GraphQL + .twb content. ONE unified fetch pool (default 5, `--pool N`, longest-job-first) with 429/timeout backoff + 401 re-mint; always writes per-task `timings.json`. Measured 61.8s → 13.7–18.9s on the 7-view reference workbook |
@@ -275,16 +309,22 @@ Required env vars:
 - `SIGMA_CLIENT_ID`
 - `SIGMA_CLIENT_SECRET`
 
-Fetch a token at the start of each phase that needs one:
+Fetch a token at the start of each phase that needs one. **Shell-neutral (works
+in bash, PowerShell, cmd):**
 
-```bash
-eval "$(scripts/get-token.sh)"
+```
+python scripts/get_token.py --workdir <WORK>
 ```
 
-> Tokens live ~1 hour. Re-run when a curl returns 401. Never use
-> `TOKEN=$(eval "$(scripts/get-token.sh)")` — `$()` creates a subshell where
-> the exported var dies immediately. Keep eval + curl in the same `bash -c '...'`
-> invocation.
+This writes `<WORK>/auth.json` (mode 0600); every Ruby/Python script reads it
+automatically (explicit `SIGMA_API_TOKEN` in the env still wins). Tokens live
+~1 hour — re-run when a call returns 401.
+
+> **bash-only alternative:** `eval "$(scripts/get-token.sh)"` still works in
+> bash. But never use `TOKEN=$(eval "$(scripts/get-token.sh)")` — `$()` creates a
+> subshell where the exported var dies immediately; keep eval + curl in the same
+> `bash -c '...'`. PowerShell/cmd cannot run this idiom at all — use
+> `get_token.py` there.
 
 > **Inline Python inside bash — DON'T.** Triple-nested escapes (`f"...{e.get(\\\"name\\\")}..."` inside `python3 -c "..."` inside `bash -c '...'`) silently break. Instead **always write a `.py` file with `Write` and call it via `python3 file.py`.** Same rule for any inline script over ~5 lines: write it to disk, then exec. It's not slower, it's deterministic, and the file becomes a reusable artifact. (Same applies to Ruby — prefer `ruby file.rb` over `ruby -e '...'`.)
 
@@ -479,7 +519,7 @@ Row/column security is **never silently dropped and never silently ported** — 
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + username-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   eval "$(scripts/get-token.sh)"
+   python scripts/get_token.py --workdir <WORK>   # shell-neutral; writes <WORK>/auth.json (read automatically)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
    ```

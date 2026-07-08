@@ -3,6 +3,11 @@ __pycache__/
 .DS_Store
 node_modules/
 
+# Live-credential handoff artifacts written into a run's workdir by
+# get_token.py / doctor — never commit (auth.json holds a live bearer token).
+auth.json
+doctor.json
+
 # Generated at vendor/release time by tools/stamp-version.rb (do not commit)
 shared/lib/VERSION
 plugins/*/skills/*/scripts/lib/VERSION

@@ -10,10 +10,15 @@
 #
 # REQUIRED: ruby (*-to-sigma orchestrators), python (looker/thoughtspot/mstr/
 # sisense + discovery), node (vendored converters/*.mjs), bash (get-token.sh).
+#
+#   -WorkDir <dir>  also drop doctor.json there (always also written to
+#                   ~/.sigma-migration/doctor.json).
+param([string]$WorkDir = "")
 
 $script:Pass = 0; $script:Fail = 0; $script:Warn = 0
+$script:Failures = @()
 function Ok([string]$m)        { Write-Host "  [OK] $m" -ForegroundColor Green;  $script:Pass++ }
-function Bad([string]$m,$fix)  { Write-Host "  [X]  $m" -ForegroundColor Red;    Write-Host "       -> $fix" -ForegroundColor DarkGray; $script:Fail++ }
+function Bad([string]$m,$fix)  { Write-Host "  [X]  $m" -ForegroundColor Red;    Write-Host "       -> $fix" -ForegroundColor DarkGray; $script:Fail++; $script:Failures += $m }
 function Warn([string]$m,$fix) { Write-Host "  [!]  $m" -ForegroundColor Yellow; Write-Host "       -> $fix" -ForegroundColor DarkGray; $script:Warn++ }
 
 Write-Host "Environment doctor - host: windows (PowerShell)`n"
@@ -84,6 +89,44 @@ if ((Test-Path $envFile) -or $env:SIGMA_API_TOKEN -or $env:SIGMA_CLIENT_ID) {
 } else {
   Warn "no Sigma credentials found" "Run 'ruby scripts/setup.rb' once, or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET."
 }
+
+# --- machine-readable fingerprint (doctor.json) ----------------------------
+# Same contract as doctor.sh: lets the preflight GATE refuse to proceed on a
+# broken environment, and lets telemetry group failures by environment class.
+# Human output above is unchanged. Always ~/.sigma-migration/doctor.json; also
+# -WorkDir if given.
+$rubyOk = [bool](Get-Command ruby -ErrorAction SilentlyContinue)
+$rubyV  = if ($rubyOk) { (& ruby -e 'print RUBY_VERSION' 2>$null) } else { "" }
+$nodeOk = [bool](Get-Command node -ErrorAction SilentlyContinue)
+$nodeV  = if ($nodeOk) { (& node --version 2>$null) } else { "" }
+$pyDesc = Test-RealPython 'py' '-3'
+if (-not $pyDesc) { $pyDesc = Test-RealPython 'python' $null }
+if (-not $pyDesc) { $pyDesc = Test-RealPython 'python3' $null }
+$pyOk = [bool]$pyDesc
+$pyV  = if ($pyOk) { ($pyDesc -split '  ')[0] } else { "" }
+
+$sandbox = "none"
+if ($env:CLAUDE_CODE_REMOTE -or $env:COWORK -or $env:CODESPACES) { $sandbox = "remote-sandbox" }
+
+$doctor = [ordered]@{
+  os           = "windows"
+  shell        = "powershell"
+  runtimes     = [ordered]@{ ruby = $rubyOk; python = $pyOk; node = $nodeOk; bash = [bool](Get-Command bash -ErrorAction SilentlyContinue) }
+  versions     = [ordered]@{ ruby = "$rubyV"; python = "$pyV"; node = "$nodeV" }
+  sandbox_hint = $sandbox
+  pass         = ($script:Fail -eq 0)
+  failures     = @($script:Failures)
+}
+$json = $doctor | ConvertTo-Json -Compress -Depth 5
+function Write-DoctorJson([string]$dest) {
+  try {
+    $dir = Split-Path -Parent $dest
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    Set-Content -Path $dest -Value $json -Encoding UTF8 -NoNewline
+  } catch { }
+}
+Write-DoctorJson (Join-Path $env:USERPROFILE ".sigma-migration\doctor.json")
+if ($WorkDir) { Write-DoctorJson (Join-Path $WorkDir "doctor.json") }
 
 Write-Host "`nSummary: $script:Pass ok, $script:Warn warning(s), $script:Fail missing/blocking."
 if ($script:Fail -eq 0) { Write-Host "Environment looks good - proceed."; exit 0 }

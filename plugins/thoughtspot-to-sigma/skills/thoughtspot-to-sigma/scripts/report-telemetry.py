@@ -100,6 +100,23 @@ if args.declined:
     _write_marker(args.workdir, {'status': 'declined', 'tool': args.tool})
     sys.exit(0)
 
+# Environment fingerprint (P0.3): prefer <workdir>/doctor.json, fall back to the
+# stable ~/.sigma-migration/doctor.json the doctor always writes.
+def _load_doctor(workdir):
+    candidates = []
+    if workdir:
+        candidates.append(os.path.join(workdir, 'doctor.json'))
+    candidates.append(os.path.expanduser('~/.sigma-migration/doctor.json'))
+    for p in candidates:
+        try:
+            with open(p, encoding='utf-8') as fh:
+                return json.load(fh)
+        except (OSError, ValueError):
+            continue
+    return None
+
+_doctor = _load_doctor(getattr(args, 'workdir', None))
+
 sent = report_migration(
     tool=args.tool,
     sigma_base=os.environ.get('SIGMA_BASE_URL', 'https://aws-api.sigmacomputing.com'),
@@ -108,6 +125,7 @@ sent = report_migration(
     success=not args.failed,
     mode=mode,
     failure_stage=(args.failure_stage if args.failed else None),
+    doctor=_doctor,
 )
 # Honest marker (handoff FIX 3): "sent" ONLY when the POST actually landed (2xx);
 # otherwise "skipped" so the audit record never claims a delivery that failed.

@@ -63,10 +63,30 @@ import urllib.request
 BASE = os.environ.get("SIGMA_BASE_URL")
 TOK = os.environ.get("SIGMA_API_TOKEN")
 
+# Shell-neutral token handoff: if the token isn't in the env (e.g. PowerShell,
+# where `eval "$(get-token.sh)"` can't run), read it from auth.json written by
+# `python scripts/get_token.py --workdir <WORK>`. Env always wins.
+if not TOK:
+    for _p in (
+        os.path.join(os.environ["SIGMA_WORKDIR"], "auth.json") if os.environ.get("SIGMA_WORKDIR") else None,
+        os.path.join(os.getcwd(), "auth.json"),
+    ):
+        if _p and os.path.exists(_p):
+            try:
+                with open(_p, encoding="utf-8") as _fh:
+                    _a = json.load(_fh)
+                TOK = TOK or _a.get("SIGMA_API_TOKEN")
+                BASE = BASE or _a.get("SIGMA_BASE_URL")
+                break
+            except (OSError, ValueError):
+                pass
+
 
 def api(method, path, body=None):
     if not BASE or not TOK:
-        sys.exit("SIGMA_BASE_URL / SIGMA_API_TOKEN unset — run: eval \"$(scripts/get-token.sh)\"")
+        sys.exit("SIGMA_BASE_URL / SIGMA_API_TOKEN unset — run: "
+                 "python scripts/get_token.py --workdir <WORK>  (any shell), "
+                 "or eval \"$(scripts/get-token.sh)\" (bash only)")
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
         BASE + path, data=data, method=method,
