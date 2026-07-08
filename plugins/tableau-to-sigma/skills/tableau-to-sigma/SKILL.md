@@ -247,7 +247,8 @@ which calc translation, which layout) — not orchestration.
 | `scripts/assert-doctor-ran.rb` | 🚧 GATE — refuse to run without a passing `doctor.json` |
 | `scripts/assert-wb-refs-resolve.rb` | 🚧 GATE — every workbook `[Element/Column]` ref must exist in the live DM before POST (catches multi-datasource collapse → "Dependency not found"; waive `--skip-ref-check "<reason>"`) |
 | `scripts/setup-tableau.rb` | One-time Tableau PAT setup (only needed for PAT mode — see `refs/tableau-rest.md`) |
-| `scripts/get-tableau-token.sh` | One-shot signin → exports `TABLEAU_AUTH_TOKEN` + `TABLEAU_SITE_ID` |
+| `scripts/get-tableau-token.sh` | One-shot signin → exports `TABLEAU_AUTH_TOKEN` + `TABLEAU_SITE_ID` — **bash only** |
+| `scripts/get-tableau-token.py` | Shell-neutral twin (bash/PowerShell/cmd) for hand-driven Tableau REST. The orchestrator mints the Tableau token in-process (no bash) so it no longer calls either. |
 | `scripts/tableau-discover.rb` | PAT-mode Phase 1 discovery in one CLI: workbook + views + VDS metadata + GraphQL + .twb content. ONE unified fetch pool (default 5, `--pool N`, longest-job-first) with 429/timeout backoff + 401 re-mint; always writes per-task `timings.json`. Measured 61.8s → 13.7–18.9s on the 7-view reference workbook |
 | `scripts/scan-workbook-gaps.rb` | **Phase 0a (mandatory):** scan a `.twb` and emit `gaps-report.md` + `gaps.json` categorising every feature into ✅ auto / ⚠️ hint / 🛠 manual / ❌ unhandled. Run BEFORE any other phase. Also detects multi-datasource **data blends** (secondary `datasource-dependencies` + linking fields) and writes `blend-plan.json` with a per-blend route — same-warehouse-repoint / materialize-via-vds / flag-unreachable (decision tree: `refs/blending.md`). |
 | `scripts/gap-scout.md` | **Phase 0a-scout:** subagent prompt + protocol for resolving ❌ Unhandled gaps. Main agent spawns one scout per gap via the Agent tool. |
@@ -352,6 +353,11 @@ process).
 | **MCP** — fallback | No PAT can be provisioned, and `mcp__tableau__*` tools are loaded in the session | None — host handles auth |
 
 **PAT mode in one command:**
+
+> **`migrate-tableau.rb` needs no token step** — it mints the Tableau token
+> **in-process** (Ruby, no bash/`eval`), so the orchestrated path works as-is on
+> Windows/PowerShell. The block below is only for **hand-driven** Tableau REST.
+> Shell-neutral: `python scripts/get-tableau-token.py --print-token`. bash:
 
 ```bash
 eval "$(scripts/get-tableau-token.sh)"

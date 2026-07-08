@@ -89,6 +89,7 @@ require_relative 'lib/scout_gate'
 require_relative 'lib/dashboard_read'
 require_relative 'lib/run_state'
 require_relative 'lib/sigma_rest' # in-process Sigma token minting (no bash/eval)
+require_relative 'lib/tableau_rest' # in-process Tableau token minting (Windows-safe; no bash/eval)
 require_relative 'hydrate-custom-sql'
 
 $stdout.sync = true # progress lines interleave correctly when piped/captured
@@ -291,6 +292,38 @@ end
 # Wrap a command so a Sigma token is live for it (injected via child env).
 def sigma_run!(cmd, allow_fail: false)
   run!(cmd, allow_fail: allow_fail, env: { 'SIGMA_API_TOKEN' => sigma_token! })
+end
+
+# Mint a fresh Tableau token IN-PROCESS (pure Ruby via tableau_rest) and return
+# the env a child needs, instead of `bash -c "eval \"$(get-tableau-token.sh)\""`.
+# On Windows the bash path fails — PowerShell env vars don't propagate into the
+# bash subprocess and $HOME isn't set, so get-tableau-token.sh can't source
+# ~/.sigma-migration/env (a Windows/PowerShell subprocess token failure). Ruby's Tableau.refresh_token!
+# resolves the neutral cred file via Ruby's own ~ expansion and mints over
+# net/http — no shell involved. Falls back to a pre-set TABLEAU_AUTH_TOKEN when
+# no PAT creds are available to refresh (parity with a hand-minted token).
+def tableau_env
+  begin
+    Tableau.refresh_token! # fresh PAT signin, in-process
+  rescue Tableau::Error
+    raise if ENV['TABLEAU_AUTH_TOKEN'].to_s.empty? # nothing to fall back on
+  end
+  {
+    'TABLEAU_SERVER_URL'  => (Tableau.server_url  rescue ENV['TABLEAU_SERVER_URL']),
+    'TABLEAU_SITE_ID'     => (Tableau.site_id     rescue ENV['TABLEAU_SITE_ID']),
+    'TABLEAU_AUTH_TOKEN'  => (Tableau.auth_token  rescue ENV['TABLEAU_AUTH_TOKEN']),
+    'TABLEAU_API_VERSION' => (Tableau.api_version rescue (ENV['TABLEAU_API_VERSION'] || '3.22')),
+  }.compact
+rescue StandardError => e
+  abort "FATAL: could not mint a Tableau token in-process: #{e.message}\n" \
+        '  Check Tableau creds (run: ruby scripts/setup-tableau.rb), or set TABLEAU_AUTH_TOKEN.'
+end
+
+# Run a Ruby child script with a live Tableau token injected via env — the
+# Windows-safe, bash-free replacement for
+# `run!(['bash','-c',"eval \"$(get-tableau-token.sh)\" && <cmd>"])`.
+def tableau_run!(cmd, allow_fail: false)
+  run!(cmd, allow_fail: allow_fail, env: tableau_env)
 end
 
 # Raised when the MECHANICAL WORKBOOK layer (build / validate / POST) fails after
@@ -607,9 +640,9 @@ probe_rb << if opts[:wb_id]
               "h = Tableau.find_workbook_by_name(#{opts[:wb_name].inspect}) or abort 'no workbook'; wb = Tableau.get_workbook(h['id']); "
             end
 probe_rb << "puts JSON.generate({ 'id' => wb['id'], 'updatedAt' => wb['updatedAt'] })"
-probe_quoted = "'" + probe_rb.gsub("'") { "'\\''" } + "'"
-probe_out, probe_st = Open3.capture2e('bash', '-c',
-                                      "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && ruby -e #{probe_quoted}")
+# Run ruby directly with the Tableau token injected via env (Windows-safe) —
+# no bash, no `eval "$(get-tableau-token.sh)"`, no shell-quoting of the script.
+probe_out, probe_st = Open3.capture2e(tableau_env, RbConfig.ruby, '-e', probe_rb)
 probe = (JSON.parse(probe_out.lines.last.to_s) rescue nil) if probe_st.success?
 stamp = (JSON.parse(File.read(stamp_path)) rescue nil)
 reuse_discovery = probe && stamp &&
@@ -646,10 +679,13 @@ else
   # Gap scan runs in the lane as soon as its input (the .twb) is ready — i.e.
   # right after discovery lands it. Scan failure is tolerated (same as before);
   # discovery failure is the lane's exit code.
-  lane_cmd = "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && #{disc_sh}; rc=$?; " \
+  # Token injected via env (Windows-safe); bash still orchestrates the lane
+  # (rc capture + conditional gap scan) but no longer sources creds via a
+  # fragile `eval "$(get-tableau-token.sh)"` that breaks under PowerShell/$HOME.
+  lane_cmd = "#{disc_sh}; rc=$?; " \
              "if [ $rc -eq 0 ] && [ -f '#{twb}' ]; then #{scan_sh} || true; fi; exit $rc"
   lane = { started: Time.now, status: nil }
-  lane[:pid] = Process.spawn('bash', '-c', lane_cmd, %i[out err] => [disc_log, 'a'])
+  lane[:pid] = Process.spawn(tableau_env, 'bash', '-c', lane_cmd, %i[out err] => [disc_log, 'a'])
   line "Tableau discovery + gap scan: BACKGROUND lane (pid #{lane[:pid]}, log #{File.basename(disc_log)})"
   line 'Sigma-side phases 1.6 + 2 run concurrently; lanes join before discovery output is consumed.'
 end
@@ -977,14 +1013,12 @@ if mechanical
     hcsql = File.join(WORK, 'hydrate-custom-sql.json')
     if wb_luid || true # resolution + GraphQL both need a Tableau token; get-*-token guards if absent
       # PRIMARY — REST content chase (covers table + Custom SQL PDSes).
-      run!(['bash', '-c', "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && " +
-            ['ruby', File.join(HERE, 'resolve-published-ds.rb'), '--twb', twb, '--out', pds_json]
-              .map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
+      tableau_run!(['ruby', File.join(HERE, 'resolve-published-ds.rb'), '--twb', twb, '--out', pds_json],
+                   allow_fail: true)
       # FALLBACK — GraphQL Custom SQL blocks (only helps the text case).
       if wb_luid
-        run!(['bash', '-c', "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && " +
-              ['ruby', File.join(HERE, 'extract-custom-sql.rb'), '--workbook-luid', wb_luid, '--twb', twb, '--out', hcsql]
-                .map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
+        tableau_run!(['ruby', File.join(HERE, 'extract-custom-sql.rb'), '--workbook-luid', wb_luid, '--twb', twb, '--out', hcsql],
+                     allow_fail: true)
       end
     end
     hyd_twb = File.join(WORK, 'workbook-hydrated.twb')
@@ -1238,9 +1272,7 @@ if wb_luid
   cf = ['ruby', File.join(HERE, 'extract-calc-fields.rb'),
         '--workbook-luid', wb_luid, '--out', calc_path]
   cf += ['--twb', twb] if have_twb
-  _, st = run!(['bash', '-c',
-                "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && " +
-                cf.map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
+  _, st = tableau_run!(cf, allow_fail: true)
   if File.exist?(calc_path)
     cfj = JSON.parse(File.read(calc_path)) rescue {}
     calcs = cfj['calcs'] || []
@@ -1282,9 +1314,7 @@ csql_path = File.join(WORK, 'custom-sql.json')
 if wb_luid && have_twb
   csql_cmd = ['ruby', File.join(HERE, 'extract-custom-sql.rb'),
               '--workbook-luid', wb_luid, '--twb', twb, '--out', csql_path]
-  run!(['bash', '-c',
-        "eval \"$(#{File.join(HERE, 'get-tableau-token.sh')})\" && " +
-        csql_cmd.map { |a| "'" + a.gsub("'", "'\\''") + "'" }.join(' ')], allow_fail: true)
+  tableau_run!(csql_cmd, allow_fail: true)
   custom_sql = (JSON.parse(File.read(csql_path)) rescue []) if File.exist?(csql_path)
   custom_sql = [] unless custom_sql.is_a?(Array)
 end
@@ -2012,7 +2042,7 @@ begin
                    '--dm-context', dm_ids_path, wb_spec_path])
   # 🚧 Pre-POST ref-resolution gate: every [Element/Column] ref in the wb-spec must
   # exist in the LIVE DM, or the POST fails one opaque "Dependency not found" at a
-  # time AFTER the DM is created (MSP-Dashboard 2026-07-08: multi-datasource
+  # time AFTER the DM is created (a multi-datasource enterprise workbook: multi-datasource
   # collapse left 550 refs unresolvable). Catch it here with the full list; the
   # WorkbookBuildError this raises routes to the friendly rebuild-against-DM handoff.
   ref_cmd = ['ruby', File.join(HERE, 'assert-wb-refs-resolve.rb'),
