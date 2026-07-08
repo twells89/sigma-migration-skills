@@ -67,6 +67,16 @@ parser.add_argument('--failure-stage', default=None,
                     choices=['auth', 'convert', 'spec_post', 'query_validate', 'other'],
                     help='When --failed: coarse stage the migration broke at (no messages or stack traces)')
 parser.add_argument('--workdir',  default=None, help='Run directory; the telemetry marker is written here for the gate')
+# Design-fidelity metrics (v3 §2.4) — the design half of cross-user variance.
+parser.add_argument('--layout-fill-waived', dest='layout_fill_waived', action='store_true',
+                    help='the auto layout-fill gate was waived (--skip-layout-fill) for this run')
+parser.add_argument('--rcf-passes', type=int, default=None,
+                    help='number of render-compare-fix passes performed')
+parser.add_argument('--rubric-score', type=float, default=None,
+                    help='fidelity rubric score for the run')
+parser.add_argument('--visual-gate', default=None,
+                    choices=['pass', 'fail', 'not-executable'],
+                    help='visual gate verdict (not-executable = driving agent lacked vision)')
 args = parser.parse_args()
 
 
@@ -118,6 +128,17 @@ def _load_doctor(workdir):
 
 _doctor = _load_doctor(getattr(args, 'workdir', None))
 
+# Design metrics: explicit flags win; otherwise leave None (absent from payload).
+_design = None
+if (args.layout_fill_waived or args.rcf_passes is not None
+        or args.rubric_score is not None or args.visual_gate is not None):
+    _design = {
+        'layout_fill_waived': args.layout_fill_waived,
+        'rcf_passes': args.rcf_passes,
+        'fidelity_rubric_score': args.rubric_score,
+        'visual_gate': args.visual_gate,
+    }
+
 sent = report_migration(
     tool=args.tool,
     sigma_base=os.environ.get('SIGMA_BASE_URL', 'https://aws-api.sigmacomputing.com'),
@@ -127,6 +148,7 @@ sent = report_migration(
     mode=mode,
     failure_stage=(args.failure_stage if args.failed else None),
     doctor=_doctor,
+    design=_design,
 )
 # Honest marker (handoff FIX 3): "sent" ONLY when the POST actually landed (2xx);
 # otherwise "skipped" so the audit record never claims a delivery that failed.

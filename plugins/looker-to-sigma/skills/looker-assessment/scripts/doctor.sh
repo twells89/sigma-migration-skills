@@ -133,6 +133,37 @@ else
   warn "no Sigma credentials found" "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET."
 fi
 
+# --- skill version drift (v3 §2.1) -----------------------------------------
+# A plugin install pins a git SHA and never self-updates; running a stale SHA
+# silently ships pre-fidelity-layer output. Record {skill_sha, behind_count};
+# the orchestrator preflight FAILs above a threshold. Bounded, best-effort
+# fetch (stalled network capped ~6s); skip with SIGMA_SKIP_VERSION_CHECK=1.
+SKILL_SHA=""; BEHIND_COUNT="null"
+if command -v git >/dev/null 2>&1 && git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
+  SKILL_SHA="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || true)"
+  if [ -z "${SIGMA_SKIP_VERSION_CHECK:-}" ]; then
+    git -C "$HERE" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=6 fetch --quiet origin 2>/dev/null
+    _bc="$(git -C "$HERE" rev-list --count HEAD..origin/main 2>/dev/null || true)"
+    case "$_bc" in ''|*[!0-9]*) BEHIND_COUNT="null" ;; *) BEHIND_COUNT="$_bc" ;; esac
+  fi
+  if [ "$BEHIND_COUNT" = "null" ]; then
+    [ -n "$SKILL_SHA" ] && ok "skill version $SKILL_SHA (drift check skipped/offline)"
+  elif [ "$BEHIND_COUNT" -gt 0 ] 2>/dev/null; then
+    warn "skill is ${BEHIND_COUNT} commit(s) behind origin/main (installed $SKILL_SHA) — you may be missing fidelity-layer fixes" \
+         "Update: 'git -C \"$HERE\" pull' (or reinstall the plugin). SIGMA_SKIP_VERSION_CHECK=1 skips this probe."
+  else
+    ok "skill version $SKILL_SHA (current with origin/main)"
+  fi
+fi
+
+# --- agent capability fingerprint (v3 §2.2) --------------------------------
+# The doctor can't introspect the driving agent, so vision is asserted by the
+# caller: a vision-capable session exports SIGMA_AGENT_VISION=true. Default
+# false so the visual gate (D5) fails LOUDLY rather than accepting a blind
+# attestation. model_hint is free-form (e.g. "claude-opus-4-8").
+case "${SIGMA_AGENT_VISION:-}" in true|1|yes|TRUE|True) AGENT_VISION=true ;; *) AGENT_VISION=false ;; esac
+MODEL_HINT="${SIGMA_MODEL_HINT:-}"
+
 # --- machine-readable fingerprint (doctor.json) ----------------------------
 # Written so (a) the run-state / preflight GATE can refuse to proceed on a
 # broken environment instead of letting the agent improvise, and (b) telemetry
@@ -169,6 +200,10 @@ write_doctor_json() {
     printf '"runtimes":{"ruby":%s,"python":%s,"node":%s,"bash":true},' "$RUBY_OK" "$PY_OK" "$NODE_OK"
     printf '"versions":{"ruby":"%s","python":"%s","node":"%s"},' "$(jstr "$RUBY_V")" "$(jstr "$PY_VER")" "$(jstr "$NODE_V")"
     printf '"sandbox_hint":"%s",' "$(jstr "$SANDBOX_HINT")"
+    printf '"skill_sha":"%s",' "$(jstr "$SKILL_SHA")"
+    printf '"behind_count":%s,' "$BEHIND_COUNT"
+    printf '"agent_vision":%s,' "$AGENT_VISION"
+    printf '"model_hint":"%s",' "$(jstr "$MODEL_HINT")"
     printf '"pass":%s,' "$PASS_BOOL"
     printf '"failures":[%s]' "$fj"
     printf '}\n'

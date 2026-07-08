@@ -122,6 +122,7 @@ def report_migration(
     client_agent: str = None,
     run_id: str = None,
     doctor: dict = None,
+    design: dict = None,
     endpoint: str = TELEMETRY_ENDPOINT,
     timeout: int = 5,
 ) -> bool:
@@ -179,6 +180,21 @@ def report_migration(
             "sandbox_hint": doctor.get("sandbox_hint"),
             "pass":         doctor.get("pass"),
             "runtimes":     sorted(k for k, v in rt.items() if v),
+            # version-drift + agent-capability fingerprint (v3 §2.1/§2.2)
+            "behind_count": doctor.get("behind_count"),
+            "agent_vision": doctor.get("agent_vision"),
+            "model_hint":   doctor.get("model_hint"),
+        }
+
+    # Design-fidelity metrics (v3 §2.4) — makes the design half of cross-user
+    # variance visible in telemetry (not just the environment half). Coarse: a
+    # waiver bit, a pass count, a rubric score, a gate verdict. No customer data.
+    if design:
+        payload["design"] = {
+            "layout_fill_waived":   design.get("layout_fill_waived"),
+            "rcf_passes":           design.get("rcf_passes"),
+            "fidelity_rubric_score": design.get("fidelity_rubric_score"),
+            "visual_gate":          design.get("visual_gate"),
         }
 
     print("\nReporting anonymous migration telemetry (no customer data sent):")

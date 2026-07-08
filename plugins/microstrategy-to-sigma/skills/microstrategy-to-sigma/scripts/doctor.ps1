@@ -107,6 +107,41 @@ if ((Test-Path $envFile) -or $env:SIGMA_API_TOKEN -or $env:SIGMA_CLIENT_ID) {
   Warn "no Sigma credentials found" "Run 'ruby scripts/setup.rb' once, or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET."
 }
 
+# --- skill version drift (v3 §2.1) -----------------------------------------
+# A pinned plugin install never self-updates; a stale SHA silently ships
+# pre-fidelity-layer output. Record {skill_sha, behind_count}; the orchestrator
+# preflight FAILs above a threshold. Bounded, best-effort fetch; skip with
+# SIGMA_SKIP_VERSION_CHECK=1.
+$skillSha = ""; $behindCount = $null
+$here = $PSScriptRoot
+if ($here -and (Get-Command git -ErrorAction SilentlyContinue)) {
+  $isRepo = (& git -C $here rev-parse --git-dir 2>$null)
+  if ($isRepo) {
+    $skillSha = (& git -C $here rev-parse --short HEAD 2>$null)
+    if (-not $env:SIGMA_SKIP_VERSION_CHECK) {
+      & git -C $here -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=6 fetch --quiet origin 2>$null
+      $bc = (& git -C $here rev-list --count HEAD..origin/main 2>$null)
+      if ($bc -match '^\d+$') { $behindCount = [int]$bc }
+    }
+    if ($null -eq $behindCount) {
+      if ($skillSha) { Ok "skill version $skillSha (drift check skipped/offline)" }
+    } elseif ($behindCount -gt 0) {
+      Warn "skill is $behindCount commit(s) behind origin/main (installed $skillSha) - you may be missing fidelity-layer fixes" `
+           "Update: 'git -C ""$here"" pull' (or reinstall the plugin). SIGMA_SKIP_VERSION_CHECK=1 skips this probe."
+    } else {
+      Ok "skill version $skillSha (current with origin/main)"
+    }
+  }
+}
+
+# --- agent capability fingerprint (v3 §2.2) --------------------------------
+# Vision is asserted by the caller (a vision-capable session sets
+# SIGMA_AGENT_VISION=true); default false so the visual gate fails LOUDLY
+# rather than accepting a blind attestation.
+$agentVision = $false
+if ($env:SIGMA_AGENT_VISION -in @('true', '1', 'yes', 'TRUE', 'True')) { $agentVision = $true }
+$modelHint = if ($env:SIGMA_MODEL_HINT) { $env:SIGMA_MODEL_HINT } else { "" }
+
 # --- machine-readable fingerprint (doctor.json) ----------------------------
 # Same contract as doctor.sh: lets the preflight GATE refuse to proceed on a
 # broken environment, and lets telemetry group failures by environment class.
@@ -131,6 +166,10 @@ $doctor = [ordered]@{
   runtimes     = [ordered]@{ ruby = $rubyOk; python = $pyOk; node = $nodeOk; bash = [bool](Get-Command bash -ErrorAction SilentlyContinue) }
   versions     = [ordered]@{ ruby = "$rubyV"; python = "$pyV"; node = "$nodeV" }
   sandbox_hint = $sandbox
+  skill_sha    = "$skillSha"
+  behind_count = $behindCount
+  agent_vision = $agentVision
+  model_hint   = "$modelHint"
   pass         = ($script:Fail -eq 0)
   failures     = @($script:Failures)
 }

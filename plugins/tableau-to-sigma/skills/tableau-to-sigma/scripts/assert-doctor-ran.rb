@@ -72,6 +72,21 @@ rt = d['runtimes'] || {}
 env_desc = "os=#{d['os']} shell=#{d['shell']} sandbox=#{d['sandbox_hint']} " \
            "runtimes=[#{rt.select { |_, v| v }.keys.join(',')}]"
 
+# Version-drift hard gate (v3 §2.1). A plugin many commits behind origin/main is
+# missing the fidelity layer — the #1 measured cause of "looks better on another
+# machine". WARN lives in the doctor; the orchestrator preflight BLOCKS above a
+# threshold. Override with SIGMA_MAX_BEHIND; waive with --skip-doctor-gate.
+threshold = (ENV['SIGMA_MAX_BEHIND'] || '50').to_i
+behind = d['behind_count']
+if behind.is_a?(Integer) && behind > threshold
+  warn "[FAIL] environment gate — skill is #{behind} commit(s) behind origin/main " \
+       "(> #{threshold}); the installed build (#{d['skill_sha']}) is missing fidelity-layer fixes."
+  warn '       Update the skill checkout: git pull (or reinstall the plugin), re-run the'
+  warn '       doctor, then retry. Tune the bar with SIGMA_MAX_BEHIND=<n>.'
+  warn '       Escape hatch (name it in your report): --skip-doctor-gate "<reason>".'
+  exit 1
+end
+
 if d['pass']
   puts "[PASS] environment gate — doctor.json OK (#{env_desc}). Source: #{path}"
   exit 0
