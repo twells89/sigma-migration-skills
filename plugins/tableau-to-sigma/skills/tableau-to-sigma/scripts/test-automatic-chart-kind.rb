@@ -42,6 +42,7 @@ GR = '[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' # Gross Revenue (measure)
 NP = '[a1111111-0000-0000-0000-000000000001]' # Net Profit (measure)
 OD = '[c2ec6b07-897e-39ab-9422-aa895d35a627]' # Order Date (date dim)
 RG = '[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' # Region (categorical dim)
+CT = '[b2222222-0000-0000-0000-000000000002]' # Category (categorical dim)
 
 TWB = <<~XML
   <?xml version='1.0' encoding='utf-8' ?>
@@ -52,18 +53,23 @@ TWB = <<~XML
         <column caption='Net Profit' name='#{NP}' datatype='real' role='measure' />
         <column caption='Order Date ' name='#{OD}' datatype='date' role='dimension' />
         <column caption='Region' name='#{RG}' datatype='string' role='dimension' />
+        <column caption='Category' name='#{CT}' datatype='string' role='dimension' />
       </datasource>
     </datasources>
     <worksheets>
       #{ws('Trend',   "[federated.x].[sum:#{GR[1..-2]}:qk]", "[federated.x].[tmn:#{OD[1..-2]}:qk]")}
       #{ws('ByRegion', "[federated.x].[sum:#{GR[1..-2]}:qk]", "[federated.x].[none:#{RG[1..-2]}:nk]")}
       #{ws('Scatter', "[federated.x].[sum:#{NP[1..-2]}:qk]", "[federated.x].[sum:#{GR[1..-2]}:qk]")}
+      #{ws('DetailList', "[federated.x].[none:#{RG[1..-2]}:nk] / [federated.x].[none:#{CT[1..-2]}:nk]", "")}
+      #{ws('MultiMeasBar', "[federated.x].[none:#{RG[1..-2]}:nk]", "[Multiple Values]")}
     </worksheets>
     <dashboards>
       <dashboard name='Dash'><zones>
         <zone id='1' name='Trend' x='0' y='0' w='33000' h='100000' />
         <zone id='2' name='ByRegion' x='33000' y='0' w='33000' h='100000' />
         <zone id='3' name='Scatter' x='66000' y='0' w='34000' h='100000' />
+        <zone id='4' name='DetailList' x='0' y='100000' w='50000' h='100000' />
+        <zone id='5' name='MultiMeasBar' x='50000' y='100000' w='50000' h='100000' />
       </zones></dashboard>
     </dashboards>
   </workbook>
@@ -89,6 +95,10 @@ check(kind(by_name, 'Scatter') == 'scatter',
       "Automatic + measure on both axes → scatter (got #{kind(by_name, 'Scatter').inspect})", fails)
 check((by_name['Trend'] || {})['chart_kind_inferred'] == true,
       'inferred-automatic kinds carry chart_kind_inferred:true (→ image confirmation)', fails)
+check(kind(by_name, 'DetailList') == 'table',
+      "Automatic + dims only, no measure axis → table (got #{kind(by_name, 'DetailList').inspect})", fails)
+check(kind(by_name, 'MultiMeasBar') == 'bar',
+      "Automatic + dim + [Multiple Values] pill → stays bar, not table (got #{kind(by_name, 'MultiMeasBar').inspect})", fails)
 
 puts
 if fails.empty?

@@ -901,11 +901,25 @@ def infer_automatic_kind(meta)
   dims = fields.select { |f| f['role'] == 'dim' }
   meas = fields.select { |f| f['role'] == 'measure' }
   has_date_dim = dims.any? { |f| DATE_GRAIN_DERIV.include?(f['derivation'].to_s.downcase) }
+  has_measure_values = rs['has_measure_values'] || cs['has_measure_values']
   # 1) continuous date dimension + a measure → time-series LINE
   return 'line' if has_date_dim && !meas.empty?
   # 2) a measure on BOTH axes (rows AND cols), ≤1 dim → SCATTER
   return 'scatter' if rs['measure_count'].to_i >= 1 && cs['measure_count'].to_i >= 1 && dims.size <= 1
-  # 3) categorical dim(s) + measure → BAR (Tableau's default for cat × measure)
+  # 3) flat detail TABLE: dimension(s) present but NO measure sits on an axis
+  #    shelf (measures live on the Marks/Text card, or the sheet is a pure
+  #    dimension list) and no Measure-VALUES encoding pill. A bar needs a
+  #    continuous measure axis; with none, Tableau's default "Automatic" mark
+  #    renders a text grid, not bars — so route to a Sigma `table` instead of
+  #    blindly defaulting to bar-chart. This is what rescues the common case of
+  #    a detail table left on the default mark (never flipped to "Text"), which
+  #    the Text/Square and crosstab/KPI heuristics above don't claim.
+  #    LIMITATION: does NOT catch a table built by making a measure DISCRETE
+  #    (blue pill) on a shelf — that still reports role=measure here, so it
+  #    reads as a bar. Those remain chart_kind_inferred → verified against the
+  #    PNG in Phase 5g. (Kept narrow on purpose to avoid demoting real bars.)
+  return 'table' if !dims.empty? && meas.empty? && !has_measure_values
+  # 4) categorical dim(s) + measure → BAR (Tableau's default for cat × measure)
   return 'bar' if !dims.empty? && !meas.empty?
   'bar'
 end
