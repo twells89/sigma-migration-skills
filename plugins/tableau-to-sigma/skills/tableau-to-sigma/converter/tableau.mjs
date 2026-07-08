@@ -3133,6 +3133,16 @@ function _stripOuterAggAroundLod(formula) {
     return null;
   return { aggFunc: m[1].toUpperCase(), inner };
 }
+function _repointCustomSqlSchema(sql, oldDb, oldSchema, newDb, newSchema) {
+  if (!sql || !newDb || !newSchema || !oldDb || !oldSchema)
+    return sql;
+  if (oldDb.toUpperCase() === newDb.toUpperCase() && oldSchema.toUpperCase() === newSchema.toUpperCase())
+    return sql;
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const seg = (s) => `(?:"${esc(s)}"|${esc(s)})`;
+  const re = new RegExp(`${seg(oldDb)}\\s*\\.\\s*${seg(oldSchema)}\\s*\\.`, "gi");
+  return sql.replace(re, `${newDb}.${newSchema}.`);
+}
 function _isTableauVirtualField(name) {
   return (name || "").replace(/^\[|\]$/g, "").trim().startsWith(":");
 }
@@ -4601,7 +4611,7 @@ function convertTableauToSigma(xmlContent, options = {}) {
       }
     } else if (relType === "text") {
       const decodeNumericEntities = (s) => s.replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)));
-      const statement = decodeNumericEntities((rootRelation["#text"] || "").toString()).trim();
+      const statement = _repointCustomSqlSchema(decodeNumericEntities((rootRelation["#text"] || "").toString()).trim(), attr(rootConn, "dbname"), attr(rootConn, "schema"), dbOverride, schOverride);
       if (!statement) {
         warnings.push("\u26A0 Custom SQL relation carried no SQL text \u2014 no element emitted.");
       } else {
