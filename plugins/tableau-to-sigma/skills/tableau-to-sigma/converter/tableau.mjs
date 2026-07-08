@@ -3133,6 +3133,9 @@ function _stripOuterAggAroundLod(formula) {
     return null;
   return { aggFunc: m[1].toUpperCase(), inner };
 }
+function _isTableauVirtualField(name) {
+  return (name || "").replace(/^\[|\]$/g, "").trim().startsWith(":");
+}
 function _windowInnerToSql(expr) {
   let s = expr;
   s = s.replace(/\bZN\s*\(([^()]+)\)/gi, "$1");
@@ -4264,7 +4267,7 @@ function convertTableauToSigma(xmlContent, options = {}) {
       const columns = [], order = [];
       for (const col of asArray(rootRelation?.columns?.column || [])) {
         const key = attr(col, "name").toUpperCase();
-        if (!key)
+        if (!key || _isTableauVirtualField(attr(col, "name")))
           continue;
         const id = sigmaInodeId(key);
         columns.push({ id, formula: `[${tableName}/${sigmaDisplayName(key)}]` });
@@ -4292,7 +4295,7 @@ function convertTableauToSigma(xmlContent, options = {}) {
           const columns = [], order = [];
           for (const col of asArray(t.rel?.columns?.column || [])) {
             const key = attr(col, "name").toUpperCase();
-            if (!key)
+            if (!key || _isTableauVirtualField(attr(col, "name")))
               continue;
             const id = sigmaInodeId(key);
             columns.push({ id, formula: `[${tableName}/${sigmaDisplayName(key)}]` });
