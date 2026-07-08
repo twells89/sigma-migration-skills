@@ -82,8 +82,11 @@ jobs:
       - name: offline corpus conversion (local converter) under Git Bash
         shell: bash
         run: |
+          # Proves the offline local-converter path converts on Windows.
+          # (converter-default-test.sh is NOT run here — its dev-override path
+          # assertions compare Unix-style paths and don't port to Windows drive
+          # letters / backslashes; it runs on the ubuntu 'corpus' job instead.)
           ./corpus/run-corpus.sh --check
-          ./corpus/converter-default-test.sh
 
   script-syntax:
     name: syntax-check every script (ruby -c / py_compile / bash -n)
