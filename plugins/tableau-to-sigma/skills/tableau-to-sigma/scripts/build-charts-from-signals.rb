@@ -474,8 +474,19 @@ end
 #     this path, and single-level LODs never reach the chain path.
 def parse_fixed_lod(formula, columns_by_guid = {})
   s = formula.to_s.gsub(/\s+/, ' ').strip
-  m = s.match(/\A\{\s*FIXED\s+(\[[^\]]+\](?:\s*,\s*\[[^\]]+\])*)\s*:\s*(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*\[([^\]]+)\]\s*\)\s*\}\z/i)
+  # The inner aggregate argument is captured greedily (.+) rather than as a bare
+  # [col], so a CONDITIONAL / expression inner (e.g. the last-sold-date pattern
+  # MAX(IF [Units] > 0 THEN [Date] END)) is ACCEPTED here instead of silently
+  # dropping to a generic "translate manually" warning (bead: conditional-inner
+  # FIXED LODs missed the auto-helper). The \z anchor forces the trailing ')}',
+  # so the greedy body backtracks to the last ')'.
+  m = s.match(/\A\{\s*FIXED\s+(\[[^\]]+\](?:\s*,\s*\[[^\]]+\])*)\s*:\s*(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\((.+)\)\s*\}\z/i)
   return nil unless m
+  inner = m[3].strip
+  # NESTED {FIXED…{FIXED…}} stays DISJOINT from this path (see the dispatch note
+  # above): it routes through decompose_nested_fixed (helper-element chain). The
+  # loosened inner would otherwise match the outer of a nest — reject it here.
+  return nil if inner =~ /\{\s*(?:FIXED|INCLUDE|EXCLUDE)\b/i
   resolve = lambda do |ref|
     if ref =~ /\A[0-9a-f\-]{36}\z/i
       info = columns_by_guid[ref]
@@ -485,9 +496,21 @@ def parse_fixed_lod(formula, columns_by_guid = {})
     end
   end
   dims = m[1].scan(/\[([^\]]+)\]/).flatten.map { |d| resolve.call(d) }
-  meas = resolve.call(m[3])
-  return nil if dims.empty? || dims.any?(&:nil?) || meas.nil?
-  { 'dims' => dims, 'agg' => m[2].upcase, 'measure' => meas }
+  return nil if dims.empty? || dims.any?(&:nil?)
+  out = { 'dims' => dims, 'agg' => m[2].upcase }
+  if (bare = inner.match(/\A\[([^\]]+)\]\z/))
+    # Bare-column inner — unchanged behaviour: expose 'measure' (+ display label).
+    meas = resolve.call(bare[1])
+    return nil if meas.nil?
+    out['measure'] = meas
+    out['label']   = meas
+  else
+    # Conditional / expression inner — the caller resolves it to a Sigma formula
+    # via lod_inner_ref; 'label' is the raw inner for warning messages.
+    out['inner_expr'] = inner
+    out['label']      = inner
+  end
+  out
 end
 
 # Parse a RELATIVE LOD — {INCLUDE [dims]: AGG([m])} or {EXCLUDE [dims]: AGG([m])}
@@ -534,6 +557,26 @@ LOD_INNER_AGG = {
   'MEDIAN' => 'Median', 'COUNTD' => 'CountDistinct',
   'COUNT' => 'CountIf(IsNotNull(%s))'
 }.freeze
+
+# Resolve a FIXED LOD's inner aggregate into the Sigma expression the helper's
+# inner grouping aggregates over. A bare-column inner ('measure') maps to a
+# single [Master/<col>] ref (unchanged). A conditional/expression inner
+# ('inner_expr', e.g. IF [Units] > 0 THEN [Date] END) is translated to a Sigma
+# formula over master columns via the shared dim/row-level calc translators
+# (IF/CASE…END → nested If()/Switch(); arithmetic/date fns via row-level). The
+# caller then wraps the result in the LOD aggregate (render_agg). Returns nil
+# when the inner uses constructs we can't safely auto-emit — the caller falls
+# back to a loud, specific warning (author a DM Custom SQL element) rather than
+# building a broken helper.
+def lod_inner_ref(lod, mmap, columns_by_guid = {})
+  if lod['measure']
+    m = map_column(lod['measure'], mmap)
+    "[Master/#{m ? m['name'] : lod['measure']}]"
+  elsif lod['inner_expr']
+    translate_dim_calc(lod['inner_expr'], mmap, columns_by_guid) ||
+      translate_row_level_calc(lod['inner_expr'], mmap, columns_by_guid)
+  end
+end
 
 # Build the hidden two-level grouped helper element for a FIXED LOD (see the
 # block comment above). Returns [element_hash, src_name, stage2_col_name].
@@ -2432,12 +2475,12 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
   two_stage_formula = nil
   ws_calc_lod = (z['calculations'] || []).find { |c| norm.call(c['name']) == norm.call(field_cap) }
   lod = ws_calc_lod && parse_fixed_lod(ws_calc_lod['formula'], meta['columns_by_guid'] || {})
-  if lod
+  lod_ref = lod && lod_inner_ref(lod, mmap, meta['columns_by_guid'] || {})
+  if lod && lod_ref
     # FIXED-LOD KPI → two-level helper (constant outer key), Max() the outer calc.
     map_name = ->(capn) { (m = map_column(capn, mmap)) ? m['name'] : capn }
     inner_keys = lod['dims'].map { |d| n = map_name.call(d); { 'name' => n, 'formula' => "[Master/#{n}]" } }
-    meas_name = map_name.call(lod['measure'])
-    value_formula = render_agg(LOD_INNER_AGG[lod['agg']], "[Master/#{meas_name}]")
+    value_formula = render_agg(LOD_INNER_AGG[lod['agg']], lod_ref)
     stage2 = SHELF_AGG_FOR_PREFIX[deriv] || 'Avg'
     helper, src_name, s2_name = build_two_stage_helper(
       el_id: el_id, master_id: opts[:master_id], value_name: field_cap.to_s.strip,
@@ -2445,8 +2488,14 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
     data_elements << helper
     source_eid = helper['id']
     two_stage_formula = "Max([#{src_name}/#{s2_name}])"
-    warnings << "'#{cap}' KPI measure '#{field_cap}' is a FIXED LOD ({FIXED #{lod['dims'].join(', ')} : #{lod['agg']}(#{lod['measure']})}) — " \
+    warnings << "'#{cap}' KPI measure '#{field_cap}' is a FIXED LOD ({FIXED #{lod['dims'].join(', ')} : #{lod['agg']}(#{lod['label']})}) — " \
                 "auto-built hidden grouped helper '#{src_name}' (inner grain = FIXED dims, 2nd-stage #{stage2}) ⚠ verify in Sigma"
+  elsif lod && lod_ref.nil?
+    # Parsed as a FIXED LOD but the conditional/expression inner can't be safely
+    # auto-translated — point at the data-model Custom SQL path (loud, specific).
+    warnings << "'#{cap}' KPI measure '#{field_cap}' is a FIXED LOD with a conditional/expression inner " \
+                "(#{lod['agg']}(#{lod['label']})) that can't be auto-translated to a workbook helper — implement it as a " \
+                "data-model Custom SQL element: #{lod['agg']}(CASE …) OVER (PARTITION BY #{lod['dims'].join(', ')}). See refs/phase-3-datamodel.md."
   elsif %w[avg average].include?(deriv) && master['formula'].nil? && master['grain'] && ws_calc_lod.nil?
     # Grain-aware average (bead AvgLTR): Avg of a dim-table measure — Tableau
     # evaluates it at the DIM table's native grain (all dim rows, incl. entities
@@ -3136,20 +3185,20 @@ layout.each do |dash|
       # through decompose_nested_fixed (helper-element chain, -lod-chains.json
       # sidecar) in the calc loop below; the agent wires the chain manually.
       lod_parse = lod_calc && parse_fixed_lod(lod_calc['formula'], meta['columns_by_guid'] || {})
-      if lod_parse
+      lod_ref = lod_parse && lod_inner_ref(lod_parse, mmap, meta['columns_by_guid'] || {})
+      if lod_parse && lod_ref
         # FIXED LOD → two-level grouped helper: inner = FIXED dims computing
         # the LOD aggregate, outer = the chart's plotted dims computing the
         # second-stage aggregate; chart Max()es the replicated outer calc.
         map_name = ->(capn) { (mm = map_column(capn, mmap)) ? mm['name'] : capn }
         inner_keys = lod_parse['dims'].map { |d| n = map_name.call(d); { 'name' => n, 'formula' => "[Master/#{n}]" } }
-        lod_meas = map_name.call(lod_parse['measure'])
         value_name = header_base(meas_hdr)
         outer_dims = [{ 'name' => dim['name'], 'formula' => dim_formula }]
         outer_dims << { 'name' => color_col_obj['name'], 'formula' => color_col_obj['formula'] } if color_col_obj
         stage2 = (SIGMA_AGG[agg_label] unless %w[None User].include?(agg_label.to_s)) || 'Avg'
         helper, src_name, s2_name = build_two_stage_helper(
           el_id: el_id, master_id: opts[:master_id], value_name: value_name,
-          value_formula: render_agg(LOD_INNER_AGG[lod_parse['agg']], "[Master/#{lod_meas}]"),
+          value_formula: render_agg(LOD_INNER_AGG[lod_parse['agg']], lod_ref),
           inner_keys: inner_keys, outer_dims: outer_dims, stage2_agg: stage2)
         data_elements << helper
         chart_source_eid = helper['id']
@@ -3157,9 +3206,16 @@ layout.each do |dash|
         color_col_obj['formula'] = "[#{src_name}/#{color_col_obj['name']}]" if color_col_obj
         measure_formula = "Max([#{src_name}/#{s2_name}])"
         warnings << "'#{cap}' measure '#{meas_hdr}' is a FIXED LOD ({FIXED #{lod_parse['dims'].join(', ')} : " \
-                    "#{lod_parse['agg']}(#{lod_parse['measure']})}) — auto-built hidden grouped helper '#{src_name}' " \
+                    "#{lod_parse['agg']}(#{lod_parse['label']})}) — auto-built hidden grouped helper '#{src_name}' " \
                     "(inner grain = FIXED dims, 2nd-stage #{stage2} at chart grain) ⚠ exact iff the chart dims are " \
                     'functionally dependent on the FIXED dims — verify in Sigma'
+      elsif lod_parse && lod_ref.nil?
+        # FIXED LOD whose conditional/expression inner isn't auto-translatable —
+        # steer to the data-model Custom SQL path instead of silently degrading.
+        warnings << "'#{cap}' measure '#{meas_hdr}' is a FIXED LOD with a conditional/expression inner " \
+                    "(#{lod_parse['agg']}(#{lod_parse['label']})) that can't be auto-translated to a workbook helper — " \
+                    "implement it as a data-model Custom SQL element: #{lod_parse['agg']}(CASE …) " \
+                    "OVER (PARTITION BY #{lod_parse['dims'].join(', ')}). See refs/phase-3-datamodel.md."
       elsif (rel = lod_calc && parse_relative_lod(lod_calc['formula'], meta['columns_by_guid'] || {}))
         # INCLUDE / EXCLUDE LOD — relative to the chart's VIEW grain.
         map_name = ->(capn) { (mm = map_column(capn, mmap)) ? mm['name'] : capn }
