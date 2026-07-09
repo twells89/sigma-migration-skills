@@ -68,17 +68,40 @@ target = if opts[:dm_el_name]
            dm_elements.find { |e| e['name'] == opts[:dm_el_name] } ||
              abort("no DM element named #{opts[:dm_el_name].inspect}")
          else
-           # First non-dim-suffixed element, fallback to first
-           dm_elements.find { |e| !(e['name'] || '').end_with?(' Dim') } || dm_elements.first
+           # First non-dim-suffixed element, but only among elements that actually
+           # carry columns. The readback exposes columns via 'columnLabels'; an
+           # extract-landed (or multi-datasource) DM has NAMELESS master-shell
+           # elements with ZERO columns that must NOT be chosen — picking one
+           # aborts at 'no master columns to emit'. Skipping empty shells keeps
+           # the original "first non-dim" order for normal single-fact DMs.
+           width = ->(e) { (e['columnLabels'] || e['columns'] || []).size }
+           bearing = dm_elements.select { |e| width.call(e).positive? }
+           bearing = dm_elements if bearing.empty?
+           bearing.find { |e| !(e['name'] || '').end_with?(' Dim') } || bearing.first
          end
 dm_el_id   = target['id']
 dm_el_name = target['name']
-# A Custom SQL DM element is NAMELESS in the spec (rule 3: omit the element-level
-# name), but Sigma assigns it the name "Custom SQL" on the server. Without this
-# fallback the master column formula becomes an INVALID `[/Col]` (empty element
-# name) → the workbook POSTs but renders EMPTY (every published-DS / Custom-SQL-
-# sourced workbook). Use the server-assigned name so refs are `[Custom SQL/Col]`.
-dm_el_name = 'Custom SQL' if dm_el_name.to_s.strip.empty?
+# A DM element is often NAMELESS in the spec (rule 3: omit the element-level
+# name). Sigma then assigns a name on the server BY KIND, and the master column
+# formula must use that server name or it references a phantom element and the
+# workbook POSTs but renders EMPTY. Fetch the spec up front so we can both name
+# the element correctly and (in auto mode) read its columns.
+#   • warehouse-table  → the table's last path segment (e.g. an extract-landed
+#                        or direct-table element: MY_SCHEMA.MY_TABLE → "MY_TABLE")
+#   • everything else  → "Custom SQL" (SQL / published-DS elements)
+$LOAD_PATH.unshift File.expand_path('lib', __dir__)
+require 'sigma_rest'
+spec = Sigma.request(:get, "/v2/dataModels/#{dm_id}/spec")
+el = spec['pages'].flat_map { |p| p['elements'] }.find { |e| e['id'] == dm_el_id }
+abort("DM element #{dm_el_id} not found in spec") unless el
+if dm_el_name.to_s.strip.empty?
+  src = el['source'] || {}
+  dm_el_name = if src['kind'] == 'warehouse-table' && !Array(src['path']).empty?
+                 Array(src['path']).last
+               else
+                 'Custom SQL'
+               end
+end
 
 # Master columns: either explicit from --master-cols or auto-passthrough from the DM element
 master_columns =
@@ -86,13 +109,6 @@ master_columns =
     cfg = YAML.safe_load(File.read(opts[:master_cols]))
     cfg['columns'] || abort('master-cols YAML missing `columns:` key')
   else
-    # Auto: pull the DM element's column DDL via REST (limited fields — name only)
-    # Sigma.request handles initial token fetch + 401-retry-with-refresh.
-    $LOAD_PATH.unshift File.expand_path('lib', __dir__)
-    require 'sigma_rest'
-    spec = Sigma.request(:get, "/v2/dataModels/#{dm_id}/spec")
-    el = spec['pages'].flat_map { |p| p['elements'] }.find { |e| e['id'] == dm_el_id }
-    abort("DM element #{dm_el_id} not found in spec") unless el
     (el['columns'] || []).map do |c|
       nm = c['name'] || (c['formula'].to_s.match(/^\[[^\/]+\/([^\]]+)\]$/) || [nil, c['id']])[1]
       slug = nm.to_s.downcase.gsub(/\W+/, '-').sub(/-$/, '')
