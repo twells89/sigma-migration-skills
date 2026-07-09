@@ -205,6 +205,24 @@ def synthesize_view_from_signals(z, meta)
     dims << { 'guid' => g, 'role' => 'dim', 'derivation' => 'none' } if g && dims.none? { |f| f['guid'] == g }
   end
   headers = (dims.map(&field_header) + meas.map(&field_header)).compact
+  # Fallback for pie/detail marks: the dimension sits on the color/detail
+  # encoding (not rows/cols shelves, and `channels` may be empty), so the only
+  # signal is the zone's `aggregations` map — a "None"-aggregated column is the
+  # dim, anything with a real aggregator is the measure. Without this a pie/
+  # donut whose dim isn't shelf-bound gets "no dim+measure" and is dropped.
+  if headers.length < 2 && (aggs = z['aggregations']).is_a?(Hash) && !aggs.empty?
+    dcaps = []
+    mcaps = []
+    aggs.each do |col, agg|
+      g = guid_from_text(col.to_s)
+      next unless g
+      cap = (cbg[g] || {})['caption']
+      cap = g if cap.nil? || cap.to_s.empty?
+      (agg.to_s.casecmp('none').zero? ? dcaps : mcaps) << cap
+    end
+    fb = (dcaps + mcaps).compact
+    headers = fb if fb.length >= 2
+  end
   headers.length >= 2 ? { headers: headers } : nil
 end
 

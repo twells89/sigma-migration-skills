@@ -645,6 +645,16 @@ xml.elements.each('//worksheet') do |ws|
       field:  e.attributes['field']
     }
   end
+  # Alt/older form: the channel is the ELEMENT NAME, not an attr — e.g.
+  #   <encodings><color column='…Customer Value Tier…'/></encodings>
+  # (vs the newer <encoding attr='color' …/> above). Without this, a dimension
+  # on the color shelf (categorical bar coloring) is silently dropped.
+  ws.elements.each('.//encodings/*') do |e|
+    ch = e.name.to_s
+    next unless %w[color size shape detail label tooltip text].include?(ch)
+    next if channels.key?(ch) # newer form already captured this channel
+    channels[ch] = { column: e.attributes['column'], field: e.attributes['field'] }
+  end
 
   # Per-worksheet calculated fields. Tableau emits these as
   #   <column datatype='X' name='[Calc Name]' role='dimension|measure' type='...'>
