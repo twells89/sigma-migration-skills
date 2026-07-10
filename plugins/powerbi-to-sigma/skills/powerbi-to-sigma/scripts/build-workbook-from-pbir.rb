@@ -50,6 +50,7 @@ require 'json'
 require 'optparse'
 require_relative 'lib/layout'
 require_relative 'lib/pbi_theme'
+require_relative 'lib/pbi_conditional_formats'
 include SigmaLayout
 
 opts = {}
@@ -496,6 +497,19 @@ def measure_color_channel(rec, fields, master, vfmts, eid, cols, ycids)
   apply_fmt(dup, mc['queryRef'], fields, vfmts)
   cols << dup
   { 'by' => 'scale', 'column' => cid, 'scheme' => scheme }
+end
+
+# Table/matrix conditional formatting (rec['conditional_formats'] from
+# extract-pbir) -> Sigma element-level `conditionalFormats`. The mapping lives in
+# lib/pbi_conditional_formats.rb (pure + unit-tested); here we just resolve the
+# CF records against the built column ids and route any non-mappable modes
+# (field-value measures, rules) to coverage — never silently dropped.
+def build_conditional_formats(rec, qr_cids, name, kind)
+  cfs = rec['conditional_formats']
+  return nil unless cfs.is_a?(Array) && !cfs.empty?
+  res = PbiConditionalFormats.build(cfs, qr_cids, name, kind)
+  res['coverage'].each { |c| record_unresolved(**c) }
+  res['formats'].empty? ? nil : res['formats']
 end
 
 # Deterministic, collision-free short id from a PBIR visual id. PBIR visual ids
@@ -1329,6 +1343,14 @@ def build_element(rec, fields, masters, extra_data = [])
   # bead f972: carry the PBI visual's sort onto the built element (runs AFTER the
   # case so a grouped table's sort can nest inside its grouping entry).
   apply_sort(el, kind, rec, qr_cids, name)
+
+  # Conditional formatting (color scales / data bars) on table + pivot-table.
+  # Runs AFTER the case so it sees the final kind (a totals-bearing table is
+  # re-expressed as a pivot-table above) — the column ids in qr_cids are unchanged.
+  if %w[table pivot-table].include?(el['kind'])
+    cf = build_conditional_formats(rec, qr_cids, name, el['kind'])
+    el['conditionalFormats'] = cf if cf
+  end
 
   # Controls reference a master column; they carry no columns array of their own.
   el['columns'] = cols unless el['kind'] == 'control'

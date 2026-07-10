@@ -66,6 +66,34 @@ suffix (`Sum(...)/1000`, `format: {prefix:"$", suffix:"K", formatString:",.0f"}`
 **not** apply it silently — it emits the standard format and this is the documented
 gotcha. Apply the hack per-KPI in the UI if a pixel match is required.
 
+## 6. Conditional formatting (table / matrix)
+PBI table & matrix conditional formatting (`objects.values[]` backColor/fontColor +
+`objects.columnFormatting[]` dataBars, each scoped by `selector.metadata` = the
+target column queryRef) is captured by `extract-pbir.py` (`_conditional_formats`)
+as `rec['conditional_formats']` and emitted by `build-workbook-from-pbir.rb` via
+`lib/pbi_conditional_formats.rb` as element-level Sigma `conditionalFormats`.
+Grammar confirmed against real PBIR (a Fabric round-trip + Microsoft BCApps /
+fabric-toolbox reports); the Sigma output was POSTed + rendered live (backgroundScale
+white→blue, fontScale red→green, in-cell dataBars — verified 2026-07-10).
+
+| PBI mode | PBIR shape | Sigma `conditionalFormats` |
+|---|---|---|
+| Color scale — background | `values[].backColor…FillRule.FillRule.linearGradient2/3` | `type: backgroundScale`, `columnIds`, `scheme` (min[,mid],max) |
+| Color scale — font | `values[].fontColor…linearGradient2/3` | `type: fontScale`, `columnIds`, `scheme` |
+| Data bars | `columnFormatting[].dataBars.{positiveColor,negativeColor}` | `type: dataBars`, `columnIds`, `scheme` = `[negative, positive]` |
+| **Field value** (a DAX measure returns the hex) | `values[].backColor…expr.Measure` (no FillRule) | **coverage** (`approximated`, recoverable) — the measure lives in the model, not the report; re-create as `type: single` with a `formula` condition once translated |
+| **Rules** (`ruleDefinition` thresholds) | `values[].…FillRule` w/o a gradient | **coverage** (`degraded`, recoverable) — re-author as `type: single` in the UI |
+
+Notes: (1) the CF target (`selector.metadata`) is entity-qualified, so the emitter
+resolves it to a built column id by exact match then a **leaf-name** fallback.
+(2) Sigma data bars are **sign-colored** (negative/positive), not a value gradient
+— for a value gradient over a column use a color scale (`backgroundScale`), see
+`sigma-workbooks/reference/specification/tables.md`. (3) A CF whose target column
+isn't in the migrated table, and the two non-mappable modes, are recorded to
+`coverage.json` — CF is **never silently dropped**. Regression:
+`scripts/test-conditional-formats.rb` (+ real fixtures under
+`fixtures/conditional_formats/`).
+
 ## Verification
 - `theme: CY24SU10`, card `value_color: #118DFF`, tableEx `show_totals: True` round-trip
   through `extract-pbir.py` (live-checked against the Retail Performance & Trends report).

@@ -372,6 +372,112 @@ def _show_totals(visual, vtype):
     return True  # PBI default
 
 
+def _cf_color(node):
+    """A color node inside a table/matrix conditional-format fill rule. PBI writes
+    several shapes: a bare {Literal:{Value:"'#fff'"}}, an {expr:{Literal:...}}, a
+    {solid:{color:...}}, a {color:...} wrapper, or a palette-indexed
+    {ThemeDataColor:{ColorId,Percent}} (no static hex -> None). Returns hex or None."""
+    if not isinstance(node, dict):
+        return None
+    if "ThemeDataColor" in node:
+        return None  # palette-indexed; can't resolve to a hex without the theme
+    lit = (node.get("Literal") or {}).get("Value")
+    if lit is not None:
+        s = str(lit).strip().strip("'")
+        return s if s.startswith("#") else None
+    for k in ("expr", "solid", "color"):
+        if k in node:
+            c = _cf_color(node[k])
+            if c:
+                return c
+    return None
+
+
+def _fill_rule_scheme(fill_rule):
+    """Ordered low->high hex scheme from a FillRule's linearGradient2/linearGradient3
+    (the PBI color-scale). Returns a list of hex stops (min[,mid],max) or None."""
+    if not isinstance(fill_rule, dict):
+        return None
+    for key in ("linearGradient2", "linearGradient3"):
+        grad = fill_rule.get(key)
+        if isinstance(grad, dict):
+            stops = []
+            for stop in ("min", "mid", "center", "max"):
+                s = grad.get(stop)
+                if isinstance(s, dict):
+                    c = _cf_color(s.get("color"))
+                    if c:
+                        stops.append(c)
+            return stops or None
+    return None
+
+
+def _conditional_formats(visual, vtype):
+    """Table/matrix conditional formatting -> normalized CF records.
+
+    PBI stores per-column CF in the visual's `objects`, in two places:
+      - objects.values[]          : backColor / fontColor cell coloring. The color
+                                    expr is either a FillRule (a color-scale
+                                    `linearGradient2/3`, or a rules `ruleDefinition`)
+                                    or a bare Measure (field-value color — a DAX
+                                    measure returns the hex directly). Scoped by
+                                    selector.metadata (= the target column queryRef).
+      - objects.columnFormatting[]: dataBars (in-cell bars). Same selector.
+    Returns a list of {target, property, mode, ...} the builder maps to Sigma
+    element-level conditionalFormats. mode ∈ gradient | fieldValue | rules | dataBars.
+    Non-table visuals -> None (CF is a table/matrix feature)."""
+    if vtype not in ("tableEx", "tableExV2", "pivotTable", "matrix"):
+        return None
+    objs = visual.get("objects", {}) or {}
+    out = []
+    # cell coloring: objects.values[] backColor / fontColor
+    for item in objs.get("values", []):
+        if not isinstance(item, dict):
+            continue
+        target = (item.get("selector") or {}).get("metadata")
+        if not target:
+            continue  # global (unscoped) style, not per-column CF
+        props = item.get("properties", {}) or {}
+        for prop_key, sigma_prop in (("backColor", "background"), ("fontColor", "font")):
+            prop = props.get(prop_key)
+            if not isinstance(prop, dict):
+                continue
+            expr = ((((prop.get("solid") or {}).get("color")) or {}).get("expr")) or {}
+            rule = expr.get("FillRule")
+            if isinstance(rule, dict):
+                scheme = _fill_rule_scheme(rule.get("FillRule") or {})
+                if scheme:
+                    out.append({"target": target, "property": sigma_prop,
+                                "mode": "gradient", "scheme": scheme,
+                                "input": _expr_queryref(rule.get("Input"))})
+                else:
+                    # rules-based (ruleDefinition) — no committed sample to model
+                    # exactly; surface it so the builder routes it to coverage
+                    # instead of silently dropping.
+                    out.append({"target": target, "property": sigma_prop,
+                                "mode": "rules", "unresolved": True,
+                                "input": _expr_queryref(rule.get("Input"))})
+                continue
+            # field-value: the color IS a measure (no FillRule wrapper). A bare
+            # Literal/ThemeDataColor here is static styling, not CF -> skipped.
+            mqr = _expr_queryref(expr)
+            if mqr:
+                out.append({"target": target, "property": sigma_prop,
+                            "mode": "fieldValue", "measure": mqr})
+    # data bars: objects.columnFormatting[] dataBars
+    for item in objs.get("columnFormatting", []):
+        if not isinstance(item, dict):
+            continue
+        target = (item.get("selector") or {}).get("metadata")
+        db = (item.get("properties", {}) or {}).get("dataBars")
+        if not target or not isinstance(db, dict):
+            continue
+        out.append({"target": target, "property": "background", "mode": "dataBars",
+                    "positive": _color_literal(db.get("positiveColor")),
+                    "negative": _color_literal(db.get("negativeColor"))})
+    return out or None
+
+
 def _report_theme(defn):
     """Report base-theme name (themeCollection.baseTheme.name), e.g. 'CY24SU10'.
     Drives lib/pbi_theme.rb's palette selection. None -> builder uses PBI default."""
@@ -447,6 +553,9 @@ def extract(pbir_dir):
                 # Sigma pivot-table totals:{showGrandTotals} (builder re-expresses a
                 # grouped table as a pivot when set).
                 "show_totals": _show_totals(visual, vtype),
+                # table/matrix conditional formatting (background/font color-scales,
+                # rules, field-value measures, data bars) -> Sigma conditionalFormats.
+                "conditional_formats": _conditional_formats(visual, vtype),
             }
             if rec["sigma_kind"] == "text":
                 rec["text"] = _textbox_body(visual)
