@@ -412,6 +412,65 @@ def _fill_rule_scheme(fill_rule):
     return None
 
 
+# PBI QueryComparisonKind -> operator. Standard enum (confirmed live via a Fabric
+# round-trip): 0 Equal, 1 GreaterThan, 2 GreaterThanOrEqual, 3 LessThan, 4 LessThanOrEqual.
+_CMP_OP = {0: "=", 1: ">", 2: ">=", 3: "<", 4: "<="}
+
+
+def _lit_value(node):
+    """A PBI literal node {Literal:{Value:"'x'"|"400D"}} -> "x" / "400" (type suffix
+    D/L/M/F stripped), or None."""
+    v = (node or {}).get("Literal", {}).get("Value")
+    if v is None:
+        return None
+    s = str(v).strip()
+    if s.startswith("'") and s.endswith("'"):
+        return s[1:-1]
+    m = __import__("re").fullmatch(r"(-?\d+(?:\.\d+)?)[DLMF]?", s)
+    return m.group(1) if m else s
+
+
+def _parse_comparison(cmp):
+    """A PBI Comparison {ComparisonKind, Left, Right} -> {op, value, driver} or None.
+    `driver` is the queryRef of the field being tested (Left) so the emitter can
+    check it matches the formatted column."""
+    if not isinstance(cmp, dict):
+        return None
+    op = _CMP_OP.get(cmp.get("ComparisonKind"))
+    val = _lit_value(cmp.get("Right"))
+    if op is None or val is None:
+        return None
+    return {"op": op, "value": val, "driver": _expr_queryref(cmp.get("Left"))}
+
+
+def _parse_condition(cond):
+    """A rule's Condition -> list of comparisons. A single `Comparison` -> [one];
+    an `And` of two comparisons (a range band) -> [two]. Returns None for shapes
+    we don't model (Or, nested boolean) so the emitter routes them to coverage."""
+    if not isinstance(cond, dict):
+        return None
+    if "Comparison" in cond:
+        c = _parse_comparison(cond["Comparison"])
+        return [c] if c else None
+    if "And" in cond:
+        left = _parse_condition(cond["And"].get("Left"))
+        right = _parse_condition(cond["And"].get("Right"))
+        return (left + right) if (left and right) else None
+    return None
+
+
+def _parse_conditional_cases(cond):
+    """A rules-based CF `Conditional` {Cases[], Default?} -> {rules:[{comparisons,color}],
+    default:hex}. Each case = a Condition (1-2 comparisons) + a Value color."""
+    rules = []
+    for case in cond.get("Cases", []) if isinstance(cond, dict) else []:
+        comps = _parse_condition((case or {}).get("Condition", {}))
+        color = _cf_color((case or {}).get("Value") or {})
+        if comps and color:
+            rules.append({"comparisons": comps, "color": color})
+    return {"rules": rules, "default": _cf_color(cond.get("Default") or {}) if isinstance(cond, dict) else None}
+
+
 def _conditional_formats(visual, vtype):
     """Table/matrix conditional formatting -> normalized CF records.
 
@@ -451,14 +510,27 @@ def _conditional_formats(visual, vtype):
                                 "mode": "gradient", "scheme": scheme,
                                 "input": _expr_queryref(rule.get("Input"))})
                 else:
-                    # rules-based (ruleDefinition) — no committed sample to model
-                    # exactly; surface it so the builder routes it to coverage
-                    # instead of silently dropping.
+                    # a FillRule with no gradient we recognize — surface it so the
+                    # builder routes it to coverage instead of silently dropping.
                     out.append({"target": target, "property": sigma_prop,
                                 "mode": "rules", "unresolved": True,
                                 "input": _expr_queryref(rule.get("Input"))})
                 continue
-            # field-value: the color IS a measure (no FillRule wrapper). A bare
+            # rules-based (thresholds): PBI serializes "Format style: Rules" as a
+            # `Conditional` {Cases:[{Condition, Value(color)}], Default} expression
+            # (NOT a FillRule) — confirmed against real PBIR (microsoft/fabric-toolbox).
+            cond = expr.get("Conditional")
+            if isinstance(cond, dict):
+                parsed = _parse_conditional_cases(cond)
+                rec = {"target": target, "property": sigma_prop, "mode": "rules",
+                       "rules": parsed["rules"]}
+                if parsed["default"]:
+                    rec["default"] = parsed["default"]
+                if not parsed["rules"]:
+                    rec["unresolved"] = True  # Conditional we couldn't model -> coverage
+                out.append(rec)
+                continue
+            # field-value: the color IS a measure (no wrapper). A bare
             # Literal/ThemeDataColor here is static styling, not CF -> skipped.
             mqr = _expr_queryref(expr)
             if mqr:

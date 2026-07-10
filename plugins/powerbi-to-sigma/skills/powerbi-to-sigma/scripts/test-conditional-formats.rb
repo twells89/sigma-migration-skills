@@ -50,6 +50,33 @@ ok('field-value -> coverage approximated/recoverable', cov.any? { |c| c[:severit
 ok('rules -> coverage degraded/recoverable', cov.any? { |c| c[:severity] == 'degraded' && c[:recoverable] && c[:detail] =~ /rules-based/ })
 ok('CF on absent column -> coverage degraded/not-recoverable', cov.any? { |c| c[:recoverable] == false && c[:detail] =~ /not in the migrated/ })
 
+# --- 1b. Rules mode -> type:single ------------------------------------------
+rule_cfs = [
+  # numeric bands on Profit Margin: <0.15 red, [0.15,0.30) yellow, >=0.30 green
+  { 'target' => 'ORDER_FACT.Profit Margin', 'property' => 'background', 'mode' => 'rules',
+    'rules' => [
+      { 'comparisons' => [{ 'op' => '<', 'value' => '0.15', 'driver' => 'ORDER_FACT.Profit Margin' }], 'color' => '#F8696B' },
+      { 'comparisons' => [{ 'op' => '>=', 'value' => '0.15', 'driver' => 'ORDER_FACT.Profit Margin' },
+                          { 'op' => '<', 'value' => '0.30', 'driver' => 'ORDER_FACT.Profit Margin' }], 'color' => '#FFEB84' },
+      { 'comparisons' => [{ 'op' => '>=', 'value' => '0.30', 'driver' => 'ORDER_FACT.Profit Margin' }], 'color' => '#63BE7B' },
+    ] },
+  # font-color text-equality rule
+  { 'target' => 'ORDER_FACT.Order Channel', 'property' => 'font', 'mode' => 'rules',
+    'rules' => [{ 'comparisons' => [{ 'op' => '=', 'value' => 'App', 'driver' => 'ORDER_FACT.Order Channel' }], 'color' => '#118DFF' }] },
+  # cross-column rule -> coverage (single can't color A by B)
+  { 'target' => 'ORDER_FACT.Net Revenue $', 'property' => 'background', 'mode' => 'rules',
+    'rules' => [{ 'comparisons' => [{ 'op' => '<', 'value' => '0', 'driver' => 'ORDER_FACT.Gross Profit $' }], 'color' => '#F8696B' }] },
+]
+rq = { 'ORDER_FACT.Profit Margin' => 'e-c3', 'ORDER_FACT.Order Channel' => 'e-c0', 'ORDER_FACT.Net Revenue $' => 'e-c1' }
+rr = PbiConditionalFormats.build(rule_cfs, rq, 'Scorecard', 'table')
+rf = rr['formats']
+ok('rules: one-sided threshold -> single with op',   rf.any? { |f| f['type'] == 'single' && f['columnIds'] == ['e-c3'] && f['condition'] == '<' && f['value'] == 0.15 && f['style'] == { 'backgroundColor' => '#F8696B' } })
+ok('rules: And range -> single formula "[Col] >= lo and [Col] < hi"', rf.any? { |f| f['condition'] == 'formula' && f['formula'] == '[Profit Margin] >= 0.15 and [Profit Margin] < 0.3' && f['style'] == { 'backgroundColor' => '#FFEB84' } })
+ok('rules: >= band -> single >=',                    rf.any? { |f| f['condition'] == '>=' && f['value'] == 0.30 && f['style'] == { 'backgroundColor' => '#63BE7B' } })
+ok('rules: font text-equality -> single = with color style', rf.any? { |f| f['columnIds'] == ['e-c0'] && f['condition'] == '=' && f['value'] == 'App' && f['style'] == { 'color' => '#118DFF' } })
+ok('rules: 3 numeric bands + 1 text = 4 singles',    rf.size == 4)
+ok('rules: cross-column rule -> coverage, not a single', rr['coverage'].any? { |c| c[:detail] =~ /cross-column/ })
+
 # leaf-name fallback: entity-qualified target still resolves to a leaf-matched col
 res2 = PbiConditionalFormats.build(
   [{ 'target' => 'SOME_OTHER.Net Revenue $', 'property' => 'background', 'mode' => 'gradient', 'scheme' => %w[#fff #000] }],
