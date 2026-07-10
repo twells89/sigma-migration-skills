@@ -248,6 +248,73 @@ def arn_id(arn):
     return arn.rsplit("/", 1)[-1]
 
 
+# QuickSight built-in ("::aws:theme/NAME") data-color palettes. AWS-managed built-ins are
+# NOT describable via DescribeTheme (ResourceNotFound / ARN rejected), so the palette is
+# carried here. The QuickSight built-in themes SHARE the same categorical DATA palette and
+# differ only in UI chrome (background/foreground) — so the CLASSIC data colors below serve
+# every built-in; `dark` just flips the Sigma themeName to Dark. CLASSIC is QuickSight's
+# default and is verified against a rendered dashboard (Sales Pipeline, 2026-07-10).
+CLASSIC_DATA_COLORS = ["#ACDCEF", "#375C75", "#EBAD63", "#C2E455",
+                       "#D246B6", "#6D96DC", "#7C4FE0", "#F05C5C"]
+BUILTIN_THEME_PALETTES = {
+    "CLASSIC":   {"colors": CLASSIC_DATA_COLORS, "empty": "#DDDDDD", "dark": False},
+    "SEASIDE":   {"colors": CLASSIC_DATA_COLORS, "empty": "#DDDDDD", "dark": False},
+    "RAINIER":   {"colors": CLASSIC_DATA_COLORS, "empty": "#DDDDDD", "dark": False},
+    "AQUASCAPE": {"colors": CLASSIC_DATA_COLORS, "empty": "#DDDDDD", "dark": False},
+    "MIDNIGHT":  {"colors": CLASSIC_DATA_COLORS, "empty": "#666666", "dark": True},
+    "NITRO":     {"colors": CLASSIC_DATA_COLORS, "empty": "#666666", "dark": True},
+}
+DEFAULT_BUILTIN = "CLASSIC"
+
+
+def _theme_id_from_arn(arn):
+    """(theme_id, is_builtin) from a theme ARN. Built-ins are `...::aws:theme/NAME`;
+    custom account themes are `...:ACCT:theme/ID`."""
+    if not arn:
+        return (None, False)
+    m = re.search(r":theme/([\w\-]+)$", arn)
+    return (m.group(1) if m else None, "::aws:theme/" in arn)
+
+
+def resolve_theme(api, theme_arn, offline=False, log=print):
+    """Resolve the QuickSight theme palette that drives a dashboard's colors.
+
+    QuickSight colors come from the (often implicit) theme, NOT the definition export:
+    a dashboard/analysis carries only a ThemeArn (or none -> account default -> CLASSIC).
+    Returns {name, dataColors:[hex...], primaryColor, emptyFill, isDark} or None (offline).
+    Custom account themes are fetched via DescribeTheme; built-ins use the carried palette."""
+    if offline:
+        return None
+    tid, builtin = _theme_id_from_arn(theme_arn)
+    if not tid:  # no theme on the asset -> account default -> else CLASSIC
+        try:
+            dft = (api.call("describe-account-settings").get("AccountSettings") or {}).get("DefaultTheme")
+        except Exception:  # noqa: BLE001
+            dft = None
+        tid, builtin = _theme_id_from_arn(dft)
+        if not tid:
+            tid, builtin = DEFAULT_BUILTIN, True
+    if not builtin:  # custom account theme -> the real palette
+        try:
+            cfg = (((api.call("describe-theme", ThemeId=tid).get("Theme") or {})
+                    .get("Version") or {}).get("Configuration") or {})
+            pal = cfg.get("DataColorPalette") or {}
+            colors = [c for c in (pal.get("Colors") or []) if c]
+            if colors:
+                bg = ((cfg.get("UIColorPalette") or {}).get("PrimaryBackground") or "").lstrip("#")
+                isdark = len(bg) >= 6 and int(bg[:2], 16) < 0x80
+                return {"name": tid, "dataColors": colors, "primaryColor": colors[0],
+                        "emptyFill": pal.get("EmptyFillColor"), "isDark": isdark}
+            log(f"  theme: custom theme {tid} has no DataColorPalette — using {DEFAULT_BUILTIN}")
+        except Exception as e:  # noqa: BLE001
+            log(f"  theme: describe-theme({tid}) failed ({str(e)[:80]}) — using built-in palette")
+    bp = BUILTIN_THEME_PALETTES.get(tid) or BUILTIN_THEME_PALETTES[DEFAULT_BUILTIN]
+    if tid not in BUILTIN_THEME_PALETTES:
+        log(f"  theme: '{tid}' not on file — QuickSight built-ins share the {DEFAULT_BUILTIN} data palette")
+    return {"name": tid, "dataColors": bp["colors"], "primaryColor": bp["colors"][0],
+            "emptyFill": bp["empty"], "isDark": bp["dark"]}
+
+
 def field_columns(inner):
     """Shallow-walk a visual's ChartConfiguration collecting referenced ColumnNames."""
     cols = []
@@ -473,9 +540,27 @@ def discover_one(out, cache, fixture_dir=None, analysis_id=None, dashboard_id=No
             for c in defn.get("CalculatedFields", [])]
     params = [{"name": (list(p.values())[0] or {}).get("Name")} for p in defn.get("ParameterDeclarations", [])]
 
+    # 5. THEME palette — QuickSight colors are theme-driven, not in the definition export.
+    #    ThemeArn lives on the dashboard-definition response; for an analysis it's on
+    #    DescribeAnalysis (the -definition call omits it). Resolve -> None only when offline.
+    theme_arn = None
+    if not offline:
+        if src_kind == "dashboard":
+            theme_arn = d.get("ThemeArn")
+        else:
+            try:
+                theme_arn = (cache.api.call("describe-analysis", AnalysisId=src_id)
+                             .get("Analysis") or {}).get("ThemeArn")
+            except Exception:  # noqa: BLE001 — theme is best-effort
+                theme_arn = None
+    theme = resolve_theme(None if offline else cache.api, theme_arn, offline=offline, log=log)
+    if theme:
+        json.dump(theme, open(os.path.join(out, "theme.json"), "w"), indent=2)
+
     signals = {"source": {"kind": src_kind, "id": src_id, "name": name},
                "datasets": ds_meta, "dataSources": src_meta,
-               "calculatedFields": calc, "parameters": params, "sheets": sheets}
+               "calculatedFields": calc, "parameters": params, "sheets": sheets,
+               "theme": theme}
     json.dump(signals, open(os.path.join(out, "signals.json"), "w"), indent=2)
 
     # summary

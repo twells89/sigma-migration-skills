@@ -60,6 +60,20 @@ end
 rb = JSON.parse(File.read(opts[:rb]))
 dm_id = rb['dataModelId']
 
+# THEME palette — QuickSight colors are theme-driven and absent from the definition export;
+# discovery resolves them into signals.json (co-located with analysis.json). We apply them as
+# (1) a workbook-level themeOverrides.categoricalScheme — the ONLY spec path to pie/donut slice
+# colors and the palette for every categorical chart — and (2) a single-hue color on
+# single-measure bar/line/area (QuickSight paints those in the theme's primary data color).
+THEME = begin
+  sig = File.join(File.dirname(File.expand_path(opts[:an])), 'signals.json')
+  File.exist?(sig) ? JSON.parse(File.read(sig))['theme'] : nil
+rescue StandardError
+  nil
+end
+THEME_COLORS = (THEME && THEME['dataColors']).is_a?(Array) ? THEME['dataColors'].compact : []
+THEME_PRIMARY = THEME && THEME['primaryColor']
+
 def disp(raw); raw.to_s.gsub(/[_.]/, ' ').split.map { |w| w[0..0].upcase + w[1..-1].to_s.downcase }.join(' '); end
 
 # Boolean columns (display names), derived from the discovery datasets' PhysicalTable
@@ -1118,6 +1132,12 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       # B-gap COLOR: by-measure (ColorScale dup column) / by-dimension (Colors well).
       cclr = qs_color(inner, w, el, [did], ycids, calc, mc_, dmel_, m_)
       el['color'] = cclr if cclr
+      # THEME single-hue: a single-measure chart with NO explicit QS color encoding is
+      # painted by QuickSight in the theme's PRIMARY data color. Match it (Sigma otherwise
+      # picks its own default hue). Multi-measure charts keep the categorical scheme.
+      if !cclr && THEME_PRIMARY && ycids.size == 1
+        el['color'] = { 'by' => 'single', 'value' => THEME_PRIMARY }
+      end
       # A-gap REFERENCE LINES -> refMarks (wrapped value:{type:formula}).
       rms = qs_reference_lines(inner, calc, mc_, dmel_, m_, title, build_warnings)
       el['refMarks'] = rms unless rms.empty?
@@ -1402,6 +1422,14 @@ spec = { 'name' => (an['Name'] || 'QuickSight Migration') + ' (from QuickSight)'
          'schemaVersion' => 1,
          'pages' => [{ 'id' => 'page-data', 'name' => 'Data', 'elements' => data_elements }] + dash_pages }
 spec['folderId'] = opts[:folder] if opts[:folder]
+# THEME palette -> workbook themeOverrides. categoricalScheme is the ONLY spec path to
+# pie/donut slice colors (per-element color.scheme is silently dropped there) and sets the
+# palette for every categorical chart; a dark QuickSight theme flips the base to Sigma "Dark".
+unless THEME_COLORS.empty?
+  spec['themeOverrides'] = { 'categoricalScheme' => THEME_COLORS }
+  spec['themeName'] = 'Dark' if THEME && THEME['isDark']
+  STDERR.puts "  theme: applied QuickSight palette (#{THEME_COLORS.size} colors) via themeOverrides.categoricalScheme#{THEME['isDark'] ? ' + themeName:Dark' : ''}"
+end
 
 File.write(opts[:out], JSON.pretty_generate(spec))
 map_out = opts[:out].sub(/\.json$/, '') + '.map.json'
