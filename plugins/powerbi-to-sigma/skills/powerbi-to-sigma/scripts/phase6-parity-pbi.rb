@@ -197,8 +197,10 @@ if opts[:emit]
   # venv, else a real system Python via PyResolve (Windows Store-stub safe; bead
   # 7o01 — see scripts/requirements.txt / run.sh bootstrap). py_argv is an array
   # so a multi-token launcher (`py -3`) survives the splat.
+  # bead 4alk.4: the venv is POSIX bin/python OR Windows Scripts\python.exe —
+  # probe both rather than assuming bin/.
   py = ENV['PBI_PY'] ||
-       (File.exist?('/tmp/pbiauth/bin/python') ? '/tmp/pbiauth/bin/python' : nil)
+       ['/tmp/pbiauth/bin/python', '/tmp/pbiauth/Scripts/python.exe'].find { |p| File.exist?(p) }
   py_argv = py ? [py] : PyResolve.argv
   out, err, st = Open3.capture3(*py_argv, HARNESS, opts[:ws], opts[:ds], stdin_data: JSON.dump(chart_dax))
   warn err unless err.empty?

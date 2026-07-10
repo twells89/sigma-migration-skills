@@ -306,8 +306,11 @@ signals_path = File.join(WORK, 'signals.json')
 # a real system Python via PyResolve (Windows Store-stub safe; the offline PBIR
 # parse is stdlib-only). PY_ARGV is an array so a multi-token launcher (`py -3`)
 # survives the splat below.
+# bead 4alk.4: venvs are POSIX bin/python OR Windows Scripts\python.exe — probe
+# both layouts per venv root rather than assuming bin/.
 py = opts[:python] || ENV['PBI_PY'] ||
-     [File.join(WORK, '.venv', 'bin', 'python'), '/tmp/pbiauth/bin/python']
+     [File.join(WORK, '.venv', 'bin', 'python'), File.join(WORK, '.venv', 'Scripts', 'python.exe'),
+      '/tmp/pbiauth/bin/python', '/tmp/pbiauth/Scripts/python.exe']
        .find { |p| File.exist?(p) }
 PY_ARGV = py ? [py] : PyResolve.argv
 if classic_rj

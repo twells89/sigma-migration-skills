@@ -69,6 +69,13 @@ python3 -m venv /tmp/pbiauth
 /tmp/pbiauth/bin/pip install -r scripts/requirements.txt   # msal, requests, truststore
 ```
 
+> **Windows:** the venv layout differs — use `Scripts\` instead of `bin/` (e.g.
+> `python -m venv \tmp\pbiauth` then `\tmp\pbiauth\Scripts\pip.exe install -r
+> scripts\requirements.txt`, and `\tmp\pbiauth\Scripts\python.exe` in place of
+> `/tmp/pbiauth/bin/python` everywhere below). The `powerbi-to-sigma` orchestrator
+> (`migrate-powerbi.rb`, `phase6-parity-pbi.rb`) already probes both layouts and
+> falls back to `PyResolve` — this note is only for the manual commands on this page.
+
 Auth reuses the working recipe documented in
 `powerbi-to-sigma/refs/connection.md`: well-known PowerBI Desktop public client
 `ea0616ba-638b-4df5-95b9-636659ae5121`, scope

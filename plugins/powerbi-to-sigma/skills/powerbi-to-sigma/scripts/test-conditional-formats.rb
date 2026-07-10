@@ -12,6 +12,7 @@
 
 require 'json'
 require_relative 'lib/pbi_conditional_formats'
+require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
 
 $fail = 0
 def ok(name, cond)
@@ -86,7 +87,10 @@ ok('leaf-name fallback resolves entity-mismatched target', res2['formats'].size 
 
 # --- 2. Python extractor: real PBIR bytes -> normalized CF records -------------
 require 'tempfile'
-py = ENV['PBI_PY'] || 'python3'
+# PBI_PY wins if set; else a real system Python via PyResolve (Windows Store-stub
+# safe). PyResolve.display is a shell-safe "tok1 tok2" string (e.g. "py -3") since
+# `py` is interpolated into a backtick command below, not splatted into argv.
+py = ENV['PBI_PY'] || PyResolve.display
 EXTRACTOR = File.join(__dir__, 'extract-pbir.py')
 def extract_cf(py, visual_json_path)
   Tempfile.create(['cf_extract', '.py']) do |f|

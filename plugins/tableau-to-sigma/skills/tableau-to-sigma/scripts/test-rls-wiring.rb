@@ -15,6 +15,7 @@
 
 require 'json'
 require 'tempfile'
+require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
 
 DIR = __dir__
 fails = []
@@ -53,7 +54,7 @@ security = [
 ]
 tmp = Tempfile.new(['security-', '.json'])
 tmp.write(JSON.generate(security)); tmp.close
-out = `python3 #{File.join(DIR, 'apply_sigma_rls.py').inspect} --from-security #{tmp.path.inspect} --print-plan 2>&1`
+out = `#{PyResolve.display} #{File.join(DIR, 'apply_sigma_rls.py').inspect} --from-security #{tmp.path.inspect} --print-plan 2>&1`
 ok = $?.success?
 tmp.unlink
 check(ok, 'print-plan exits 0 with no token / --dm-id (offline)', fails)

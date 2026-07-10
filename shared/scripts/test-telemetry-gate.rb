@@ -7,6 +7,7 @@
 require 'json'
 require 'tmpdir'
 require 'rbconfig'
+require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
 
 GATE   = File.join(__dir__, 'assert-telemetry-ran.rb')
 REPORT = File.join(__dir__, 'report-telemetry.py')
@@ -21,7 +22,7 @@ end
 
 def report(dir, *extra)
   env = { 'SIGMA_CLIENT_ID' => 'testclient', 'SIGMA_BASE_URL' => 'https://api.au.aws.sigmacomputing.com' }
-  system(env, 'python3', REPORT, '--tool', 'tableau-to-sigma', '--workdir', dir, *extra,
+  system(env, *PyResolve.argv, REPORT, '--tool', 'tableau-to-sigma', '--workdir', dir, *extra,
          out: File::NULL, err: File::NULL)
 end
 
