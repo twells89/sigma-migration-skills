@@ -358,6 +358,45 @@ def _card_value_color(visual):
     return None
 
 
+_DISPLAY_UNITS = {
+    "0": "auto", "1": "none", "1000": "thousands", "1000000": "millions",
+    "1000000000": "billions", "1000000000000": "trillions",
+}
+
+
+def _display_units(visual):
+    """PBI number display units (objects.labels/callout/calloutValue[].properties.
+    labelDisplayUnits) -> 'auto'|'none'|'thousands'|'millions'|... or None.
+
+    PBI serializes this only when NON-default, so None means the report is on the
+    default 'Auto' (which abbreviates large values, e.g. '$126K'). The builder
+    treats None/anything-but-'none' as abbreviate; explicit 'none' = full
+    precision. (Style fidelity §5.)"""
+    objs = visual.get("objects", {}) or {}
+    for key in ("labels", "callout", "calloutValue", "dataLabels"):
+        for item in objs.get(key, []) or []:
+            props = (item or {}).get("properties", {}) or {}
+            du = _literal(props.get("labelDisplayUnits"))
+            if du is not None:
+                return _DISPLAY_UNITS.get(str(du).split(".")[0], "auto")
+    return None
+
+
+def _card_alignment(visual):
+    """PBI card callout horizontal alignment (objects.callout/labels[].properties.
+    alignment | horizontalAlignment) -> 'left'|'center'|'right' or None. The
+    builder maps it to the Sigma kpi-chart layout.anchor; None -> centered
+    default (PBI stat cards center). (Style fidelity §6.)"""
+    objs = visual.get("objects", {}) or {}
+    for key in ("callout", "calloutValue", "labels", "general"):
+        for item in objs.get(key, []) or []:
+            props = (item or {}).get("properties", {}) or {}
+            a = _literal(props.get("alignment") or props.get("horizontalAlignment"))
+            if a:
+                return str(a).lower()
+    return None
+
+
 def _show_totals(visual, vtype):
     """PBI matrix/tableEx show a Grand Total by default -> True; honor an explicit
     off toggle -> False. Non-table visuals -> None (irrelevant)."""
@@ -625,6 +664,13 @@ def extract(pbir_dir):
                 # Sigma pivot-table totals:{showGrandTotals} (builder re-expresses a
                 # grouped table as a pivot when set).
                 "show_totals": _show_totals(visual, vtype),
+                # style fidelity §5: PBI number display units (None = default
+                # 'Auto' = abbreviate). Builder emits compact d3 `s` format on
+                # KPI/chart measure columns to match PBI's "$126K" look.
+                "display_units": _display_units(visual),
+                # style fidelity §6: PBI card callout alignment -> KPI layout.anchor
+                # (None = centered default).
+                "value_align": _card_alignment(visual),
                 # table/matrix conditional formatting (background/font color-scales,
                 # rules, field-value measures, data bars) -> Sigma conditionalFormats.
                 "conditional_formats": _conditional_formats(visual, vtype),

@@ -13,6 +13,8 @@ captures the signals, the builder emits the Sigma equivalents. No UI editing.
 | Card value color | card visual `objects.labels[].properties.color` | `rec['value_color']` |
 | Matrix/tableEx totals | matrix/tableEx default (honor explicit `total.show=false`) | `rec['show_totals']` |
 | Data-label toggle | `objects.labels.show` | `rec['data_labels']` (pre-existing) |
+| Number display units | `objects.labels/callout[].properties.labelDisplayUnits` (absent ⇒ PBI default `Auto`) | `rec['display_units']` (`auto`/`none`/`thousands`/…) |
+| Card callout alignment | `objects.callout/labels[].properties.alignment` | `rec['value_align']` |
 
 ## What's emitted (build-workbook-from-pbir.rb)
 
@@ -26,10 +28,11 @@ PBI colors by legend order, so donut/pie slices and multi-series charts line up.
 Unknown/absent theme → PBI's current default (`CY24SU10`).
 
 ### 2. KPI card fidelity
-A PBI card renders a big value in the theme accent with a gray caption **below** it.
-The KPI emit reproduces that: `value.color` = `rec['value_color']` (or the palette
-accent), `name` = `{text, color:{kind:theme, ref:colors-textNeutral}}`, and
-`layout.titleOrient: bottom`.
+A PBI card renders a big value in the theme accent with a gray caption **below** it,
+**centered** in the card. The KPI emit reproduces that: `value.color` =
+`rec['value_color']` (or the palette accent), `name` = `{text, color:{kind:theme,
+ref:colors-textNeutral}}`, `layout.titleOrient: bottom`, and `layout.anchor`
+(centered by default — see §6). All handled by `lib/pbi_style.rb`.
 
 ### 3. Pivot grand totals
 PBI matrices/tableEx show a **Grand Total** row by default. A grouped Sigma `table`
@@ -54,17 +57,87 @@ donut/pie (per-element `color.scheme` is silently dropped there — the workbook
 `Coalesce([dim], "(Blank)")`, which both matches PBI's label and sorts ahead of
 letters (`(` < `A`) — so every slice gets the color PBI gave it.
 
-## 5. Number "K"/thousands — known approximation (NOT auto-transformed)
-PBI "display units: Thousands, 0 dp" (`$121K`, `$8K`) is **fixed** thousands scaling.
-Sigma's compact `formatString` uses d3 `s` = **significant figures**, so:
-- `$,.2s` renders `$121,347` → `$120K` (2 sig figs drops the 1) and `$8,358` → `$8.4K`.
-- No d3 `formatString` reproduces PBI's whole-thousands-K across all magnitudes.
+## 5. Number abbreviation ("K"/"M") — now auto-emitted (`lib/pbi_style.rb`)
+PBI cards and charts default to **display units "Auto"**, which abbreviates large
+values (`$126K`, `$1.2M`). PBI *serializes `labelDisplayUnits` only when non-default*,
+so an **absent** signal means Auto ⇒ abbreviate. The builder honors this:
 
-The exact match is a display hack — divide the measure by 1000 and add a literal `K`
-suffix (`Sum(...)/1000`, `format: {prefix:"$", suffix:"K", formatString:",.0f"}` →
-`$121K`). It changes the value's semantics (now in thousands), so the converter does
-**not** apply it silently — it emits the standard format and this is the documented
-gotcha. Apply the hack per-KPI in the UI if a pixel match is required.
+- `rec['display_units']` absent (`nil`) or anything but `none` → **abbreviate** the
+  element's **measure** columns; explicit `none` → keep full precision.
+- **KPI** value columns → `$,.3s` (3 sig figs keeps a 6-digit value honest:
+  `$125,916` → `$126k`, not `$130k`). **Chart** data labels → `$,.2s` (denser).
+- Currency `$` prefix is preserved; **percents/ratios are never abbreviated**
+  (`.1%` untouched, and an *unformatted* ratio like a bare YoY% is left alone —
+  abbreviating `0.26` → `260m` would be wrong).
+- An unformatted **sibling** measure (e.g. a "Prior Year" column with no format)
+  inherits the element's currency so it abbreviates consistently with its peers.
+- **Tables keep full precision** — PBI matrices/tableEx show full numbers
+  (`$17,581`), so `table`/`pivot-table` measure columns are **not** abbreviated.
+
+**Known approximation (irreducible via `formatString`):** Sigma's compact format is
+d3 `s` notation — **lowercase** `k`/`M` and **significant-figures** based, so it can't
+reproduce PBI's *uppercase whole-thousands* exactly (`$84,760` → `$84.8k`, where PBI
+shows `$85K`). The only exact match is the divide-by-1000 + literal-`K`-suffix hack,
+which changes the value's semantics (now stored in thousands) and breaks tooltips/axes
+— so the builder emits the honest `s` format and this residual is documented, not
+silently hacked. (Prior versions skipped abbreviation entirely; the compact `s` form
+is a strictly closer match and is now the default.)
+
+## 6. KPI card alignment (`layout.anchor`)
+PBI stat cards center their callout. The KPI emit sets `layout.anchor` from
+`rec['value_align']` (`left`→`start`, `right`→`end`, `center`→`middle`), defaulting to
+**`middle`** when PBI didn't specify — centered stat cards are the house default for
+migrations and match the common PBI card look. Set an explicit PBI alignment to
+override. (`PbiStyle.kpi_anchor`.)
+
+## 7. Presentation table style (`tableStyle`)
+PBI matrices/tableEx read as roomy, lightly-ruled "presentation" tables, not Sigma's
+dense spreadsheet grid. Every migrated `table`/`pivot-table` gets
+`tableStyle: {preset: presentation, cellSpacing: medium, gridLines: horizontal,
+banding: shown}` (does not clobber an explicitly-set style).
+(`PbiStyle.presentation_table!`.)
+
+## 8. Other PBIR-derived formats — roadmap (what else the report file carries)
+The PBIR encodes more visual style than we port today. Prioritized by value ×
+reliability (all mechanical reads of `visual.objects[...].properties`):
+
+| Signal | PBIR source | Sigma target | Status |
+|---|---|---|---|
+| Decimal precision | `labelPrecision` | `formatString` `.Nf` decimals | planned |
+| Legend position | `legend.position` (`Top`/`Right`/…) | chart legend `position` | planned (`show` already ported) |
+| Axis titles / visibility | `categoryAxis/valueAxis.showAxisTitle`, `.titleText`, `.show` | chart axis `title`, `visibility` | planned |
+| Explicit series colors | `dataPoint[].properties.fill` per series | `color.scheme` (bar/line/combo) | partial (theme palette by order) |
+| Title font / size / color | `title.properties.{fontSize,fontColor,alignment}` | element `titleFont` / `themeOverrides.titleFont` | planned |
+| Y-axis gridlines | `valueAxis.gridlineShow` | chart gridlines | planned |
+| Negative-number / currency-symbol / separators | number-format structured props | `format` structured fields (`prefix`,`currencySymbol`,…) | planned |
+| Total label / subtotal toggles | matrix `subTotals`, `total.label` | pivot `totals` | partial |
+| Page/canvas background | `section.objects.background` | `themeOverrides.colorOverrides.backgroundCanvas` | planned |
+
+Conditional formatting (background/font scales, rules, data bars) is **already**
+ported (`rec['conditional_formats']` → Sigma `conditionalFormats`).
+
+## 9. Recovering style the PBIR omits — the PNG fallback
+Some style never reaches the PBIR: it's a **theme default** PBI doesn't serialize
+(the `$126K` abbreviation is exactly this — `labelDisplayUnits` was absent), a
+report-theme JSON we can't resolve to hex, or an org theme applied at view time. When
+a signal is absent, the **source render** is ground truth. The Phase-5e compare
+already exports the PBI pages (`export-pbi-pages.py`, PNG→PDF fallback); that image
+can also be **sampled** to recover style the file dropped:
+
+| Recover from PNG | How | Feeds |
+|---|---|---|
+| KPI accent / series palette (hex) | sample dominant non-neutral pixels in each KPI value / chart mark region | `value.color`, `themeOverrides.categoricalScheme` |
+| Whether values are abbreviated + case | OCR/needle a KPI tile: does it read `$126K` vs `$125,916`? | confirm `display_units` when `nil` |
+| Value/label alignment | centroid of the value text within its card bbox | `layout.anchor` |
+| Data-label / legend presence | detect label glyphs / legend swatches in the render | confirm `data_labels`/`legend` when `nil` |
+
+Design: a `pbi-style-from-png.py` enrichment that runs **only when the PBIR signal is
+`nil`** and a source render exists — it never overrides an explicit PBIR value, and it
+degrades to the documented defaults when no render is available (as here: this
+tenant's `ExportToFile` 404s, so we relied on the `nil`→abbreviate/centered defaults).
+**Not yet implemented** — the color path (sampling the KPI accent + categorical
+palette) is the highest-value first cut, since theme-hex is the least reliable PBIR
+signal.
 
 ## 6. Conditional formatting (table / matrix)
 PBI table & matrix conditional formatting (`objects.values[]` backColor/fontColor +
@@ -103,3 +176,8 @@ isn't in the migrated table, and the two non-mappable modes, are recorded to
 - Cold builder run emits `themeName`/`themeOverrides` (CY24SU10 palette), KPI
   `value.color`+`titleOrient`, donut `Coalesce(..., "(Blank)")`, and the tableEx→pivot
   totals re-expression — 0 dropped/degraded in coverage.
+- §5–§7 (`lib/pbi_style.rb`): `scripts/test-pbi-style.rb` (26 assertions, offline)
+  pins the abbreviation/anchor/presentation logic. Live-verified on the Retail
+  Performance & Trends workbook (2026-07-10): KPIs render `$126k` / `$84.8k` centered,
+  chart labels `$37k`/`$49k`, and the Region table in the presentation preset — matching
+  the PBI source (POST → `GET /spec` round-trip → PNG export compared to the source).
