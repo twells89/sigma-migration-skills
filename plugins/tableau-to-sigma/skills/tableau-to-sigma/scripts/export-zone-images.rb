@@ -32,6 +32,7 @@
 require 'json'
 require 'fileutils'
 require 'optparse'
+require 'rbconfig'
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -56,17 +57,34 @@ abort "ERROR: layout file not found: #{opts[:layout]}" unless File.exist?(opts[:
 # ---------------------------------------------------------------------------
 # Detect image tool
 # ---------------------------------------------------------------------------
+# sips is macOS-only (not present on Windows/Linux) and its own presence check
+# used to be a shell string relying on POSIX-only redirection (`>/dev/null
+# 2>&1`), which is not portable to cmd.exe. Gate the probe on the host OS and
+# use array-form `system` (bypasses the shell entirely, so no redirection
+# syntax is needed) — on non-macOS this skips straight to the ImageMagick
+# fallback with a one-line note instead of attempting/failing on `sips`.
+MACOS = RbConfig::CONFIG['host_os'] =~ /darwin/i ? true : false
+
+def tool_available?(*cmd)
+  system(*cmd, out: File::NULL, err: File::NULL)
+rescue StandardError
+  false
+end
+
 TOOL =
-  if system('sips --version >/dev/null 2>&1')
+  if MACOS && tool_available?('sips', '--version')
     :sips
-  elsif system('convert -version >/dev/null 2>&1')
+  elsif tool_available?('convert', '-version')
     :imagemagick_convert
-  elsif system('magick -version >/dev/null 2>&1')
+  elsif tool_available?('magick', '-version')
     :imagemagick_magick
   else
+    warn 'NOTE: sips is macOS-only and this is not macOS — skipping straight to ImageMagick (also not found).' unless MACOS
     abort "ERROR: no image-cropping tool found.\n" \
           "  macOS: sips is built-in (/usr/bin/sips) — it should be present.\n" \
-          "  Linux: install imagemagick (apt install imagemagick / brew install imagemagick)."
+          "  Linux: install ImageMagick (apt install imagemagick / brew install imagemagick).\n" \
+          "  Windows: install ImageMagick (choco install imagemagick / winget install ImageMagick.ImageMagick) " \
+          'and ensure `magick` is on PATH.'
   end
 warn "Image tool: #{TOOL}"
 

@@ -19,16 +19,29 @@ Env: SISENSE_BASE_URL/SISENSE_API_TOKEN; `snow` CLI connection (default "tj").
 Usage: python3 verify_parity.py <checks.json> [--snow-conn tj]
 checks.json: [{"label","datasource","jaql":[...],"snowflake_sql","tol":0.01}]
 """
-import json, os, subprocess, sys
+import json, os, ssl, subprocess, sys, urllib.error, urllib.request
 
 def sisense_jaql(datasource, metadata):
     ds = datasource.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
-    out = subprocess.run(["curl", "-sk", "--max-time", "120", "-X", "POST",
-        f'{os.environ["SISENSE_BASE_URL"].rstrip("/")}/api/datasources/{ds}/jaql',
-        "-H", f'Authorization: Bearer {os.environ["SISENSE_API_TOKEN"]}',
-        "-H", "Content-Type: application/json",
-        "-d", json.dumps({"datasource": datasource, "metadata": metadata})],
-        capture_output=True, text=True).stdout
+    url = f'{os.environ["SISENSE_BASE_URL"].rstrip("/")}/api/datasources/{ds}/jaql'
+    payload = json.dumps({"datasource": datasource, "metadata": metadata}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST", headers={
+        "Authorization": f'Bearer {os.environ["SISENSE_API_TOKEN"]}',
+        "Content-Type": "application/json",
+    })
+    # NOTE: the original `curl -sk` skipped TLS verification (-k), which is
+    # commonly needed against on-prem Sisense deployments on self-signed certs.
+    # Preserved here (not tightened) so existing setups don't silently break;
+    # if this ever needs to be strict, gate it behind an env var instead of
+    # flipping the default.
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with urllib.request.urlopen(req, timeout=120, context=ctx) as resp:
+            out = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        out = e.read().decode("utf-8")
     d = json.loads(out)
     if d.get("error"):
         return ("ERROR", d.get("details"))

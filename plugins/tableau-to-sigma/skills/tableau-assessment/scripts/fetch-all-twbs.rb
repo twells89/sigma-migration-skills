@@ -31,6 +31,19 @@ require 'net/http'
 require 'uri'
 $LOAD_PATH.unshift File.expand_path('../../tableau-to-sigma/scripts/lib', __dir__)
 require 'tableau_rest'
+require 'py_resolve'
+
+# Cross-platform replacement for shelling `unzip` (not present on stock
+# Windows): Ruby has no stdlib zip reader, so this delegates to Python's
+# stdlib `zipfile` via a Store-stub-safe interpreter (see lib/py_resolve.rb,
+# shared across the tableau-to-sigma plugin's skills).
+def unzip_extract(zip_path, dest_dir)
+  require 'open3'
+  code = 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])'
+  _out, err, status = Open3.capture3(*PyResolve.argv, '-c', code, zip_path, dest_dir)
+  warn "  unzip failed for #{zip_path}: #{err.strip[0, 300]}" if !status.success? && !err.to_s.strip.empty?
+  status.success?
+end
 
 opts = { threads: 12, refresh_min: 60, limit: nil, force: false, exclude_projects: ['Personal Space'] }
 OptionParser.new do |p|
@@ -220,8 +233,7 @@ unzip_queue.each do |luid, r|
   next if File.exist?(twb_path) && File.size(twb_path) > 0
   tmp = File.join(twb_dir, "_unpack_#{luid}")
   FileUtils.mkdir_p(tmp)
-  unless system('unzip', '-o', '-q', r['path'], '-d', tmp)
-    warn "  unzip failed for #{r['path']} (is the unzip command available?)"
+  unless unzip_extract(r['path'], tmp)
     FileUtils.rm_rf(tmp)
     next
   end

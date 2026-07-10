@@ -61,6 +61,19 @@ require 'thread'
 
 $LOAD_PATH.unshift File.expand_path('lib', __dir__)
 require 'tableau_rest'
+require 'py_resolve'
+
+# Cross-platform replacement for shelling `unzip` (not present on stock
+# Windows): Ruby has no stdlib zip reader, so this delegates to Python's
+# stdlib `zipfile` via a Store-stub-safe interpreter (see lib/py_resolve.rb).
+# Returns true/false like the old `system('unzip', ...)` call did.
+def unzip_extract(zip_path, dest_dir)
+  require 'open3'
+  code = 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])'
+  _out, err, status = Open3.capture3(*PyResolve.argv, '-c', code, zip_path, dest_dir)
+  warn "  unzip failed for #{zip_path}: #{err.strip[0, 300]}" if !status.success? && !err.to_s.strip.empty?
+  status.success?
+end
 
 opts = { fetch_view_images: 'dashboard-only', pool: 5 }
 OptionParser.new do |o|
@@ -193,8 +206,8 @@ unless opts[:skip_content]
         log "wrote workbook-content.twbx  (#{bytes.bytesize} bytes)"
         require 'tmpdir'
         Dir.mktmpdir do |tmp|
-          unless system('unzip', '-o', '-q', twbx_path, '-d', tmp)
-            log '.twbx auto-unzip failed (unzip command not available?); leaving .twbx in place'
+          unless unzip_extract(twbx_path, tmp)
+            log '.twbx auto-unzip failed; leaving .twbx in place'
           else
             inner = Dir.glob(File.join(tmp, '**', '*.twb')).first
             if inner
