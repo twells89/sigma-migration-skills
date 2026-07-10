@@ -1079,10 +1079,15 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
 
     case kind
     when 'kpi-chart'
-      # KPI + Gauge both surface a single value
+      # KPI + Gauge both surface a single value. STYLE for QuickSight fidelity: QS renders
+      # KPIs as prominent big-number tiles, so give the value a larger font and center it
+      # (Sigma's default is a small, top-anchored number). Card chrome comes from the
+      # workbook-level themeOverrides.hasCards below (theme-aware light/dark), not per-element.
       vals = rol.('Values'); (next if vals.empty?)
       c, cid = meas_col(vals[0], calc, mc_, dmel_, m_)
-      el = base.merge('columns' => [c.merge('name' => title)], 'value' => { 'columnId' => cid })
+      el = base.merge('columns' => [c.merge('name' => title)],
+                      'value' => { 'columnId' => cid, 'fontSize' => 24 },
+                      'layout' => { 'anchor' => 'middle' })
     when 'bar-chart', 'line-chart', 'area-chart'
       # funnel/treemap land here too: their dim is in Category/Groups, measure in Values/Sizes
       if is_fallback
@@ -1422,13 +1427,21 @@ spec = { 'name' => (an['Name'] || 'QuickSight Migration') + ' (from QuickSight)'
          'schemaVersion' => 1,
          'pages' => [{ 'id' => 'page-data', 'name' => 'Data', 'elements' => data_elements }] + dash_pages }
 spec['folderId'] = opts[:folder] if opts[:folder]
-# THEME palette -> workbook themeOverrides. categoricalScheme is the ONLY spec path to
-# pie/donut slice colors (per-element color.scheme is silently dropped there) and sets the
-# palette for every categorical chart; a dark QuickSight theme flips the base to Sigma "Dark".
+# THEME -> workbook themeOverrides. Two fidelity moves:
+#  (1) categoricalScheme: the ONLY spec path to pie/donut slice colors (per-element
+#      color.scheme is silently dropped there) + the palette for every categorical chart.
+#  (2) card chrome: QuickSight renders every tile as a bordered card, so hasCards + a
+#      subtle elementBorder + rounded corners mirror that look (theme-aware: the light
+#      border is skipped on a dark QS theme, which also flips the base to Sigma "Dark").
 unless THEME_COLORS.empty?
-  spec['themeOverrides'] = { 'categoricalScheme' => THEME_COLORS }
-  spec['themeName'] = 'Dark' if THEME && THEME['isDark']
-  STDERR.puts "  theme: applied QuickSight palette (#{THEME_COLORS.size} colors) via themeOverrides.categoricalScheme#{THEME['isDark'] ? ' + themeName:Dark' : ''}"
+  ov = { 'categoricalScheme' => THEME_COLORS, 'hasCards' => 'shown', 'borderRadius' => 'round' }
+  if THEME && THEME['isDark']
+    spec['themeName'] = 'Dark'
+  else
+    ov['elementBorder'] = { 'color' => '#E2E8F0', 'width' => 1 }
+  end
+  spec['themeOverrides'] = ov
+  STDERR.puts "  theme: applied QuickSight palette (#{THEME_COLORS.size} colors) + card chrome via themeOverrides#{THEME['isDark'] ? ' + themeName:Dark' : ''}"
 end
 
 File.write(opts[:out], JSON.pretty_generate(spec))
