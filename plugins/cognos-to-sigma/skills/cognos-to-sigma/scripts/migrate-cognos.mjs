@@ -94,20 +94,24 @@ const hdr = (n, t) => console.log(`\n── Phase ${n}/${TOTAL} · ${t} ──`)
 const line = (m) => console.log(`   ${m}`);
 
 // ---------------------------------------------------------------------------
-// Sigma env bootstrap — same path as the per-phase scripts: get-token.sh
-// (which itself falls back to ~/.sigma-migration/env). All children inherit.
+// Sigma env bootstrap — shell-neutral (no bash, no `eval`): shells out to the
+// co-located get_token.py via a real Python interpreter (pythonArgv() — robust
+// to the Windows Store "App Execution Alias" python stub), which mints a
+// bearer (falling back to ~/.sigma-migration/env for creds) and writes
+// WORK/auth.json; read the token back from there. All children inherit via
+// process.env. Works identically on macOS/Linux/Windows.
 // ---------------------------------------------------------------------------
 function sigmaLogin() {
   if (process.env.SIGMA_API_TOKEN && process.env.SIGMA_BASE_URL) return;
-  const r = spawnSync('bash', ['-c',
-    `[ -f "$HOME/.sigma-migration/env" ] && . "$HOME/.sigma-migration/env"; ` +
-    `eval "$('${join(HERE, 'get-token.sh')}')" && env | grep '^SIGMA_'`], { encoding: 'utf8' });
+  const py = pythonArgv();
+  const r = spawnSync(py[0], [...py.slice(1), join(HERE, 'get_token.py'), '--workdir', WORK], { encoding: 'utf8' });
   if (r.status !== 0) die(`Sigma token bootstrap failed:\n${r.stderr || r.stdout}`);
-  for (const l of r.stdout.split('\n')) {
-    const m = l.match(/^(SIGMA_[A-Z_]+)=(.*)$/);
-    if (m) process.env[m[1]] = m[2];
-  }
-  if (!process.env.SIGMA_API_TOKEN) die('get-token.sh did not yield SIGMA_API_TOKEN');
+  const authPath = join(WORK, 'auth.json');
+  if (!existsSync(authPath)) die('get_token.py did not write auth.json');
+  const auth = JSON.parse(readFileSync(authPath, 'utf8'));
+  if (auth.SIGMA_API_TOKEN) process.env.SIGMA_API_TOKEN = auth.SIGMA_API_TOKEN;
+  if (auth.SIGMA_BASE_URL && !process.env.SIGMA_BASE_URL) process.env.SIGMA_BASE_URL = auth.SIGMA_BASE_URL;
+  if (!process.env.SIGMA_API_TOKEN) die('get_token.py did not yield SIGMA_API_TOKEN');
 }
 
 // Run a child, stream output indented; hard-fail unless allowFail.

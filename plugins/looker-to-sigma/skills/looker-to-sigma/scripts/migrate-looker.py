@@ -165,7 +165,15 @@ def run(cmd, env=None, cwd=None, check=True):
     return p.returncode, out
 
 
-def ensure_sigma_env():
+def ensure_sigma_env(workdir=None):
+    """Load ~/.sigma-migration/env and mint a bearer when SIGMA_API_TOKEN isn't
+    already exported.
+
+    Shell-neutral (no bash, no `eval`): shells out to the co-located
+    get_token.py with the SAME interpreter already running this script
+    (sys.executable — no PATH/py-launcher guessing needed), which writes
+    <workdir>/auth.json; read the token back from there. Works identically on
+    macOS/Linux/Windows."""
     env_file = os.path.expanduser("~/.sigma-migration/env")
     if os.path.exists(env_file):
         for line in open(env_file):
@@ -173,11 +181,19 @@ def ensure_sigma_env():
             if m and not os.environ.get(m.group(1)):
                 os.environ[m.group(1)] = m.group(2)
     if not os.environ.get("SIGMA_API_TOKEN") and os.environ.get("SIGMA_CLIENT_ID"):
-        p = subprocess.run(["bash", os.path.join(HERE, "get-token.sh")],
-                           capture_output=True, text=True)
-        m = re.search(r"export SIGMA_API_TOKEN=(\S+)", p.stdout or "")
-        if m:
-            os.environ["SIGMA_API_TOKEN"] = m.group(1)
+        wd = workdir or os.getcwd()
+        os.makedirs(wd, exist_ok=True)
+        p = subprocess.run([sys.executable, os.path.join(HERE, "get_token.py"),
+                            "--workdir", wd], capture_output=True, text=True)
+        if p.returncode != 0:
+            print(p.stderr or p.stdout, file=sys.stderr)
+        auth_path = os.path.join(wd, "auth.json")
+        if os.path.exists(auth_path):
+            auth = json.load(open(auth_path))
+            if auth.get("SIGMA_API_TOKEN"):
+                os.environ["SIGMA_API_TOKEN"] = auth["SIGMA_API_TOKEN"]
+            if auth.get("SIGMA_BASE_URL") and not os.environ.get("SIGMA_BASE_URL"):
+                os.environ["SIGMA_BASE_URL"] = auth["SIGMA_BASE_URL"]
 
 
 def sigma(method, path, body=None):
@@ -514,7 +530,7 @@ def main():
         a.lookml_dir = pulled
     lookml_dir = os.path.abspath(os.path.expanduser(a.lookml_dir))
     prefix = (a.name.strip() + " ") if a.name else ""
-    ensure_sigma_env()
+    ensure_sigma_env(wd)
     if not a.dry_run:
         missing = [v for v in ("SIGMA_BASE_URL", "SIGMA_API_TOKEN") if not os.environ.get(v)]
         if not a.reuse_dm and not os.environ.get("SIGMA_CONNECTION_ID"):
