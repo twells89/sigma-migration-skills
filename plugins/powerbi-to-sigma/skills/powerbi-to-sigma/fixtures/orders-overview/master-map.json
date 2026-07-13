@@ -1,0 +1,43 @@
+{
+  "masters": {
+    "OF": {
+      "id": "master-of",
+      "element_id": "<ORDER_FACT_ELEMENT_ID>",
+      "data_model": "<DATA_MODEL_ID>",
+      "columns": [
+        {
+          "id": "mof-rev",
+          "name": "Net Revenue",
+          "formula": "[Order Fact/Net Revenue]"
+        },
+        {
+          "id": "mof-ch",
+          "name": "Order Channel",
+          "formula": "[Order Fact/Order Channel]"
+        },
+        {
+          "id": "mof-sm",
+          "name": "Ship Method",
+          "formula": "[Order Fact/Ship Method]"
+        }
+      ]
+    }
+  },
+  "fields": {
+    "ORDER_FACT.Total Net Revenue": {
+      "master": "OF",
+      "ref": "[OF/Net Revenue]",
+      "agg": "Sum"
+    },
+    "ORDER_FACT.Order Channel": {
+      "master": "OF",
+      "ref": "[OF/Order Channel]",
+      "agg": null
+    },
+    "ORDER_FACT.Ship Method": {
+      "master": "OF",
+      "ref": "[OF/Ship Method]",
+      "agg": null
+    }
+  }
+}

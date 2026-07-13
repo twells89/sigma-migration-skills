@@ -1,0 +1,17 @@
+{
+  "source": "pbir", "theme": null,
+  "pages": [{
+    "page_id": "p1", "page_title": "Orders Overview", "page_w": 1280, "page_h": 720,
+    "visuals": [
+      {"visual_id":"v-kpi","visual_type":"card","sigma_kind":"kpi","title":"Total Net Revenue",
+       "x":0,"y":0,"w":300,"h":140,"z":0,"bindings":{"Values":["ORDER_FACT.Total Net Revenue"]},"formats":{}},
+      {"visual_id":"v-chan","visual_type":"clusteredColumnChart","sigma_kind":"bar","title":"Net Revenue by Channel",
+       "x":0,"y":150,"w":620,"h":360,"z":0,"orientation":null,
+       "bindings":{"Category":["ORDER_FACT.Order Channel"],"Y":["ORDER_FACT.Total Net Revenue"]},"formats":{}},
+      {"visual_id":"v-ship","visual_type":"clusteredBarChart","sigma_kind":"bar","title":"Net Revenue by Ship Method",
+       "x":640,"y":150,"w":620,"h":360,"z":0,"orientation":"horizontal",
+       "bindings":{"Category":["ORDER_FACT.Ship Method"],"Y":["ORDER_FACT.Total Net Revenue"]},"formats":{}}
+    ],
+    "interactions": []
+  }]
+}

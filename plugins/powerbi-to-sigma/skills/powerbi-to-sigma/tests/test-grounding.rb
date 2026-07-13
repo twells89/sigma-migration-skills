@@ -59,8 +59,11 @@ CATS.each do |name, cat|
   ok("#{name}: every row cites a real doc_ref URL", cited)
   mapped = cat.rows.all? { |r| !r['sigma'].to_s.empty? }
   ok("#{name}: every row has a Sigma target", mapped)
-  none_faked = cat.rows.none? { |r| (r['sigma_verified'] || {})['status'] == 'y' }
-  ok("#{name}: no row falsely claims live-verified (all status n)", none_faked)
+  valid_sv = cat.rows.all? do |r|
+    sv = r['sigma_verified'] || {}
+    %w[y n].include?(sv['status']) && (sv['status'] != 'y' || !sv['date'].to_s.empty?)
+  end
+  ok("#{name}: sigma_verified status is y/n and any 'y' carries a date", valid_sv)
 end
 
 # ---- 2. no residual inline map / the named silent default is gone ----------

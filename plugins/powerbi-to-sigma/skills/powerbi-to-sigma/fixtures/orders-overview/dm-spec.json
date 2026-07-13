@@ -1,0 +1,14 @@
+{
+  "name": "KVZA PBI Fixture DM", "schemaVersion": 1,
+  "folderId": "9ca9bf60-6a33-43dd-967d-1ba6352c54bb",
+  "pages": [{ "id": "pg-dm", "name": "Page 1", "elements": [
+    { "id": "orderfact", "name": "Order Fact", "kind": "table",
+      "source": { "kind": "sql", "connectionId": "cb2f5180-641f-47bd-8efa-da9d590d855a",
+                  "statement": "SELECT NET_REVENUE, ORDER_CHANNEL, SHIP_METHOD FROM CSA.TJ.ORDER_FACT" },
+      "columns": [
+        {"id":"of-rev","formula":"[Custom SQL/NET_REVENUE]"},
+        {"id":"of-ch","formula":"[Custom SQL/ORDER_CHANNEL]"},
+        {"id":"of-sm","formula":"[Custom SQL/SHIP_METHOD]"}
+      ] }
+  ]}]
+}

@@ -6,7 +6,7 @@ Every documented source construct maps to a real, current Sigma target or a loud
 
 **`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at **query time** in a live migration (no `type=error` column) on the date shown; 🟡 n = target is documented but not yet query-verified.
 
-**Coverage:** 26 documented constructs across 4 dimensions; 0 live-verified.
+**Coverage:** 26 documented constructs across 4 dimensions; 3 live-verified.
 
 ## Visualization / chart kind
 
@@ -16,9 +16,9 @@ Authoritative source: <https://learn.microsoft.com/en-us/power-bi/visuals/power-
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `kpi` | [doc](https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-kpi) | `kpi-chart` | 🟡 n | n/a |
+| `kpi` | [doc](https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-kpi) | `kpi-chart` | ✅ y · 2026-07-13 | n/a |
 | | | | | _PBI card / multiRowCard / kpi / gauge -> Sigma kpi-chart. gauge has no native Sigma kind (approximated). A multiRowCard fans out to one kpi-chart per measure in the builder._ |
-| `bar` | [doc](https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-types-for-reports-and-q-and-a) | `bar-chart` | 🟡 n | n/a |
+| `bar` | [doc](https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-types-for-reports-and-q-and-a) | `bar-chart` | ✅ y · 2026-07-13 | n/a |
 | | | | | _*Bar* families render horizontal (orientation:horizontal), *Column* families vertical (omit orientation). Stacking none\|stacked\|normalized from the type name. NOTE: hundredPercentStackedBarChart is in NATIVE_VISUAL_TYPES but is MISSING from VISUAL_KIND, so it currently falls through the Python default to 'bar' — the same silent coercion this catalog documents._ |
 | `line` | [doc](https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-types-for-reports-and-q-and-a) | `line-chart` | 🟡 n | n/a |
 | | | | | _Defaults to a SINGLE series unless a Series/Legend role is bound (bead c07)._ |
@@ -65,7 +65,7 @@ Authoritative source: <https://learn.microsoft.com/en-us/dax/aggregation-functio
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `SUM` | [doc](https://learn.microsoft.com/en-us/dax/sum-function-dax) | `Sum` | 🟡 n | n/a |
+| `SUM` | [doc](https://learn.microsoft.com/en-us/dax/sum-function-dax) | `Sum` | ✅ y · 2026-07-13 | n/a |
 | | | | | _DAX SUM / SUMX aggregate -> Sigma Sum._ |
 | `COUNT` | [doc](https://learn.microsoft.com/en-us/dax/count-function-dax) | `Count` | 🟡 n | n/a |
 | | | | | _DAX COUNT / COUNTA / COUNTROWS -> Sigma Count._ |
