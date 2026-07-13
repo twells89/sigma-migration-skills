@@ -9,10 +9,19 @@
       ]
     },
     {
+      "canonical": "shared/lib/coverage_catalog.rb",
+      "targets": [
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/lib/coverage_catalog.rb",
+        "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/lib/coverage_catalog.rb"
+      ]
+    },
+    {
       "canonical": "shared/scripts/gen-coverage-matrix.py",
       "targets": [
         "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/gen-coverage-matrix.py",
-        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/gen-coverage-matrix.py"
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/gen-coverage-matrix.py",
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/gen-coverage-matrix.py",
+        "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/gen-coverage-matrix.py"
       ]
     },
     {
