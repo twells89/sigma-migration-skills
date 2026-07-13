@@ -1,0 +1,16 @@
+{
+  "dimension": "aggregation",
+  "source_tool": "qlik",
+  "authoritative_doc": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/aggregation-functions.htm",
+  "sigma_target_doc": "https://help.sigmacomputing.com/docs/aggregate-functions",
+  "on_unmapped_default": "return None -> caller warns + skips the chart (NEVER default to Sum)",
+  "description": "Qlik aggregation function -> Sigma aggregate function, used token-wise by translate_measure. `qlik_fn` is matched case-insensitively; `sigma` is the emitted function. Count(DISTINCT X) is a distinct row (Qlik spells distinct as an inline keyword, Sigma as a separate function). Compositional forms are NOT in this table and stay as cited predicates in translate_measure: simple Set Analysis {<F={v}>} -> If(); arithmetic combinations Sum(a)/Sum(b); and (dropped+flagged) Aggr/Rank/Above/Peek/$()-vars/FirstSortedValue.",
+  "rows": [
+    {"source": "sum", "sigma": "Sum", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/BasicAggregationFunctions/Sum.htm", "sigma_target_ref": "https://help.sigmacomputing.com/docs/sum", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "avg", "sigma": "Avg", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/BasicAggregationFunctions/Avg.htm", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "min", "sigma": "Min", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/BasicAggregationFunctions/Min.htm", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "max", "sigma": "Max", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/BasicAggregationFunctions/Max.htm", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "count", "sigma": "Count", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/CounterAggregationFunctions/Count.htm", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "count_distinct", "sigma": "CountDistinct", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/ChartFunctions/CounterAggregationFunctions/Count.htm", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip", "notes": "Qlik Count(DISTINCT X) -> Sigma CountDistinct(X)."}
+  ]
+}

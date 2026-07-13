@@ -1,0 +1,2065 @@
+{
+  "name": "GOLDEN",
+  "schemaVersion": 1,
+  "pages": [
+    {
+      "id": "page-data",
+      "name": "Data",
+      "elements": [
+        {
+          "id": "m-master",
+          "name": "Master",
+          "kind": "table",
+          "source": {
+            "dataModelId": "dm-x",
+            "elementId": "el-x",
+            "kind": "data-model"
+          },
+          "columns": [
+            {
+              "id": "o0",
+              "name": "Order Id",
+              "formula": "[Custom SQL/Order Id]"
+            },
+            {
+              "id": "o1",
+              "name": "Order Line",
+              "formula": "[Custom SQL/Order Line]"
+            },
+            {
+              "id": "o2",
+              "name": "Customer Key",
+              "formula": "[Custom SQL/Customer Key]"
+            },
+            {
+              "id": "o3",
+              "name": "Product Key",
+              "formula": "[Custom SQL/Product Key]"
+            },
+            {
+              "id": "o4",
+              "name": "Promo Key",
+              "formula": "[Custom SQL/Promo Key]"
+            },
+            {
+              "id": "o5",
+              "name": "Store Key",
+              "formula": "[Custom SQL/Store Key]"
+            },
+            {
+              "id": "o6",
+              "name": "Date Key",
+              "formula": "[Custom SQL/Date Key]"
+            },
+            {
+              "id": "o7",
+              "name": "Order Channel",
+              "formula": "[Custom SQL/Order Channel]"
+            },
+            {
+              "id": "o8",
+              "name": "Ship Method",
+              "formula": "[Custom SQL/Ship Method]"
+            },
+            {
+              "id": "o9",
+              "name": "Order Status",
+              "formula": "[Custom SQL/Order Status]"
+            },
+            {
+              "id": "o10",
+              "name": "Quantity Ordered",
+              "formula": "[Custom SQL/Quantity Ordered]"
+            },
+            {
+              "id": "o11",
+              "name": "Quantity Returned",
+              "formula": "[Custom SQL/Quantity Returned]"
+            },
+            {
+              "id": "o12",
+              "name": "Unit Price",
+              "formula": "[Custom SQL/Unit Price]"
+            },
+            {
+              "id": "o13",
+              "name": "Unit Cost",
+              "formula": "[Custom SQL/Unit Cost]"
+            },
+            {
+              "id": "o14",
+              "name": "Discount Amount",
+              "formula": "[Custom SQL/Discount Amount]"
+            },
+            {
+              "id": "o15",
+              "name": "Shipping Amount",
+              "formula": "[Custom SQL/Shipping Amount]"
+            },
+            {
+              "id": "o16",
+              "name": "Tax Amount",
+              "formula": "[Custom SQL/Tax Amount]"
+            },
+            {
+              "id": "o17",
+              "name": "Gross Revenue",
+              "formula": "[Custom SQL/Gross Revenue]"
+            },
+            {
+              "id": "o18",
+              "name": "Net Revenue",
+              "formula": "[Custom SQL/Net Revenue]"
+            },
+            {
+              "id": "o19",
+              "name": "Gross Profit",
+              "formula": "[Custom SQL/Gross Profit]"
+            },
+            {
+              "id": "o20",
+              "name": "Net Profit",
+              "formula": "[Custom SQL/Net Profit]"
+            },
+            {
+              "id": "o21",
+              "name": "Is First Order",
+              "formula": "[Custom SQL/Is First Order]"
+            },
+            {
+              "id": "o22",
+              "name": "Is Returned",
+              "formula": "[Custom SQL/Is Returned]"
+            },
+            {
+              "id": "o23",
+              "name": "Is Cancelled",
+              "formula": "[Custom SQL/Is Cancelled]"
+            },
+            {
+              "id": "o24",
+              "name": "Days to Ship",
+              "formula": "[Custom SQL/Days to Ship]"
+            },
+            {
+              "id": "o25",
+              "name": "Customer Id",
+              "formula": "[Custom SQL/Customer Id]"
+            },
+            {
+              "id": "o26",
+              "name": "First Name",
+              "formula": "[Custom SQL/First Name]"
+            },
+            {
+              "id": "o27",
+              "name": "Last Name",
+              "formula": "[Custom SQL/Last Name]"
+            },
+            {
+              "id": "o28",
+              "name": "Customer City",
+              "formula": "[Custom SQL/Customer City]"
+            },
+            {
+              "id": "o29",
+              "name": "Customer State",
+              "formula": "[Custom SQL/Customer State]"
+            },
+            {
+              "id": "o30",
+              "name": "Customer Region",
+              "formula": "[Custom SQL/Customer Region]"
+            },
+            {
+              "id": "o31",
+              "name": "Customer Segment",
+              "formula": "[Custom SQL/Customer Segment]"
+            },
+            {
+              "id": "o32",
+              "name": "Loyalty Tier",
+              "formula": "[Custom SQL/Loyalty Tier]"
+            },
+            {
+              "id": "o33",
+              "name": "Acquisition Channel",
+              "formula": "[Custom SQL/Acquisition Channel]"
+            },
+            {
+              "id": "o34",
+              "name": "Lifetime Revenue",
+              "formula": "[Custom SQL/Lifetime Revenue]"
+            },
+            {
+              "id": "o35",
+              "name": "Product Id",
+              "formula": "[Custom SQL/Product Id]"
+            },
+            {
+              "id": "o36",
+              "name": "Product Name",
+              "formula": "[Custom SQL/Product Name]"
+            },
+            {
+              "id": "o37",
+              "name": "Category",
+              "formula": "[Custom SQL/Category]"
+            },
+            {
+              "id": "o38",
+              "name": "Subcategory",
+              "formula": "[Custom SQL/Subcategory]"
+            },
+            {
+              "id": "o39",
+              "name": "Brand",
+              "formula": "[Custom SQL/Brand]"
+            },
+            {
+              "id": "o40",
+              "name": "Is Private Label",
+              "formula": "[Custom SQL/Is Private Label]"
+            },
+            {
+              "id": "o41",
+              "name": "Is Seasonal",
+              "formula": "[Custom SQL/Is Seasonal]"
+            },
+            {
+              "id": "o42",
+              "name": "Store Id",
+              "formula": "[Custom SQL/Store Id]"
+            },
+            {
+              "id": "o43",
+              "name": "Store Name",
+              "formula": "[Custom SQL/Store Name]"
+            },
+            {
+              "id": "o44",
+              "name": "Store Type",
+              "formula": "[Custom SQL/Store Type]"
+            },
+            {
+              "id": "o45",
+              "name": "Store City",
+              "formula": "[Custom SQL/Store City]"
+            },
+            {
+              "id": "o46",
+              "name": "Store State",
+              "formula": "[Custom SQL/Store State]"
+            },
+            {
+              "id": "o47",
+              "name": "Store Region",
+              "formula": "[Custom SQL/Store Region]"
+            },
+            {
+              "id": "o48",
+              "name": "District",
+              "formula": "[Custom SQL/District]"
+            },
+            {
+              "id": "o49",
+              "name": "Manager Name",
+              "formula": "[Custom SQL/Manager Name]"
+            },
+            {
+              "id": "o50",
+              "name": "Full Date",
+              "formula": "[Custom SQL/Full Date]"
+            },
+            {
+              "id": "o51",
+              "name": "Day of Week",
+              "formula": "[Custom SQL/Day of Week]"
+            },
+            {
+              "id": "o52",
+              "name": "Month Number",
+              "formula": "[Custom SQL/Month Number]"
+            },
+            {
+              "id": "o53",
+              "name": "Month Name",
+              "formula": "[Custom SQL/Month Name]"
+            },
+            {
+              "id": "o54",
+              "name": "Quarter",
+              "formula": "[Custom SQL/Quarter]"
+            },
+            {
+              "id": "o55",
+              "name": "Year",
+              "formula": "[Custom SQL/Year]"
+            },
+            {
+              "id": "o56",
+              "name": "Is Weekend",
+              "formula": "[Custom SQL/Is Weekend]"
+            },
+            {
+              "id": "o57",
+              "name": "Is Holiday",
+              "formula": "[Custom SQL/Is Holiday]"
+            },
+            {
+              "id": "o58",
+              "name": "Promo Name",
+              "formula": "[Custom SQL/Promo Name]"
+            },
+            {
+              "id": "o59",
+              "name": "Promo Type",
+              "formula": "[Custom SQL/Promo Type]"
+            },
+            {
+              "id": "o60",
+              "name": "Promo Channel",
+              "formula": "[Custom SQL/Promo Channel]"
+            },
+            {
+              "id": "o61",
+              "name": "Discount Pct",
+              "formula": "[Custom SQL/Discount Pct]"
+            },
+            {
+              "id": "o62",
+              "name": "Target Segment",
+              "formula": "[Custom SQL/Target Segment]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pg-1",
+      "name": "Retail Orders \u2014 Overview",
+      "elements": [
+        {
+          "id": "el-krev",
+          "kind": "kpi-chart",
+          "name": "Net Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y1",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y1"
+          }
+        },
+        {
+          "id": "el-kord",
+          "kind": "kpi-chart",
+          "name": "Orders",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y2",
+              "formula": "CountDistinct([Master/Order Id])",
+              "name": "Orders",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y2"
+          }
+        },
+        {
+          "id": "el-kmar",
+          "kind": "kpi-chart",
+          "name": "Net Margin",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y3",
+              "formula": "Sum([Master/Net Profit])/Sum([Master/Net Revenue])",
+              "name": "Net Margin",
+              "format": {
+                "kind": "number",
+                "formatString": ",.1%"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y3"
+          }
+        },
+        {
+          "id": "el-lb6",
+          "kind": "control",
+          "controlId": "FullDateFilter",
+          "name": "Order Date",
+          "filters": [
+            {
+              "source": {
+                "kind": "table",
+                "elementId": "m-master"
+              },
+              "columnId": "o50"
+            }
+          ],
+          "controlType": "date-range",
+          "mode": "between",
+          "includeNulls": "when-no-value-is-selected"
+        },
+        {
+          "id": "el-ccat",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Category",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x1",
+              "formula": "[Master/Category]",
+              "name": "Category"
+            },
+            {
+              "id": "y4",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn1",
+              "formula": "Not(IsNull([Master/Category]))",
+              "name": "Category Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f1",
+              "columnId": "nn1",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x1",
+            "sort": {
+              "by": "y4",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y4"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-cmon",
+          "kind": "line-chart",
+          "name": "Revenue & Profit by Month",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x2",
+              "formula": "[Master/Month Number]",
+              "name": "Month"
+            },
+            {
+              "id": "y5",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "y6",
+              "formula": "Sum([Master/Net Profit])",
+              "name": "Net Profit",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn2",
+              "formula": "Not(IsNull([Master/Month Number]))",
+              "name": "Month Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f2",
+              "columnId": "nn2",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x2"
+          },
+          "yAxis": {
+            "columnIds": [
+              "y5",
+              "y6"
+            ]
+          }
+        },
+        {
+          "id": "el-lb1",
+          "kind": "control",
+          "controlId": "CustomerRegionFilter",
+          "name": "Customer Region",
+          "filters": [
+            {
+              "source": {
+                "kind": "table",
+                "elementId": "m-master"
+              },
+              "columnId": "o30"
+            }
+          ],
+          "controlType": "list",
+          "mode": "include",
+          "selectionMode": "multiple",
+          "values": [],
+          "source": {
+            "kind": "source",
+            "source": {
+              "kind": "table",
+              "elementId": "m-master"
+            },
+            "columnId": "o30"
+          }
+        },
+        {
+          "id": "el-lb4",
+          "kind": "control",
+          "controlId": "CategoryFilter",
+          "name": "Category",
+          "filters": [
+            {
+              "source": {
+                "kind": "table",
+                "elementId": "m-master"
+              },
+              "columnId": "o37"
+            }
+          ],
+          "controlType": "list",
+          "mode": "include",
+          "selectionMode": "multiple",
+          "values": [],
+          "source": {
+            "kind": "source",
+            "source": {
+              "kind": "table",
+              "elementId": "m-master"
+            },
+            "columnId": "o37"
+          }
+        },
+        {
+          "id": "el-cseg",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Customer Segment",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x3",
+              "formula": "[Master/Customer Segment]",
+              "name": "Segment"
+            },
+            {
+              "id": "y7",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn3",
+              "formula": "Not(IsNull([Master/Customer Segment]))",
+              "name": "Segment Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f3",
+              "columnId": "nn3",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x3",
+            "sort": {
+              "by": "y7",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y7"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-ctbl",
+          "kind": "table",
+          "name": "Store Performance",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x4",
+              "formula": "[Master/Store Name]",
+              "name": "Store"
+            },
+            {
+              "id": "x5",
+              "formula": "[Master/Store Region]",
+              "name": "Region"
+            },
+            {
+              "id": "y8",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "y9",
+              "formula": "CountDistinct([Master/Order Id])",
+              "name": "Orders",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            },
+            {
+              "id": "nn4",
+              "formula": "Not(IsNull([Master/Store Name]))",
+              "name": "Store Matched",
+              "hidden": true
+            },
+            {
+              "id": "nn5",
+              "formula": "Not(IsNull([Master/Store Region]))",
+              "name": "Region Matched",
+              "hidden": true
+            }
+          ],
+          "filters": [
+            {
+              "id": "f4",
+              "columnId": "nn4",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            },
+            {
+              "id": "f5",
+              "columnId": "nn5",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "groupings": [
+            {
+              "id": "g1",
+              "groupBy": [
+                "x4",
+                "x5"
+              ],
+              "calculations": [
+                "y8",
+                "y9"
+              ],
+              "sort": [
+                {
+                  "columnId": "y8",
+                  "direction": "descending"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "band-pg-1-hdr",
+          "kind": "container",
+          "style": {
+            "backgroundColor": "#0F172A",
+            "borderRadius": "round"
+          }
+        },
+        {
+          "id": "band-pg-1-hdrtext",
+          "kind": "text",
+          "body": "# <span style=\"color: #FFFFFF\">Retail Orders \u2014 Overview</span>"
+        },
+        {
+          "id": "band-pg-1-1",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-1-2",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-1-3",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-1-4",
+          "kind": "container"
+        }
+      ]
+    },
+    {
+      "id": "pg-2",
+      "name": "Product Performance",
+      "elements": [
+        {
+          "id": "el-pk1",
+          "kind": "kpi-chart",
+          "name": "Net Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y10",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y10"
+          }
+        },
+        {
+          "id": "el-pk2",
+          "kind": "kpi-chart",
+          "name": "Units Sold",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y11",
+              "formula": "Sum([Master/Quantity Ordered])",
+              "name": "Units Sold",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y11"
+          }
+        },
+        {
+          "id": "el-pk3",
+          "kind": "kpi-chart",
+          "name": "Return Rate",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y12",
+              "formula": "Sum([Master/Quantity Returned])/Sum([Master/Quantity Ordered])",
+              "name": "Return Rate",
+              "format": {
+                "kind": "number",
+                "formatString": ",.1%"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y12"
+          }
+        },
+        {
+          "id": "el-pc1",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Category",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x6",
+              "formula": "[Master/Category]",
+              "name": "Category"
+            },
+            {
+              "id": "y13",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn6",
+              "formula": "Not(IsNull([Master/Category]))",
+              "name": "Category Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f6",
+              "columnId": "nn6",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x6",
+            "sort": {
+              "by": "y13",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y13"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-pc2",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Subcategory",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x7",
+              "formula": "[Master/Subcategory]",
+              "name": "Subcategory"
+            },
+            {
+              "id": "y14",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn7",
+              "formula": "Not(IsNull([Master/Subcategory]))",
+              "name": "Subcategory Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f7",
+              "columnId": "nn7",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x7",
+            "sort": {
+              "by": "y14",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y14"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-pc3",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Brand",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x8",
+              "formula": "[Master/Brand]",
+              "name": "Brand"
+            },
+            {
+              "id": "y15",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn8",
+              "formula": "Not(IsNull([Master/Brand]))",
+              "name": "Brand Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f8",
+              "columnId": "nn8",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x8",
+            "sort": {
+              "by": "y15",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y15"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-pc4",
+          "kind": "bar-chart",
+          "name": "Units Sold by Category",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x9",
+              "formula": "[Master/Category]",
+              "name": "Category"
+            },
+            {
+              "id": "y16",
+              "formula": "Sum([Master/Quantity Ordered])",
+              "name": "Units",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            },
+            {
+              "id": "nn9",
+              "formula": "Not(IsNull([Master/Category]))",
+              "name": "Category Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f9",
+              "columnId": "nn9",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x9",
+            "sort": {
+              "by": "y16",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y16"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "band-pg-2-hdr",
+          "kind": "container",
+          "style": {
+            "backgroundColor": "#0F172A",
+            "borderRadius": "round"
+          }
+        },
+        {
+          "id": "band-pg-2-hdrtext",
+          "kind": "text",
+          "body": "# <span style=\"color: #FFFFFF\">Product Performance</span>"
+        },
+        {
+          "id": "band-pg-2-1",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-2-2",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-2-3",
+          "kind": "container"
+        }
+      ]
+    },
+    {
+      "id": "pg-3",
+      "name": "Customer Analytics",
+      "elements": [
+        {
+          "id": "el-cuk1",
+          "kind": "kpi-chart",
+          "name": "Net Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y17",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y17"
+          }
+        },
+        {
+          "id": "el-cuk2",
+          "kind": "kpi-chart",
+          "name": "Orders",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y18",
+              "formula": "CountDistinct([Master/Order Id])",
+              "name": "Orders",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y18"
+          }
+        },
+        {
+          "id": "el-cuk3",
+          "kind": "kpi-chart",
+          "name": "Avg Order Value",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y19",
+              "formula": "Sum([Master/Net Revenue])/CountDistinct([Master/Order Id])",
+              "name": "Avg Order Value",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y19"
+          }
+        },
+        {
+          "id": "el-cuc1",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Segment",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x10",
+              "formula": "[Master/Customer Segment]",
+              "name": "Segment"
+            },
+            {
+              "id": "y20",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn10",
+              "formula": "Not(IsNull([Master/Customer Segment]))",
+              "name": "Segment Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f10",
+              "columnId": "nn10",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x10",
+            "sort": {
+              "by": "y20",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y20"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-cuc2",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Region",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x11",
+              "formula": "[Master/Customer Region]",
+              "name": "Region"
+            },
+            {
+              "id": "y21",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn11",
+              "formula": "Not(IsNull([Master/Customer Region]))",
+              "name": "Region Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f11",
+              "columnId": "nn11",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x11",
+            "sort": {
+              "by": "y21",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y21"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-cuc3",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Loyalty Tier",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x12",
+              "formula": "[Master/Loyalty Tier]",
+              "name": "Loyalty Tier"
+            },
+            {
+              "id": "y22",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn12",
+              "formula": "Not(IsNull([Master/Loyalty Tier]))",
+              "name": "Loyalty Tier Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f12",
+              "columnId": "nn12",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x12",
+            "sort": {
+              "by": "y22",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y22"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-cuc4",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Acquisition Channel",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x13",
+              "formula": "[Master/Acquisition Channel]",
+              "name": "Channel"
+            },
+            {
+              "id": "y23",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn13",
+              "formula": "Not(IsNull([Master/Acquisition Channel]))",
+              "name": "Channel Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f13",
+              "columnId": "nn13",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x13",
+            "sort": {
+              "by": "y23",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y23"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "band-pg-3-hdr",
+          "kind": "container",
+          "style": {
+            "backgroundColor": "#0F172A",
+            "borderRadius": "round"
+          }
+        },
+        {
+          "id": "band-pg-3-hdrtext",
+          "kind": "text",
+          "body": "# <span style=\"color: #FFFFFF\">Customer Analytics</span>"
+        },
+        {
+          "id": "band-pg-3-1",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-3-2",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-3-3",
+          "kind": "container"
+        }
+      ]
+    },
+    {
+      "id": "pg-4",
+      "name": "Store Operations",
+      "elements": [
+        {
+          "id": "el-sk1",
+          "kind": "kpi-chart",
+          "name": "Net Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y24",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y24"
+          }
+        },
+        {
+          "id": "el-sk2",
+          "kind": "kpi-chart",
+          "name": "Orders",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y25",
+              "formula": "CountDistinct([Master/Order Id])",
+              "name": "Orders",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y25"
+          }
+        },
+        {
+          "id": "el-sk3",
+          "kind": "kpi-chart",
+          "name": "Avg Days to Ship",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y26",
+              "formula": "Avg([Master/Days to Ship])",
+              "name": "Avg Days to Ship",
+              "format": {
+                "kind": "number",
+                "formatString": ",.1f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y26"
+          }
+        },
+        {
+          "id": "el-sc1",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Store Region",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x14",
+              "formula": "[Master/Store Region]",
+              "name": "Region"
+            },
+            {
+              "id": "y27",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn14",
+              "formula": "Not(IsNull([Master/Store Region]))",
+              "name": "Region Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f14",
+              "columnId": "nn14",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x14",
+            "sort": {
+              "by": "y27",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y27"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-sc2",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Store",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x15",
+              "formula": "[Master/Store Name]",
+              "name": "Store"
+            },
+            {
+              "id": "y28",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn15",
+              "formula": "Not(IsNull([Master/Store Name]))",
+              "name": "Store Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f15",
+              "columnId": "nn15",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x15",
+            "sort": {
+              "by": "y28",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y28"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-sc3",
+          "kind": "bar-chart",
+          "name": "Net Revenue by District",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x16",
+              "formula": "[Master/District]",
+              "name": "District"
+            },
+            {
+              "id": "y29",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn16",
+              "formula": "Not(IsNull([Master/District]))",
+              "name": "District Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f16",
+              "columnId": "nn16",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x16",
+            "sort": {
+              "by": "y29",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y29"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-sc4",
+          "kind": "bar-chart",
+          "name": "Orders by Store Type",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x17",
+              "formula": "[Master/Store Type]",
+              "name": "Store Type"
+            },
+            {
+              "id": "y30",
+              "formula": "CountDistinct([Master/Order Id])",
+              "name": "Orders",
+              "format": {
+                "kind": "number",
+                "formatString": ",.0f"
+              }
+            },
+            {
+              "id": "nn17",
+              "formula": "Not(IsNull([Master/Store Type]))",
+              "name": "Store Type Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f17",
+              "columnId": "nn17",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x17",
+            "sort": {
+              "by": "y30",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y30"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "band-pg-4-hdr",
+          "kind": "container",
+          "style": {
+            "backgroundColor": "#0F172A",
+            "borderRadius": "round"
+          }
+        },
+        {
+          "id": "band-pg-4-hdrtext",
+          "kind": "text",
+          "body": "# <span style=\"color: #FFFFFF\">Store Operations</span>"
+        },
+        {
+          "id": "band-pg-4-1",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-4-2",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-4-3",
+          "kind": "container"
+        }
+      ]
+    },
+    {
+      "id": "pg-5",
+      "name": "Promotions & Channel",
+      "elements": [
+        {
+          "id": "el-prk1",
+          "kind": "kpi-chart",
+          "name": "Net Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y31",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y31"
+          }
+        },
+        {
+          "id": "el-prk2",
+          "kind": "kpi-chart",
+          "name": "Discount Amount",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y32",
+              "formula": "Sum([Master/Discount Amount])",
+              "name": "Discount Amount",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y32"
+          }
+        },
+        {
+          "id": "el-prk3",
+          "kind": "kpi-chart",
+          "name": "Holiday Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "y33",
+              "formula": "Sum(If([Master/Is Holiday] = 1, [Master/Net Revenue]))",
+              "name": "Holiday Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            }
+          ],
+          "value": {
+            "columnId": "y33"
+          }
+        },
+        {
+          "id": "el-prc1",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Promo Type",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x18",
+              "formula": "[Master/Promo Type]",
+              "name": "Promo Type"
+            },
+            {
+              "id": "y34",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn18",
+              "formula": "Not(IsNull([Master/Promo Type]))",
+              "name": "Promo Type Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f18",
+              "columnId": "nn18",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x18",
+            "sort": {
+              "by": "y34",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y34"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-prc2",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Order Channel",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x19",
+              "formula": "[Master/Order Channel]",
+              "name": "Channel"
+            },
+            {
+              "id": "y35",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn19",
+              "formula": "Not(IsNull([Master/Order Channel]))",
+              "name": "Channel Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f19",
+              "columnId": "nn19",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x19",
+            "sort": {
+              "by": "y35",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y35"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-prc3",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Ship Method",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x20",
+              "formula": "[Master/Ship Method]",
+              "name": "Ship Method"
+            },
+            {
+              "id": "y36",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn20",
+              "formula": "Not(IsNull([Master/Ship Method]))",
+              "name": "Ship Method Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f20",
+              "columnId": "nn20",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x20",
+            "sort": {
+              "by": "y36",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "y36"
+            ]
+          },
+          "dataLabel": {
+            "labels": "shown"
+          }
+        },
+        {
+          "id": "el-prc4",
+          "kind": "line-chart",
+          "name": "Net Revenue by Month",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "columns": [
+            {
+              "id": "x21",
+              "formula": "[Master/Month Number]",
+              "name": "Month"
+            },
+            {
+              "id": "y37",
+              "formula": "Sum([Master/Net Revenue])",
+              "name": "Net Revenue",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f"
+              }
+            },
+            {
+              "id": "nn21",
+              "formula": "Not(IsNull([Master/Month Number]))",
+              "name": "Month Matched"
+            }
+          ],
+          "filters": [
+            {
+              "id": "f21",
+              "columnId": "nn21",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ],
+          "xAxis": {
+            "columnId": "x21"
+          },
+          "yAxis": {
+            "columnIds": [
+              "y37"
+            ]
+          }
+        },
+        {
+          "id": "band-pg-5-hdr",
+          "kind": "container",
+          "style": {
+            "backgroundColor": "#0F172A",
+            "borderRadius": "round"
+          }
+        },
+        {
+          "id": "band-pg-5-hdrtext",
+          "kind": "text",
+          "body": "# <span style=\"color: #FFFFFF\">Promotions & Channel</span>"
+        },
+        {
+          "id": "band-pg-5-1",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-5-2",
+          "kind": "container"
+        },
+        {
+          "id": "band-pg-5-3",
+          "kind": "container"
+        }
+      ]
+    }
+  ]
+}

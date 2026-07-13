@@ -1,0 +1,12 @@
+{
+  "dimension": "control",
+  "source_tool": "qlik",
+  "authoritative_doc": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Filterpane/filter-pane.htm",
+  "sigma_target_doc": "refs/control-parity.md",
+  "on_unmapped_default": "list (documented default control kind for a categorical Qlik field)",
+  "description": "Qlik filter/listbox field kind -> Sigma control kind. Only the date case is special: a Sigma `list` control whose target is a datetime column posts fine but Sigma SILENTLY STRIPS the target (dead control) — so date fields become date-range controls. Date detection is COMPOSITIONAL (engine tags $date/$timestamp are authoritative; qNumFormat date pattern + column name are fallbacks) and stays as the cited predicate date_field(). Alternate-state listboxes have no Sigma equivalent -> flagged MANUAL (not emitted); a field not on the denorm element -> skipped+warned.",
+  "rows": [
+    {"source": "date", "sigma": "date-range", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Filterpane/filter-pane.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "n/a", "notes": "Field the date_field() predicate tags as date/timestamp — a datetime-bound list control is silently stripped by Sigma."},
+    {"source": "field", "sigma": "list", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Filterpane/filter-pane.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "n/a", "notes": "Categorical list control (documented default)."}
+  ]
+}

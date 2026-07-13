@@ -50,10 +50,31 @@ KEEP_UNMATCHED = os.environ.get("QLIK_KEEP_UNMATCHED", "") == "1"
 ROW_SCALE = 2          # min row-scale; Qlik rows are ~3x shorter than Sigma's
 KPI_MIN_ROWS = 5       # Sigma kpi-chart clips its title below ~5 grid rows
 TEMPORAL = re.compile(r"DATE|MONTH|YEAR|QUARTER|WEEK|DAY", re.I)
-NATIVE = {"barchart": "bar-chart", "linechart": "line-chart", "piechart": "pie-chart",
-          "combochart": "combo-chart", "scatterplot": "scatter-chart",
-          "table": "table", "kpi": "kpi-chart", "pivot-table": "pivot-table",
-          "map": "region-map"}
+# ── documentation-grounded mapping catalogs (SINGLE SOURCE OF TRUTH) ─────────
+# viz/aggregation/control maps are LOADED from refs/catalogs/<dimension>.json —
+# cited rows, live-verified Sigma targets, loud fallback on anything unmapped.
+# NO inline mapping literal may bypass these (grep-enforced by tests/test_grounding.py).
+# The human-readable matrix in refs/qlik-coverage.md is GENERATED from these files.
+# Loader: shared/lib/coverage_catalog.py (synced to scripts/lib/). Mirrors the
+# beads-sigma-93ps contract: catalog = data, code = thin resolver/predicates.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import coverage_catalog as _cc  # noqa: E402
+_CAT_DIR = _cc.default_catalog_dir(__file__)
+VIZ_CAT  = _cc.load(_CAT_DIR, "viz-kind")       # Qlik vizType     -> Sigma element kind
+AGG_CAT  = _cc.load(_CAT_DIR, "aggregation")    # Qlik agg fn      -> Sigma aggregate fn
+CTRL_CAT = _cc.load(_CAT_DIR, "control")        # Qlik field kind  -> Sigma control kind
+# number-format is COMPOSITIONAL (sigma_fmt parses the qNumFormat mask); its
+# catalog (refs/catalogs/number-format.json) pins the parser to documented
+# examples via tests/test_grounding.py rather than a flat lookup.
+
+# Qlik vizType -> Sigma element kind (auto-chart resolved by shape in build_element).
+NATIVE = {r["source"]: r["sigma"] for r in VIZ_CAT.rows}
+# Qlik aggregation fn -> Sigma aggregate fn (token-wise in translate_measure). The
+# recognized non-distinct fns drive the regex alternation; Count(DISTINCT) is separate.
+_AGG_TO_SIGMA = {r["source"]: r["sigma"] for r in AGG_CAT.rows}
+_AGG_ALT = "|".join(sorted(r["source"] for r in AGG_CAT.rows if r["source"] != "count_distinct"))
+def _agg_sigma(qlik_fn):
+    return _AGG_TO_SIGMA.get(str(qlik_fn).lower(), str(qlik_fn).capitalize())
 
 _ids = {}
 def nid(prefix):
@@ -77,8 +98,15 @@ def api_post(path, body):
                 continue
             print("HTTP", e.code, detail[:800], file=sys.stderr); raise
 
-def sigma_fmt(qfmt, name=""):
-    """Qlik qNumFormat.qFmt -> Sigma formatString. Falls back to a name heuristic."""
+def sigma_fmt(qfmt, name="", warnings=None):
+    """Qlik qNumFormat.qFmt (an Excel-style mask) -> Sigma format object, or None.
+    PARSER ONLY: a leading '$' -> currency, '%' -> percent, and the count of 0/#
+    after '.' -> decimals (qNumFormat grammar:
+    help.qlik.com/.../Scripting/FormattingFunctions/Num.htm; mapping pinned by
+    refs/catalogs/number-format.json + tests/test_grounding.py).
+    An ABSENT qFmt yields None — ship the numeric value UNFORMATTED + a loud note.
+    The old name-substring currency guess (revenue|profit|... -> $,.0f) and the
+    silent ,.0f default were REMOVED (beads-sigma-kvza): no judgement-based guessing."""
     if qfmt:
         dec = 0
         if "." in qfmt:
@@ -86,10 +114,11 @@ def sigma_fmt(qfmt, name=""):
         if "%" in qfmt: return {"kind": "number", "formatString": f",.{dec}%"}
         pre = "$" if qfmt.lstrip().startswith("$") else ""
         return {"kind": "number", "formatString": f"{pre},.{dec}f"}
-    if re.search(r"%|margin|rate", name, re.I): return {"kind": "number", "formatString": ",.1%"}
-    if re.search(r"revenue|profit|amount|value|cost|price", name, re.I):
-        return {"kind": "number", "formatString": "$,.0f"}
-    return {"kind": "number", "formatString": ",.0f"}
+    if warnings is not None and name:
+        warnings.append(f"⚠ number-format: measure '{name}' has no Qlik qNumFormat — shipped "
+                        f"UNFORMATTED (no name-substring currency guess, no silent default). "
+                        f"Apply a Sigma column format if a specific display is needed.")
+    return None
 
 class Resolver:
     """Raw Qlik field name -> master-column display name (via the denorm element)."""
@@ -115,7 +144,7 @@ def translate_measure(expr, resolve):
         if d is None: unresolved.append(f)
         return f"[{MASTER}/{d}]"
     def set_analysis(m):
-        agg, cf, op, vals_raw, xf = (m.group(1).capitalize(), m.group(2),
+        agg, cf, op, vals_raw, xf = (_agg_sigma(m.group(1)), m.group(2),
                                      m.group(3), m.group(4), m.group(5))
         conds = []
         for val in (v.strip() for v in vals_raw.split(",")):
@@ -129,17 +158,20 @@ def translate_measure(expr, resolve):
         cond = (" and " if op == "-=" else " or ").join(conds)
         if len(conds) > 1: cond = f"({cond})"
         inner = f"If({cond}, {ref(xf)})"
-        return f"CountDistinct({inner})" if agg == "Count" and m.group(0).upper().find("DISTINCT") >= 0 \
+        _cd = _AGG_TO_SIGMA.get("count_distinct", "CountDistinct")
+        return f"{_cd}({inner})" if agg == _agg_sigma("count") and m.group(0).upper().find("DISTINCT") >= 0 \
             else f"{agg}({inner})"
+    # aggregation function names + Sigma targets come from refs/catalogs/aggregation.json
+    _cd = _AGG_TO_SIGMA.get("count_distinct", "CountDistinct")
     # 1) simple Set Analysis  Agg({<F={v,...}>} [DISTINCT] X)  (also F-={...} exclusion)
-    e = re.sub(r"\b(Sum|Avg|Min|Max|Count)\s*\(\s*\{\s*<\s*([A-Za-z0-9_]+)\s*(-?=)\s*\{([^}]*)\}\s*>\s*\}\s*(?:DISTINCT\s+)?([A-Za-z0-9_]+)\s*\)",
+    e = re.sub(r"\b(" + _AGG_ALT + r")\s*\(\s*\{\s*<\s*([A-Za-z0-9_]+)\s*(-?=)\s*\{([^}]*)\}\s*>\s*\}\s*(?:DISTINCT\s+)?([A-Za-z0-9_]+)\s*\)",
                set_analysis, e, flags=re.I)
     # 2) Count(DISTINCT X)
     e = re.sub(r"\bCount\s*\(\s*DISTINCT\s+([A-Za-z0-9_]+)\s*\)",
-               lambda m: f"CountDistinct({ref(m.group(1))})", e, flags=re.I)
+               lambda m: f"{_cd}({ref(m.group(1))})", e, flags=re.I)
     # 3) plain Agg(FIELD)
-    e = re.sub(r"\b(Sum|Avg|Min|Max|Count)\s*\(\s*([A-Za-z0-9_]+)\s*\)",
-               lambda m: f"{m.group(1).capitalize()}({ref(m.group(2))})", e, flags=re.I)
+    e = re.sub(r"\b(" + _AGG_ALT + r")\s*\(\s*([A-Za-z0-9_]+)\s*\)",
+               lambda m: f"{_agg_sigma(m.group(1))}({ref(m.group(2))})", e, flags=re.I)
     if unresolved: return None
     # anything left that looks like a bare Qlik field/function = untranslated
     leftovers = re.sub(r'"[^"]*"|\[[^\]]*\]|\b(?:CountDistinct|Sum|Avg|Min|Max|Count|If|and|or)\b', "", e)
@@ -209,15 +241,19 @@ def build_control(lb, resolve, mcol_id, raw_of, warnings, scope, unbound, seen_f
     el = {"id": "el-" + re.sub(r"[^a-z0-9]", "", str(lb["id"]).lower()),
           "kind": "control", "controlId": ctl_id, "name": label or dn,
           "filters": [{"source": {"kind": "table", "elementId": MASTER_ID}, "columnId": cid}]}
-    if date_field(info, raw_of.get(dn)):
+    # control kind is documentation-grounded (refs/catalogs/control.json): a
+    # date-typed field -> date-range, everything else -> the documented `list`
+    # default. date_field() (engine tags/format/name) is the cited predicate.
+    _ctype = CTRL_CAT.target("date") if date_field(info, raw_of.get(dn)) else CTRL_CAT.target("field")
+    if _ctype == "date-range":
         # date-range needs no `source` (the column comes from the filter
         # binding) but DOES require a flat `mode` — without it the POST fails
         # with the misleading "Invalid kind: control" (live-verified 2026-06-12;
         # the widget shape is picked by mode, see sigma-workbooks controls.md).
-        el.update({"controlType": "date-range", "mode": "between",
+        el.update({"controlType": _ctype, "mode": "between",
                    "includeNulls": "when-no-value-is-selected"})
     else:
-        el.update({"controlType": "list", "mode": "include", "selectionMode": "multiple",
+        el.update({"controlType": _ctype, "mode": "include", "selectionMode": "multiple",
                    "values": [],
                    "source": {"kind": "source",
                               "source": {"kind": "table", "elementId": MASTER_ID}, "columnId": cid}})
@@ -348,7 +384,10 @@ def build_element(c, resolve, warnings):
             continue
         mname = mlabels[i] or (title if kind == "kpi-chart" else f"Measure {i+1}")
         cid = nid("y")
-        cols.append({"id": cid, "formula": f, "name": mname, "format": sigma_fmt(mfmts[i], mname)})
+        _mcol = {"id": cid, "formula": f, "name": mname}
+        _fmt = sigma_fmt(mfmts[i], mname, warnings)
+        if _fmt: _mcol["format"] = _fmt
+        cols.append(_mcol)
         mids.append(cid); mnames.append(mname)
     if not mids:
         warnings.append(f"skip '{title}': no translatable measures"); return None

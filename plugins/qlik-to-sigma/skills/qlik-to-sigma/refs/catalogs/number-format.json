@@ -1,0 +1,15 @@
+{
+  "dimension": "number-format",
+  "source_tool": "qlik",
+  "authoritative_doc": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Scripting/FormattingFunctions/Num.htm",
+  "sigma_target_doc": "https://help.sigmacomputing.com/docs/data-types-and-formats",
+  "on_unmapped_default": "no qFmt -> return None (ship the numeric value UNFORMATTED) + loud warn — NEVER a name-substring currency guess, NEVER a silent ,.0f default",
+  "description": "Qlik qNumFormat.qFmt (an Excel-style number mask) -> Sigma column format (D3 formatString). The mapping is COMPOSITIONAL — sigma_fmt() parses the mask: '$' prefix -> currency, '%' -> percent, and the count of 0/# digits after '.' -> decimals. These rows are PINNED PARSER EXAMPLES that a test asserts sigma_fmt() reproduces, grounding the parser against documented qNumFormat semantics. The old name-substring currency guess (revenue|profit|... -> $,.0f) and the silent ,.0f default were REMOVED (beads-sigma-kvza) — an absent qFmt now yields no format + a loud note.",
+  "rows": [
+    {"source": "$#,##0", "sigma": "$,.0f", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Scripting/FormattingFunctions/Num.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); rendered $127,514 via qFmt parser, 0 type=error"}, "on_unmapped": "n/a", "notes": "Currency, no decimals."},
+    {"source": "$#,##0.00", "sigma": "$,.2f", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Scripting/FormattingFunctions/Num.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "n/a", "notes": "Currency, 2 decimals."},
+    {"source": "#,##0", "sigma": ",.0f", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Scripting/FormattingFunctions/Num.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "n/a", "notes": "Thousands-separated integer."},
+    {"source": "#,##0.0%", "sigma": ",.1%", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Scripting/FormattingFunctions/Num.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "n/a", "notes": "Percent, 1 decimal."},
+    {"source": "0.00%", "sigma": ",.2%", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Scripting/FormattingFunctions/Num.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "n/a", "notes": "Percent, 2 decimals."}
+  ]
+}

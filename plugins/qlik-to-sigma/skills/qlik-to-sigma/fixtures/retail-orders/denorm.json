@@ -1,0 +1,394 @@
+{
+  "element": {
+    "id": "HEDI8VP0ys",
+    "kind": "table",
+    "source": {
+      "connectionId": "",
+      "kind": "sql",
+      "statement": "SELECT\n  f.ORDER_ID AS ORDER_ID,\n  f.ORDER_LINE AS ORDER_LINE,\n  f.CUSTOMER_KEY AS CUSTOMER_KEY,\n  f.PRODUCT_KEY AS PRODUCT_KEY,\n  f.PROMO_KEY AS PROMO_KEY,\n  f.ORDER_STORE_KEY AS STORE_KEY,\n  f.ORDER_DATE_KEY AS DATE_KEY,\n  f.ORDER_CHANNEL AS ORDER_CHANNEL,\n  f.SHIP_METHOD AS SHIP_METHOD,\n  f.ORDER_STATUS AS ORDER_STATUS,\n  f.QUANTITY_ORDERED AS QUANTITY_ORDERED,\n  f.QUANTITY_RETURNED AS QUANTITY_RETURNED,\n  f.UNIT_PRICE AS UNIT_PRICE,\n  f.UNIT_COST AS UNIT_COST,\n  f.DISCOUNT_AMOUNT AS DISCOUNT_AMOUNT,\n  f.SHIPPING_AMOUNT AS SHIPPING_AMOUNT,\n  f.TAX_AMOUNT AS TAX_AMOUNT,\n  f.GROSS_REVENUE AS GROSS_REVENUE,\n  f.NET_REVENUE AS NET_REVENUE,\n  f.GROSS_PROFIT AS GROSS_PROFIT,\n  f.NET_PROFIT AS NET_PROFIT,\n  f.IS_FIRST_ORDER AS IS_FIRST_ORDER,\n  f.IS_RETURNED AS IS_RETURNED,\n  f.IS_CANCELLED AS IS_CANCELLED,\n  f.DAYS_TO_SHIP AS DAYS_TO_SHIP,\n  a.CUSTOMER_ID AS CUSTOMER_ID,\n  a.FIRST_NAME AS FIRST_NAME,\n  a.LAST_NAME AS LAST_NAME,\n  a.CITY AS CUSTOMER_CITY,\n  a.STATE AS CUSTOMER_STATE,\n  a.REGION AS CUSTOMER_REGION,\n  a.CUSTOMER_SEGMENT AS CUSTOMER_SEGMENT,\n  a.LOYALTY_TIER AS LOYALTY_TIER,\n  a.ACQUISITION_CHANNEL AS ACQUISITION_CHANNEL,\n  a.LIFETIME_REVENUE AS LIFETIME_REVENUE,\n  b.PRODUCT_ID AS PRODUCT_ID,\n  b.PRODUCT_NAME AS PRODUCT_NAME,\n  b.CATEGORY AS CATEGORY,\n  b.SUBCATEGORY AS SUBCATEGORY,\n  b.BRAND AS BRAND,\n  b.IS_PRIVATE_LABEL AS IS_PRIVATE_LABEL,\n  b.IS_SEASONAL AS IS_SEASONAL,\n  c.STORE_ID AS STORE_ID,\n  c.STORE_NAME AS STORE_NAME,\n  c.STORE_TYPE AS STORE_TYPE,\n  c.CITY AS STORE_CITY,\n  c.STATE AS STORE_STATE,\n  c.REGION AS STORE_REGION,\n  c.DISTRICT AS DISTRICT,\n  c.MANAGER_NAME AS MANAGER_NAME,\n  d.FULL_DATE AS FULL_DATE,\n  d.DAY_OF_WEEK AS DAY_OF_WEEK,\n  d.MONTH_NUMBER AS MONTH_NUMBER,\n  d.MONTH_NAME AS MONTH_NAME,\n  d.QUARTER AS QUARTER,\n  d.YEAR AS YEAR,\n  d.IS_WEEKEND AS IS_WEEKEND,\n  d.IS_HOLIDAY AS IS_HOLIDAY,\n  e.PROMO_NAME AS PROMO_NAME,\n  e.PROMO_TYPE AS PROMO_TYPE,\n  e.CHANNEL AS PROMO_CHANNEL,\n  e.DISCOUNT_PCT AS DISCOUNT_PCT,\n  e.TARGET_SEGMENT AS TARGET_SEGMENT\nFROM CSA.TJ.ORDER_FACT f\nLEFT JOIN CSA.TJ.CUSTOMER_DIM a ON f.CUSTOMER_KEY = a.CUSTOMER_KEY\nLEFT JOIN CSA.TJ.PRODUCT_DIM b ON f.PRODUCT_KEY = b.PRODUCT_KEY\nLEFT JOIN CSA.TJ.STORE_DIM c ON f.ORDER_STORE_KEY = c.STORE_KEY\nLEFT JOIN CSA.TJ.DATE_DIM d ON f.ORDER_DATE_KEY = d.DATE_KEY\nLEFT JOIN CSA.TJ.PROMO_DIM e ON f.PROMO_KEY = e.PROMO_KEY"
+    },
+    "columns": [
+      {
+        "id": "JtcytGxX9l",
+        "name": "Order Id",
+        "formula": "[Custom SQL/ORDER_ID]"
+      },
+      {
+        "id": "qvJTXcUvgI",
+        "name": "Order Line",
+        "formula": "[Custom SQL/ORDER_LINE]"
+      },
+      {
+        "id": "hqS7kSu1D4",
+        "name": "Customer Key",
+        "formula": "[Custom SQL/CUSTOMER_KEY]"
+      },
+      {
+        "id": "nExgz1nZvo",
+        "name": "Product Key",
+        "formula": "[Custom SQL/PRODUCT_KEY]"
+      },
+      {
+        "id": "L9V2MmDcvX",
+        "name": "Promo Key",
+        "formula": "[Custom SQL/PROMO_KEY]"
+      },
+      {
+        "id": "jwdVRViTil",
+        "name": "Store Key",
+        "formula": "[Custom SQL/STORE_KEY]"
+      },
+      {
+        "id": "Rg8Icgyfbv",
+        "name": "Date Key",
+        "formula": "[Custom SQL/DATE_KEY]"
+      },
+      {
+        "id": "xsTq27T3H1",
+        "name": "Order Channel",
+        "formula": "[Custom SQL/ORDER_CHANNEL]"
+      },
+      {
+        "id": "i7u8f9YKew",
+        "name": "Ship Method",
+        "formula": "[Custom SQL/SHIP_METHOD]"
+      },
+      {
+        "id": "4ZcqdNs1cT",
+        "name": "Order Status",
+        "formula": "[Custom SQL/ORDER_STATUS]"
+      },
+      {
+        "id": "0ijrE5m9CJ",
+        "name": "Quantity Ordered",
+        "formula": "[Custom SQL/QUANTITY_ORDERED]"
+      },
+      {
+        "id": "Q3Z47EyhYH",
+        "name": "Quantity Returned",
+        "formula": "[Custom SQL/QUANTITY_RETURNED]"
+      },
+      {
+        "id": "MetuxT5CbV",
+        "name": "Unit Price",
+        "formula": "[Custom SQL/UNIT_PRICE]"
+      },
+      {
+        "id": "NXSIzBf2XR",
+        "name": "Unit Cost",
+        "formula": "[Custom SQL/UNIT_COST]"
+      },
+      {
+        "id": "6UWD2rFOSc",
+        "name": "Discount Amount",
+        "formula": "[Custom SQL/DISCOUNT_AMOUNT]"
+      },
+      {
+        "id": "3JKxPFaorD",
+        "name": "Shipping Amount",
+        "formula": "[Custom SQL/SHIPPING_AMOUNT]"
+      },
+      {
+        "id": "XLpVjFqQjd",
+        "name": "Tax Amount",
+        "formula": "[Custom SQL/TAX_AMOUNT]"
+      },
+      {
+        "id": "WnuywMUlXM",
+        "name": "Gross Revenue",
+        "formula": "[Custom SQL/GROSS_REVENUE]"
+      },
+      {
+        "id": "2koM0wUKpp",
+        "name": "Net Revenue",
+        "formula": "[Custom SQL/NET_REVENUE]"
+      },
+      {
+        "id": "ClwPzfqhmu",
+        "name": "Gross Profit",
+        "formula": "[Custom SQL/GROSS_PROFIT]"
+      },
+      {
+        "id": "PvduXFUAxf",
+        "name": "Net Profit",
+        "formula": "[Custom SQL/NET_PROFIT]"
+      },
+      {
+        "id": "79cU4hYOET",
+        "name": "Is First Order",
+        "formula": "[Custom SQL/IS_FIRST_ORDER]"
+      },
+      {
+        "id": "qB27nOj1w9",
+        "name": "Is Returned",
+        "formula": "[Custom SQL/IS_RETURNED]"
+      },
+      {
+        "id": "TjDLQ4vDxL",
+        "name": "Is Cancelled",
+        "formula": "[Custom SQL/IS_CANCELLED]"
+      },
+      {
+        "id": "JhekwYlnib",
+        "name": "Days to Ship",
+        "formula": "[Custom SQL/DAYS_TO_SHIP]"
+      },
+      {
+        "id": "zW7dKEeIKn",
+        "name": "Customer Id",
+        "formula": "[Custom SQL/CUSTOMER_ID]"
+      },
+      {
+        "id": "ZKnCJ38V8C",
+        "name": "First Name",
+        "formula": "[Custom SQL/FIRST_NAME]"
+      },
+      {
+        "id": "kJbNmClcNP",
+        "name": "Last Name",
+        "formula": "[Custom SQL/LAST_NAME]"
+      },
+      {
+        "id": "nr2kSfwLCN",
+        "name": "Customer City",
+        "formula": "[Custom SQL/CUSTOMER_CITY]"
+      },
+      {
+        "id": "obHVn93esG",
+        "name": "Customer State",
+        "formula": "[Custom SQL/CUSTOMER_STATE]"
+      },
+      {
+        "id": "12I7sa4ghu",
+        "name": "Customer Region",
+        "formula": "[Custom SQL/CUSTOMER_REGION]"
+      },
+      {
+        "id": "829ztyhEHl",
+        "name": "Customer Segment",
+        "formula": "[Custom SQL/CUSTOMER_SEGMENT]"
+      },
+      {
+        "id": "At5KXEnudS",
+        "name": "Loyalty Tier",
+        "formula": "[Custom SQL/LOYALTY_TIER]"
+      },
+      {
+        "id": "sMiwobiuta",
+        "name": "Acquisition Channel",
+        "formula": "[Custom SQL/ACQUISITION_CHANNEL]"
+      },
+      {
+        "id": "B5rDIU5tvS",
+        "name": "Lifetime Revenue",
+        "formula": "[Custom SQL/LIFETIME_REVENUE]"
+      },
+      {
+        "id": "egjAOoqeRX",
+        "name": "Product Id",
+        "formula": "[Custom SQL/PRODUCT_ID]"
+      },
+      {
+        "id": "88gxSZz0KY",
+        "name": "Product Name",
+        "formula": "[Custom SQL/PRODUCT_NAME]"
+      },
+      {
+        "id": "aCV254epzF",
+        "name": "Category",
+        "formula": "[Custom SQL/CATEGORY]"
+      },
+      {
+        "id": "KqOaVWQlBv",
+        "name": "Subcategory",
+        "formula": "[Custom SQL/SUBCATEGORY]"
+      },
+      {
+        "id": "RHHgTKrEov",
+        "name": "Brand",
+        "formula": "[Custom SQL/BRAND]"
+      },
+      {
+        "id": "k5vrKN8R10",
+        "name": "Is Private Label",
+        "formula": "[Custom SQL/IS_PRIVATE_LABEL]"
+      },
+      {
+        "id": "YHyuG5QIO8",
+        "name": "Is Seasonal",
+        "formula": "[Custom SQL/IS_SEASONAL]"
+      },
+      {
+        "id": "FeQFA6ztV8",
+        "name": "Store Id",
+        "formula": "[Custom SQL/STORE_ID]"
+      },
+      {
+        "id": "HQ9kRMWqrc",
+        "name": "Store Name",
+        "formula": "[Custom SQL/STORE_NAME]"
+      },
+      {
+        "id": "H3rK5r5r6S",
+        "name": "Store Type",
+        "formula": "[Custom SQL/STORE_TYPE]"
+      },
+      {
+        "id": "eo7ixYIHm0",
+        "name": "Store City",
+        "formula": "[Custom SQL/STORE_CITY]"
+      },
+      {
+        "id": "An0NLcq9hN",
+        "name": "Store State",
+        "formula": "[Custom SQL/STORE_STATE]"
+      },
+      {
+        "id": "T0z9CVaJrt",
+        "name": "Store Region",
+        "formula": "[Custom SQL/STORE_REGION]"
+      },
+      {
+        "id": "uWhmvXBS5J",
+        "name": "District",
+        "formula": "[Custom SQL/DISTRICT]"
+      },
+      {
+        "id": "y32q4w2OyD",
+        "name": "Manager Name",
+        "formula": "[Custom SQL/MANAGER_NAME]"
+      },
+      {
+        "id": "lXRPS4WMhN",
+        "name": "Full Date",
+        "formula": "[Custom SQL/FULL_DATE]"
+      },
+      {
+        "id": "KG4v6LTkqc",
+        "name": "Day of Week",
+        "formula": "[Custom SQL/DAY_OF_WEEK]"
+      },
+      {
+        "id": "1dubUq7aGZ",
+        "name": "Month Number",
+        "formula": "[Custom SQL/MONTH_NUMBER]"
+      },
+      {
+        "id": "rk2hQsiJcK",
+        "name": "Month Name",
+        "formula": "[Custom SQL/MONTH_NAME]"
+      },
+      {
+        "id": "ozh2b8WhCv",
+        "name": "Quarter",
+        "formula": "[Custom SQL/QUARTER]"
+      },
+      {
+        "id": "zhqIvRXp1M",
+        "name": "Year",
+        "formula": "[Custom SQL/YEAR]"
+      },
+      {
+        "id": "K6Oy2jgESB",
+        "name": "Is Weekend",
+        "formula": "[Custom SQL/IS_WEEKEND]"
+      },
+      {
+        "id": "8ai0yxRjv8",
+        "name": "Is Holiday",
+        "formula": "[Custom SQL/IS_HOLIDAY]"
+      },
+      {
+        "id": "tGPFXGPyV8",
+        "name": "Promo Name",
+        "formula": "[Custom SQL/PROMO_NAME]"
+      },
+      {
+        "id": "x12zPEdS5K",
+        "name": "Promo Type",
+        "formula": "[Custom SQL/PROMO_TYPE]"
+      },
+      {
+        "id": "yIs653XREB",
+        "name": "Promo Channel",
+        "formula": "[Custom SQL/PROMO_CHANNEL]"
+      },
+      {
+        "id": "f94ys3BooC",
+        "name": "Discount Pct",
+        "formula": "[Custom SQL/DISCOUNT_PCT]"
+      },
+      {
+        "id": "VE9E2gJZhf",
+        "name": "Target Segment",
+        "formula": "[Custom SQL/TARGET_SEGMENT]"
+      }
+    ],
+    "order": [
+      "JtcytGxX9l",
+      "qvJTXcUvgI",
+      "hqS7kSu1D4",
+      "nExgz1nZvo",
+      "L9V2MmDcvX",
+      "jwdVRViTil",
+      "Rg8Icgyfbv",
+      "xsTq27T3H1",
+      "i7u8f9YKew",
+      "4ZcqdNs1cT",
+      "0ijrE5m9CJ",
+      "Q3Z47EyhYH",
+      "MetuxT5CbV",
+      "NXSIzBf2XR",
+      "6UWD2rFOSc",
+      "3JKxPFaorD",
+      "XLpVjFqQjd",
+      "WnuywMUlXM",
+      "2koM0wUKpp",
+      "ClwPzfqhmu",
+      "PvduXFUAxf",
+      "79cU4hYOET",
+      "qB27nOj1w9",
+      "TjDLQ4vDxL",
+      "JhekwYlnib",
+      "zW7dKEeIKn",
+      "ZKnCJ38V8C",
+      "kJbNmClcNP",
+      "nr2kSfwLCN",
+      "obHVn93esG",
+      "12I7sa4ghu",
+      "829ztyhEHl",
+      "At5KXEnudS",
+      "sMiwobiuta",
+      "B5rDIU5tvS",
+      "egjAOoqeRX",
+      "88gxSZz0KY",
+      "aCV254epzF",
+      "KqOaVWQlBv",
+      "RHHgTKrEov",
+      "k5vrKN8R10",
+      "YHyuG5QIO8",
+      "FeQFA6ztV8",
+      "HQ9kRMWqrc",
+      "H3rK5r5r6S",
+      "eo7ixYIHm0",
+      "An0NLcq9hN",
+      "T0z9CVaJrt",
+      "uWhmvXBS5J",
+      "y32q4w2OyD",
+      "lXRPS4WMhN",
+      "KG4v6LTkqc",
+      "1dubUq7aGZ",
+      "rk2hQsiJcK",
+      "ozh2b8WhCv",
+      "zhqIvRXp1M",
+      "K6Oy2jgESB",
+      "8ai0yxRjv8",
+      "tGPFXGPyV8",
+      "x12zPEdS5K",
+      "yIs653XREB",
+      "f94ys3BooC",
+      "VE9E2gJZhf"
+    ]
+  },
+  "sql": "SELECT\n  f.ORDER_ID AS ORDER_ID,\n  f.ORDER_LINE AS ORDER_LINE,\n  f.CUSTOMER_KEY AS CUSTOMER_KEY,\n  f.PRODUCT_KEY AS PRODUCT_KEY,\n  f.PROMO_KEY AS PROMO_KEY,\n  f.ORDER_STORE_KEY AS STORE_KEY,\n  f.ORDER_DATE_KEY AS DATE_KEY,\n  f.ORDER_CHANNEL AS ORDER_CHANNEL,\n  f.SHIP_METHOD AS SHIP_METHOD,\n  f.ORDER_STATUS AS ORDER_STATUS,\n  f.QUANTITY_ORDERED AS QUANTITY_ORDERED,\n  f.QUANTITY_RETURNED AS QUANTITY_RETURNED,\n  f.UNIT_PRICE AS UNIT_PRICE,\n  f.UNIT_COST AS UNIT_COST,\n  f.DISCOUNT_AMOUNT AS DISCOUNT_AMOUNT,\n  f.SHIPPING_AMOUNT AS SHIPPING_AMOUNT,\n  f.TAX_AMOUNT AS TAX_AMOUNT,\n  f.GROSS_REVENUE AS GROSS_REVENUE,\n  f.NET_REVENUE AS NET_REVENUE,\n  f.GROSS_PROFIT AS GROSS_PROFIT,\n  f.NET_PROFIT AS NET_PROFIT,\n  f.IS_FIRST_ORDER AS IS_FIRST_ORDER,\n  f.IS_RETURNED AS IS_RETURNED,\n  f.IS_CANCELLED AS IS_CANCELLED,\n  f.DAYS_TO_SHIP AS DAYS_TO_SHIP,\n  a.CUSTOMER_ID AS CUSTOMER_ID,\n  a.FIRST_NAME AS FIRST_NAME,\n  a.LAST_NAME AS LAST_NAME,\n  a.CITY AS CUSTOMER_CITY,\n  a.STATE AS CUSTOMER_STATE,\n  a.REGION AS CUSTOMER_REGION,\n  a.CUSTOMER_SEGMENT AS CUSTOMER_SEGMENT,\n  a.LOYALTY_TIER AS LOYALTY_TIER,\n  a.ACQUISITION_CHANNEL AS ACQUISITION_CHANNEL,\n  a.LIFETIME_REVENUE AS LIFETIME_REVENUE,\n  b.PRODUCT_ID AS PRODUCT_ID,\n  b.PRODUCT_NAME AS PRODUCT_NAME,\n  b.CATEGORY AS CATEGORY,\n  b.SUBCATEGORY AS SUBCATEGORY,\n  b.BRAND AS BRAND,\n  b.IS_PRIVATE_LABEL AS IS_PRIVATE_LABEL,\n  b.IS_SEASONAL AS IS_SEASONAL,\n  c.STORE_ID AS STORE_ID,\n  c.STORE_NAME AS STORE_NAME,\n  c.STORE_TYPE AS STORE_TYPE,\n  c.CITY AS STORE_CITY,\n  c.STATE AS STORE_STATE,\n  c.REGION AS STORE_REGION,\n  c.DISTRICT AS DISTRICT,\n  c.MANAGER_NAME AS MANAGER_NAME,\n  d.FULL_DATE AS FULL_DATE,\n  d.DAY_OF_WEEK AS DAY_OF_WEEK,\n  d.MONTH_NUMBER AS MONTH_NUMBER,\n  d.MONTH_NAME AS MONTH_NAME,\n  d.QUARTER AS QUARTER,\n  d.YEAR AS YEAR,\n  d.IS_WEEKEND AS IS_WEEKEND,\n  d.IS_HOLIDAY AS IS_HOLIDAY,\n  e.PROMO_NAME AS PROMO_NAME,\n  e.PROMO_TYPE AS PROMO_TYPE,\n  e.CHANNEL AS PROMO_CHANNEL,\n  e.DISCOUNT_PCT AS DISCOUNT_PCT,\n  e.TARGET_SEGMENT AS TARGET_SEGMENT\nFROM CSA.TJ.ORDER_FACT f\nLEFT JOIN CSA.TJ.CUSTOMER_DIM a ON f.CUSTOMER_KEY = a.CUSTOMER_KEY\nLEFT JOIN CSA.TJ.PRODUCT_DIM b ON f.PRODUCT_KEY = b.PRODUCT_KEY\nLEFT JOIN CSA.TJ.STORE_DIM c ON f.ORDER_STORE_KEY = c.STORE_KEY\nLEFT JOIN CSA.TJ.DATE_DIM d ON f.ORDER_DATE_KEY = d.DATE_KEY\nLEFT JOIN CSA.TJ.PROMO_DIM e ON f.PROMO_KEY = e.PROMO_KEY"
+}

@@ -1,0 +1,18 @@
+{
+  "dimension": "viz-kind",
+  "source_tool": "qlik",
+  "authoritative_doc": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/visualizations.htm",
+  "on_unmapped_default": "warn+skip (no native Sigma kind) — or, when the tile has dims+measures, approximate as bar-chart WITH a warning",
+  "description": "Qlik object vizType -> Sigma workbook element kind. The single source of truth for build-sigma-workbook.py's chart classifier. `auto-chart` is NOT in this table — it is resolved compositionally by shape (no dims -> KPI; >=2 dims -> grouped table; 1 temporal dim -> line; else bar), a cited predicate in build_element.",
+  "rows": [
+    {"source": "barchart", "sigma": "bar-chart", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/BarChart/bar-chart.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "linechart", "sigma": "line-chart", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/LineChart/line-chart.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "piechart", "sigma": "pie-chart", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/PieChart/pie-chart.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "combochart", "sigma": "combo-chart", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/ComboChart/combo-chart.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "scatterplot", "sigma": "scatter-chart", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/ScatterPlot/scatter-plot.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "table", "sigma": "table", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Table/table.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "kpi", "sigma": "kpi-chart", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/KPI/KPI.htm", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-verify CSA.TJ (qlik retail-orders, wb 9adb1ae8); 142 cols resolve, 0 type=error, parity GREEN"}, "on_unmapped": "warn+skip"},
+    {"source": "pivot-table", "sigma": "pivot-table", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/PivotTable/pivot-table.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "map", "sigma": "region-map", "doc_ref": "https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Map/Map.htm", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "build_element refuses to guess a region grain and warns+skips if it cannot resolve one."}
+  ]
+}
