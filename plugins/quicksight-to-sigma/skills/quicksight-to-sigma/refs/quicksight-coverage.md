@@ -6,7 +6,7 @@ Every documented source construct maps to a real, current Sigma target or a loud
 
 **`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at **query time** in a live migration (no `type=error` column) on the date shown; 🟡 n = target is documented but not yet query-verified.
 
-**Coverage:** 44 documented constructs across 4 dimensions; 0 live-verified.
+**Coverage:** 44 documented constructs across 4 dimensions; 6 live-verified.
 
 ## Visualization / chart kind
 
@@ -16,12 +16,12 @@ Authoritative source: <https://docs.aws.amazon.com/quicksight/latest/APIReferenc
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `KPIVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_KPIVisual.html) | `kpi-chart` | 🟡 n | native |
+| `KPIVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_KPIVisual.html) | `kpi-chart` | ✅ y · 2026-07-13 | native |
 | | | | | _Single-value KPI tile._ |
-| `BarChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_BarChartVisual.html) | `bar-chart` | 🟡 n | native |
+| `BarChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_BarChartVisual.html) | `bar-chart` | ✅ y · 2026-07-13 | native |
 | | | | | _BarsArrangement -> Sigma bar stacking (compositional, qs_bars_stacking)._ |
-| `LineChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_LineChartVisual.html) | `line-chart` | 🟡 n | native |
-| `PieChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_PieChartVisual.html) | `pie-chart` | 🟡 n | native |
+| `LineChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_LineChartVisual.html) | `line-chart` | ✅ y · 2026-07-13 | native |
+| `PieChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_PieChartVisual.html) | `pie-chart` | ✅ y · 2026-07-13 | native |
 | | | | | _Mapped to donut-chart in code only when DonutOptions.ArcOptions.ArcThickness is present and != WHOLE (compositional)._ |
 | `ComboChartVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_ComboChartVisual.html) | `combo-chart` | 🟡 n | native |
 | `ScatterPlotVisual` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_ScatterPlotVisual.html) | `scatter-chart` | 🟡 n | native |
@@ -81,9 +81,9 @@ Authoritative source: <https://docs.aws.amazon.com/quicksight/latest/APIReferenc
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `SUM` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_NumericalAggregationFunction.html) | `Sum` | 🟡 n | warn+neutralize |
+| `SUM` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_NumericalAggregationFunction.html) | `Sum` | ✅ y · 2026-07-13 | warn+neutralize |
 | | | | | _Filtered SumIf handled compositionally in qs_expr_to_sigma._ |
-| `AVERAGE` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_NumericalAggregationFunction.html) | `Avg` | 🟡 n | warn+neutralize |
+| `AVERAGE` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_NumericalAggregationFunction.html) | `Avg` | ✅ y · 2026-07-13 | warn+neutralize |
 | `MIN` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_NumericalAggregationFunction.html) | `Min` | 🟡 n | warn+neutralize |
 | `MAX` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_NumericalAggregationFunction.html) | `Max` | 🟡 n | warn+neutralize |
 | `COUNT` | [doc](https://docs.aws.amazon.com/quicksight/latest/APIReference/API_CategoricalAggregationFunction.html) | `Count` | 🟡 n | warn+neutralize |

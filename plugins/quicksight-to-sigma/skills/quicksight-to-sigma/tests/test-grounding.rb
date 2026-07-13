@@ -56,8 +56,11 @@ def test_catalogs_valid
       assert(!seen[key], "#{name}: duplicate source #{key.inspect}")
       seen[key] = true
       assert(r['doc_ref'].to_s.start_with?('http'), "#{name}: #{r['source']} doc_ref not a URL")
-      assert((r['sigma_verified'] || {})['status'] == 'n',
-             "#{name}: #{r['source']} sigma_verified must be 'n' this pass (LIVE verification deferred)")
+      sv = r['sigma_verified'] || {}
+      assert(%w[y n].include?(sv['status']),
+             "#{name}: #{r['source']} sigma_verified.status must be 'y' or 'n' (got #{sv['status'].inspect})")
+      assert(sv['status'] != 'y' || !sv['date'].to_s.empty?,
+             "#{name}: #{r['source']} live-verified rows (status 'y') must carry a date")
       # a mapped Sigma target must be present — EXCEPT a viz-kind DROP row (no Sigma
       # equivalent), which legitimately carries sigma:null + an unsupported_reason.
       has_target = !r['sigma'].nil?

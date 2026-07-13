@@ -6,7 +6,7 @@ Every documented source construct maps to a real, current Sigma target or a loud
 
 **`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at **query time** in a live migration (no `type=error` column) on the date shown; 🟡 n = target is documented but not yet query-verified.
 
-**Coverage:** 50 documented constructs across 4 dimensions; 0 live-verified.
+**Coverage:** 50 documented constructs across 4 dimensions; 4 live-verified.
 
 ## Visualization / chart kind
 
@@ -16,13 +16,13 @@ Authoritative source: <https://docs.thoughtspot.com/cloud/latest/chart-types>
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `KPI` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `kpi-chart` | 🟡 n | warn+degrade-to-flagged-table |
+| `KPI` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `kpi-chart` | ✅ y · 2026-07-13 | warn+degrade-to-flagged-table |
 | | | | | _ThoughtSpot KPI/headline -> Sigma KPI chart (dedicated builder branch)._ |
-| `COLUMN` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `bar-chart` | 🟡 n | warn+degrade-to-flagged-table |
+| `COLUMN` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `bar-chart` | ✅ y · 2026-07-13 | warn+degrade-to-flagged-table |
 | | | | | _Vertical bars. Sigma bar-chart with NO orientation key = vertical._ |
 | `BAR` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `bar-chart` | 🟡 n | warn+degrade-to-flagged-table |
 | | | | | _Horizontal bars in ThoughtSpot; Sigma bar-chart kind._ |
-| `LINE` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `line-chart` | 🟡 n | warn+degrade-to-flagged-table |
+| `LINE` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `line-chart` | ✅ y · 2026-07-13 | warn+degrade-to-flagged-table |
 | `STACKED_COLUMN` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `bar-chart` | 🟡 n | warn+degrade-to-flagged-table |
 | | | | | _Stacking is set on the Sigma bar-chart element downstream._ |
 | `STACKED_BAR` | [doc](https://docs.thoughtspot.com/cloud/latest/chart-types) | `bar-chart` | 🟡 n | warn+degrade-to-flagged-table |
@@ -91,7 +91,7 @@ Authoritative source: <https://docs.thoughtspot.com/cloud/latest/data-modeling-a
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `SUM` | [doc](https://docs.thoughtspot.com/cloud/latest/data-modeling-aggreg-additive) | `Sum` | 🟡 n | warn |
+| `SUM` | [doc](https://docs.thoughtspot.com/cloud/latest/data-modeling-aggreg-additive) | `Sum` | ✅ y · 2026-07-13 | warn |
 | | | | | _ThoughtSpot documented default aggregation for a measure column._ |
 | `AVERAGE` | [doc](https://docs.thoughtspot.com/cloud/latest/data-modeling-aggreg-additive) | `Avg` | 🟡 n | warn |
 | `AVG` | [doc](https://docs.thoughtspot.com/cloud/latest/data-modeling-aggreg-additive) | `Avg` | 🟡 n | warn |
