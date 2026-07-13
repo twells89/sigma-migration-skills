@@ -1,0 +1,13 @@
+{
+  "dimension": "control",
+  "source_tool": "looker",
+  "authoritative_doc": "https://cloud.google.com/looker/docs/reference/param-lookml-dashboard#filters",
+  "sigma_target_doc": "refs/control-parity.md",
+  "on_unmapped_default": "list (documented default control kind for a categorical dashboard filter)",
+  "description": "Looker dashboard filter `type` -> Sigma control kind. Only the date case is special (a Sigma `list` control bound to a datetime column is silently dropped on POST, so a date filter MUST become a date-range control). Everything else is a categorical `list` control — the DOCUMENTED default, not a silent guess. An override applies in code: a filter bound to a date/time dimension_group becomes date-range regardless of the Looker filter `type` (compositional, cited).",
+  "rows": [
+    {"source": "date_filter", "sigma": "date-range", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-lookml-dashboard#type_for_filters", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "n/a", "notes": "A datetime-bound list control comes back with empty filters (dead control) — must be a date control."},
+    {"source": "field_filter", "sigma": "list", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-lookml-dashboard#type_for_filters", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "n/a", "notes": "Categorical list control (documented default). A field_filter bound to a date dimension_group is overridden to date-range in code."},
+    {"source": "string_filter", "sigma": "list", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-lookml-dashboard#type_for_filters", "sigma_verified": {"status": "n"}, "on_unmapped": "n/a"}
+  ]
+}

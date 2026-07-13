@@ -32,40 +32,33 @@ TIMEFRAME_SUFFIX = {"raw": "Raw", "time": "Time", "date": "Date", "week": "Week"
                     "month": "Month", "quarter": "Quarter", "year": "Year"}
 DEFAULT_TIMEFRAMES = ["raw", "time", "date", "week", "month", "quarter", "year"]
 
-TILE_KIND = {
-    "single_value": "kpi-chart", "looker_column": "bar-chart", "looker_bar": "bar-chart",
-    "looker_area": "area-chart", "looker_line": "line-chart", "looker_pie": "pie-chart",
-    "looker_donut_multiples": "donut-chart", "table": "table", "looker_grid": "table",
-    "looker_scatter": "scatter-chart",
-}
-AGG = {"average": "Avg", "sum": "Sum", "min": "Min", "max": "Max", "median": "Median"}
+# ── documentation-grounded mapping catalogs (SINGLE SOURCE OF TRUTH) ─────────
+# Every classifier map below is loaded from refs/catalogs/<dimension>.json —
+# cited rows (source doc + Sigma target + sigma_verified), complete coverage,
+# and a loud fallback on anything unmapped. NO inline mapping literal may bypass
+# these catalogs (grep-enforced by tests/test_grounding.py). The human-readable
+# coverage matrix in refs/looker-coverage.md is GENERATED from these files.
+# Loader: shared/lib/coverage_catalog.py (synced to scripts/lib/). Design mirrors
+# the beads-sigma-93ps contract: catalog = data, code = thin resolver/predicates.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import coverage_catalog as _cc  # noqa: E402
+_CAT_DIR = _cc.default_catalog_dir(__file__)
+VIZ_CAT  = _cc.load(_CAT_DIR, "viz-kind")        # Looker vis type   -> Sigma element kind
+FMT_CAT  = _cc.load(_CAT_DIR, "number-format")   # value_format_name -> Sigma number format (D3)
+AGG_CAT  = _cc.load(_CAT_DIR, "aggregation")     # measure type      -> Sigma aggregate fn (+ *If)
+CTRL_CAT = _cc.load(_CAT_DIR, "control")         # dashboard filter  -> Sigma control kind
 
-# ── LookML value_format_name / value_format -> Sigma column format ──────────
-# Sigma columns carry an optional `format` object — for numbers:
-#   {"kind": "number", "formatString": "<d3-format>"}  (see sigma-workbooks
-#   reference/specification/formatting.md). LookML measures declare their display
-#   via a named format (`value_format_name`) or a custom Excel-style mask
-#   (`value_format`). Map the common named formats to d3 format strings; fall
-#   back to a best-effort translation of a custom mask.
-VALUE_FORMAT_NAME_MAP = {
-    "usd":          "$,.2f",
-    "usd_0":        "$,.0f",
-    "gbp":          "£,.2f",
-    "gbp_0":        "£,.0f",
-    "eur":          "€,.2f",
-    "eur_0":        "€,.0f",
-    "percent_0":    ",.0%",
-    "percent_1":    ",.1%",
-    "percent_2":    ",.2%",
-    "percent_3":    ",.3%",
-    "percent_4":    ",.4%",
-    "decimal_0":    ",.0f",
-    "decimal_1":    ",.1f",
-    "decimal_2":    ",.2f",
-    "decimal_3":    ",.3f",
-    "decimal_4":    ",.4f",
-    "id":           "d",            # plain integer, no thousands separator
-}
+# Back-compat dict views derived from the catalogs. These carry the SAME keys and
+# values the old inline literals did (locked by tests/golden/); the loud fallback
+# on a miss lives at each USE site (resolve_or_warn), not here.
+TILE_KIND = {r["source"]: r["sigma"] for r in VIZ_CAT.rows}
+AGG = {r["source"]: r["sigma"] for r in AGG_CAT.rows if r.get("sigma")}
+
+# LookML value_format_name -> Sigma column `format` object ({"kind":"number",
+# "formatString":"<d3>"}, see the Sigma data-types-and-formats ref). Custom
+# `value_format` Excel/TO_CHAR masks are handled by the cited predicates
+# custom_value_format_to_d3() / snowflake_mask_to_format() below.
+VALUE_FORMAT_NAME_MAP = {r["source"]: r["sigma"] for r in FMT_CAT.rows}
 
 def custom_value_format_to_d3(mask):
     """Best-effort translate a LookML custom value_format (Excel-style mask) to a
@@ -206,7 +199,7 @@ def parse_join_aliases(model_files):
     return aliases
 
 
-def build_field_index(view_files, aliases=None):
+def build_field_index(view_files, aliases=None, warnings=None):
     measures = {}   # "view.field" -> (agg_type, base_display_or_None, sql, filters)
     formats = {}    # "view.field" -> Sigma format dict (or None)
     dims = set()    # "view.field"
@@ -283,8 +276,21 @@ def build_field_index(view_files, aliases=None):
             # capture the measure's display format (named or custom mask)
             vfn = re.search(r"value_format_name:\s*(\w+)", block)
             vf = re.search(r'value_format:\s*"([^"]*)"', block)
-            fmt = sigma_format_for(vfn.group(1) if vfn else None, vf.group(1) if vf else None)
-            if fmt: formats[key] = fmt
+            _vfn = vfn.group(1) if vfn else None
+            _vf = vf.group(1) if vf else None
+            fmt = sigma_format_for(_vfn, _vf)
+            if fmt:
+                formats[key] = fmt
+            elif (_vfn or _vf) and warnings is not None:
+                # a display format WAS declared but neither the documented
+                # value_format_name catalog nor the custom-mask parser could map it —
+                # ship the numeric value UNFORMATTED + say so (never a silent None,
+                # never a name-substring currency guess).
+                _decl = ("value_format_name '%s'" % _vfn) if _vfn else ("value_format '%s'" % _vf)
+                warnings.append(
+                    "⚠ number-format: measure '%s' declares %s but it maps to no Sigma "
+                    "format (refs/catalogs/number-format.json) — column shipped UNFORMATTED. "
+                    "Add a cited row if this is a real named format." % (key, _decl))
             # TO_CHAR display-mask measure → numeric aggregate + Sigma format
             # (display-identical to the mask; value stays numeric). Unparseable
             # masks keep mtype=string and stay on the loud-warning path.
@@ -348,9 +354,9 @@ def main():
     model_files = (glob.glob(os.path.join(a.views, "*.model.lkml"))
                    + glob.glob(os.path.join(a.views, "..", "*.model.lkml")))
     aliases = parse_join_aliases(model_files)
-    measures, dims, view_pk, formats, yesno_dims, dim_groups, dim_labels = build_field_index(
-        sorted(glob.glob(os.path.join(a.views, "*.view.lkml"))), aliases)
     warnings = []
+    measures, dims, view_pk, formats, yesno_dims, dim_groups, dim_labels = build_field_index(
+        sorted(glob.glob(os.path.join(a.views, "*.view.lkml"))), aliases, warnings)
 
     # ── per-explore masters ────────────────────────────────────────────────────
     # A Looker dashboard's tiles can hit SEVERAL explores; one master per explore,
@@ -500,8 +506,7 @@ def main():
             return "(" + formula_for(key, explore) + ")" if key in measures else m.group(0)
         e = re.sub(r"\$\{(\w+)\}", sub, measures[f][2])
         return re.sub(r"\bNULLIF\s*\(", "NullIf(", e, flags=re.I).replace("${TABLE}.", "").strip()
-    IF_AGG = {"sum": "SumIf", "count": "CountIf", "count_distinct": "CountDistinctIf",
-              "average": "AvgIf", "max": "MaxIf", "min": "MinIf"}
+    IF_AGG = {r["source"]: r["sigma_if"] for r in AGG_CAT.rows if r.get("sigma_if")}
 
     def measure_filters(f):
         return measures[f][3] if is_measure(f) and len(measures[f]) > 3 else []
@@ -566,10 +571,27 @@ def main():
                 if view != explore:
                     pkd = pk_display(view, explore)
                     if pkd: return f"CountDistinct([{master_of(explore)['name']}/{pkd}])"
+                return "Count()"   # fact-grain row count (documented; aggregation.json 'count')
+            if mtype == "count_distinct":
+                if cd:
+                    return f"CountDistinct([{master_of(explore)['name']}/{cd}])"
+                warnings.append(f"⚠ measure '{f}': count_distinct base column did not resolve to "
+                                f"a master column — emitted Count() (counts ROWS, not distinct "
+                                f"values); parity at risk, add the base column to the explore.")
                 return "Count()"
-            if mtype == "count_distinct": return f"CountDistinct([{master_of(explore)['name']}/{cd}])" if cd else "Count()"
             fn = AGG.get(mtype)
-            return f"{fn}([{master_of(explore)['name']}/{cd}])" if fn and cd else "Count()"
+            if fn and cd:
+                return f"{fn}([{master_of(explore)['name']}/{cd}])"
+            if not fn:
+                # no documented Sigma aggregate for this LookML measure type — DO NOT fake a
+                # number; emit a loud placeholder column (refs/catalogs/aggregation.json).
+                warnings.append(f"⚠ measure '{f}': no documented Sigma aggregate for LookML measure "
+                                f"type '{mtype}' (refs/catalogs/aggregation.json) — emitted a "
+                                f"placeholder column; add a cited row if this is a real type.")
+                return f'"⚠ {leaf(f)}: unmapped measure type {mtype}"'
+            warnings.append(f"⚠ measure '{f}' (type {mtype}): base column did not resolve to a "
+                            f"master column — emitted Count() as a degraded fallback; verify parity.")
+            return "Count()"
         return f"[{master_of(explore)['name']}/{cd}]"
     def _warn_count(f, el):
         if measures.get(f, (None,))[0] == "count":
@@ -1278,7 +1300,12 @@ def main():
         # of the Looker filter `type` (a Looker field_filter on a date renders a
         # list in LookML but must become a date control in Sigma).
         _fld = flt.get("dimension") or flt.get("field") or flt.get("_resolvedField")
-        is_date_field = (flt["type"] == "date_filter"
+        # control kind is documentation-grounded (refs/catalogs/control.json): only
+        # a date_filter maps to date-range; every other type is the documented
+        # `list` default. Compositional override: a filter bound to a date/time
+        # dimension_group must be a date control regardless of the Looker type.
+        _type_is_date = (CTRL_CAT.target(flt["type"]) == "date-range")
+        is_date_field = (_type_is_date
                          or (_fld is not None and dimgroup_display(_fld) is not None))
         ctype = "date-range" if is_date_field else "list"
         cid = flt["name"].lower().replace(" ", "-")

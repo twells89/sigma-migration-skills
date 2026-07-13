@@ -1,0 +1,482 @@
+{
+  "folderId": "<FOLDER_ID>",
+  "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash\">\n<GridContainer elementId=\"band-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <LayoutElement elementId=\"band-hdrtext\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</GridContainer>\n<GridContainer elementId=\"band-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <LayoutElement elementId=\"ID0000\" gridColumn=\"1 / 9\" gridRow=\"1 / 4\"/>\n  <LayoutElement elementId=\"ID0001\" gridColumn=\"9 / 17\" gridRow=\"1 / 4\"/>\n  <LayoutElement elementId=\"ID0002\" gridColumn=\"17 / 25\" gridRow=\"1 / 4\"/>\n</GridContainer>\n<GridContainer elementId=\"band-kpi\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 13\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <LayoutElement elementId=\"ID0003\" gridColumn=\"1 / 9\" gridRow=\"1 / 7\"/>\n  <LayoutElement elementId=\"ID0004\" gridColumn=\"9 / 17\" gridRow=\"1 / 7\"/>\n  <LayoutElement elementId=\"ID0005\" gridColumn=\"17 / 25\" gridRow=\"1 / 7\"/>\n</GridContainer>\n<GridContainer elementId=\"band-row-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"13 / 29\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <LayoutElement elementId=\"ID0006\" gridColumn=\"1 / 13\" gridRow=\"1 / 17\"/>\n  <LayoutElement elementId=\"ID0007\" gridColumn=\"13 / 25\" gridRow=\"1 / 17\"/>\n</GridContainer>\n<GridContainer elementId=\"band-row-2\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"29 / 41\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <LayoutElement elementId=\"ID0008\" gridColumn=\"1 / 25\" gridRow=\"1 / 13\"/>\n</GridContainer>\n</Page>",
+  "name": "SKILLTEST Looker Orders Pulse (from Looker)",
+  "pages": [
+    {
+      "elements": [
+        {
+          "columns": [
+            {
+              "formula": "[Order Fact/Net Revenue]",
+              "id": "ID0009",
+              "name": "Net Revenue"
+            },
+            {
+              "formula": "[Order Fact/Order Id]",
+              "id": "ID0010",
+              "name": "Order Id"
+            },
+            {
+              "formula": "[Order Fact/customer_dim/Region]",
+              "id": "ID0011",
+              "name": "Region (customer_dim)"
+            },
+            {
+              "formula": "[Order Fact/Ship Method]",
+              "id": "ID0012",
+              "name": "Ship Method"
+            },
+            {
+              "formula": "[Order Fact/Order Channel]",
+              "id": "ID0013",
+              "name": "Order Channel"
+            },
+            {
+              "formula": "[Order Fact/Order Status]",
+              "id": "ID0014",
+              "name": "Order Status"
+            },
+            {
+              "formula": "[Order Fact/customer_dim/First Order Date]",
+              "id": "ID0015",
+              "name": "First Order Date (customer_dim)"
+            }
+          ],
+          "id": "m-master",
+          "kind": "table",
+          "name": "Data",
+          "source": {
+            "dataModelId": "dm-x",
+            "elementId": "el-x",
+            "kind": "data-model"
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[Data/Net Revenue]",
+              "id": "ID0016",
+              "name": "Net Revenue"
+            },
+            {
+              "formula": "[Data/Order Id]",
+              "id": "ID0017",
+              "name": "Order Id"
+            },
+            {
+              "formula": "[Data/Region (customer_dim)]",
+              "id": "ID0018",
+              "name": "Region (customer_dim)"
+            },
+            {
+              "formula": "[Data/Ship Method]",
+              "id": "ID0019",
+              "name": "Ship Method"
+            },
+            {
+              "formula": "[Data/Order Channel]",
+              "id": "ID0020",
+              "name": "Order Channel"
+            },
+            {
+              "formula": "[Data/Order Status]",
+              "id": "ID0021",
+              "name": "Order Status"
+            },
+            {
+              "formula": "[Data/First Order Date (customer_dim)]",
+              "id": "ID0022",
+              "name": "First Order Date (customer_dim)"
+            }
+          ],
+          "id": "scope-1",
+          "kind": "table",
+          "name": "Data Scope 1",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[Data/Net Revenue]",
+              "id": "ID0023",
+              "name": "Net Revenue"
+            },
+            {
+              "formula": "[Data/Order Id]",
+              "id": "ID0024",
+              "name": "Order Id"
+            },
+            {
+              "formula": "[Data/Region (customer_dim)]",
+              "id": "ID0025",
+              "name": "Region (customer_dim)"
+            },
+            {
+              "formula": "[Data/Ship Method]",
+              "id": "ID0026",
+              "name": "Ship Method"
+            },
+            {
+              "formula": "[Data/Order Channel]",
+              "id": "ID0027",
+              "name": "Order Channel"
+            },
+            {
+              "formula": "[Data/Order Status]",
+              "id": "ID0028",
+              "name": "Order Status"
+            },
+            {
+              "formula": "[Data/First Order Date (customer_dim)]",
+              "id": "ID0029",
+              "name": "First Order Date (customer_dim)"
+            }
+          ],
+          "id": "scope-2",
+          "kind": "table",
+          "name": "Data Scope 2",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          }
+        }
+      ],
+      "id": "page-data",
+      "name": "Data"
+    },
+    {
+      "elements": [
+        {
+          "columns": [
+            {
+              "format": {
+                "formatString": "$,.2f",
+                "kind": "number"
+              },
+              "formula": "Sum([Data/Net Revenue])",
+              "id": "ID0030",
+              "name": "Total Net Revenue"
+            }
+          ],
+          "id": "ID0003",
+          "kind": "kpi-chart",
+          "name": "Total Net Revenue",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "value": {
+            "columnId": "ID0030"
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "CountDistinct([Data/Order Id])",
+              "id": "ID0031",
+              "name": "Order Count"
+            }
+          ],
+          "id": "ID0004",
+          "kind": "kpi-chart",
+          "name": "Order Count",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "value": {
+            "columnId": "ID0031"
+          }
+        },
+        {
+          "columns": [
+            {
+              "format": {
+                "formatString": "$,.2f",
+                "kind": "number"
+              },
+              "formula": "1.0 * (Sum([Data/Net Revenue])) / NullIf((CountDistinct([Data/Order Id])), 0)",
+              "id": "ID0032",
+              "name": "Average Order Value"
+            }
+          ],
+          "id": "ID0005",
+          "kind": "kpi-chart",
+          "name": "Average Order Value",
+          "source": {
+            "elementId": "m-master",
+            "kind": "table"
+          },
+          "value": {
+            "columnId": "ID0032"
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[Data Scope 1/Region (customer_dim)]",
+              "id": "ID0033",
+              "name": "Region (customer_dim)"
+            },
+            {
+              "format": {
+                "formatString": "$,.2f",
+                "kind": "number"
+              },
+              "formula": "Sum([Data Scope 1/Net Revenue])",
+              "id": "ID0034",
+              "name": "Total Net Revenue"
+            }
+          ],
+          "id": "ID0006",
+          "kind": "bar-chart",
+          "name": "Net Revenue by Region",
+          "source": {
+            "elementId": "scope-1",
+            "kind": "table"
+          },
+          "xAxis": {
+            "columnId": "ID0033",
+            "sort": {
+              "by": "ID0034",
+              "direction": "descending"
+            }
+          },
+          "yAxis": {
+            "columnIds": [
+              "ID0034"
+            ]
+          }
+        },
+        {
+          "color": {
+            "id": "ID0035",
+            "sort": {
+              "by": "ID0036",
+              "direction": "descending"
+            }
+          },
+          "columns": [
+            {
+              "formula": "[Data Scope 2/Ship Method]",
+              "id": "ID0035",
+              "name": "Ship Method"
+            },
+            {
+              "formula": "CountDistinct([Data Scope 2/Order Id])",
+              "id": "ID0036",
+              "name": "Order Count"
+            }
+          ],
+          "id": "ID0007",
+          "kind": "pie-chart",
+          "name": "Orders by Ship Method",
+          "source": {
+            "elementId": "scope-2",
+            "kind": "table"
+          },
+          "value": {
+            "id": "ID0036"
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[Data Scope 2/Order Channel]",
+              "id": "ID0037",
+              "name": "Order Channel"
+            },
+            {
+              "formula": "CountDistinct([Data Scope 2/Order Id])",
+              "id": "ID0038",
+              "name": "Order Count"
+            },
+            {
+              "format": {
+                "formatString": "$,.2f",
+                "kind": "number"
+              },
+              "formula": "Sum([Data Scope 2/Net Revenue])",
+              "id": "ID0039",
+              "name": "Total Net Revenue"
+            },
+            {
+              "format": {
+                "formatString": "$,.2f",
+                "kind": "number"
+              },
+              "formula": "1.0 * (Sum([Data Scope 2/Net Revenue])) / NullIf((CountDistinct([Data Scope 2/Order Id])), 0)",
+              "id": "ID0040",
+              "name": "Average Order Value"
+            },
+            {
+              "formula": "[Data Scope 2/Order Status]",
+              "hidden": true,
+              "id": "ID0041",
+              "name": "Order Status"
+            }
+          ],
+          "filters": [
+            {
+              "columnId": "ID0041",
+              "id": "ID0042",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                "Complete",
+                "Returned"
+              ]
+            }
+          ],
+          "groupings": [
+            {
+              "calculations": [
+                "ID0038",
+                "ID0039",
+                "ID0040"
+              ],
+              "groupBy": [
+                "ID0037"
+              ],
+              "id": "ID0043",
+              "sort": [
+                {
+                  "columnId": "ID0039",
+                  "direction": "descending"
+                }
+              ]
+            }
+          ],
+          "id": "ID0008",
+          "kind": "table",
+          "name": "Channel Summary",
+          "source": {
+            "elementId": "scope-2",
+            "kind": "table"
+          }
+        },
+        {
+          "controlId": "region",
+          "controlType": "list",
+          "filters": [
+            {
+              "columnId": "ID0011",
+              "source": {
+                "elementId": "m-master",
+                "kind": "table"
+              }
+            },
+            {
+              "columnId": "ID0025",
+              "source": {
+                "elementId": "scope-2",
+                "kind": "table"
+              }
+            }
+          ],
+          "id": "ID0000",
+          "kind": "control",
+          "mode": "include",
+          "name": "Region",
+          "selectionMode": "multiple",
+          "source": {
+            "columnId": "ID0011",
+            "kind": "source",
+            "source": {
+              "elementId": "m-master",
+              "kind": "table"
+            }
+          },
+          "values": []
+        },
+        {
+          "controlId": "order-channel",
+          "controlType": "list",
+          "filters": [
+            {
+              "columnId": "ID0013",
+              "source": {
+                "elementId": "m-master",
+                "kind": "table"
+              }
+            },
+            {
+              "columnId": "ID0020",
+              "source": {
+                "elementId": "scope-1",
+                "kind": "table"
+              }
+            }
+          ],
+          "id": "ID0001",
+          "kind": "control",
+          "mode": "include",
+          "name": "Order Channel",
+          "selectionMode": "multiple",
+          "source": {
+            "columnId": "ID0013",
+            "kind": "source",
+            "source": {
+              "elementId": "m-master",
+              "kind": "table"
+            }
+          },
+          "values": []
+        },
+        {
+          "controlId": "first-order-date",
+          "controlType": "date-range",
+          "filters": [
+            {
+              "columnId": "ID0015",
+              "source": {
+                "elementId": "m-master",
+                "kind": "table"
+              }
+            }
+          ],
+          "id": "ID0002",
+          "kind": "control",
+          "mode": "between",
+          "name": "First Order Date"
+        },
+        {
+          "id": "band-hdr",
+          "kind": "container",
+          "style": {
+            "backgroundColor": "#0F172A",
+            "borderRadius": "round"
+          }
+        },
+        {
+          "body": "# <span style=\"color: #FFFFFF\">SKILLTEST Looker Orders Pulse</span>",
+          "id": "band-hdrtext",
+          "kind": "text"
+        },
+        {
+          "id": "band-ctl",
+          "kind": "container"
+        },
+        {
+          "id": "band-kpi",
+          "kind": "container"
+        },
+        {
+          "id": "band-row-1",
+          "kind": "container"
+        },
+        {
+          "id": "band-row-2",
+          "kind": "container"
+        }
+      ],
+      "id": "page-dash",
+      "name": "SKILLTEST Looker Orders Pulse"
+    }
+  ],
+  "schemaVersion": 1
+}

@@ -1,0 +1,19 @@
+{
+  "dimension": "viz-kind",
+  "source_tool": "looker",
+  "authoritative_doc": "https://cloud.google.com/looker/docs/reference/param-lookml-dashboard",
+  "on_unmapped_default": "warn+skip",
+  "description": "Looker dashboard element visualization `type` -> Sigma workbook element kind. The single source of truth for build_workbook.py's tile classifier. Unmapped vis types warn+skip (a merged-results tile with no vis type is the one documented exception, defaulted in code with a warning).",
+  "rows": [
+    {"source": "single_value", "sigma": "kpi-chart", "doc_ref": "https://cloud.google.com/looker/docs/single-value", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+skip", "notes": "Looker single_value tile -> Sigma KPI."},
+    {"source": "looker_column", "sigma": "bar-chart", "doc_ref": "https://cloud.google.com/looker/docs/column-chart-options", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+skip", "notes": "Vertical bars. Sigma bar-chart with NO orientation key = vertical."},
+    {"source": "looker_bar", "sigma": "bar-chart", "doc_ref": "https://cloud.google.com/looker/docs/bar-chart-options", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "Horizontal bars. build_workbook adds orientation:horizontal downstream (see test_grid_fidelity.py)."},
+    {"source": "looker_area", "sigma": "area-chart", "doc_ref": "https://cloud.google.com/looker/docs/area-chart-options", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "looker_line", "sigma": "line-chart", "doc_ref": "https://cloud.google.com/looker/docs/line-chart-options", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "looker_pie", "sigma": "pie-chart", "doc_ref": "https://cloud.google.com/looker/docs/pie-chart-and-donut-chart-options", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+skip"},
+    {"source": "looker_donut_multiples", "sigma": "donut-chart", "doc_ref": "https://cloud.google.com/looker/docs/pie-chart-and-donut-chart-options", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "Looker donut small-multiples has no Sigma equivalent -> single donut-chart; build_workbook warns about the lost small-multiples facet."},
+    {"source": "table", "sigma": "table", "doc_ref": "https://cloud.google.com/looker/docs/table-chart-options", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+skip"},
+    {"source": "looker_grid", "sigma": "table", "doc_ref": "https://cloud.google.com/looker/docs/table-chart-options", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "Looker grid (data table) -> Sigma table."},
+    {"source": "looker_scatter", "sigma": "scatter-chart", "doc_ref": "https://cloud.google.com/looker/docs/scatterplot-options", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"}
+  ]
+}

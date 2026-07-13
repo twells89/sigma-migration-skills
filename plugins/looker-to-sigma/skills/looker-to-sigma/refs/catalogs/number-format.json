@@ -1,0 +1,27 @@
+{
+  "dimension": "number-format",
+  "source_tool": "looker",
+  "authoritative_doc": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name",
+  "sigma_target_doc": "https://help.sigmacomputing.com/docs/data-types-and-formats",
+  "on_unmapped_default": "warn (keep numeric value, no format) — a custom value_format mask is tried in code before this fallback",
+  "description": "LookML `value_format_name` (built-in named format) -> Sigma column number format (D3 format string in {kind:number, formatString}). Custom `value_format` Excel/TO_CHAR masks are NOT in this table — they are parsed by cited predicates custom_value_format_to_d3() / snowflake_mask_to_format(). An unrecognized named format falls through to the custom-mask parser, then to a loud warn (never a name-substring currency guess).",
+  "rows": [
+    {"source": "usd", "sigma": "$,.2f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+keep-value", "notes": "USD, 2 decimals, thousands sep."},
+    {"source": "usd_0", "sigma": "$,.0f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value", "notes": "USD, 0 decimals."},
+    {"source": "gbp", "sigma": "£,.2f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "gbp_0", "sigma": "£,.0f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "eur", "sigma": "€,.2f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "eur_0", "sigma": "€,.0f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "percent_0", "sigma": ",.0%", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value", "notes": "LookML percent_N assumes the value is a ratio (0-1); Sigma % format multiplies by 100 the same way."},
+    {"source": "percent_1", "sigma": ",.1%", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "percent_2", "sigma": ",.2%", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "percent_3", "sigma": ",.3%", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "percent_4", "sigma": ",.4%", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "decimal_0", "sigma": ",.0f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "decimal_1", "sigma": ",.1f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "decimal_2", "sigma": ",.2f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "decimal_3", "sigma": ",.3f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "decimal_4", "sigma": ",.4f", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value"},
+    {"source": "id", "sigma": "d", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-field-value-format-name#default_value_formats", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+keep-value", "notes": "Plain integer, no thousands separator (D3 'd')."}
+  ]
+}

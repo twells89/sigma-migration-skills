@@ -1,0 +1,17 @@
+{
+  "dimension": "aggregation",
+  "source_tool": "looker",
+  "authoritative_doc": "https://cloud.google.com/looker/docs/reference/param-measure-types",
+  "sigma_target_doc": "https://help.sigmacomputing.com/docs/aggregate-functions",
+  "on_unmapped_default": "warn+skip (NEVER silently default to Count())",
+  "description": "LookML measure `type` -> Sigma aggregate function. `sigma` is the plain aggregate; `sigma_if` is the filtered variant used when the measure carries a `filters:` sub-block (Looker filtered measures). Compositional measure types (yesno, number/expression, running/period-over-period, percentile, list) are NOT flat-mappable and stay as cited predicates in formula_for(); an unmapped scalar type warns+skips. count / count_distinct are resolved compositionally in formula_for (a plain count on a JOINED view becomes CountDistinct on that view's PK), so their plain `sigma` here documents the canonical target rather than driving the fallback branch.",
+  "rows": [
+    {"source": "sum", "sigma": "Sum", "sigma_if": "SumIf", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#sum", "sigma_target_ref": "https://help.sigmacomputing.com/docs/sum", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+skip"},
+    {"source": "average", "sigma": "Avg", "sigma_if": "AvgIf", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#average", "sigma_target_ref": "https://help.sigmacomputing.com/docs/avgif", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "min", "sigma": "Min", "sigma_if": "MinIf", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#min", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "max", "sigma": "Max", "sigma_if": "MaxIf", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#max", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip"},
+    {"source": "median", "sigma": "Median", "sigma_if": null, "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#median", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "Sigma has no MedianIf; a filtered median warns (filter dropped)."},
+    {"source": "count", "sigma": "Count()", "sigma_if": "CountIf", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#count", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "Resolved in formula_for: a plain count on a JOINED view -> CountDistinct on that view's primary_key (counts entities, not fact rows). Plain `sigma` here is the canonical fact-grain target."},
+    {"source": "count_distinct", "sigma": "CountDistinct", "sigma_if": "CountDistinctIf", "doc_ref": "https://cloud.google.com/looker/docs/reference/param-measure-types#count_distinct", "sigma_target_ref": "https://help.sigmacomputing.com/docs/aggregate-functions", "sigma_verified": {"status": "y", "date": "2026-07-13", "method": "live-parity CSA.TJ (looker skilltest-orders, wb a11ec834); 5/5 strict, no type=error"}, "on_unmapped": "warn+skip"}
+  ]
+}
