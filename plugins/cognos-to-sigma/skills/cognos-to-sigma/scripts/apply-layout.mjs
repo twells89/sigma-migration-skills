@@ -147,6 +147,10 @@ for (const p of spec.pages || []) {
   if (xml) pageBlocks.push(xml);
 }
 if (!pageBlocks.length) { console.log('no layoutable pages — nothing to lay out'); process.exit(0); }
+// beads-sigma-kvza.3: the band layout is SYNTHESIZED from element order — the Cognos
+// report's pixel geometry is not read — so say so LOUDLY rather than let it read as
+// source-faithful placement.
+console.warn(`⚠ layout: synthesized a banded grid for ${pageBlocks.length} page(s) from element order — Cognos report pixel geometry is not read, so placement is NOT source-faithful; review it.`);
 spec.layout = `<?xml version="1.0" encoding="utf-8"?>\n${pageBlocks.join('\n')}`;
 for (const k of ['workbookId', 'url', 'ownerId', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt', 'latestDocumentVersion', 'documentVersion']) delete spec[k];
 if (a.folder && !spec.folderId) spec.folderId = a.folder;

@@ -216,6 +216,11 @@ def build_layout(spec, tiles=None, controls=None):
         elems = [{"id": e["id"], "kind": e["kind"]} for e in main["elements"]
                  if e.get("kind") not in ("container", "control")
                  and not str(e.get("id", "")).startswith("band-")]
+        # beads-sigma-kvza.3: no source geometry (layout.tiles absent) — say so
+        # LOUDLY instead of silently synthesizing a grid that looks source-faithful.
+        print("⚠ layout: no ThoughtSpot tile geometry (layout.tiles absent) — "
+              "SYNTHESIZED an auto grid; placement is NOT source-faithful, review it.",
+              file=sys.stderr)
         items = auto_items(elems)
     if ctl_items:
         # drop the tiles/charts below the controls band so nothing overlaps it

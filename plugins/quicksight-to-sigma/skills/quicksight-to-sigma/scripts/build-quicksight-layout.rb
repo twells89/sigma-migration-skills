@@ -146,6 +146,11 @@ def layout_sheet(sheet, v2e, eids_for_sheet)
 
   # fallback: 2-per-row flow over this sheet's mapped elements (preserving sheet order)
   if placed.empty?
+    # beads-sigma-kvza.3: no source visual geometry (positions absent) — say so
+    # LOUDLY instead of silently synthesizing a grid that looks source-faithful.
+    warn "⚠ layout: QuickSight sheet '#{sheet['Name'] || sheet['SheetId'] || 'sheet'}' has no " \
+         "source visual geometry (positions absent) — SYNTHESIZED a 2-per-row auto-flow; " \
+         "placement is NOT source-faithful, review it."
     sheet_eids = (sheet['Visuals'] || []).map { |v| _t, inner = v.first; v2e[inner['VisualId']] }
                                           .compact.select { |eid| eids_for_sheet.include?(eid) }
     col = 1; row = 1
