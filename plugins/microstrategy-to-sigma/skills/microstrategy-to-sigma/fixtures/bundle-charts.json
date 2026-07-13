@@ -1,0 +1,4334 @@
+{
+  "dossier": {
+    "id": "77EFB43F5B441BA7B6EEECAB4D92A7EF",
+    "name": "Orders Performance Overview",
+    "datasets": [
+      {
+        "name": "Revenue by Region and Category",
+        "id": "5C8ABD78BC4EA7F4AF876E97091E6BA5",
+        "availableObjects": [
+          {
+            "id": "6140BFA7309B406AA76A90454BC7BB53",
+            "name": "Region",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "varChar",
+                "baseFormCategory": "ID",
+                "baseFormType": "text"
+              }
+            ]
+          },
+          {
+            "id": "13AF74581AA84A46B8FD2D1BBA073150",
+            "name": "Category",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "varChar",
+                "baseFormCategory": "ID",
+                "baseFormType": "text"
+              }
+            ]
+          },
+          {
+            "id": "413D98E4993B4D6ABB2DC440F7B31971",
+            "name": "Total Net Revenue",
+            "type": "metric"
+          },
+          {
+            "id": "653830C2CB684809B7030FBBEA498C8C",
+            "name": "Total Gross Profit",
+            "type": "metric"
+          },
+          {
+            "id": "5393F49A94A443E79E38CB3855B0272F",
+            "name": "Profit Margin Pct",
+            "type": "metric"
+          }
+        ],
+        "rows": [
+          {
+            "id": "6140BFA7309B406AA76A90454BC7BB53",
+            "name": "Region",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "varChar",
+                "baseFormCategory": "ID",
+                "baseFormType": "text"
+              }
+            ]
+          },
+          {
+            "id": "13AF74581AA84A46B8FD2D1BBA073150",
+            "name": "Category",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "varChar",
+                "baseFormCategory": "ID",
+                "baseFormType": "text"
+              }
+            ]
+          }
+        ],
+        "columns": [
+          {
+            "id": "00000000000000000000000000000000",
+            "name": "Metrics",
+            "type": "templateMetrics",
+            "elements": [
+              {
+                "name": "Total Net Revenue",
+                "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                "type": "metric",
+                "dataType": "reserved"
+              },
+              {
+                "name": "Total Gross Profit",
+                "id": "653830C2CB684809B7030FBBEA498C8C",
+                "type": "metric",
+                "dataType": "reserved"
+              },
+              {
+                "name": "Profit Margin Pct",
+                "id": "5393F49A94A443E79E38CB3855B0272F",
+                "type": "metric",
+                "dataType": "reserved"
+              }
+            ]
+          }
+        ],
+        "pageBy": []
+      },
+      {
+        "name": "Monthly Revenue Trend",
+        "id": "864205BFBA4B4E6E863C3FB42FB0A406",
+        "availableObjects": [
+          {
+            "id": "C025482DAE4C4BFDA72E8297D981ABAC",
+            "name": "Year",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "decimal",
+                "baseFormCategory": "ID",
+                "baseFormType": "number"
+              }
+            ]
+          },
+          {
+            "id": "C3292DAD4FAF404F88590CB19C3930F9",
+            "name": "Month",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "CCFBE2A5EADB4F50941FB879CCF1721C",
+                "name": "DESC",
+                "dataType": "varChar",
+                "baseFormCategory": "DESC",
+                "baseFormType": "text"
+              }
+            ]
+          },
+          {
+            "id": "413D98E4993B4D6ABB2DC440F7B31971",
+            "name": "Total Net Revenue",
+            "type": "metric"
+          },
+          {
+            "id": "145746BAC65E4BF39E83149A843A3DF7",
+            "name": "Order Count",
+            "type": "metric"
+          }
+        ],
+        "rows": [
+          {
+            "id": "C025482DAE4C4BFDA72E8297D981ABAC",
+            "name": "Year",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "decimal",
+                "baseFormCategory": "ID",
+                "baseFormType": "number"
+              }
+            ]
+          },
+          {
+            "id": "C3292DAD4FAF404F88590CB19C3930F9",
+            "name": "Month",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "CCFBE2A5EADB4F50941FB879CCF1721C",
+                "name": "DESC",
+                "dataType": "varChar",
+                "baseFormCategory": "DESC",
+                "baseFormType": "text"
+              }
+            ]
+          }
+        ],
+        "columns": [
+          {
+            "id": "00000000000000000000000000000000",
+            "name": "Metrics",
+            "type": "templateMetrics",
+            "elements": [
+              {
+                "name": "Total Net Revenue",
+                "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                "type": "metric",
+                "dataType": "reserved"
+              },
+              {
+                "name": "Order Count",
+                "id": "145746BAC65E4BF39E83149A843A3DF7",
+                "type": "metric",
+                "dataType": "reserved"
+              }
+            ]
+          }
+        ],
+        "pageBy": []
+      },
+      {
+        "name": "Channel Performance",
+        "id": "69759BAD734F3EB9308219B61D916432",
+        "availableObjects": [
+          {
+            "id": "E951AA8437BF46BB860E98F0DB349617",
+            "name": "Order Channel",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "varChar",
+                "baseFormCategory": "ID",
+                "baseFormType": "text"
+              }
+            ]
+          },
+          {
+            "id": "413D98E4993B4D6ABB2DC440F7B31971",
+            "name": "Total Net Revenue",
+            "type": "metric"
+          },
+          {
+            "id": "3BF64C66D95D41888EE5EEDEFAFB7C69",
+            "name": "Units Sold",
+            "type": "metric"
+          },
+          {
+            "id": "145746BAC65E4BF39E83149A843A3DF7",
+            "name": "Order Count",
+            "type": "metric"
+          }
+        ],
+        "rows": [
+          {
+            "id": "E951AA8437BF46BB860E98F0DB349617",
+            "name": "Order Channel",
+            "type": "attribute",
+            "forms": [
+              {
+                "id": "45C11FA478E745FEA08D781CEA190FE5",
+                "name": "ID",
+                "dataType": "varChar",
+                "baseFormCategory": "ID",
+                "baseFormType": "text"
+              }
+            ]
+          }
+        ],
+        "columns": [
+          {
+            "id": "00000000000000000000000000000000",
+            "name": "Metrics",
+            "type": "templateMetrics",
+            "elements": [
+              {
+                "name": "Total Net Revenue",
+                "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                "type": "metric",
+                "dataType": "reserved"
+              },
+              {
+                "name": "Units Sold",
+                "id": "3BF64C66D95D41888EE5EEDEFAFB7C69",
+                "type": "metric",
+                "dataType": "reserved"
+              },
+              {
+                "name": "Order Count",
+                "id": "145746BAC65E4BF39E83149A843A3DF7",
+                "type": "metric",
+                "dataType": "reserved"
+              }
+            ]
+          }
+        ],
+        "pageBy": []
+      }
+    ],
+    "currentChapter": "K123",
+    "chapters": [
+      {
+        "key": "K65",
+        "name": "Revenue by Region and Category",
+        "pages": [
+          {
+            "key": "K85",
+            "name": "Page 1",
+            "visualizations": [
+              {
+                "key": "K86",
+                "name": "Visualization 1",
+                "visualizationType": "grid"
+              }
+            ]
+          }
+        ],
+        "filters": [
+          {
+            "key": "K201",
+            "name": "Region",
+            "source": {
+              "id": "6140BFA7309B406AA76A90454BC7BB53",
+              "name": "Region"
+            }
+          }
+        ]
+      },
+      {
+        "key": "K69",
+        "name": "Monthly Revenue Trend",
+        "pages": [
+          {
+            "key": "K120",
+            "name": "Page 1",
+            "visualizations": [
+              {
+                "key": "K121",
+                "name": "Visualization 1",
+                "visualizationType": "line_chart"
+              }
+            ],
+            "selectors": []
+          }
+        ],
+        "filters": []
+      },
+      {
+        "key": "K123",
+        "name": "Channel Performance",
+        "pages": [
+          {
+            "key": "K158",
+            "name": "Page 1",
+            "visualizations": [
+              {
+                "key": "K159",
+                "name": "Visualization 1",
+                "visualizationType": "bar_chart"
+              }
+            ],
+            "selectors": []
+          }
+        ],
+        "filters": []
+      }
+    ]
+  },
+  "reports": {
+    "5C8ABD78BC4EA7F4AF876E97091E6BA5": {
+      "information": {
+        "dateCreated": "2026-06-11T01:51:17.284Z",
+        "dateModified": "2026-06-11T01:51:17.284Z",
+        "versionId": "A81A552B3B4FAB584A8293ABBBEE2798",
+        "acg": 255,
+        "objectId": "5C8ABD78BC4EA7F4AF876E97091E6BA5",
+        "subType": "report_grid",
+        "name": "Revenue by Region and Category"
+      },
+      "sourceType": "normal",
+      "dataSource": {
+        "dataTemplate": {
+          "units": [
+            {
+              "id": "6140BFA7309B406AA76A90454BC7BB53",
+              "name": "Region",
+              "type": "attribute",
+              "nonAggregatable": false
+            },
+            {
+              "id": "13AF74581AA84A46B8FD2D1BBA073150",
+              "name": "Category",
+              "type": "attribute",
+              "nonAggregatable": false
+            },
+            {
+              "type": "metrics",
+              "elements": [
+                {
+                  "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                  "name": "Total Net Revenue",
+                  "subType": "metric"
+                },
+                {
+                  "id": "653830C2CB684809B7030FBBEA498C8C",
+                  "name": "Total Gross Profit",
+                  "subType": "metric"
+                },
+                {
+                  "id": "5393F49A94A443E79E38CB3855B0272F",
+                  "name": "Profit Margin Pct",
+                  "subType": "metric"
+                }
+              ]
+            }
+          ]
+        },
+        "filter": {}
+      },
+      "grid": {
+        "viewTemplate": {
+          "rows": {
+            "units": [
+              {
+                "id": "6140BFA7309B406AA76A90454BC7BB53",
+                "name": "Region",
+                "type": "attribute"
+              },
+              {
+                "id": "13AF74581AA84A46B8FD2D1BBA073150",
+                "name": "Category",
+                "type": "attribute"
+              }
+            ],
+            "sorts": []
+          },
+          "columns": {
+            "units": [
+              {
+                "type": "metrics",
+                "elements": [
+                  {
+                    "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                    "name": "Total Net Revenue",
+                    "subType": "metric"
+                  },
+                  {
+                    "id": "653830C2CB684809B7030FBBEA498C8C",
+                    "name": "Total Gross Profit",
+                    "subType": "metric"
+                  },
+                  {
+                    "id": "5393F49A94A443E79E38CB3855B0272F",
+                    "name": "Profit Margin Pct",
+                    "subType": "metric"
+                  }
+                ]
+              }
+            ],
+            "sorts": []
+          },
+          "pageBy": {
+            "units": [],
+            "sorts": []
+          }
+        },
+        "viewFilter": {}
+      }
+    },
+    "864205BFBA4B4E6E863C3FB42FB0A406": {
+      "information": {
+        "dateCreated": "2026-06-11T01:51:17.779Z",
+        "dateModified": "2026-06-11T01:51:17.779Z",
+        "versionId": "43BB95B68A4CCA7DBDBC93B9B2F6DA34",
+        "acg": 255,
+        "objectId": "864205BFBA4B4E6E863C3FB42FB0A406",
+        "subType": "report_grid",
+        "name": "Monthly Revenue Trend"
+      },
+      "sourceType": "normal",
+      "dataSource": {
+        "dataTemplate": {
+          "units": [
+            {
+              "id": "C025482DAE4C4BFDA72E8297D981ABAC",
+              "name": "Year",
+              "type": "attribute",
+              "nonAggregatable": false
+            },
+            {
+              "id": "C3292DAD4FAF404F88590CB19C3930F9",
+              "name": "Month",
+              "type": "attribute",
+              "nonAggregatable": false
+            },
+            {
+              "type": "metrics",
+              "elements": [
+                {
+                  "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                  "name": "Total Net Revenue",
+                  "subType": "metric"
+                },
+                {
+                  "id": "145746BAC65E4BF39E83149A843A3DF7",
+                  "name": "Order Count",
+                  "subType": "metric"
+                }
+              ]
+            }
+          ]
+        },
+        "filter": {}
+      },
+      "grid": {
+        "viewTemplate": {
+          "rows": {
+            "units": [
+              {
+                "id": "C025482DAE4C4BFDA72E8297D981ABAC",
+                "name": "Year",
+                "type": "attribute"
+              },
+              {
+                "id": "C3292DAD4FAF404F88590CB19C3930F9",
+                "name": "Month",
+                "type": "attribute"
+              }
+            ],
+            "sorts": []
+          },
+          "columns": {
+            "units": [
+              {
+                "type": "metrics",
+                "elements": [
+                  {
+                    "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                    "name": "Total Net Revenue",
+                    "subType": "metric"
+                  },
+                  {
+                    "id": "145746BAC65E4BF39E83149A843A3DF7",
+                    "name": "Order Count",
+                    "subType": "metric"
+                  }
+                ]
+              }
+            ],
+            "sorts": []
+          },
+          "pageBy": {
+            "units": [],
+            "sorts": []
+          }
+        },
+        "viewFilter": {}
+      }
+    },
+    "69759BAD734F3EB9308219B61D916432": {
+      "information": {
+        "dateCreated": "2026-06-11T01:51:18.212Z",
+        "dateModified": "2026-06-11T01:51:18.212Z",
+        "versionId": "A44A49EA35425984036D79927BEFA145",
+        "acg": 255,
+        "objectId": "69759BAD734F3EB9308219B61D916432",
+        "subType": "report_grid",
+        "name": "Channel Performance"
+      },
+      "sourceType": "normal",
+      "dataSource": {
+        "dataTemplate": {
+          "units": [
+            {
+              "id": "E951AA8437BF46BB860E98F0DB349617",
+              "name": "Order Channel",
+              "type": "attribute",
+              "nonAggregatable": false
+            },
+            {
+              "type": "metrics",
+              "elements": [
+                {
+                  "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                  "name": "Total Net Revenue",
+                  "subType": "metric"
+                },
+                {
+                  "id": "3BF64C66D95D41888EE5EEDEFAFB7C69",
+                  "name": "Units Sold",
+                  "subType": "metric"
+                },
+                {
+                  "id": "145746BAC65E4BF39E83149A843A3DF7",
+                  "name": "Order Count",
+                  "subType": "metric"
+                }
+              ]
+            }
+          ]
+        },
+        "filter": {}
+      },
+      "grid": {
+        "viewTemplate": {
+          "rows": {
+            "units": [
+              {
+                "id": "E951AA8437BF46BB860E98F0DB349617",
+                "name": "Order Channel",
+                "type": "attribute"
+              }
+            ],
+            "sorts": []
+          },
+          "columns": {
+            "units": [
+              {
+                "type": "metrics",
+                "elements": [
+                  {
+                    "id": "413D98E4993B4D6ABB2DC440F7B31971",
+                    "name": "Total Net Revenue",
+                    "subType": "metric"
+                  },
+                  {
+                    "id": "3BF64C66D95D41888EE5EEDEFAFB7C69",
+                    "name": "Units Sold",
+                    "subType": "metric"
+                  },
+                  {
+                    "id": "145746BAC65E4BF39E83149A843A3DF7",
+                    "name": "Order Count",
+                    "subType": "metric"
+                  }
+                ]
+              }
+            ],
+            "sorts": []
+          },
+          "pageBy": {
+            "units": [],
+            "sorts": []
+          }
+        },
+        "viewFilter": {}
+      }
+    }
+  },
+  "attributes": {
+    "13AF74581AA84A46B8FD2D1BBA073150": {
+      "information": {
+        "dateCreated": "2026-06-11T01:39:45.089Z",
+        "dateModified": "2026-06-11T01:40:35.091Z",
+        "versionId": "2F7B0587EB4A72B49B0EAAAC1FC4B0C4",
+        "acg": 255,
+        "objectId": "13AF74581AA84A46B8FD2D1BBA073150",
+        "subType": "attribute",
+        "name": "Category"
+      },
+      "forms": [
+        {
+          "id": "45C11FA478E745FEA08D781CEA190FE5",
+          "name": "",
+          "category": "ID",
+          "type": "system",
+          "displayFormat": "text",
+          "dataType": {
+            "type": "fixed_length_string",
+            "precision": 50,
+            "scale": -2147483648
+          },
+          "expressions": [
+            {
+              "expressionId": "B8BB213EB9B3474BA0A064C69F846AE9",
+              "expression": {
+                "text": "CATEGORY",
+                "tokens": [
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "CATEGORY",
+                    "type": "column_reference",
+                    "target": {
+                      "dateCreated": "2026-06-11T01:34:19.851Z",
+                      "dateModified": "2026-06-11T01:34:19.851Z",
+                      "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                      "acg": 255,
+                      "objectId": "EE2E24FFDF58489193BB93F5FEB66D5B",
+                      "subType": "column",
+                      "name": "CATEGORY"
+                    }
+                  },
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "",
+                    "type": "end_of_text"
+                  }
+                ]
+              },
+              "tables": [
+                {
+                  "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+                  "subType": "logical_table",
+                  "name": "PRODUCT_DIM"
+                }
+              ],
+              "autoMapping": true
+            }
+          ],
+          "alias": "CATEGORY",
+          "lookupTable": {
+            "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+            "subType": "logical_table",
+            "name": "PRODUCT_DIM"
+          }
+        }
+      ],
+      "attributeLookupTable": {
+        "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+        "subType": "logical_table",
+        "name": "PRODUCT_DIM"
+      },
+      "keyForm": {
+        "id": "45C11FA478E745FEA08D781CEA190FE5"
+      },
+      "displays": {
+        "reportDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ],
+        "browseDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ]
+      },
+      "sorts": {},
+      "relationships": [
+        {
+          "parent": {
+            "objectId": "13AF74581AA84A46B8FD2D1BBA073150",
+            "subType": "attribute",
+            "name": "Category"
+          },
+          "child": {
+            "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+            "subType": "attribute",
+            "name": "Product"
+          },
+          "relationshipTable": {
+            "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+            "subType": "logical_table",
+            "name": "PRODUCT_DIM"
+          },
+          "relationshipType": "one_to_many"
+        }
+      ],
+      "nonAggregatable": false,
+      "applySecurityFiltersToElementBrowsing": true,
+      "enableElementCaching": true,
+      "elementDisplayOption": "all_elements"
+    },
+    "6140BFA7309B406AA76A90454BC7BB53": {
+      "information": {
+        "dateCreated": "2026-06-11T01:39:45.089Z",
+        "dateModified": "2026-06-11T01:40:35.091Z",
+        "versionId": "2F7B0587EB4A72B49B0EAAAC1FC4B0C4",
+        "acg": 255,
+        "objectId": "6140BFA7309B406AA76A90454BC7BB53",
+        "subType": "attribute",
+        "name": "Region"
+      },
+      "forms": [
+        {
+          "id": "45C11FA478E745FEA08D781CEA190FE5",
+          "name": "",
+          "category": "ID",
+          "type": "system",
+          "displayFormat": "text",
+          "dataType": {
+            "type": "fixed_length_string",
+            "precision": 20,
+            "scale": -2147483648
+          },
+          "expressions": [
+            {
+              "expressionId": "02676EBADA84448B9F8C161CA904811C",
+              "expression": {
+                "text": "REGION",
+                "tokens": [
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "REGION",
+                    "type": "column_reference",
+                    "target": {
+                      "dateCreated": "2026-06-11T01:34:19.851Z",
+                      "dateModified": "2026-06-11T01:34:19.851Z",
+                      "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                      "acg": 255,
+                      "objectId": "31FC4505562A431BBBB15D0B79514023",
+                      "subType": "column",
+                      "name": "REGION"
+                    }
+                  },
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "",
+                    "type": "end_of_text"
+                  }
+                ]
+              },
+              "tables": [
+                {
+                  "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+                  "subType": "logical_table",
+                  "name": "STORE_DIM"
+                }
+              ],
+              "autoMapping": true
+            }
+          ],
+          "alias": "REGION",
+          "lookupTable": {
+            "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+            "subType": "logical_table",
+            "name": "STORE_DIM"
+          }
+        }
+      ],
+      "attributeLookupTable": {
+        "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+        "subType": "logical_table",
+        "name": "STORE_DIM"
+      },
+      "keyForm": {
+        "id": "45C11FA478E745FEA08D781CEA190FE5"
+      },
+      "displays": {
+        "reportDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ],
+        "browseDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ]
+      },
+      "sorts": {},
+      "relationships": [
+        {
+          "parent": {
+            "objectId": "6140BFA7309B406AA76A90454BC7BB53",
+            "subType": "attribute",
+            "name": "Region"
+          },
+          "child": {
+            "objectId": "9177026370BB44A3A0CD521FE5166500",
+            "subType": "attribute",
+            "name": "Store"
+          },
+          "relationshipTable": {
+            "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+            "subType": "logical_table",
+            "name": "STORE_DIM"
+          },
+          "relationshipType": "one_to_many"
+        }
+      ],
+      "nonAggregatable": false,
+      "applySecurityFiltersToElementBrowsing": true,
+      "enableElementCaching": true,
+      "elementDisplayOption": "all_elements"
+    },
+    "C025482DAE4C4BFDA72E8297D981ABAC": {
+      "information": {
+        "dateCreated": "2026-06-11T01:39:45.089Z",
+        "dateModified": "2026-06-11T01:40:35.091Z",
+        "versionId": "2F7B0587EB4A72B49B0EAAAC1FC4B0C4",
+        "acg": 255,
+        "objectId": "C025482DAE4C4BFDA72E8297D981ABAC",
+        "subType": "attribute",
+        "name": "Year"
+      },
+      "forms": [
+        {
+          "id": "45C11FA478E745FEA08D781CEA190FE5",
+          "name": "",
+          "category": "ID",
+          "type": "system",
+          "displayFormat": "number",
+          "dataType": {
+            "type": "decimal",
+            "precision": 4,
+            "scale": 0
+          },
+          "expressions": [
+            {
+              "expressionId": "D06E7BCA19D543F589D084E7C90B89E9",
+              "expression": {
+                "text": "YEAR",
+                "tokens": [
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "YEAR",
+                    "type": "column_reference",
+                    "target": {
+                      "dateCreated": "2026-06-11T01:34:19.851Z",
+                      "dateModified": "2026-06-11T01:34:19.851Z",
+                      "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                      "acg": 255,
+                      "objectId": "A443425EB7684086B49B5182EDA0D825",
+                      "subType": "column",
+                      "name": "YEAR"
+                    }
+                  },
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "",
+                    "type": "end_of_text"
+                  }
+                ]
+              },
+              "tables": [
+                {
+                  "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                  "subType": "logical_table",
+                  "name": "DATE_DIM"
+                }
+              ],
+              "autoMapping": true
+            }
+          ],
+          "alias": "YEAR",
+          "lookupTable": {
+            "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+            "subType": "logical_table",
+            "name": "DATE_DIM"
+          }
+        }
+      ],
+      "attributeLookupTable": {
+        "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+        "subType": "logical_table",
+        "name": "DATE_DIM"
+      },
+      "keyForm": {
+        "id": "45C11FA478E745FEA08D781CEA190FE5"
+      },
+      "displays": {
+        "reportDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ],
+        "browseDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ]
+      },
+      "sorts": {},
+      "relationships": [
+        {
+          "parent": {
+            "objectId": "C025482DAE4C4BFDA72E8297D981ABAC",
+            "subType": "attribute",
+            "name": "Year"
+          },
+          "child": {
+            "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+            "subType": "attribute",
+            "name": "Month"
+          },
+          "relationshipTable": {
+            "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+            "subType": "logical_table",
+            "name": "DATE_DIM"
+          },
+          "relationshipType": "one_to_many"
+        }
+      ],
+      "nonAggregatable": false,
+      "applySecurityFiltersToElementBrowsing": true,
+      "enableElementCaching": true,
+      "elementDisplayOption": "all_elements"
+    },
+    "C3292DAD4FAF404F88590CB19C3930F9": {
+      "information": {
+        "dateCreated": "2026-06-11T01:39:45.089Z",
+        "dateModified": "2026-06-11T01:40:35.091Z",
+        "versionId": "2F7B0587EB4A72B49B0EAAAC1FC4B0C4",
+        "acg": 255,
+        "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+        "subType": "attribute",
+        "name": "Month"
+      },
+      "forms": [
+        {
+          "id": "45C11FA478E745FEA08D781CEA190FE5",
+          "name": "",
+          "category": "ID",
+          "type": "system",
+          "displayFormat": "number",
+          "dataType": {
+            "type": "decimal",
+            "precision": 2,
+            "scale": 0
+          },
+          "expressions": [
+            {
+              "expressionId": "526242A750714963BE42EB4E80918214",
+              "expression": {
+                "text": "MONTH_NUMBER",
+                "tokens": [
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "MONTH_NUMBER",
+                    "type": "column_reference",
+                    "target": {
+                      "dateCreated": "2026-06-11T01:34:19.851Z",
+                      "dateModified": "2026-06-11T01:34:19.851Z",
+                      "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                      "acg": 255,
+                      "objectId": "421F8160638F4F9AA7FC434C0EBF14EC",
+                      "subType": "column",
+                      "name": "MONTH_NUMBER"
+                    }
+                  },
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "",
+                    "type": "end_of_text"
+                  }
+                ]
+              },
+              "tables": [
+                {
+                  "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                  "subType": "logical_table",
+                  "name": "DATE_DIM"
+                }
+              ],
+              "autoMapping": true
+            }
+          ],
+          "alias": "MONTH_NUMBER",
+          "lookupTable": {
+            "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+            "subType": "logical_table",
+            "name": "DATE_DIM"
+          }
+        },
+        {
+          "id": "CCFBE2A5EADB4F50941FB879CCF1721C",
+          "name": "",
+          "category": "DESC",
+          "type": "system",
+          "displayFormat": "text",
+          "dataType": {
+            "type": "fixed_length_string",
+            "precision": 10,
+            "scale": -2147483648
+          },
+          "expressions": [
+            {
+              "expressionId": "E56418E7E00A4115BB562695AE70921E",
+              "expression": {
+                "text": "MONTH_NAME",
+                "tokens": [
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "MONTH_NAME",
+                    "type": "column_reference",
+                    "target": {
+                      "dateCreated": "2026-06-11T01:34:19.851Z",
+                      "dateModified": "2026-06-11T01:34:19.851Z",
+                      "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                      "acg": 255,
+                      "objectId": "4C6BF4B48BF94197B76731366E39ED7A",
+                      "subType": "column",
+                      "name": "MONTH_NAME"
+                    }
+                  },
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "",
+                    "type": "end_of_text"
+                  }
+                ]
+              },
+              "tables": [
+                {
+                  "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                  "subType": "logical_table",
+                  "name": "DATE_DIM"
+                }
+              ],
+              "autoMapping": true
+            }
+          ],
+          "alias": "MONTH_NAME",
+          "lookupTable": {
+            "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+            "subType": "logical_table",
+            "name": "DATE_DIM"
+          }
+        }
+      ],
+      "attributeLookupTable": {
+        "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+        "subType": "logical_table",
+        "name": "DATE_DIM"
+      },
+      "keyForm": {
+        "id": "45C11FA478E745FEA08D781CEA190FE5"
+      },
+      "displays": {
+        "reportDisplays": [
+          {
+            "id": "CCFBE2A5EADB4F50941FB879CCF1721C"
+          }
+        ],
+        "browseDisplays": [
+          {
+            "id": "CCFBE2A5EADB4F50941FB879CCF1721C"
+          }
+        ]
+      },
+      "sorts": {},
+      "relationships": [
+        {
+          "parent": {
+            "objectId": "C025482DAE4C4BFDA72E8297D981ABAC",
+            "subType": "attribute",
+            "name": "Year"
+          },
+          "child": {
+            "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+            "subType": "attribute",
+            "name": "Month"
+          },
+          "relationshipTable": {
+            "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+            "subType": "logical_table",
+            "name": "DATE_DIM"
+          },
+          "relationshipType": "one_to_many"
+        },
+        {
+          "parent": {
+            "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+            "subType": "attribute",
+            "name": "Month"
+          },
+          "child": {
+            "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+            "subType": "attribute",
+            "name": "Day"
+          },
+          "relationshipTable": {
+            "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+            "subType": "logical_table",
+            "name": "DATE_DIM"
+          },
+          "relationshipType": "one_to_many"
+        }
+      ],
+      "nonAggregatable": false,
+      "applySecurityFiltersToElementBrowsing": true,
+      "enableElementCaching": true,
+      "elementDisplayOption": "all_elements"
+    },
+    "E951AA8437BF46BB860E98F0DB349617": {
+      "information": {
+        "dateCreated": "2026-06-11T01:39:45.089Z",
+        "dateModified": "2026-06-11T01:39:45.089Z",
+        "versionId": "B6C6654A01446E6F7D4C42BDD134E645",
+        "acg": 255,
+        "objectId": "E951AA8437BF46BB860E98F0DB349617",
+        "subType": "attribute",
+        "name": "Order Channel"
+      },
+      "forms": [
+        {
+          "id": "45C11FA478E745FEA08D781CEA190FE5",
+          "name": "",
+          "category": "ID",
+          "type": "system",
+          "displayFormat": "text",
+          "dataType": {
+            "type": "fixed_length_string",
+            "precision": 20,
+            "scale": -2147483648
+          },
+          "expressions": [
+            {
+              "expressionId": "30FCC73845F54BD0AAA4D55C723C8432",
+              "expression": {
+                "text": "ORDER_CHANNEL",
+                "tokens": [
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "ORDER_CHANNEL",
+                    "type": "column_reference",
+                    "target": {
+                      "dateCreated": "2026-06-11T01:34:19.851Z",
+                      "dateModified": "2026-06-11T01:34:19.851Z",
+                      "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                      "acg": 255,
+                      "objectId": "6D2F6387F5624C3FA6D4F9CC5320D324",
+                      "subType": "column",
+                      "name": "ORDER_CHANNEL"
+                    }
+                  },
+                  {
+                    "level": "resolved",
+                    "state": "initial",
+                    "value": "",
+                    "type": "end_of_text"
+                  }
+                ]
+              },
+              "tables": [
+                {
+                  "objectId": "D9FC61279B1B493896B8D146734F3706",
+                  "subType": "logical_table",
+                  "name": "ORDER_FACT"
+                }
+              ],
+              "autoMapping": true
+            }
+          ],
+          "alias": "ORDER_CHANNEL",
+          "lookupTable": {
+            "objectId": "D9FC61279B1B493896B8D146734F3706",
+            "subType": "logical_table",
+            "name": "ORDER_FACT"
+          }
+        }
+      ],
+      "attributeLookupTable": {
+        "objectId": "D9FC61279B1B493896B8D146734F3706",
+        "subType": "logical_table",
+        "name": "ORDER_FACT"
+      },
+      "keyForm": {
+        "id": "45C11FA478E745FEA08D781CEA190FE5"
+      },
+      "displays": {
+        "reportDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ],
+        "browseDisplays": [
+          {
+            "id": "45C11FA478E745FEA08D781CEA190FE5"
+          }
+        ]
+      },
+      "sorts": {},
+      "relationships": [],
+      "nonAggregatable": false,
+      "applySecurityFiltersToElementBrowsing": true,
+      "enableElementCaching": true,
+      "elementDisplayOption": "all_elements"
+    }
+  },
+  "metrics": {
+    "145746BAC65E4BF39E83149A843A3DF7": {
+      "information": {
+        "dateCreated": "2026-06-11T01:41:18.866Z",
+        "dateModified": "2026-06-11T01:41:18.866Z",
+        "versionId": "A2BC09E4554816CC81EE99B40B10F9E6",
+        "acg": 255,
+        "objectId": "145746BAC65E4BF39E83149A843A3DF7",
+        "subType": "metric",
+        "name": "Order Count"
+      },
+      "expression": {
+        "text": "Count({Order Id Fact})",
+        "tokens": [
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "Count",
+            "type": "function",
+            "target": {
+              "dateCreated": "2025-05-29T19:58:08.059Z",
+              "dateModified": "2025-05-29T19:58:08.059Z",
+              "versionId": "CD5315C011DF671600088AA0669A0C20",
+              "acg": 255,
+              "objectId": "8107C31CDD9911D3B98100C04F2233EA",
+              "subType": "function",
+              "name": "Count",
+              "description": "Returns the number of values the ValueList. This is a group-value function."
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "<",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "Distinct",
+            "type": "identifier"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "=",
+            "type": "function"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "True",
+            "type": "boolean"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ",",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "UseLookupForAttributes",
+            "type": "identifier"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "=",
+            "type": "function"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "False",
+            "type": "boolean"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ">",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "(",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "[Order Id Fact]",
+            "type": "object_reference",
+            "target": {
+              "dateCreated": "2026-06-11T01:40:36.959Z",
+              "dateModified": "2026-06-11T01:40:36.959Z",
+              "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+              "acg": 255,
+              "objectId": "313BB989028B430A9E8734AEB7432BF3",
+              "subType": "fact",
+              "name": "Order Id Fact"
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ")",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "{",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "~",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "}",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "",
+            "type": "end_of_text"
+          }
+        ]
+      },
+      "dimty": {
+        "dimtyUnits": [
+          {
+            "dimtyUnitType": "report_base_level",
+            "aggregation": "normal",
+            "filtering": "none",
+            "groupBy": true
+          }
+        ],
+        "excludeAttribute": false,
+        "allowAddingUnit": true
+      },
+      "conditionality": {
+        "embedMethod": "report_into_metric_filter",
+        "removeElements": true
+      },
+      "metricSubtotals": [],
+      "aggregateFromBase": false,
+      "formulaJoinType": "default",
+      "smartTotal": "decomposable_false",
+      "dataType": {
+        "type": "reserved",
+        "precision": 0,
+        "scale": 0
+      },
+      "format": {
+        "header": [],
+        "values": []
+      },
+      "subtotalFromBase": false,
+      "metricFormatType": "reserved",
+      "thresholds": []
+    },
+    "3BF64C66D95D41888EE5EEDEFAFB7C69": {
+      "information": {
+        "dateCreated": "2026-06-11T01:41:18.866Z",
+        "dateModified": "2026-06-11T01:41:18.866Z",
+        "versionId": "A2BC09E4554816CC81EE99B40B10F9E6",
+        "acg": 255,
+        "objectId": "3BF64C66D95D41888EE5EEDEFAFB7C69",
+        "subType": "metric",
+        "name": "Units Sold"
+      },
+      "expression": {
+        "text": "Sum(Quantity)",
+        "tokens": [
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "Sum",
+            "type": "function",
+            "target": {
+              "dateCreated": "2025-05-29T19:58:08.059Z",
+              "dateModified": "2025-05-29T19:58:08.059Z",
+              "versionId": "CD5315C011DF671600088AA0669A0C20",
+              "acg": 255,
+              "objectId": "8107C31BDD9911D3B98100C04F2233EA",
+              "subType": "function",
+              "name": "Sum",
+              "description": "Returns the sum of all values in the ValueList.  This is a group-value function."
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "<",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "UseLookupForAttributes",
+            "type": "identifier"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "=",
+            "type": "function"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "False",
+            "type": "boolean"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ">",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "(",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "Quantity",
+            "type": "object_reference",
+            "target": {
+              "dateCreated": "2026-06-11T01:40:36.959Z",
+              "dateModified": "2026-06-11T01:40:36.959Z",
+              "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+              "acg": 255,
+              "objectId": "5BC47E4C35454EA5BD24C54AF3430577",
+              "subType": "fact",
+              "name": "Quantity"
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ")",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "{",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "~",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "}",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "",
+            "type": "end_of_text"
+          }
+        ]
+      },
+      "dimty": {
+        "dimtyUnits": [
+          {
+            "dimtyUnitType": "report_base_level",
+            "aggregation": "normal",
+            "filtering": "none",
+            "groupBy": true
+          }
+        ],
+        "excludeAttribute": false,
+        "allowAddingUnit": true
+      },
+      "conditionality": {
+        "embedMethod": "report_into_metric_filter",
+        "removeElements": true
+      },
+      "metricSubtotals": [],
+      "aggregateFromBase": false,
+      "formulaJoinType": "default",
+      "smartTotal": "decomposable_false",
+      "dataType": {
+        "type": "reserved",
+        "precision": 0,
+        "scale": 0
+      },
+      "format": {
+        "header": [],
+        "values": []
+      },
+      "subtotalFromBase": false,
+      "metricFormatType": "reserved",
+      "thresholds": []
+    },
+    "413D98E4993B4D6ABB2DC440F7B31971": {
+      "information": {
+        "dateCreated": "2026-06-11T01:41:18.866Z",
+        "dateModified": "2026-06-11T01:41:18.866Z",
+        "versionId": "A2BC09E4554816CC81EE99B40B10F9E6",
+        "acg": 255,
+        "objectId": "413D98E4993B4D6ABB2DC440F7B31971",
+        "subType": "metric",
+        "name": "Total Net Revenue"
+      },
+      "expression": {
+        "text": "Sum({Net Revenue})",
+        "tokens": [
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "Sum",
+            "type": "function",
+            "target": {
+              "dateCreated": "2025-05-29T19:58:08.059Z",
+              "dateModified": "2025-05-29T19:58:08.059Z",
+              "versionId": "CD5315C011DF671600088AA0669A0C20",
+              "acg": 255,
+              "objectId": "8107C31BDD9911D3B98100C04F2233EA",
+              "subType": "function",
+              "name": "Sum",
+              "description": "Returns the sum of all values in the ValueList.  This is a group-value function."
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "<",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "UseLookupForAttributes",
+            "type": "identifier"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "=",
+            "type": "function"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "False",
+            "type": "boolean"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ">",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "(",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "[Net Revenue]",
+            "type": "object_reference",
+            "target": {
+              "dateCreated": "2026-06-11T01:40:36.959Z",
+              "dateModified": "2026-06-11T01:40:36.959Z",
+              "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+              "acg": 255,
+              "objectId": "DDBF580D0AD14785A742CCC40EE2EE5C",
+              "subType": "fact",
+              "name": "Net Revenue"
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ")",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "{",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "~",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "}",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "",
+            "type": "end_of_text"
+          }
+        ]
+      },
+      "dimty": {
+        "dimtyUnits": [
+          {
+            "dimtyUnitType": "report_base_level",
+            "aggregation": "normal",
+            "filtering": "none",
+            "groupBy": true
+          }
+        ],
+        "excludeAttribute": false,
+        "allowAddingUnit": true
+      },
+      "conditionality": {
+        "embedMethod": "report_into_metric_filter",
+        "removeElements": true
+      },
+      "metricSubtotals": [],
+      "aggregateFromBase": false,
+      "formulaJoinType": "default",
+      "smartTotal": "decomposable_false",
+      "dataType": {
+        "type": "reserved",
+        "precision": 0,
+        "scale": 0
+      },
+      "format": {
+        "header": [],
+        "values": []
+      },
+      "subtotalFromBase": false,
+      "metricFormatType": "reserved",
+      "thresholds": []
+    },
+    "5393F49A94A443E79E38CB3855B0272F": {
+      "information": {
+        "dateCreated": "2026-06-11T01:41:19.395Z",
+        "dateModified": "2026-06-11T01:41:19.395Z",
+        "versionId": "1CEBD6B78A4C252713DAA3ACB624BBB3",
+        "acg": 255,
+        "objectId": "5393F49A94A443E79E38CB3855B0272F",
+        "subType": "metric",
+        "name": "Profit Margin Pct"
+      },
+      "expression": {
+        "text": "{Total Gross Profit} / {Total Net Revenue}",
+        "tokens": [
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "[Total Gross Profit]",
+            "type": "object_reference",
+            "target": {
+              "dateCreated": "2026-06-11T01:41:18.866Z",
+              "dateModified": "2026-06-11T01:41:18.866Z",
+              "versionId": "A2BC09E4554816CC81EE99B40B10F9E6",
+              "acg": 255,
+              "objectId": "653830C2CB684809B7030FBBEA498C8C",
+              "subType": "metric",
+              "name": "Total Gross Profit"
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "/",
+            "type": "character",
+            "target": {
+              "dateCreated": "2025-05-29T19:58:08.059Z",
+              "dateModified": "2025-05-29T19:58:08.059Z",
+              "versionId": "CD5315C011DF671600088AA0669A0C20",
+              "acg": 255,
+              "objectId": "8107C313DD9911D3B98100C04F2233EA",
+              "subType": "function",
+              "name": "/",
+              "description": "Returns the quotient when one value is divided by another."
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "[Total Net Revenue]",
+            "type": "object_reference",
+            "target": {
+              "dateCreated": "2026-06-11T01:41:18.866Z",
+              "dateModified": "2026-06-11T01:41:18.866Z",
+              "versionId": "A2BC09E4554816CC81EE99B40B10F9E6",
+              "acg": 255,
+              "objectId": "413D98E4993B4D6ABB2DC440F7B31971",
+              "subType": "metric",
+              "name": "Total Net Revenue"
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "",
+            "type": "end_of_text"
+          }
+        ]
+      },
+      "metricSubtotals": [],
+      "aggregateFromBase": false,
+      "formulaJoinType": "default",
+      "smartTotal": "decomposable_false",
+      "dataType": {
+        "type": "reserved",
+        "precision": 0,
+        "scale": 0
+      },
+      "format": {
+        "header": [],
+        "values": []
+      },
+      "subtotalFromBase": false,
+      "metricFormatType": "reserved",
+      "thresholds": []
+    },
+    "653830C2CB684809B7030FBBEA498C8C": {
+      "information": {
+        "dateCreated": "2026-06-11T01:41:18.866Z",
+        "dateModified": "2026-06-11T01:41:18.866Z",
+        "versionId": "A2BC09E4554816CC81EE99B40B10F9E6",
+        "acg": 255,
+        "objectId": "653830C2CB684809B7030FBBEA498C8C",
+        "subType": "metric",
+        "name": "Total Gross Profit"
+      },
+      "expression": {
+        "text": "Sum({Gross Profit})",
+        "tokens": [
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "Sum",
+            "type": "function",
+            "target": {
+              "dateCreated": "2025-05-29T19:58:08.059Z",
+              "dateModified": "2025-05-29T19:58:08.059Z",
+              "versionId": "CD5315C011DF671600088AA0669A0C20",
+              "acg": 255,
+              "objectId": "8107C31BDD9911D3B98100C04F2233EA",
+              "subType": "function",
+              "name": "Sum",
+              "description": "Returns the sum of all values in the ValueList.  This is a group-value function."
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "<",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "UseLookupForAttributes",
+            "type": "identifier"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "=",
+            "type": "function"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "False",
+            "type": "boolean"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ">",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "(",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "[Gross Profit]",
+            "type": "object_reference",
+            "target": {
+              "dateCreated": "2026-06-11T01:40:36.959Z",
+              "dateModified": "2026-06-11T01:40:36.959Z",
+              "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+              "acg": 255,
+              "objectId": "AE6CEAC55D054ABDAA3526C8931BD21B",
+              "subType": "fact",
+              "name": "Gross Profit"
+            }
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": ")",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "{",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "~",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "}",
+            "type": "character"
+          },
+          {
+            "level": "resolved",
+            "state": "initial",
+            "value": "",
+            "type": "end_of_text"
+          }
+        ]
+      },
+      "dimty": {
+        "dimtyUnits": [
+          {
+            "dimtyUnitType": "report_base_level",
+            "aggregation": "normal",
+            "filtering": "none",
+            "groupBy": true
+          }
+        ],
+        "excludeAttribute": false,
+        "allowAddingUnit": true
+      },
+      "conditionality": {
+        "embedMethod": "report_into_metric_filter",
+        "removeElements": true
+      },
+      "metricSubtotals": [],
+      "aggregateFromBase": false,
+      "formulaJoinType": "default",
+      "smartTotal": "decomposable_false",
+      "dataType": {
+        "type": "reserved",
+        "precision": 0,
+        "scale": 0
+      },
+      "format": {
+        "header": [],
+        "values": []
+      },
+      "subtotalFromBase": false,
+      "metricFormatType": "reserved",
+      "thresholds": []
+    }
+  },
+  "facts": {
+    "313BB989028B430A9E8734AEB7432BF3": {
+      "information": {
+        "dateCreated": "2026-06-11T01:40:36.959Z",
+        "dateModified": "2026-06-11T01:40:36.959Z",
+        "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+        "acg": 255,
+        "objectId": "313BB989028B430A9E8734AEB7432BF3",
+        "subType": "fact",
+        "name": "Order Id Fact"
+      },
+      "dataType": {
+        "type": "fixed_length_string",
+        "precision": 20,
+        "scale": -2147483648
+      },
+      "expressions": [
+        {
+          "expressionId": "81AA6DD90EDC46B5BF314F1830DDA14E",
+          "expression": {
+            "text": "ORDER_ID",
+            "tokens": [
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "ORDER_ID",
+                "type": "column_reference",
+                "target": {
+                  "dateCreated": "2026-06-11T01:34:19.851Z",
+                  "dateModified": "2026-06-11T01:34:19.851Z",
+                  "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                  "acg": 255,
+                  "objectId": "B183B71282A94A5ABC04FEC48ABDE592",
+                  "subType": "column",
+                  "name": "ORDER_ID"
+                }
+              },
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "",
+                "type": "end_of_text"
+              }
+            ]
+          },
+          "tables": [
+            {
+              "objectId": "D9FC61279B1B493896B8D146734F3706",
+              "subType": "logical_table",
+              "name": "ORDER_FACT"
+            }
+          ],
+          "autoMapping": true
+        }
+      ],
+      "extensions": [],
+      "entryLevel": [
+        {
+          "objectId": "FF3823C8E7284AA2B19B0F45551F4B6F",
+          "subType": "attribute",
+          "name": "Customer"
+        },
+        {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        },
+        {
+          "objectId": "E951AA8437BF46BB860E98F0DB349617",
+          "subType": "attribute",
+          "name": "Order Channel"
+        },
+        {
+          "objectId": "7B5873A028BC49EFB9806373F4B6BAA7",
+          "subType": "attribute",
+          "name": "Order Status"
+        },
+        {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        },
+        {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        }
+      ],
+      "alias": "ORDER_ID"
+    },
+    "5BC47E4C35454EA5BD24C54AF3430577": {
+      "information": {
+        "dateCreated": "2026-06-11T01:40:36.959Z",
+        "dateModified": "2026-06-11T01:40:36.959Z",
+        "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+        "acg": 255,
+        "objectId": "5BC47E4C35454EA5BD24C54AF3430577",
+        "subType": "fact",
+        "name": "Quantity"
+      },
+      "dataType": {
+        "type": "decimal",
+        "precision": 6,
+        "scale": 0
+      },
+      "expressions": [
+        {
+          "expressionId": "2057D1110EA14C20822C052771D8D47B",
+          "expression": {
+            "text": "QUANTITY_ORDERED",
+            "tokens": [
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "QUANTITY_ORDERED",
+                "type": "column_reference",
+                "target": {
+                  "dateCreated": "2026-06-11T01:34:19.851Z",
+                  "dateModified": "2026-06-11T01:34:19.851Z",
+                  "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                  "acg": 255,
+                  "objectId": "3FBBDD38F0174D8096AF8840C4740821",
+                  "subType": "column",
+                  "name": "QUANTITY_ORDERED"
+                }
+              },
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "",
+                "type": "end_of_text"
+              }
+            ]
+          },
+          "tables": [
+            {
+              "objectId": "D9FC61279B1B493896B8D146734F3706",
+              "subType": "logical_table",
+              "name": "ORDER_FACT"
+            }
+          ],
+          "autoMapping": true
+        }
+      ],
+      "extensions": [],
+      "entryLevel": [
+        {
+          "objectId": "FF3823C8E7284AA2B19B0F45551F4B6F",
+          "subType": "attribute",
+          "name": "Customer"
+        },
+        {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        },
+        {
+          "objectId": "E951AA8437BF46BB860E98F0DB349617",
+          "subType": "attribute",
+          "name": "Order Channel"
+        },
+        {
+          "objectId": "7B5873A028BC49EFB9806373F4B6BAA7",
+          "subType": "attribute",
+          "name": "Order Status"
+        },
+        {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        },
+        {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        }
+      ],
+      "alias": "QUANTITY_ORDERED"
+    },
+    "AE6CEAC55D054ABDAA3526C8931BD21B": {
+      "information": {
+        "dateCreated": "2026-06-11T01:40:36.959Z",
+        "dateModified": "2026-06-11T01:40:36.959Z",
+        "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+        "acg": 255,
+        "objectId": "AE6CEAC55D054ABDAA3526C8931BD21B",
+        "subType": "fact",
+        "name": "Gross Profit"
+      },
+      "dataType": {
+        "type": "decimal",
+        "precision": 12,
+        "scale": 2
+      },
+      "expressions": [
+        {
+          "expressionId": "1C48419202864E2092EB33D7AB7C7184",
+          "expression": {
+            "text": "GROSS_PROFIT",
+            "tokens": [
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "GROSS_PROFIT",
+                "type": "column_reference",
+                "target": {
+                  "dateCreated": "2026-06-11T01:34:19.851Z",
+                  "dateModified": "2026-06-11T01:34:19.851Z",
+                  "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                  "acg": 255,
+                  "objectId": "962C692A0DC748F2802B6479DC93756A",
+                  "subType": "column",
+                  "name": "GROSS_PROFIT"
+                }
+              },
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "",
+                "type": "end_of_text"
+              }
+            ]
+          },
+          "tables": [
+            {
+              "objectId": "D9FC61279B1B493896B8D146734F3706",
+              "subType": "logical_table",
+              "name": "ORDER_FACT"
+            }
+          ],
+          "autoMapping": true
+        }
+      ],
+      "extensions": [],
+      "entryLevel": [
+        {
+          "objectId": "FF3823C8E7284AA2B19B0F45551F4B6F",
+          "subType": "attribute",
+          "name": "Customer"
+        },
+        {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        },
+        {
+          "objectId": "E951AA8437BF46BB860E98F0DB349617",
+          "subType": "attribute",
+          "name": "Order Channel"
+        },
+        {
+          "objectId": "7B5873A028BC49EFB9806373F4B6BAA7",
+          "subType": "attribute",
+          "name": "Order Status"
+        },
+        {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        },
+        {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        }
+      ],
+      "alias": "GROSS_PROFIT"
+    },
+    "DDBF580D0AD14785A742CCC40EE2EE5C": {
+      "information": {
+        "dateCreated": "2026-06-11T01:40:36.959Z",
+        "dateModified": "2026-06-11T01:40:36.959Z",
+        "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+        "acg": 255,
+        "objectId": "DDBF580D0AD14785A742CCC40EE2EE5C",
+        "subType": "fact",
+        "name": "Net Revenue"
+      },
+      "dataType": {
+        "type": "decimal",
+        "precision": 12,
+        "scale": 2
+      },
+      "expressions": [
+        {
+          "expressionId": "31463B9045A24EF0B627A186801BDB85",
+          "expression": {
+            "text": "NET_REVENUE",
+            "tokens": [
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "NET_REVENUE",
+                "type": "column_reference",
+                "target": {
+                  "dateCreated": "2026-06-11T01:34:19.851Z",
+                  "dateModified": "2026-06-11T01:34:19.851Z",
+                  "versionId": "D84CD810B84204E035ADD5BF872EC621",
+                  "acg": 255,
+                  "objectId": "03E5DD935D8C4BB48FA2335D47921180",
+                  "subType": "column",
+                  "name": "NET_REVENUE"
+                }
+              },
+              {
+                "level": "resolved",
+                "state": "initial",
+                "value": "",
+                "type": "end_of_text"
+              }
+            ]
+          },
+          "tables": [
+            {
+              "objectId": "D9FC61279B1B493896B8D146734F3706",
+              "subType": "logical_table",
+              "name": "ORDER_FACT"
+            }
+          ],
+          "autoMapping": true
+        }
+      ],
+      "extensions": [],
+      "entryLevel": [
+        {
+          "objectId": "FF3823C8E7284AA2B19B0F45551F4B6F",
+          "subType": "attribute",
+          "name": "Customer"
+        },
+        {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        },
+        {
+          "objectId": "E951AA8437BF46BB860E98F0DB349617",
+          "subType": "attribute",
+          "name": "Order Channel"
+        },
+        {
+          "objectId": "7B5873A028BC49EFB9806373F4B6BAA7",
+          "subType": "attribute",
+          "name": "Order Status"
+        },
+        {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        },
+        {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        }
+      ],
+      "alias": "NET_REVENUE"
+    }
+  },
+  "tables": {
+    "47E46839DEBB4EEF9B10CCA524E0C794": {
+      "information": {
+        "dateCreated": "2026-06-11T01:34:19.851Z",
+        "dateModified": "2026-06-11T01:39:45.089Z",
+        "versionId": "B6C6654A01446E6F7D4C42BDD134E645",
+        "acg": 255,
+        "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+        "subType": "logical_table",
+        "name": "PRODUCT_DIM"
+      },
+      "physicalTable": {
+        "information": {
+          "dateCreated": "2026-06-11T01:34:19.851Z",
+          "dateModified": "2026-06-11T01:34:19.851Z",
+          "versionId": "D84CD810B84204E035ADD5BF872EC621",
+          "acg": 255,
+          "objectId": "D940EBAC1FB74D9689BED56A11642F05",
+          "subType": "physical_table",
+          "name": "PRODUCT_DIM"
+        },
+        "tableName": "PRODUCT_DIM",
+        "columns": [
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "1BBA29679ABE48E7B554D8FD947DB2BE",
+              "subType": "column",
+              "name": "BRAND"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 50,
+              "scale": -2147483648
+            },
+            "columnName": "BRAND"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "EE2E24FFDF58489193BB93F5FEB66D5B",
+              "subType": "column",
+              "name": "CATEGORY"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 50,
+              "scale": -2147483648
+            },
+            "columnName": "CATEGORY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "E23718322CBE48F3980C90549F47691C",
+              "subType": "column",
+              "name": "DISCONTINUE_DATE"
+            },
+            "dataType": {
+              "type": "date",
+              "precision": 0,
+              "scale": -2147483648
+            },
+            "columnName": "DISCONTINUE_DATE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "9E4A20F1F6D84F259409F1A8617667EE",
+              "subType": "column",
+              "name": "IS_ACTIVE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_ACTIVE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "45C00E20CE4244F0A33DCDD0EE27FAE6",
+              "subType": "column",
+              "name": "IS_PRIVATE_LABEL"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_PRIVATE_LABEL"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "51038229B06B400F98B2470A75A0B4D8",
+              "subType": "column",
+              "name": "IS_SEASONAL"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_SEASONAL"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "F28C6CD1025E4B068CEC24D7C43F4B1D",
+              "subType": "column",
+              "name": "LAUNCH_DATE"
+            },
+            "dataType": {
+              "type": "date",
+              "precision": 0,
+              "scale": -2147483648
+            },
+            "columnName": "LAUNCH_DATE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "022FD6B1B053432E998F5BD387583EEF",
+              "subType": "column",
+              "name": "PRODUCT_ID"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "PRODUCT_ID"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "42FC35A6FBF248458F96D54C8404E071",
+              "subType": "column",
+              "name": "PRODUCT_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "PRODUCT_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "748EC2993D1D4C5D87CAD5421722B576",
+              "subType": "column",
+              "name": "PRODUCT_NAME"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 150,
+              "scale": -2147483648
+            },
+            "columnName": "PRODUCT_NAME"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "661455C3624F4CE3B614D1627D7D6E9F",
+              "subType": "column",
+              "name": "Product_Key/Name"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 16777216,
+              "scale": -2147483648
+            },
+            "columnName": "Product_Key/Name"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "4F17FDCB18764647AFAFFD24D6217CAE",
+              "subType": "column",
+              "name": "SUBCATEGORY"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 50,
+              "scale": -2147483648
+            },
+            "columnName": "SUBCATEGORY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "D30824A0D0D54A4DB3B5300BAFB2D859",
+              "subType": "column",
+              "name": "UNIT_COST"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "UNIT_COST"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "4A933FCF738D45B89787EF4E8D70053B",
+              "subType": "column",
+              "name": "UNIT_PRICE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "UNIT_PRICE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "FC32EF80F2A04FE8B061D05F52F09630",
+              "subType": "column",
+              "name": "WEIGHT_LBS"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 2
+            },
+            "columnName": "WEIGHT_LBS"
+          }
+        ],
+        "namespace": "TJ",
+        "tablePrefix": "TJ.",
+        "type": "normal"
+      },
+      "logicalSize": 15,
+      "isLogicalSizeLocked": false,
+      "isTrueKey": true,
+      "isPartOfPartition": false,
+      "tableKey": [
+        {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        }
+      ],
+      "attributes": [
+        {
+          "information": {
+            "objectId": "13AF74581AA84A46B8FD2D1BBA073150",
+            "subType": "attribute",
+            "name": "Category"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+                "subType": "logical_table",
+                "name": "PRODUCT_DIM"
+              },
+              "expression": {
+                "text": "CATEGORY"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+            "subType": "attribute",
+            "name": "Product"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+                "subType": "logical_table",
+                "name": "PRODUCT_DIM"
+              },
+              "expression": {
+                "text": "PRODUCT_KEY"
+              }
+            },
+            {
+              "formCategory": {
+                "objectId": "CCFBE2A5EADB4F50941FB879CCF1721C",
+                "subType": "attribute_form_system",
+                "name": "DESC"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": false,
+              "lookupTable": {
+                "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+                "subType": "logical_table",
+                "name": "PRODUCT_DIM"
+              },
+              "expression": {
+                "text": "PRODUCT_NAME"
+              }
+            }
+          ]
+        }
+      ],
+      "primaryDataSource": {
+        "objectId": "B2ABAAB6EA4FE181C3BF43B09D0930FC",
+        "subType": "db_role",
+        "name": "Snowflake CSA"
+      },
+      "secondaryDataSources": []
+    },
+    "64D5C75E86F84FC78F39C8413018DF3D": {
+      "information": {
+        "dateCreated": "2026-06-11T01:34:19.851Z",
+        "dateModified": "2026-06-11T01:39:45.089Z",
+        "versionId": "B6C6654A01446E6F7D4C42BDD134E645",
+        "acg": 255,
+        "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+        "subType": "logical_table",
+        "name": "DATE_DIM"
+      },
+      "physicalTable": {
+        "information": {
+          "dateCreated": "2026-06-11T01:34:19.851Z",
+          "dateModified": "2026-06-11T01:34:19.851Z",
+          "versionId": "D84CD810B84204E035ADD5BF872EC621",
+          "acg": 255,
+          "objectId": "9609286525994536AE82F4CAD0BB05EC",
+          "subType": "physical_table",
+          "name": "DATE_DIM"
+        },
+        "tableName": "DATE_DIM",
+        "columns": [
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "CF20E78112994A5D96B2D39B628240E9",
+              "subType": "column",
+              "name": "DATE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "DATE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "C635418469C84543A173102128C48A02",
+              "subType": "column",
+              "name": "DAY_OF_MONTH"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 2,
+              "scale": 0
+            },
+            "columnName": "DAY_OF_MONTH"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "E314B08C2F51449081C21E13C044E490",
+              "subType": "column",
+              "name": "DAY_OF_WEEK"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 10,
+              "scale": -2147483648
+            },
+            "columnName": "DAY_OF_WEEK"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "2390FE17710B4F7EB162540D2AF60934",
+              "subType": "column",
+              "name": "FISCAL_PERIOD"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 10,
+              "scale": -2147483648
+            },
+            "columnName": "FISCAL_PERIOD"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "6C552A18D8114E0E89E934EDE6EE0534",
+              "subType": "column",
+              "name": "FULL_DATE"
+            },
+            "dataType": {
+              "type": "date",
+              "precision": 0,
+              "scale": -2147483648
+            },
+            "columnName": "FULL_DATE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "B4DBBBD4F03845E3843E121237CA1E22",
+              "subType": "column",
+              "name": "IS_HOLIDAY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_HOLIDAY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "04FBCA2E65074CF2855F2C636EF51055",
+              "subType": "column",
+              "name": "IS_WEEKEND"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_WEEKEND"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "4C6BF4B48BF94197B76731366E39ED7A",
+              "subType": "column",
+              "name": "MONTH_NAME"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 10,
+              "scale": -2147483648
+            },
+            "columnName": "MONTH_NAME"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "421F8160638F4F9AA7FC434C0EBF14EC",
+              "subType": "column",
+              "name": "MONTH_NUMBER"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 2,
+              "scale": 0
+            },
+            "columnName": "MONTH_NUMBER"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "A48AC88A9B4C4D599059820954BE4043",
+              "subType": "column",
+              "name": "QUARTER"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "QUARTER"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "15842FC875714225ADD1D284FA31167B",
+              "subType": "column",
+              "name": "WEEK_OF_YEAR"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 2,
+              "scale": 0
+            },
+            "columnName": "WEEK_OF_YEAR"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "A443425EB7684086B49B5182EDA0D825",
+              "subType": "column",
+              "name": "YEAR"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 4,
+              "scale": 0
+            },
+            "columnName": "YEAR"
+          }
+        ],
+        "namespace": "TJ",
+        "tablePrefix": "TJ.",
+        "type": "normal"
+      },
+      "logicalSize": 20,
+      "isLogicalSizeLocked": false,
+      "isTrueKey": true,
+      "isPartOfPartition": false,
+      "tableKey": [
+        {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        }
+      ],
+      "attributes": [
+        {
+          "information": {
+            "objectId": "C025482DAE4C4BFDA72E8297D981ABAC",
+            "subType": "attribute",
+            "name": "Year"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                "subType": "logical_table",
+                "name": "DATE_DIM"
+              },
+              "expression": {
+                "text": "YEAR"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+            "subType": "attribute",
+            "name": "Month"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                "subType": "logical_table",
+                "name": "DATE_DIM"
+              },
+              "expression": {
+                "text": "MONTH_NUMBER"
+              }
+            },
+            {
+              "formCategory": {
+                "objectId": "CCFBE2A5EADB4F50941FB879CCF1721C",
+                "subType": "attribute_form_system",
+                "name": "DESC"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": false,
+              "lookupTable": {
+                "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                "subType": "logical_table",
+                "name": "DATE_DIM"
+              },
+              "expression": {
+                "text": "MONTH_NAME"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+            "subType": "attribute",
+            "name": "Day"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                "subType": "logical_table",
+                "name": "DATE_DIM"
+              },
+              "expression": {
+                "text": "DATE_KEY"
+              }
+            },
+            {
+              "formCategory": {
+                "objectId": "CCFBE2A5EADB4F50941FB879CCF1721C",
+                "subType": "attribute_form_system",
+                "name": "DESC"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": false,
+              "lookupTable": {
+                "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                "subType": "logical_table",
+                "name": "DATE_DIM"
+              },
+              "expression": {
+                "text": "FULL_DATE"
+              }
+            }
+          ]
+        }
+      ],
+      "primaryDataSource": {
+        "objectId": "B2ABAAB6EA4FE181C3BF43B09D0930FC",
+        "subType": "db_role",
+        "name": "Snowflake CSA"
+      },
+      "secondaryDataSources": []
+    },
+    "98D96DCF86D1494DA8F62DDB5A6A8482": {
+      "information": {
+        "dateCreated": "2026-06-11T01:34:19.851Z",
+        "dateModified": "2026-06-11T01:39:45.089Z",
+        "versionId": "B6C6654A01446E6F7D4C42BDD134E645",
+        "acg": 255,
+        "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+        "subType": "logical_table",
+        "name": "STORE_DIM"
+      },
+      "physicalTable": {
+        "information": {
+          "dateCreated": "2026-06-11T01:34:19.851Z",
+          "dateModified": "2026-06-11T01:34:19.851Z",
+          "versionId": "D84CD810B84204E035ADD5BF872EC621",
+          "acg": 255,
+          "objectId": "47AE6C5128A64F0FB312D9B5EAC84F22",
+          "subType": "physical_table",
+          "name": "STORE_DIM"
+        },
+        "tableName": "STORE_DIM",
+        "columns": [
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "C77D2175AF254A5C85709C45ECFA62ED",
+              "subType": "column",
+              "name": "ANNUAL_LEASE_COST"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 12,
+              "scale": 2
+            },
+            "columnName": "ANNUAL_LEASE_COST"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "9CE28E0180B7443CADBFBD7DB37E7FE5",
+              "subType": "column",
+              "name": "CITY"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 50,
+              "scale": -2147483648
+            },
+            "columnName": "CITY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "69188ED23ABC41E1B32ECE2B6AD80FDF",
+              "subType": "column",
+              "name": "CLOSE_DATE"
+            },
+            "dataType": {
+              "type": "date",
+              "precision": 0,
+              "scale": -2147483648
+            },
+            "columnName": "CLOSE_DATE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "FAF47F66F94349CF945911773FB44325",
+              "subType": "column",
+              "name": "DISTRICT"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 30,
+              "scale": -2147483648
+            },
+            "columnName": "DISTRICT"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "120FA2DC07804DB586A155E9BF814939",
+              "subType": "column",
+              "name": "HAS_CAFE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "HAS_CAFE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "D3EC8A6674484BC489483131D185A607",
+              "subType": "column",
+              "name": "HAS_CURBSIDE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "HAS_CURBSIDE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "9E4A20F1F6D84F259409F1A8617667EE",
+              "subType": "column",
+              "name": "IS_ACTIVE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_ACTIVE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "6E8637DEC6534B30A0CB423BC49E782D",
+              "subType": "column",
+              "name": "MANAGER_NAME"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 100,
+              "scale": -2147483648
+            },
+            "columnName": "MANAGER_NAME"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "D7D8D64FDC3E4DFFB3532169E1D58E83",
+              "subType": "column",
+              "name": "OPEN_DATE"
+            },
+            "dataType": {
+              "type": "date",
+              "precision": 0,
+              "scale": -2147483648
+            },
+            "columnName": "OPEN_DATE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "31FC4505562A431BBBB15D0B79514023",
+              "subType": "column",
+              "name": "REGION"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "REGION"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "90A0AE1E5DFC4774B00335784C9A9DBF",
+              "subType": "column",
+              "name": "SQUARE_FOOTAGE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "SQUARE_FOOTAGE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "5F24D32D23DB420397496C9B7880AF63",
+              "subType": "column",
+              "name": "STATE"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 2,
+              "scale": -2147483648
+            },
+            "columnName": "STATE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "BCD37EA759D64B8DB1E069B9F3E315CB",
+              "subType": "column",
+              "name": "STORE_ID"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 10,
+              "scale": -2147483648
+            },
+            "columnName": "STORE_ID"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "552771515DA84D10833176D8DBA883C9",
+              "subType": "column",
+              "name": "STORE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 0
+            },
+            "columnName": "STORE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "3395C2D0B6B3423F99B5B7E0937FEEC3",
+              "subType": "column",
+              "name": "STORE_NAME"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 100,
+              "scale": -2147483648
+            },
+            "columnName": "STORE_NAME"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "A52225949EEB49C8BB9754730EC747ED",
+              "subType": "column",
+              "name": "STORE_PHONE"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "STORE_PHONE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "BE4FD6C00FB24D13B9A6625D345C1B0C",
+              "subType": "column",
+              "name": "STORE_TYPE"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "STORE_TYPE"
+          }
+        ],
+        "namespace": "TJ",
+        "tablePrefix": "TJ.",
+        "type": "normal"
+      },
+      "logicalSize": 15,
+      "isLogicalSizeLocked": false,
+      "isTrueKey": true,
+      "isPartOfPartition": false,
+      "tableKey": [
+        {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        }
+      ],
+      "attributes": [
+        {
+          "information": {
+            "objectId": "6140BFA7309B406AA76A90454BC7BB53",
+            "subType": "attribute",
+            "name": "Region"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+                "subType": "logical_table",
+                "name": "STORE_DIM"
+              },
+              "expression": {
+                "text": "REGION"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "9177026370BB44A3A0CD521FE5166500",
+            "subType": "attribute",
+            "name": "Store"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+                "subType": "logical_table",
+                "name": "STORE_DIM"
+              },
+              "expression": {
+                "text": "STORE_KEY"
+              }
+            },
+            {
+              "formCategory": {
+                "objectId": "CCFBE2A5EADB4F50941FB879CCF1721C",
+                "subType": "attribute_form_system",
+                "name": "DESC"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": false,
+              "lookupTable": {
+                "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+                "subType": "logical_table",
+                "name": "STORE_DIM"
+              },
+              "expression": {
+                "text": "STORE_NAME"
+              }
+            }
+          ]
+        }
+      ],
+      "primaryDataSource": {
+        "objectId": "B2ABAAB6EA4FE181C3BF43B09D0930FC",
+        "subType": "db_role",
+        "name": "Snowflake CSA"
+      },
+      "secondaryDataSources": []
+    },
+    "D9FC61279B1B493896B8D146734F3706": {
+      "information": {
+        "dateCreated": "2026-06-11T01:34:19.851Z",
+        "dateModified": "2026-06-11T01:40:36.959Z",
+        "versionId": "FDD46DC4DA4E620FD1FA029F3383A733",
+        "acg": 255,
+        "objectId": "D9FC61279B1B493896B8D146734F3706",
+        "subType": "logical_table",
+        "name": "ORDER_FACT"
+      },
+      "physicalTable": {
+        "information": {
+          "dateCreated": "2026-06-11T01:34:19.851Z",
+          "dateModified": "2026-06-11T01:34:19.851Z",
+          "versionId": "D84CD810B84204E035ADD5BF872EC621",
+          "acg": 255,
+          "objectId": "1474B0C677424416B11BD2A5B0CC2547",
+          "subType": "physical_table",
+          "name": "ORDER_FACT"
+        },
+        "tableName": "ORDER_FACT",
+        "columns": [
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "4C7A7D12875E4F4098327715B0F21EB8",
+              "subType": "column",
+              "name": "CUSTOMER_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 0
+            },
+            "columnName": "CUSTOMER_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "EA1E5EA3AA2244B2A4E54C81B9E42A8C",
+              "subType": "column",
+              "name": "DAYS_TO_SHIP"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 4,
+              "scale": 0
+            },
+            "columnName": "DAYS_TO_SHIP"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "3F3F02DC39264F29A1AFF03069A641FB",
+              "subType": "column",
+              "name": "DISCOUNT_AMOUNT"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "DISCOUNT_AMOUNT"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "962C692A0DC748F2802B6479DC93756A",
+              "subType": "column",
+              "name": "GROSS_PROFIT"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 12,
+              "scale": 2
+            },
+            "columnName": "GROSS_PROFIT"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "CB1AB2B339DE4B28B0E6E2D6390BFFBE",
+              "subType": "column",
+              "name": "GROSS_REVENUE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 12,
+              "scale": 2
+            },
+            "columnName": "GROSS_REVENUE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "972BA50D709B4357A138F6B1983FF24D",
+              "subType": "column",
+              "name": "IS_CANCELLED"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_CANCELLED"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "AEB35B531C53417182CE74A3B2C6AD13",
+              "subType": "column",
+              "name": "IS_FIRST_ORDER"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_FIRST_ORDER"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "0180EFD155CA477AB0645696DC17CCEB",
+              "subType": "column",
+              "name": "IS_RETURNED"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 1,
+              "scale": 0
+            },
+            "columnName": "IS_RETURNED"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "A7978E37459449D1831DBE5631DDA7D1",
+              "subType": "column",
+              "name": "NET_PROFIT"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 12,
+              "scale": 2
+            },
+            "columnName": "NET_PROFIT"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "03E5DD935D8C4BB48FA2335D47921180",
+              "subType": "column",
+              "name": "NET_REVENUE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 12,
+              "scale": 2
+            },
+            "columnName": "NET_REVENUE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "6D2F6387F5624C3FA6D4F9CC5320D324",
+              "subType": "column",
+              "name": "ORDER_CHANNEL"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "ORDER_CHANNEL"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "D8385C86002E4CC99F15963514C2D021",
+              "subType": "column",
+              "name": "ORDER_DATE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "ORDER_DATE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "B183B71282A94A5ABC04FEC48ABDE592",
+              "subType": "column",
+              "name": "ORDER_ID"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "ORDER_ID"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "B6FCDA0DFC2341148D2AFA04D29CB9EE",
+              "subType": "column",
+              "name": "ORDER_LINE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 4,
+              "scale": 0
+            },
+            "columnName": "ORDER_LINE"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "43B8E563195C41AAB52E269715A0D911",
+              "subType": "column",
+              "name": "ORDER_STATUS"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "ORDER_STATUS"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "FC60FB86414944DD92C531722810969D",
+              "subType": "column",
+              "name": "ORDER_STORE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 0
+            },
+            "columnName": "ORDER_STORE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "42FC35A6FBF248458F96D54C8404E071",
+              "subType": "column",
+              "name": "PRODUCT_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "PRODUCT_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "2FB5F360FFF14AA6A11F75444AFD0C97",
+              "subType": "column",
+              "name": "PROMO_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 0
+            },
+            "columnName": "PROMO_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "3FBBDD38F0174D8096AF8840C4740821",
+              "subType": "column",
+              "name": "QUANTITY_ORDERED"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 0
+            },
+            "columnName": "QUANTITY_ORDERED"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "D9B0143462C14E9BAC286E197CE424B6",
+              "subType": "column",
+              "name": "QUANTITY_RETURNED"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 0
+            },
+            "columnName": "QUANTITY_RETURNED"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "11F75D9969E4401EA6C48D9C9C0174D9",
+              "subType": "column",
+              "name": "RETURN_DATE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "RETURN_DATE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "B5EDD927FCF94037A4E42288CC779839",
+              "subType": "column",
+              "name": "SHIPPING_AMOUNT"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "SHIPPING_AMOUNT"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "37635702709D4774B648E7B29628CAB0",
+              "subType": "column",
+              "name": "SHIP_DATE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 8,
+              "scale": 0
+            },
+            "columnName": "SHIP_DATE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "3B4F476C0326472BB7E0342CB3C995BE",
+              "subType": "column",
+              "name": "SHIP_METHOD"
+            },
+            "dataType": {
+              "type": "fixed_length_string",
+              "precision": 20,
+              "scale": -2147483648
+            },
+            "columnName": "SHIP_METHOD"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "DA75D433DD894A43A448F822083BBCDA",
+              "subType": "column",
+              "name": "SHIP_STORE_KEY"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 6,
+              "scale": 0
+            },
+            "columnName": "SHIP_STORE_KEY"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "DEF4C308852A4F8BA0C257AC41B13CC7",
+              "subType": "column",
+              "name": "TAX_AMOUNT"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "TAX_AMOUNT"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "D30824A0D0D54A4DB3B5300BAFB2D859",
+              "subType": "column",
+              "name": "UNIT_COST"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "UNIT_COST"
+          },
+          {
+            "information": {
+              "dateCreated": "2026-06-11T01:34:19.851Z",
+              "dateModified": "2026-06-11T01:34:19.851Z",
+              "versionId": "D84CD810B84204E035ADD5BF872EC621",
+              "acg": 255,
+              "objectId": "4A933FCF738D45B89787EF4E8D70053B",
+              "subType": "column",
+              "name": "UNIT_PRICE"
+            },
+            "dataType": {
+              "type": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "columnName": "UNIT_PRICE"
+          }
+        ],
+        "namespace": "TJ",
+        "tablePrefix": "TJ.",
+        "type": "normal"
+      },
+      "logicalSize": 60,
+      "isLogicalSizeLocked": false,
+      "isTrueKey": true,
+      "isPartOfPartition": false,
+      "tableKey": [
+        {
+          "objectId": "FF3823C8E7284AA2B19B0F45551F4B6F",
+          "subType": "attribute",
+          "name": "Customer"
+        },
+        {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        },
+        {
+          "objectId": "E951AA8437BF46BB860E98F0DB349617",
+          "subType": "attribute",
+          "name": "Order Channel"
+        },
+        {
+          "objectId": "7B5873A028BC49EFB9806373F4B6BAA7",
+          "subType": "attribute",
+          "name": "Order Status"
+        },
+        {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        },
+        {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        }
+      ],
+      "attributes": [
+        {
+          "information": {
+            "objectId": "FF3823C8E7284AA2B19B0F45551F4B6F",
+            "subType": "attribute",
+            "name": "Customer"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "CE414C694E64481AB6640AE63BBB2B50",
+                "subType": "logical_table",
+                "name": "CUSTOMER_DIM"
+              },
+              "expression": {
+                "text": "CUSTOMER_KEY"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "9177026370BB44A3A0CD521FE5166500",
+            "subType": "attribute",
+            "name": "Store"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+                "subType": "logical_table",
+                "name": "STORE_DIM"
+              },
+              "expression": {
+                "text": "ORDER_STORE_KEY"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+            "subType": "attribute",
+            "name": "Product"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+                "subType": "logical_table",
+                "name": "PRODUCT_DIM"
+              },
+              "expression": {
+                "text": "PRODUCT_KEY"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+            "subType": "attribute",
+            "name": "Day"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+                "subType": "logical_table",
+                "name": "DATE_DIM"
+              },
+              "expression": {
+                "text": "ORDER_DATE_KEY"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "E951AA8437BF46BB860E98F0DB349617",
+            "subType": "attribute",
+            "name": "Order Channel"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "D9FC61279B1B493896B8D146734F3706",
+                "subType": "logical_table",
+                "name": "ORDER_FACT"
+              },
+              "expression": {
+                "text": "ORDER_CHANNEL"
+              }
+            }
+          ]
+        },
+        {
+          "information": {
+            "objectId": "7B5873A028BC49EFB9806373F4B6BAA7",
+            "subType": "attribute",
+            "name": "Order Status"
+          },
+          "forms": [
+            {
+              "formCategory": {
+                "objectId": "45C11FA478E745FEA08D781CEA190FE5",
+                "subType": "attribute_form_system",
+                "name": "ID"
+              },
+              "name": "",
+              "dataFormat": "number",
+              "isKeyForm": true,
+              "lookupTable": {
+                "objectId": "D9FC61279B1B493896B8D146734F3706",
+                "subType": "logical_table",
+                "name": "ORDER_FACT"
+              },
+              "expression": {
+                "text": "ORDER_STATUS"
+              }
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "information": {
+            "objectId": "DDBF580D0AD14785A742CCC40EE2EE5C",
+            "subType": "fact",
+            "name": "Net Revenue"
+          },
+          "expression": {
+            "text": "NET_REVENUE"
+          }
+        },
+        {
+          "information": {
+            "objectId": "AE6CEAC55D054ABDAA3526C8931BD21B",
+            "subType": "fact",
+            "name": "Gross Profit"
+          },
+          "expression": {
+            "text": "GROSS_PROFIT"
+          }
+        },
+        {
+          "information": {
+            "objectId": "5BC47E4C35454EA5BD24C54AF3430577",
+            "subType": "fact",
+            "name": "Quantity"
+          },
+          "expression": {
+            "text": "QUANTITY_ORDERED"
+          }
+        },
+        {
+          "information": {
+            "objectId": "B5F33B1C52D74E95B98EB05A08DBFB59",
+            "subType": "fact",
+            "name": "Discount"
+          },
+          "expression": {
+            "text": "DISCOUNT_AMOUNT"
+          }
+        },
+        {
+          "information": {
+            "objectId": "313BB989028B430A9E8734AEB7432BF3",
+            "subType": "fact",
+            "name": "Order Id Fact"
+          },
+          "expression": {
+            "text": "ORDER_ID"
+          }
+        }
+      ],
+      "primaryDataSource": {
+        "objectId": "B2ABAAB6EA4FE181C3BF43B09D0930FC",
+        "subType": "db_role",
+        "name": "Snowflake CSA"
+      },
+      "secondaryDataSources": []
+    }
+  },
+  "relationships": {
+    "13AF74581AA84A46B8FD2D1BBA073150": [
+      {
+        "parent": {
+          "objectId": "13AF74581AA84A46B8FD2D1BBA073150",
+          "subType": "attribute",
+          "name": "Category"
+        },
+        "child": {
+          "objectId": "B612DBDE5A224C7CA19C1FC8967926C2",
+          "subType": "attribute",
+          "name": "Product"
+        },
+        "relationshipTable": {
+          "objectId": "47E46839DEBB4EEF9B10CCA524E0C794",
+          "subType": "logical_table",
+          "name": "PRODUCT_DIM"
+        },
+        "relationshipType": "one_to_many"
+      }
+    ],
+    "6140BFA7309B406AA76A90454BC7BB53": [
+      {
+        "parent": {
+          "objectId": "6140BFA7309B406AA76A90454BC7BB53",
+          "subType": "attribute",
+          "name": "Region"
+        },
+        "child": {
+          "objectId": "9177026370BB44A3A0CD521FE5166500",
+          "subType": "attribute",
+          "name": "Store"
+        },
+        "relationshipTable": {
+          "objectId": "98D96DCF86D1494DA8F62DDB5A6A8482",
+          "subType": "logical_table",
+          "name": "STORE_DIM"
+        },
+        "relationshipType": "one_to_many"
+      }
+    ],
+    "C025482DAE4C4BFDA72E8297D981ABAC": [
+      {
+        "parent": {
+          "objectId": "C025482DAE4C4BFDA72E8297D981ABAC",
+          "subType": "attribute",
+          "name": "Year"
+        },
+        "child": {
+          "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+          "subType": "attribute",
+          "name": "Month"
+        },
+        "relationshipTable": {
+          "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+          "subType": "logical_table",
+          "name": "DATE_DIM"
+        },
+        "relationshipType": "one_to_many"
+      }
+    ],
+    "C3292DAD4FAF404F88590CB19C3930F9": [
+      {
+        "parent": {
+          "objectId": "C025482DAE4C4BFDA72E8297D981ABAC",
+          "subType": "attribute",
+          "name": "Year"
+        },
+        "child": {
+          "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+          "subType": "attribute",
+          "name": "Month"
+        },
+        "relationshipTable": {
+          "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+          "subType": "logical_table",
+          "name": "DATE_DIM"
+        },
+        "relationshipType": "one_to_many"
+      },
+      {
+        "parent": {
+          "objectId": "C3292DAD4FAF404F88590CB19C3930F9",
+          "subType": "attribute",
+          "name": "Month"
+        },
+        "child": {
+          "objectId": "33C36CB28C804708AA0153E2D8B730C8",
+          "subType": "attribute",
+          "name": "Day"
+        },
+        "relationshipTable": {
+          "objectId": "64D5C75E86F84FC78F39C8413018DF3D",
+          "subType": "logical_table",
+          "name": "DATE_DIM"
+        },
+        "relationshipType": "one_to_many"
+      }
+    ]
+  }
+}

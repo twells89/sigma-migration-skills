@@ -30,6 +30,7 @@ SCRIPTS = os.path.join(SKILL, "scripts")
 CONV = os.path.join(SCRIPTS, "convert.py")
 CATDIR = os.path.join(SKILL, "refs", "catalogs")
 BUNDLE = os.path.join(SKILL, "fixtures", "bundle.json")
+BUNDLE_CHARTS = os.path.join(SKILL, "fixtures", "bundle-charts.json")
 AE_WINNERS = os.path.join(SKILL, "fixtures", "ae_winners.json")
 COVERAGE = os.path.join(SKILL, "refs", "microstrategy-coverage.md")
 sys.path.insert(0, SCRIPTS)
@@ -65,16 +66,14 @@ def test_catalogs_valid():
             seen.add(key)
             assert r.get("doc_ref", "").startswith("http"), (name, r["source"])
             assert r.get("sigma") is not None, (name, r["source"])
-            assert (r.get("sigma_verified") or {}).get("status") == "n", \
-                ("this pass defers live query-verification — every row must be "
-                 "status 'n': %s/%s" % (name, r["source"]))
-    # viz-kind is documentation-only and must SAY so (not wired into convert.py)
-    viz = cats["viz-kind"]
-    assert getattr(viz, "rows"), "viz-kind"
+            sv = r.get("sigma_verified") or {}
+            assert sv.get("status") in ("y", "n"), (name, r["source"], sv.get("status"))
+            assert sv.get("status") != "y" or sv.get("date"), \
+                ("live-verified rows must carry a date: %s/%s" % (name, r["source"]))
+    # viz-kind is now WIRED into convert.py (grid->table; bar/line/area emit charts)
     raw = json.load(open(os.path.join(CATDIR, "viz-kind.json")))
-    assert raw.get("wired") is False and raw.get("status") == "documentation-only", \
-        "viz-kind.json must be flagged documentation-only / wired:false"
-    print("[ok] catalogs: 4 dimensions load, cited, unique sources, all status=n")
+    assert raw.get("wired") is True, "viz-kind.json must be flagged wired:true"
+    print("[ok] catalogs: 4 dimensions load, cited, unique sources, valid sigma_verified")
 
 
 def test_no_inline_maps():
@@ -85,10 +84,10 @@ def test_no_inline_maps():
     assert "AGG_CAT.resolve_or_warn(" in src, "aggregation miss not routed through loud resolver"
     assert "FMT_CAT.resolve_or_warn(" in src, "number-format not resolved via catalog"
     assert "CTRL_CAT.resolve_or_warn(" in src, "control kind not resolved via catalog"
-    # viz-kind must NOT be loaded (no fake wiring)
-    assert '_cc.load(_CAT_DIR, "viz-kind")' not in src and \
-           "_cc.load(_CAT_DIR, 'viz-kind')" not in src, \
-        "viz-kind is documentation-only — convert.py must not load it"
+    # viz-kind is now WIRED: loaded + resolved per chapter (chart emission)
+    assert '_cc.load(_CAT_DIR, "viz-kind")' in src, "viz-kind must be loaded (now wired)"
+    assert "VIZ_CAT.resolve(" in src and "CHART_KINDS" in src, \
+        "chapter viz kind must be resolved via VIZ_CAT into chart/table emission"
     # the named silent defaults must be GONE (precise code patterns, not prose)
     assert '"Sum": "SUM"' not in src, "inline FN literal still present"
     assert "FN.get(fname, fname.upper())" not in src, "silent aggregate passthrough still present"
@@ -213,12 +212,47 @@ def test_e2e_offline_fixture():
     print("[ok] e2e: fixture builds; metrics ship unformatted + loud; no guessed format")
 
 
+def test_chart_emission():
+    """The wired viz-kind catalog makes a bar_chart/line_chart dossier chapter
+    emit the matching Sigma CHART (dim -> xAxis, metrics -> yAxis) instead of a
+    table; a grid chapter stays a table. (bundle-charts.json's chart chapters are
+    control-free — a chart can't be a list control's value source, so a charted
+    chapter WITH a control is kept a table by the ship-safe guard.)"""
+    with tempfile.TemporaryDirectory() as d:
+        # no --ae-winners: a chart chapter that is ALSO an attribute-element
+        # collapse routes through build_ae_page (table) — chart+AE composition is
+        # a follow-up, same as chart+control. This matches the LIVE-verified run.
+        r = subprocess.run(
+            [sys.executable, CONV, "--bundle", BUNDLE_CHARTS,
+             "--connection-id", "conn-x", "--database", "CSA", "--folder-id", "fld-x",
+             "--out-wb", os.path.join(d, "wb.json")],
+            capture_output=True, text=True, cwd=d)
+        assert r.returncode == 0, r.stderr
+        wb = json.load(open(os.path.join(d, "wb.json")))
+        kinds = {}
+        for p in wb.get("pages", []):
+            for e in p.get("elements", []):
+                if e.get("kind") in ("bar-chart", "line-chart", "area-chart", "table") and e.get("name"):
+                    kinds[e["name"]] = e
+        assert kinds.get("Channel Performance", {}).get("kind") == "bar-chart", kinds
+        assert kinds.get("Monthly Revenue Trend", {}).get("kind") == "line-chart", kinds
+        assert kinds.get("Revenue by Region and Category", {}).get("kind") == "table", kinds
+        # chart yAxis must be metrics only (no DESC-label calc columns)
+        bar = kinds["Channel Performance"]
+        assert bar.get("xAxis", {}).get("columnId") and bar.get("yAxis", {}).get("columnIds"), bar
+        # ship-safe guard code present (chart + control -> table + warn)
+        src = open(CONV).read()
+        assert "_controlled_chapters" in src, "chart+control ship-safe guard missing"
+    print("[ok] chart emission: bar_chart/line_chart -> Sigma chart (dim x, metrics y); grid -> table")
+
+
 if __name__ == "__main__":
     test_catalogs_valid()
     test_no_inline_maps()
     test_loud_unknown_agg()
     test_loud_unknown_format()
     test_control_catalog()
+    test_chart_emission()
     test_coverage_matrix_fresh()
     test_e2e_offline_fixture()
     print("ALL PASS")

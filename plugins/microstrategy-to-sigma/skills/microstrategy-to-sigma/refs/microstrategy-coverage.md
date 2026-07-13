@@ -6,22 +6,22 @@ Every documented source construct maps to a real, current Sigma target or a loud
 
 **`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at **query time** in a live migration (no `type=error` column) on the date shown; 🟡 n = target is documented but not yet query-verified.
 
-**Coverage:** 25 documented constructs across 4 dimensions; 0 live-verified.
+**Coverage:** 25 documented constructs across 4 dimensions; 3 live-verified.
 
 ## Visualization / chart kind
 
-_DOCUMENTATION-ONLY — NOT loaded by convert.py. The MicroStrategy dossier converter (scripts/convert.py) currently emits exactly ONE Sigma table element per dossier chapter (viz_chapter); every dossier visual — grid, KPI, chart — collapses to a Sigma table today, so there is NO visualizationType->element-kind code map to ground. This catalog records the ASPIRATIONAL MSTR visualizationType -> Sigma element kind mapping (chart emission is roadmap) drawn from refs/viz-type-mapping.md and kept in sync with the ACTIVE classifier that DOES use it: microstrategy-assessment/scripts/assess.py (VIZ_MAPPED). Only `grid` is on the validated build path (it is what collapses to a Sigma table). Do not wire this into convert.py without real emission code — that would fake coverage the converter does not have._
+_WIRED into scripts/convert.py (build_workbook_spec, beads-sigma-kvza). Each dossier chapter's PRIMARY visualizationType is resolved through this catalog. Axis-bindable chart types (bar_chart/line_chart/area_chart) with a dimension + a measure emit the matching Sigma CHART element (dim -> xAxis, metrics -> yAxis). `grid`/`compound_grid`/`heat_map` map to a Sigma table. A chart type with no wired emission yet (kpi/pie/ring/combo/bubble/multi_metric_kpi) or an UNMAPPED type falls to a Sigma table with a LOUD warning (data preserved, never a silent wrong chart). MSTR chart definitions bind the dataset's row attributes as dims and its column metrics as measures (retrieve-document/definition). `build`: validated = LIVE-verified against CSA.TJ; roadmap = wired mapping, emission pending; fallback = intentional table (no Sigma analog)._
 
 Authoritative source: <https://www2.microstrategy.com/producthelp/Current/MSTRWeb/WebHelp/Lang_1033/Content/viz_gallery.htm>
 
 | construct | doc ref | Sigma target | sigma_verified | on-unmapped |
 |---|---|---|---|---|
-| `grid` | [doc](https://www2.microstrategy.com/producthelp/Current/MSTRWeb/webhelp/lang_1033/Content/Displaying_a_visual_representation_of_your_data__V.htm) | `table` | 🟡 n | flagged-table |
+| `grid` | [doc](https://www2.microstrategy.com/producthelp/Current/MSTRWeb/webhelp/lang_1033/Content/Displaying_a_visual_representation_of_your_data__V.htm) | `table` | ✅ y · 2026-07-13 | flagged-table |
 | | | | | _Pivot when crossTab:true. The ONLY type on the validated build path — convert.py collapses each chapter to a Sigma table._ |
 | `kpi` | [doc](https://www2.microstrategy.com/producthelp/Current/Library/en-us/Content/intro_kpi_viz.htm) | `kpi-chart` | 🟡 n | flagged-table |
 | | | | | _Highest-volume unbuilt type in the demo sweep; currently collapses to a table._ |
-| `bar_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/MSTRWeb/WebHelp/Lang_1033/Content/viz_gallery.htm) | `bar-chart` | 🟡 n | flagged-table |
-| `line_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/AdvancedReportingGuide/WebHelp/Lang_1033/Content/Line.htm) | `line-chart` | 🟡 n | flagged-table |
+| `bar_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/MSTRWeb/WebHelp/Lang_1033/Content/viz_gallery.htm) | `bar-chart` | ✅ y · 2026-07-13 | flagged-table |
+| `line_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/AdvancedReportingGuide/WebHelp/Lang_1033/Content/Line.htm) | `line-chart` | ✅ y · 2026-07-13 | flagged-table |
 | `area_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/MSTRWeb/WebHelp/Lang_1033/Content/viz_gallery.htm) | `area-chart` | 🟡 n | flagged-table |
 | `pie_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/MCG-Workstation/en-us/Content/Creating_a_graph_with_pies_or_rings.htm) | `pie-chart` | 🟡 n | flagged-table |
 | `ring_chart` | [doc](https://www2.microstrategy.com/producthelp/Current/MCG-Workstation/en-us/Content/Creating_a_graph_with_pies_or_rings.htm) | `donut-chart` | 🟡 n | flagged-table |

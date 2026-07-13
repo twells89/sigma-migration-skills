@@ -53,12 +53,24 @@ _CAT_DIR = _cc.default_catalog_dir(__file__)
 AGG_CAT = _cc.load(_CAT_DIR, "aggregation")     # MSTR group function -> Sigma/SQL aggregate
 FMT_CAT = _cc.load(_CAT_DIR, "number-format")   # MSTR format category -> Sigma number format
 CTRL_CAT = _cc.load(_CAT_DIR, "control")        # bound-column type    -> Sigma control kind
-# NB: refs/catalogs/viz-kind.json is DOCUMENTATION-ONLY and is deliberately NOT
-# loaded here. convert.py emits exactly one Sigma table per dossier chapter
-# (see Bundle.viz_chapter); there is no visualizationType->element-kind code map
-# to ground yet (chart emission is roadmap — the ACTIVE viz classifier lives in
-# microstrategy-assessment/scripts/assess.py VIZ_MAPPED). Loading it here would
-# fake wiring the converter does not have.
+VIZ_CAT = _cc.load(_CAT_DIR, "viz-kind")        # dossier visualizationType -> Sigma element kind
+# viz-kind is now WIRED (beads-sigma-kvza): each dossier chapter's primary
+# visualizationType is resolved through VIZ_CAT — bar/line/area chart types emit
+# the matching Sigma chart element (a dim on the xAxis + the metrics on the
+# yAxis); `grid`/compound/heat_map and any UNMAPPED type fall to a Sigma table
+# with a LOUD warning (data preserved, never a silent wrong chart).
+CHART_KINDS = {"bar-chart", "line-chart", "area-chart"}  # axis-bindable in build_workbook_spec
+
+def primary_viz_type(chapter):
+    """The chapter's primary (first) dossier visualizationType, e.g. 'grid' or
+    'bar_chart'. convert.py builds one Sigma element per chapter, so the first
+    visualization's type drives that element's kind."""
+    for pg in chapter.get("pages") or []:
+        for v in pg.get("visualizations") or []:
+            vt = v.get("visualizationType")
+            if vt:
+                return vt
+    return "grid"
 
 # FN: MSTR metric group function -> warehouse SQL aggregate, DERIVED from the
 # aggregation catalog (formerly an inline dict literal mapping Sum/Count/Avg/
@@ -1047,6 +1059,13 @@ def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None):
     # chapter -> dataset/report mapping comes from the dossier datasets by name
     report_by_name = {r["information"]["name"]: (rid, r)
                       for rid, r in b.reports.items()}
+    # chapters whose element a control/selector filters. A Sigma list control
+    # sources its value list from a TABLE element, not a chart — so a charted
+    # chapter that has such a control would POST-fail ("Dependency not found").
+    # Ship-safe: keep those chapters as tables (data preserved) + warn, until
+    # chart+control composition (a hidden control-source table) lands. beads-sigma-kvza.
+    _controlled_chapters = {s.get("chapter") for s in b.filter_signals()
+                            if s.get("kind") in ("chapter-filter", "selector")}
     for ch in b.dossier["chapters"]:
         ch_name = ch["name"]
         rid, report = report_by_name[ch_name]
@@ -1073,6 +1092,7 @@ def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None):
             continue
 
         columns, group_ids, calc_ids, key_names = [], [], [], []
+        metric_ids = []  # metric columns only (for a chart yAxis; excludes DESC-label calcs)
         filters = []
         for u in units:
             if u.get("type") == "attribute":
@@ -1125,9 +1145,19 @@ def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None):
                         col["format"] = fmt
                     columns.append(col)
                     calc_ids.append(cid)
+                    metric_ids.append(cid)
 
         report_keys[report["information"]["name"]] = key_names
-        element = {
+        # viz-kind (beads-sigma-kvza): resolve the chapter's primary dossier
+        # visualizationType through the catalog. bar/line/area with a dim + a
+        # measure emit the matching Sigma CHART (dim -> xAxis, metrics -> yAxis);
+        # grid/compound/heat_map -> table; an unmapped type or a chart type with
+        # no wired emission -> table + a LOUD warning (data preserved, never a
+        # silent wrong chart).
+        _viz = primary_viz_type(ch)
+        _vrow = VIZ_CAT.resolve(_viz)
+        _kind = _vrow["sigma"] if _vrow else None
+        _base = {
             "id": f"tbl-{slug(ch_name)}",
             "kind": "table",
             "name": report["information"]["name"],
@@ -1137,12 +1167,38 @@ def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None):
                 "elementId": el_ref(join_name),
             },
             "columns": columns,
-            "groupings": [{
+        }
+        _chartable = _kind in CHART_KINDS and group_ids and metric_ids
+        if _chartable and ch_name in _controlled_chapters:
+            # a chart can't be a list control's value source — keep the table + say so
+            b.warnings.append("chapter %r: %s chart has a control/selector filtering it — a "
+                              "Sigma list control can't source values from a chart, so it was "
+                              "emitted as a table (data preserved); chart+control composition is "
+                              "a tracked follow-up." % (ch_name, _viz))
+            _chartable = False
+        if _chartable:
+            # keep the base element id (tbl-<ch>) so the layout XML + control
+            # targets still resolve — only the kind + axes change.
+            element = dict(_base)
+            element["kind"] = _kind
+            element["xAxis"] = {"columnId": group_ids[0]}   # primary attribute -> x
+            element["yAxis"] = {"columnIds": metric_ids}     # metrics only (not DESC-label calcs)
+        else:
+            if _vrow is None:
+                VIZ_CAT.resolve_or_warn(_viz, b.warnings, context="chapter %r" % ch_name)
+            elif _kind in CHART_KINDS and not (ch_name in _controlled_chapters):
+                b.warnings.append("chapter %r: %s chart needs a dimension + a measure to "
+                                  "bind axes — emitted a table (data preserved)." % (ch_name, _viz))
+            elif _kind not in ("table", None):
+                b.warnings.append("chapter %r: MSTR visualizationType %r (-> %s) has no wired "
+                                  "chart emission yet — emitted a table (data preserved)."
+                                  % (ch_name, _viz, _kind))
+            element = dict(_base)
+            element["groupings"] = [{
                 "id": f"g-{slug(ch_name)}",
                 "groupBy": group_ids,
                 "calculations": calc_ids,
-            }],
-        }
+            }]
         if filters:
             element["filters"] = filters
         page = {
