@@ -25,9 +25,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/util.js
+// converter/node_modules/fast-xml-parser/src/util.js
 var require_util = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/util.js"(exports) {
+  "converter/node_modules/fast-xml-parser/src/util.js"(exports) {
     "use strict";
     var nameStartChar = ":A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
     var nameChar = nameStartChar + "\\-.\\d\\u00B7\\u0300-\\u036F\\u203F-\\u2040";
@@ -99,9 +99,9 @@ var require_util = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/validator.js
+// converter/node_modules/fast-xml-parser/src/validator.js
 var require_validator = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/validator.js"(exports) {
+  "converter/node_modules/fast-xml-parser/src/validator.js"(exports) {
     "use strict";
     var util = require_util();
     var defaultOptions = {
@@ -411,9 +411,9 @@ var require_validator = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
+// converter/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
 var require_OptionsBuilder = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js"(exports) {
+  "converter/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js"(exports) {
     var { DANGEROUS_PROPERTY_NAMES, criticalProperties } = require_util();
     var defaultOnDangerousProperty = (name) => {
       if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
@@ -537,9 +537,9 @@ var require_OptionsBuilder = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
+// converter/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
 var require_xmlNode = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js"(exports, module) {
     "use strict";
     var XmlNode = class {
       constructor(tagname) {
@@ -564,9 +564,9 @@ var require_xmlNode = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
+// converter/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
 var require_DocTypeReader = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js"(exports, module) {
     var util = require_util();
     var DocTypeReader = class {
       constructor(options) {
@@ -852,9 +852,9 @@ var require_DocTypeReader = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/strnum/strnum.js
+// converter/node_modules/strnum/strnum.js
 var require_strnum = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/strnum/strnum.js"(exports, module) {
+  "converter/node_modules/strnum/strnum.js"(exports, module) {
     var hexRegex = /^[-+]?0x[a-fA-F0-9]+$/;
     var numRegex = /^([\-\+])?(0*)([0-9]*(\.[0-9]*)?)$/;
     var consider = {
@@ -940,9 +940,9 @@ var require_strnum = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/ignoreAttributes.js
+// converter/node_modules/fast-xml-parser/src/ignoreAttributes.js
 var require_ignoreAttributes = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/ignoreAttributes.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/ignoreAttributes.js"(exports, module) {
     function getIgnoreAttributesFn(ignoreAttributes) {
       if (typeof ignoreAttributes === "function") {
         return ignoreAttributes;
@@ -965,9 +965,9 @@ var require_ignoreAttributes = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
+// converter/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
 var require_OrderedObjParser = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js"(exports, module) {
     "use strict";
     var util = require_util();
     var xmlNode = require_xmlNode();
@@ -1570,9 +1570,9 @@ var require_OrderedObjParser = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/node2json.js
+// converter/node_modules/fast-xml-parser/src/xmlparser/node2json.js
 var require_node2json = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/node2json.js"(exports) {
+  "converter/node_modules/fast-xml-parser/src/xmlparser/node2json.js"(exports) {
     "use strict";
     function prettify(node, options) {
       return compress(node, options);
@@ -1657,9 +1657,9 @@ var require_node2json = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
+// converter/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
 var require_XMLParser = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js"(exports, module) {
     var { buildOptions } = require_OptionsBuilder();
     var OrderedObjParser = require_OrderedObjParser();
     var { prettify } = require_node2json();
@@ -1715,9 +1715,9 @@ var require_XMLParser = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
+// converter/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
 var require_orderedJs2Xml = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js"(exports, module) {
     var EOL = "\n";
     function toXml(jArray, options) {
       let indentation = "";
@@ -1848,9 +1848,9 @@ var require_orderedJs2Xml = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
+// converter/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
 var require_json2xml = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js"(exports, module) {
     "use strict";
     var buildFromOrderedJs = require_orderedJs2Xml();
     var getIgnoreAttributesFn = require_ignoreAttributes();
@@ -2094,9 +2094,9 @@ var require_json2xml = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/fxp.js
+// converter/node_modules/fast-xml-parser/src/fxp.js
 var require_fxp = __commonJS({
-  "plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/fxp.js"(exports, module) {
+  "converter/node_modules/fast-xml-parser/src/fxp.js"(exports, module) {
     "use strict";
     var validator = require_validator();
     var XMLParser2 = require_XMLParser();
@@ -2109,12 +2109,12 @@ var require_fxp = __commonJS({
   }
 });
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cli.ts
+// converter/cli.ts
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/sigma-ids.ts
+// converter/sigma-ids.ts
 var SIGMA_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var _usedIds = /* @__PURE__ */ new Set();
 var SIGMA_LOWERCASE_WORDS = /* @__PURE__ */ new Set([
@@ -2291,7 +2291,7 @@ function buildDerivedElements(elements) {
   return derived;
 }
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos.ts
+// converter/cognos.ts
 function applyLearnedRules(expr, rules) {
   let s = expr || "";
   for (const r of rules || []) {
@@ -2655,7 +2655,7 @@ function parseJoinExpr(expr) {
 }
 var trunc = (s, n = 80) => s && s.length > n ? s.slice(0, n) + "\u2026" : s || "";
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos-report.ts
+// converter/cognos-report.ts
 var import_fast_xml_parser = __toESM(require_fxp(), 1);
 var xmlParser = new import_fast_xml_parser.XMLParser({
   ignoreAttributes: false,
@@ -2989,7 +2989,9 @@ function convertCognosReportToSigma(xml2, options = {}) {
       warns.forEach((w) => warnings.push(`"${qName}.${r}": ${w}`));
       const id = sigmaShortId();
       if (grouped && isMeasureItem(di)) {
-        const fn = AGG[di.aggregate.toLowerCase()] || "Sum";
+        const _aggk = di.aggregate.toLowerCase();
+        if (!AGG[_aggk]) warnings.push(`list measure "${di.name}" (query "${qName}"): unmapped Cognos aggregate '${di.aggregate}' \u2014 defaulted to Sum (degraded); verify parity or add the mapping (refs/cognos-coverage.md).`);
+        const fn = AGG[_aggk] || "Sum";
         columns.push({ id, name: sigmaDisplayName(di.name), formula: /^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(formula) ? formula : `${fn}(${formula})` });
         measureIds.push(id);
       } else {
@@ -3201,7 +3203,12 @@ function convertCognosReportToSigma(xml2, options = {}) {
       warns.forEach((w) => warnings.push(`"${vizName}.${e.ref}": ${w}`));
       if (categorical && !measure && (di.dataType === "1" || di.dataType === "2")) formula = `Text(${formula})`;
       const id = sigmaShortId();
-      const fn = measure ? ROLLUP_AGG[String(e.rollup || "").toLowerCase()] || "Sum" : "";
+      let fn = "";
+      if (measure) {
+        const _rk = String(e.rollup || "").toLowerCase();
+        if (_rk && !ROLLUP_AGG[_rk]) warnings.push(`chart "${vizName}" measure "${nm}": unmapped Cognos rollup '${e.rollup}' \u2014 defaulted to Sum (degraded); verify parity (refs/cognos-coverage.md).`);
+        fn = ROLLUP_AGG[_rk] || "Sum";
+      }
       const col = { id, name: nm, formula: measure ? `${fn}(${formula})` : formula };
       if (e.format) col.format = e.format;
       cols.push(col);
@@ -3396,7 +3403,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
   };
 }
 
-// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cli.ts
+// converter/cli.ts
 function loadLearnedRules() {
   try {
     const p = join(homedir(), ".cognos-to-sigma", "learned-rules.json");

@@ -424,7 +424,10 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       warns.forEach((w) => warnings.push(`"${qName}.${r}": ${w}`));
       const id = sigmaShortId();
       if (grouped && isMeasureItem(di)) {
-        const fn = AGG[di.aggregate!.toLowerCase()] || 'Sum';
+        // beads-sigma-kvza: an unmapped Cognos aggregate must be LOUD, not a silent Sum.
+        const _aggk = di.aggregate!.toLowerCase();
+        if (!AGG[_aggk]) warnings.push(`list measure "${di.name}" (query "${qName}"): unmapped Cognos aggregate '${di.aggregate}' — defaulted to Sum (degraded); verify parity or add the mapping (refs/cognos-coverage.md).`);
+        const fn = AGG[_aggk] || 'Sum';
         columns.push({ id, name: sigmaDisplayName(di.name), formula: /^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(formula) ? formula : `${fn}(${formula})` });
         measureIds.push(id);
       } else {
@@ -631,7 +634,14 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       // renders as a continuous axis in Sigma — cast to Text so it binds categorically.
       if (categorical && !measure && (di.dataType === '1' || di.dataType === '2')) formula = `Text(${formula})`;
       const id = sigmaShortId();
-      const fn = measure ? (ROLLUP_AGG[String(e.rollup || '').toLowerCase()] || 'Sum') : '';
+      // beads-sigma-kvza: warn on an unmapped Cognos rollup (empty rollup -> Sum is the
+      // documented default and is NOT a miss). Degraded Sum stays but is now loud.
+      let fn = '';
+      if (measure) {
+        const _rk = String(e.rollup || '').toLowerCase();
+        if (_rk && !ROLLUP_AGG[_rk]) warnings.push(`chart "${vizName}" measure "${nm}": unmapped Cognos rollup '${e.rollup}' — defaulted to Sum (degraded); verify parity (refs/cognos-coverage.md).`);
+        fn = ROLLUP_AGG[_rk] || 'Sum';
+      }
       const col: WbColumn = { id, name: nm, formula: measure ? `${fn}(${formula})` : formula };
       if (e.format) col.format = e.format;
       cols.push(col);
