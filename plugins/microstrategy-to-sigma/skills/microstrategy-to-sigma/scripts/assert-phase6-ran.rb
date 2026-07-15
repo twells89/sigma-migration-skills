@@ -45,6 +45,14 @@
 #      an interactive source = FAIL, the Qlik class) and per-control
 #      scope:[...] allowlists (intentional single-chart switchers like grain
 #      controls). See the lib header CONTRACT.
+#   7b. Runtime control flip test (OPT-IN via --require-control-flip) — gate 7's
+#      control-scope.json sidecar is derived by build_workbook.py from the same
+#      `listen` data it used to wire the spec, so a builder-level mis-mapping
+#      makes spec and sidecar AGREE and gate 7 passes. This gate proves the
+#      wiring INDEPENDENTLY at runtime: scripts/probe-controls.rb flips each
+#      auto-probeable control via the REST export API and requires its targets'
+#      output to actually change (wired-but-inert = FAIL, exit 21). Offline runs
+#      (no creds / no workbook) SKIP. See lib/flip_gate.rb.
 #
 # Usage:
 #   ruby scripts/assert-phase6-ran.rb --tableau /tmp/<name> \
@@ -63,6 +71,11 @@
 #                              # in your report
 #     [--control-scope PATH]   # control-scope.json sidecar for gate 7
 #                              # (default: <workdir>/control-scope.json)
+#     [--require-control-flip] # gate 7b (OPT-IN): prove control wiring at runtime
+#                              # via probe-controls.rb (looker-to-sigma opts in)
+#     [--skip-control-flip R]  # waive gate 7b — name the reason in your report
+#     [--flip-check-leaks]     # gate 7b: also assert flips don't leak
+#                              # (probe --check-out-of-closure; doubles exports)
 #     [--min-layout-elements N] default 2 — single-page bare-element layouts
 #                              # often have just the page wrapper; require this
 #                              # many <LayoutElement> tags
@@ -172,6 +185,15 @@
 #      pass=false. Script absent → gate is invisible; inputs absent → stated
 #      SKIP. Escape hatch: --skip-visual-similarity "<reason>" (counted against
 #      the waiver budget).
+#  21  Runtime control flip test failed (gate 7b; OPT-IN via --require-control-flip)
+#      — a control passed the static wiring lint (gate 7) but does NOT actually
+#      filter its targets at runtime (wired-but-inert / builder-level listen->
+#      column mis-mapping), proven by scripts/probe-controls.rb; OR the probe
+#      could not run at all on an opted-in gate (fail-closed). Fix the listen
+#      mapping in build_workbook.py + re-PUT, or re-run once the export API is
+#      reachable. Un-probeable control types (date-range / slider) are an
+#      advisory WARN + control-flip-unverified.json marker, not this failure.
+#      Escape hatch: --skip-control-flip "<reason>" (counts against the budget).
 #
 # DATA-CLASS RCF residuals (part of gate 8d, exit 15, but enforced whenever
 # fidelity-ledger.json EXISTS — even without --require-fidelity-ledger): any
@@ -206,6 +228,9 @@ OptionParser.new do |p|
   p.on('--skip-layout-lint [REASON]')   { |v| opts[:skip_lint] = v || true }
   p.on('--skip-control-lint [REASON]')  { |v| opts[:skip_control_lint] = v || true }
   p.on('--control-scope PATH')       { |v| opts[:control_scope] = v }
+  p.on('--require-control-flip', 'gate 7b (OPT-IN, off by default): after control lint, PROVE each auto-probeable control actually filters its targets at runtime via scripts/probe-controls.rb (live REST export flip test). Closes the self-referential-sidecar hole in gate 7. Adopters (looker-to-sigma) pass this; other converters are unaffected until they do.') { opts[:require_control_flip] = true }
+  p.on('--skip-control-flip [REASON]', 'waive gate 7b (runtime control flip test) — the reason MUST be named in your migration report.') { |v| opts[:skip_control_flip] = v || true }
+  p.on('--flip-check-leaks', 'gate 7b: also run probe --check-out-of-closure (asserts a flip does NOT leak to out-of-closure elements; doubles exports). Off by default.') { opts[:flip_check_leaks] = true }
   p.on('--min-layout-elements N', Integer) { |v| opts[:min_layout_elements] = v }
   p.on('--allow-missing-tiles N', Integer, 'tolerate N unmatched dashboard zones in the tile census') { |v| opts[:allow_missing_tiles] = v }
   p.on('--skip-parity-gate REASON', 'waive gate 1 (Phase 6 source-parity) — REQUIRED reason string. Use ONLY when source parity is genuinely unavailable (e.g. no source workspace/dataset/warehouse access). The reason MUST be named in your migration report.') { |v| opts[:skip_parity] = v }
@@ -294,6 +319,7 @@ WAIVER_HIDES = {
   '--allow-missing-tiles'      => 'gate 5: source tiles absent from the build were accepted',
   '--skip-layout-lint'         => 'gate 6: layout quality never linted',
   '--skip-control-lint'        => 'gate 7: control wiring never linted',
+  '--skip-control-flip'        => 'gate 7b: control wiring never proven at runtime',
   '--skip-visual-gate'         => 'gate 8: no rendered PNG was required',
   '--skip-visual-comparison'   => 'gate 8b: no source-vs-target visual verdict was required',
   '--skip-layout-fill'         => 'gate 8c: dropped/under-filled pages were accepted',
@@ -321,6 +347,7 @@ waiver_flags << '--skip-layout-check'        if opts[:skip_layout]
 waiver_flags << '--allow-missing-tiles'      if opts[:allow_missing_tiles].to_i.positive?
 waiver_flags << '--skip-layout-lint'         if opts[:skip_lint]
 waiver_flags << '--skip-control-lint'        if opts[:skip_control_lint]
+waiver_flags << '--skip-control-flip'        if opts[:skip_control_flip] && opts[:require_control_flip]
 waiver_flags << '--skip-visual-gate'         if opts[:skip_visual]
 waiver_flags << '--skip-visual-comparison'   if opts[:skip_visual_cmp]
 waiver_flags << '--skip-layout-fill'         if opts[:skip_layout_fill]
@@ -953,6 +980,110 @@ else
              "targets, full same-page reach#{scope ? ', source scope honored' : ''})"
       else
         warn "[SKIP] gate 7/7: GET /v2/workbooks/#{wb_id}/spec returned HTTP #{res.code} — cannot lint"
+      end
+    end
+  end
+end
+
+# ---------------------------------------------------------------------------
+# Gate 7b — runtime control flip test (exit 21; OPT-IN via --require-control-flip)
+# Gate 7 proves control wiring against the LIVE spec + control-scope.json — but
+# that sidecar is derived by build_workbook.py from the SAME `listen` data it
+# used to wire the spec, so a BUILDER-level mis-mapping yields a spec and a
+# sidecar that AGREE and gate 7 passes. The only independent proof is runtime:
+# flip a control via the REST export API and confirm its targets' output
+# actually changes. This gate shells out to scripts/probe-controls.rb (which
+# already does exactly that) and turns its verdict into a hard gate. Opt-in so
+# converters adopt it deliberately (looker-to-sigma passes --require-control-flip);
+# offline runs (no creds / no workbook) SKIP, never false-fail. See lib/flip_gate.rb.
+# ---------------------------------------------------------------------------
+if !opts[:require_control_flip]
+  puts '[SKIP] gate 7b: runtime control flip test not opted in (pass --require-control-flip to enable)'
+elsif opts[:skip_control_flip]
+  record_waiver.call('--skip-control-flip', 'gate 7b (runtime control flip test)', opts[:skip_control_flip])
+else
+  flip_wb = opts[:wb]
+  if flip_wb.nil?
+    _p = File.join(opts[:tab], 'wb-ids.json')
+    flip_wb = (JSON.parse(File.read(_p))['workbookId'] rescue nil) if File.exist?(_p)
+  end
+  flip_base = ENV['SIGMA_BASE_URL']
+  flip_tok  = ENV['SIGMA_API_TOKEN']
+  probe = File.join(__dir__, 'probe-controls.rb')
+  if flip_wb.nil? || flip_wb.to_s.empty?
+    puts '[SKIP] gate 7b: no workbook ID resolvable for the flip test'
+  elsif flip_base.nil? || flip_base.empty? || flip_tok.nil? || flip_tok.empty?
+    warn '[SKIP] gate 7b: SIGMA_BASE_URL / SIGMA_API_TOKEN not set — cannot exercise controls'
+  elsif !File.exist?(probe)
+    warn '[SKIP] gate 7b: scripts/probe-controls.rb not vendored alongside this script — re-vendor (SHA-1 discipline)'
+  else
+    # Only meaningful when the workbook actually has controls. Reuse gate 7's
+    # spec fetch + ControlLint to count them; 0 controls -> nothing to prove.
+    begin
+      require_relative 'lib/control_lint'
+      require_relative 'lib/flip_gate'
+    rescue LoadError => e
+      warn "[SKIP] gate 7b: #{e.message} — re-vendor scripts/lib (SHA-1 discipline)"
+    end
+    n_controls = nil
+    if defined?(ControlLint) && defined?(FlipGate)
+      uri = URI("#{flip_base}/v2/workbooks/#{flip_wb}/spec")
+      req = Net::HTTP::Get.new(uri)
+      req['Authorization'] = "Bearer #{flip_tok}"
+      req['Accept'] = 'application/json'
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https', read_timeout: 30) { |h| h.request(req) }
+      if res.is_a?(Net::HTTPSuccess)
+        spec =
+          begin
+            JSON.parse(res.body)
+          rescue JSON::ParserError
+            require 'yaml'
+            require 'date'
+            YAML.safe_load(res.body, permitted_classes: [Date, Time]) || {}
+          end
+        n_controls = ControlLint.controls_report(spec).length
+      else
+        warn "[SKIP] gate 7b: GET /v2/workbooks/#{flip_wb}/spec returned HTTP #{res.code} — cannot count controls"
+      end
+    end
+    if n_controls == 0
+      puts '[OK] gate 7b: workbook has no controls — nothing to flip-test'
+    elsif !n_controls.nil?
+      out = File.join(opts[:tab], 'probe-controls')
+      cmd = [RbConfig.ruby, probe, '--workbook-id', flip_wb, '--out', out]
+      cmd << '--check-out-of-closure' if opts[:flip_check_leaks]
+      system(*cmd) # inherits stdout — the operator sees the per-control PASS/FAIL/SKIP table
+      probe_rc = $?.exitstatus
+      results = (JSON.parse(File.read(File.join(out, 'probe-results.json'))) rescue nil)
+      decision, info = FlipGate.decide(probe_rc, results)
+      case decision
+      when :ok
+        puts "[OK] gate 7b: #{info[:passes].length} control(s) proven live (in-closure export changes when flipped)" \
+             "#{info[:skips].any? ? "; #{info[:skips].length} un-probeable type(s) skipped" : ''}"
+      when :fail
+        warn "[FAIL] gate 7b: #{info[:fails].length} control(s) wired but INERT on live workbook #{flip_wb}:"
+        info[:fails].each { |cid, note| warn "         - #{cid}: #{note}" }
+        warn '       The control passed the static lint (gate 7) but does not actually filter its'
+        warn '       targets — a builder-level listen->column mis-mapping. Re-check the tile `listen`'
+        warn '       mapping in build_workbook.py, re-PUT the spec, then re-run.'
+        warn "       Reproduce: ruby scripts/probe-controls.rb --workbook-id #{flip_wb}"
+        warn '       Escape hatch: --skip-control-flip "<reason>" (counts against the waiver budget).'
+        exit 21
+      when :advisory
+        warn "[WARN] gate 7b: no control could be auto-flipped (#{info[:skips].length} date-range / slider / " \
+             'unlabeled control(s) need an explicit flip value) — runtime wiring is UNVERIFIED.'
+        info[:skips].each { |cid, note| warn "         - #{cid}: #{note}" }
+        marker = File.join(opts[:tab], 'control-flip-unverified.json')
+        File.write(marker, JSON.pretty_generate('workbookId' => flip_wb,
+                                                'unprobed' => info[:skips].map { |c, n| { 'control' => c, 'note' => n } })) rescue nil
+        warn "       Recorded to #{marker}. Prove them with: ruby scripts/probe-controls.rb --workbook-id " \
+             "#{flip_wb} --value <controlId>=<value>  (or waive with --skip-control-flip \"<reason>\")."
+      when :error
+        warn "[FAIL] gate 7b: probe-controls.rb could not verify the wiring (exit #{probe_rc}) on workbook #{flip_wb}."
+        warn '       An opted-in gate that could not run must not pass silently. Re-run once the export'
+        warn "       API is reachable: ruby scripts/probe-controls.rb --workbook-id #{flip_wb}"
+        warn '       Escape hatch: --skip-control-flip "<reason>" (counts against the waiver budget).'
+        exit 21
       end
     end
   end

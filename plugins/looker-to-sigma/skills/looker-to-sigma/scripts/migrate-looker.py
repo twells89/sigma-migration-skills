@@ -1078,7 +1078,15 @@ console.error('stats:', JSON.stringify(res.stats));
     rc, _ = run(["ruby", os.path.join(HERE, "phase6-parity-looker.rb"),
                  "--workdir", wd, "--finalize"], check=False)
     gate_cmd = ["ruby", os.path.join(HERE, "assert-phase6-ran.rb"),
-                "--workdir", wd, "--workbook-id", wb]
+                "--workdir", wd, "--workbook-id", wb,
+                # Opt into gate 7b (runtime control flip test). Gate 7's static
+                # control lint checks the spec against a builder-derived
+                # control-scope.json sidecar — it cannot catch a builder-level
+                # listen->column mis-mapping (spec + sidecar agree). Gate 7b
+                # flips each control live (probe-controls.rb) and proves its
+                # targets change. Looker is the first adopter; other converters
+                # are unaffected until they pass this flag too.
+                "--require-control-flip"]
     # Wire the Phase-4c render to gate 8 (visual render). We render to
     # visual-qa/<pageId>.png, but the gate defaults to looking for
     # <workdir>/sigma-render.png — without this the gate never finds the PNG and
