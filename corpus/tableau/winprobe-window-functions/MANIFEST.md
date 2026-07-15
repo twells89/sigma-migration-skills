@@ -21,6 +21,21 @@ window family each:
 
 Full mapping + gotchas: the skill's `refs/window-functions.md`.
 
+## Placement re-probe (2026-07-15)
+
+A customer reported that `MovingSum` worked in a **table** calc column, which
+contradicted the old "chart yAxis is the ONLY verified context" rule. Re-probed
+live with `scripts/probe-window-contexts.rb` against the `WINPROBE Base` DM
+(`01d5deb8-de64-485d-a428-e368afc6963b`): the Sigma-native window family
+(CumulativeSum/MovingSum/MovingAvg/Rank/RankDense/RowNumber/Lag/Lead/
+PercentOfTotal) resolves to real `OVER(...)` in **all three** calc-column
+contexts — grouped workbook table, ungrouped workbook "master" table, and
+DM-element calc column. Only the `*Over` family (SumOver/CountOver/…) errors:
+`Unknown function` at query in workbook contexts, and a hard 400 on a DM-spec
+POST. The old rule confused *function family* with *placement*; `refs/window-
+functions.md` and the two `scripts/*.rb` notes were corrected accordingly.
+Re-run the probe to re-verify on any org — it is the gate for that claim.
+
 ## Artifacts
 
 | File | What it is |

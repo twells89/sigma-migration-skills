@@ -1384,13 +1384,13 @@ def translate_tableau_tc(formula)
 
   return [nil, nil] unless changed
   hints.uniq!
-  # WINPROBE-validated placement rule (2026-06-12, 930/930 cells): Sigma window
-  # functions (Rank/RankDense/RankPercentile/Lag/Lead/RowNumber/Cumulative*/
-  # Moving*/PercentOfTotal) work FIRST-CLASS as chart-element viz formulas on
-  # the yAxis — no Custom SQL needed. They still silently error in DM-element
-  # calc columns and grouping-table master calcs, and the *Over family
-  # (SumOver/MaxOver/...) is 'Unknown function' in spec contexts entirely.
-  hints << 'NOTE: emit as a CHART-element viz formula on the yAxis (valid there; WINPROBE-verified). Never a DM-element calc col / grouping-table master calc, and never the *Over functions — see refs/window-functions.md' if hints.any? { |h| h =~ /Rank|Lag|Lead|RowNumber|Cumulative|Moving/ }
+  # Family rule (corrected 2026-07-15, probe-window-contexts.rb): Sigma-native
+  # window functions (Rank/RankDense/RankPercentile/Lag/Lead/RowNumber/
+  # Cumulative*/Moving*/PercentOfTotal) resolve to real OVER() as chart-element
+  # viz formulas on the yAxis AND in table calc columns (grouped + ungrouped)
+  # AND in DM-element calc columns — no Custom SQL needed. Only the *Over family
+  # (SumOver/MaxOver/...) is 'Unknown function' in every spec context.
+  hints << 'NOTE: emit as a CHART-element viz formula on the yAxis (the default, WINPROBE-verified); table / DM-element calc columns are also valid. Never the *Over functions — see refs/window-functions.md' if hints.any? { |h| h =~ /Rank|Lag|Lead|RowNumber|Cumulative|Moving/ }
   [s, hints.join('; ')]
 end
 
@@ -1412,12 +1412,13 @@ end
 #     consumer re-aggregates Max/Min — NEVER Sum: group calcs broadcast to
 #     base-grain rows, so a Sum would multiply by the row count)
 #
-# Placement rule (the load-bearing discovery): these Sigma window functions are
-# FIRST-CLASS as chart-element viz formulas on the yAxis. Cumulative*/rank
-# functions follow the chart's xAxis sort and auto-partition by the chart's
-# color/series dim. They still silently error in DM-element calc columns and
-# grouping-table master calcs, and the *Over family (SumOver/MaxOver/...) is
-# 'Unknown function' in every spec context — never emit those.
+# Family rule (corrected 2026-07-15): these Sigma-native window functions are
+# first-class as chart-element viz formulas on the yAxis (the emitted default)
+# AND resolve in table calc columns (grouped + ungrouped) and DM-element calc
+# columns — location is not the gate. Cumulative*/rank functions follow the
+# chart's xAxis sort and auto-partition by the chart's color/series dim. Only
+# the *Over family (SumOver/MaxOver/...) is 'Unknown function' in every spec
+# context — never emit those. Re-verify contexts with probe-window-contexts.rb.
 #
 # STAYS MANUAL (flagged, never guessed): WINDOW_MEDIAN / WINDOW_PERCENTILE /
 # WINDOW_CORR / WINDOW_COVAR(P) / WINDOW_VARP (population) / WINDOW_STDEVP,

@@ -219,8 +219,9 @@ def gotchas(formula)
              'RANK/RANK_DENSE/RANK_PERCENTILE→Rank/RankDense/RankPercentile(agg,"desc"); INDEX()→RowNumber(); LOOKUP(x,±n)→Lag/Lead(x,n); ' \
              'RUNNING_SUM/TOTAL pareto→CumulativeSum(PercentOfTotal(agg,"grand_total")); unbounded WINDOW_MAX/MIN/SUM→hidden two-level ' \
              'grouped helper (consumer re-aggregates Max/Min, NEVER Sum). Single DM base element, NO Custom SQL. ' \
-             'Placement: chart yAxis ONLY — these silently error in DM calc columns and grouping-table master calcs, ' \
-             'and the *Over family (SumOver/RankOver/...) is "Unknown function" in every spec context.'
+             'Placement: emitted on the chart yAxis (verified, the default), but the native family ALSO resolves in ' \
+             'table calc columns (grouped + ungrouped) and DM-element calc columns — only the *Over family ' \
+             '(SumOver/RankOver/...) is "Unknown function" (every context). Re-verify with scripts/probe-window-contexts.rb.'
   end
   if manual_hits.any?
     notes << "MANUAL. #{manual_hits.join(', ')} has no validated Sigma chart-formula mapping — port via a Custom SQL " \

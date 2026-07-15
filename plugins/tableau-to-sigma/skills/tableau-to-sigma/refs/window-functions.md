@@ -7,21 +7,37 @@ with ZERO Custom SQL elements**. Regression fixture:
 `corpus/tableau/winprobe-window-functions/` (Tableau wb
 `aa126c36-608a-402c-9733-2c83797bc65c` on the 10ay/dataflow site).
 
-## The placement rule (load-bearing)
+## The family rule (load-bearing) — CORRECTED 2026-07-15
 
-Sigma window functions (`Cumulative*`, `Moving*`, `Rank`, `RankDense`,
-`RankPercentile`, `RowNumber`, `Lag`, `Lead`, `PercentOfTotal`) are
-**first-class as CHART-element viz formulas on the yAxis**. That is the ONLY
-verified context:
+What gates a window function is the **function family, NOT where the formula
+lives**. The earlier "chart yAxis is the ONLY verified context" rule was wrong;
+it over-generalized the `*Over` restriction (below) onto the whole native family.
 
-- They **silently error** (column type `error`, blank chart) in DM-element
-  calc columns and in workbook-master / grouping-table calc columns
-  (memory: `feedback_sigma_window_functions` — still true).
+- **Sigma-native window functions** (`Cumulative*`, `Moving*`, `Rank`,
+  `RankDense`, `RankPercentile`, `RowNumber`, `Lag`, `Lead`, `PercentOfTotal`)
+  resolve to real Snowflake `OVER(...)` in **every** calc-column context tested:
+  chart-element viz formulas on the yAxis, workbook-table calc columns (both
+  **grouped** and **ungrouped / "master"**), **and data-model-element calc
+  columns**. Live-verified 2026-07-15 by `scripts/probe-window-contexts.rb`
+  (9 functions × 3 contexts, resolve-vs-error on the live CSV export against the
+  WINPROBE Base DM). Originally surfaced by a customer report that MovingSum
+  worked in a table calc column, contradicting the old rule.
 - The `*Over` family (`SumOver`, `MaxOver`, `RankOver`, `CountOver`, …) is
-  **`Unknown function` in every spec context** — never emit those.
-- Windowed measures must land **on the yAxis**: the element CSV export (the
-  Phase-6 pooled actuals collector) returns only the plotted axis/encoding
-  columns.
+  **`Unknown function` in every spec context** — never emit those. This is the
+  ONLY window restriction, and it holds across all three contexts above.
+
+**What the converter emits:** `build-charts-from-signals.rb` places these on the
+chart yAxis — verified, and the default. Table / DM-element calc columns are
+**equally valid** targets: prefer one when a windowed measure must live in a
+table rather than a chart, instead of forcing a hidden helper-element workaround.
+The Phase-6 actuals collector reads the plotted axis/encoding columns, so
+auto-emitted measures land on the yAxis *for collection* — a collector detail,
+not a Sigma capability limit.
+
+> **Gate:** negative-capability claims ("X silently errors in context Y") must
+> be re-proven by running `scripts/probe-window-contexts.rb`, never asserted
+> from a point-in-time memory. This section was corrected exactly because the
+> old claim rode a cited memory without a re-probe.
 
 Cumulative/rank functions **follow the chart's `xAxis.sort`** and
 **auto-partition by the chart's color/series dim**. Tableau's
