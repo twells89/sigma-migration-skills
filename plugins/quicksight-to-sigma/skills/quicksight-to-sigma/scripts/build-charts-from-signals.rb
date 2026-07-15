@@ -240,8 +240,8 @@ end
 # ---- Tableau table-calc translators ---------------------------------------
 # Translate Tableau table-calculation functions to their Sigma equivalents.
 # Returns the translated formula, plus a hint about Sigma-specific caveats
-# (e.g., "window functions silently error in grouping-table charts — add to a
-# non-grouping context or Custom SQL DM element").
+# (e.g., "the *Over family — SumOver/CountOver/... — is Unknown-function in
+# every spec context; the native window family works in calc columns").
 #
 # Function mappings (Sigma names):
 #   INDEX()                  → RowNumber()
@@ -405,7 +405,7 @@ def translate_tableau_tc(formula)
 
   return [nil, nil] unless changed
   hints.uniq!
-  hints << 'NOTE: Sigma window functions (Rank/Lag/Lead/Cumulative*) silently error in grouping-table charts and DM-element calc cols — add to a workbook-master non-grouping context OR a Custom SQL DM element' if hints.any? { |h| h =~ /Rank|Lag|Lead|RowNumber/ }
+  hints << 'NOTE: Sigma-native window functions (Rank/RankDense/Lag/Lead/RowNumber/Cumulative*/Moving*/PercentOfTotal) resolve to real OVER() in calc columns of DM elements AND workbook tables (grouped or ungrouped) — live-verified 2026-07-15 (tableau probe-window-contexts.rb). Only the *Over family (SumOver/CountOver/...) is Unknown-function in every spec context — never emit those.' if hints.any? { |h| h =~ /Rank|Lag|Lead|RowNumber/ }
   [s, hints.join('; ')]
 end
 

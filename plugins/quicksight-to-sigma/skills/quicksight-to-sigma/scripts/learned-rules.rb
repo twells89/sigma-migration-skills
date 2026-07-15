@@ -14,7 +14,7 @@
 #       description: "Tableau WINDOW_AVG(SUM(x)) → Sigma MovingAvg"
 #       tableau_pattern: '\bWINDOW_AVG\s*\(\s*SUM\s*\(\[([^\]]+)\]\)\s*\)'
 #       sigma_template: 'MovingAvg(Sum([Master/\1]), -10, 10)'
-#       hint: "Sigma window functions silently error in grouping-table charts"
+#       hint: "Native window fns resolve in calc columns; only the *Over family errors"
 #       validated_at: "2026-05-19T16:42:00Z"
 #       validated_workbook: "wb-id-here"
 #       example_from: "workbook.twb line 1234"

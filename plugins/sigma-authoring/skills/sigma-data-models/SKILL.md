@@ -66,7 +66,7 @@ Call out any of these before presenting the final spec:
 - Input tables, Python elements, and UI elements
 - Referencing Sigma elements in custom SQL
 - Partial updates — the create and update endpoints both require the full representation
-- `CountOver` / `SumOver` / `RowNumberOver` / other window functions inside DM element calculated columns — they silently error. See `reference/calc-columns.md` for workarounds.
+- The `*Over` window functions (`CountOver` / `SumOver` / `RowNumberOver` / `RankOver` / …) — invalid as a spec formula (a DM-spec POST 400s; workbook calc columns error `Unknown function`). The Sigma-**native** window family (`CumulativeSum` / `MovingAvg` / `Rank` / `RowNumber` / `Lag` / `Lead` / `PercentOfTotal`) DOES resolve in DM-element and workbook calc columns — use those. See `reference/calc-columns.md`.
 - `IsIn(...)` in any formula — Sigma's formula language has no such function. Use chained `or` conditions instead. (See the `sigma-workbooks` skill's `formulas.md` for the full function reference.)
 
 ## Cross-Skill References

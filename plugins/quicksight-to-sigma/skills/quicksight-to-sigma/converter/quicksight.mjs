@@ -1599,8 +1599,8 @@ function quicksightFormulaToSigmaEx(expr, warnings) {
   ];
   const windowRe = new RegExp(`\\b(${windowFns.join("|")})\\s*\\(`, "i");
   if (windowRe.test(s)) {
-    warnings.push(`\u26A0 Formula uses a QuickSight table-calculation function (${s.match(windowRe)[1]}) \u2014 Sigma DM calc columns silently error on window functions. Degraded to a Null calc column with the original expression in its description; re-author as a Custom SQL element or a workbook-layer calculation.`);
-    return { formula: "Null", description: `QuickSight table-calc (re-author in Sigma): ${expr}` };
+    warnings.push(`\u26A0 Formula uses a QuickSight table-calculation function (${s.match(windowRe)[1]}) \u2014 not auto-mapped to a native Sigma window function yet (converter follow-up). Degraded to a Null calc column with the original expression in its description; re-author with the native Sigma equivalent (CumulativeSum/MovingAvg/MovingSum/PercentOfTotal/Rank/Lag/Lead), which DOES resolve in DM-element and workbook calc columns (verified 2026-07-15) \u2014 only the *Over family errors.`);
+    return { formula: "Null", description: `QuickSight table-calc \u2014 re-author with the native Sigma window fn (NOT the *Over family): ${expr}` };
   }
   const paramRe = /\$\{([^{}]+)\}/;
   if (paramRe.test(s)) {

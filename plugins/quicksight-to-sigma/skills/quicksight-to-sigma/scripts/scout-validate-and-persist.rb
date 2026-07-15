@@ -17,7 +17,7 @@
 #     --master-element-id master \
 #     [--folder-id <folder-id>] \
 #     [--description "..."] \
-#     [--hint "Sigma window functions silently error in grouping-table charts"] \
+#     [--hint "Native window fns resolve in calc columns; only the *Over family errors"] \
 #     [--example-from "workbook.twb line 123"] \
 #     [--max-attempts 3]
 #

@@ -445,7 +445,7 @@ function convertQlikToSigma(rawJson, options = {}) {
         ...ctx.verify ? { verify: true } : {},
         note: ctx.notes?.length ? ctx.notes.join(" ") : "Translated Qlik inter-record expression."
       });
-      warnings.push(`\u2139 "${title}": inter-record/window expression \u2192 ready Sigma formula in result.workbookPatterns \u2014 place as a calculation in a GROUPED workbook element (group by the chart's dimension); not emitted as a DM metric (window functions silently error there).`);
+      warnings.push(`\u2139 "${title}": inter-record/window expression \u2192 ready Sigma formula in result.workbookPatterns \u2014 place as a calculation in a GROUPED workbook element (group by the chart's dimension); not emitted as a DM metric (a metric aggregates across rows, so it can't express a per-row window; native window funcs belong in a workbook element or a DM-element calc column).`);
       continue;
     }
     if (!measuresByElement[bestElementId])
@@ -572,7 +572,7 @@ function convertQlikToSigma(rawJson, options = {}) {
         ...ctx.verify ? { verify: true } : {},
         note: (ctx.notes?.length ? ctx.notes.join(" ") : "Translated Qlik inter-record expression.") + " (Qlik master dimension.)"
       });
-      warnings.push(`\u2139 Calc dimension "${title}": inter-record/window expression \u2192 ready Sigma formula in result.workbookPatterns \u2014 place in a GROUPED workbook element; not emitted as a DM column (window functions silently error there).`);
+      warnings.push(`\u2139 Calc dimension "${title}": inter-record/window expression \u2192 ready Sigma formula in result.workbookPatterns \u2014 place in a GROUPED workbook element; not emitted as a DM column (native window funcs also resolve in a DM-element calc column; grouped here for the partition/order that match the Qlik chart).`);
       continue;
     }
     const distinctElIds = Object.keys(elementHits);
@@ -1134,7 +1134,7 @@ var QLIK_FSV_SENTINEL = "__QLIK_FSV__";
 function tidyFormula(f) {
   return f.replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").replace(/\s+,/g, ",").replace(/ {2,}/g, " ").trim();
 }
-var QLIK_GROUPED_REQUIRES = "Place as a calculation in a GROUPED workbook element: group by the Qlik chart's dimension(s), sort the element to match the chart's sort order, and put this formula at the grouping level. (Spec gotcha, live-verified 2026-06-11: the element-level `sort` field 400s on grouped tables \u2014 'Sort column not found' \u2014 so a grouped element computes Lag/Lead over the group key ASCENDING at POST time; apply any other sort in the UI afterwards, or pick the grouping key so ascending order matches the Qlik chart.) When placing in a workbook element, prefix base-column refs with the source element name ([Element/Col]). Window functions (Rank/RankDense/Lag/Lead) silently error in data-model calc columns/metrics and in workbook master calc columns \u2014 they only work in grouped workbook elements.";
+var QLIK_GROUPED_REQUIRES = "Place as a calculation in a GROUPED workbook element: group by the Qlik chart's dimension(s), sort the element to match the chart's sort order, and put this formula at the grouping level. (Spec gotcha, live-verified 2026-06-11: the element-level `sort` field 400s on grouped tables \u2014 'Sort column not found' \u2014 so a grouped element computes Lag/Lead over the group key ASCENDING at POST time; apply any other sort in the UI afterwards, or pick the grouping key so ascending order matches the Qlik chart.) When placing in a workbook element, prefix base-column refs with the source element name ([Element/Col]). Native window functions (Rank/RankDense/Lag/Lead/RowNumber/Cumulative*/Moving*) resolve in DM-element calc columns and in workbook tables (grouped OR ungrouped/master) \u2014 live-verified 2026-07-15; only the *Over family (SumOver/CountOver/...) errors in every spec context. A GROUPED element is still the recommended placement here because it gives Lag/Lead the partition + ordering that match the Qlik chart.";
 var QLIK_IR_RE = /\b(Rank|HRank|VRank|Above|Below|Before|After|Top|Bottom|Previous|Peek)\s*\(/i;
 function lowerInterRecordFns(f, warnings, name, original, ctx) {
   const flagUnsupported = (note2) => {

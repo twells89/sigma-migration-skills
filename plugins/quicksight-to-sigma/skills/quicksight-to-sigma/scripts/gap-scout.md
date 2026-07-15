@@ -39,9 +39,11 @@ PROCEDURE
    - scripts/lib/sigma_functions.rb (the whitelist — anything outside ALL_SET
      silently errors)
 2. Propose ONE candidate Sigma formula. Prefer functions in the whitelist.
-   For window/running/percentOfTotal functions, remember they silently error in
-   workbook-master grouping-table calc cols AND in DM-element calc cols — route
-   to a non-grouping context or a Custom SQL DM element with explicit OVER(...).
+   For window/running/percentOfTotal functions: the native Sigma forms
+   (CumulativeSum/MovingAvg/PercentOfTotal/Rank/RankDense/Lag/Lead/RowNumber)
+   resolve in DM-element AND workbook table calc cols (grouped OR ungrouped) —
+   verified 2026-07-15. Only the *Over family (SumOver/CountOver/...) errors in
+   every context; for those, use a Custom SQL DM element with explicit OVER(...).
 3. Run:
    ruby scripts/scout-validate-and-persist.rb \
      --feature '<feature>' \
