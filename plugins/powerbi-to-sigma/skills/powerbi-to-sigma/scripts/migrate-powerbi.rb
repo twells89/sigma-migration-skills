@@ -1455,12 +1455,19 @@ end
 divergent = fresh_classes.count { |c| c[0] == 'DIVERGENT' }
 
 parity_ok = err_cols.empty? && divergent.zero?
+# NOTE: this is a RESOLUTION check, not value parity. It proves every column
+# resolves (no type "error") and the warehouse matches the PBI snapshot
+# (freshness) — it does NOT diff the built aggregates against the source's
+# DAX/SQL results. Value parity is the assert-phase6-ran.rb / phase6-parity-pbi.rb
+# gate (writes parity-final.json). Labeling this "PARITY: PASS" over-claimed and
+# masked that the value bar was never run in the one-shot path (bead: p5y2 seam).
 if err_cols.empty?
-  puts "   PARITY: #{parity_ok ? 'PASS' : 'FAIL'} — #{total_cols} workbook column(s) resolve (0 error-typed); " \
+  puts "   RESOLUTION: #{parity_ok ? 'PASS' : 'FAIL'} — #{total_cols} workbook column(s) resolve (0 error-typed); " \
        "#{chart_els.size} chart element(s) built across #{chart_pages.size} page(s)"
-  puts "   PARITY: FAIL — #{divergent} DIVERGENT freshness delta(s) above" unless divergent.zero?
+  puts '   NOTE: value parity NOT diffed vs source in this path — run assert-phase6-ran.rb / phase6-parity-pbi.rb to value-verify.'
+  puts "   RESOLUTION: FAIL — #{divergent} DIVERGENT freshness delta(s) above" unless divergent.zero?
 else
-  puts "   PARITY: FAIL — #{err_cols.size}/#{total_cols} column(s) resolved to type 'error':"
+  puts "   RESOLUTION: FAIL — #{err_cols.size}/#{total_cols} column(s) resolved to type 'error':"
   err_cols.first(8).each { |c| puts "     [#{c['elementId']}] #{c['label']}: #{c['formula']}" }
 end
 
@@ -1517,8 +1524,8 @@ puts
 puts '================ RESULT ================'
 puts "dataModelId : #{dm_id}"
 puts "workbookId  : #{wb_id}"
-puts "PARITY      : #{parity_ok ? 'PASS' : 'FAIL'} (#{total_cols} cols resolve, #{err_cols.size} error" \
-     "#{fresh_classes.any? ? format(', freshness: %d match / %d stale-explained / %d divergent', fresh_classes.count { |c| c[0] == 'MATCH' }, fresh_classes.count { |c| c[0] == 'STALE-EXPLAINED' }, divergent) : ''})"
+puts "RESOLUTION  : #{parity_ok ? 'PASS' : 'FAIL'} (#{total_cols} cols resolve, #{err_cols.size} error" \
+     "#{fresh_classes.any? ? format(', freshness: %d match / %d stale-explained / %d divergent', fresh_classes.count { |c| c[0] == 'MATCH' }, fresh_classes.count { |c| c[0] == 'STALE-EXPLAINED' }, divergent) : ''}); value parity NOT run — see assert-phase6-ran.rb"
 if fresh_ok
   puts "freshness   : PBI last refresh #{fresh_ok['endTime']} (#{stale_days} days ago)" \
        "#{freshness['credsSuspect'] ? ' — REFRESH FAILING (creds)' : ''}"
@@ -1540,8 +1547,11 @@ end
 begin
   succ = File.join(WORK, 'phase6-success.json')
   if built_ok
+    # 'resolution-pass' (not 'parity-pass'): this marker records that the build
+    # resolved + freshness-matched, NOT that values were diffed against source.
+    # verify-complete.rb reports value parity separately (parity-final.json).
     File.write(succ, JSON.pretty_generate('workbookId' => wb_id, 'chartCount' => chart_els.size,
-                                          'gates' => 'parity-pass',
+                                          'gates' => 'resolution-pass',
                                           'generatedAt' => Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')))
   elsif File.exist?(succ)
     File.delete(succ) # a prior success marker is stale if this run isn't green
