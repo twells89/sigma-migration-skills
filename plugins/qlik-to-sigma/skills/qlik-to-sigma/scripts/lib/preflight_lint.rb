@@ -33,7 +33,8 @@
 #   C6  a control with an unknown controlType, or the docs-only `top-n` type that
 #       the live tenant 400s — mirrors Sigma spec/verify offline (canary 2026-07-11).
 #   C7  a control missing a REQUIRED field for its type: `mode` on
-#       switch/checkbox/text/number/date/slider; `low`/`high` on range-slider.
+#       switch/checkbox/text/number/date/slider; `low`/`high` on range-slider;
+#       flat `min`/`max` on number-range (unbounded → 400).
 #   C8  `includeNulls` on a controlType where it is off-schema.
 #   N1  an element or column whose `name` is empty/whitespace-only — breaks
 #       parity header matching and blank-renders axes (title hiding belongs on
@@ -191,6 +192,13 @@ def lint(spec)
           # C7: a range-slider without track bounds silently filters every row out.
           if ct == 'range-slider' && (el['low'].nil? || el['high'].nil?)
             errs << "C7 control '#{name}': controlType \"range-slider\" needs flat `low`/`high` track bounds — bare emits a 0..0 slider that filters all rows out."
+          end
+          # C7: an unbounded number-range (both min AND max null/absent) 400s the
+          # spec — the builder null-fills mode:between bounds instead of omitting
+          # them (field-caught: an opaque union-type 400 mislabeled "modal"). Set
+          # flat min/max, or drop the control if the range is genuinely open.
+          if ct == 'number-range' && el['min'].nil? && el['max'].nil?
+            errs << "C7 control '#{name}': controlType \"number-range\" has neither `min` nor `max` — an unbounded number-range 400s (null-filled between-bounds). Set flat min/max, or drop the control."
           end
           # C8: includeNulls only valid on a specific subset.
           if el.key?('includeNulls') && !INCLUDE_NULLS_OK.include?(ct)

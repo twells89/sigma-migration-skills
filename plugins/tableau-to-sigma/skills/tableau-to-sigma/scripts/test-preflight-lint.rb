@@ -212,6 +212,13 @@ rs['controlType'] = 'range-slider'; rs.delete('selectionMode'); rs.delete('value
 check(rule(lint(s), 'C7').any? { |e| e.include?('low`/`high') }, 'C7: range-slider without low/high → violation', fails)
 rs['low'] = 0; rs['high'] = 100
 check(rule(lint(s), 'C7').empty?, 'C7: range-slider with low/high → clean', fails)
+s = valid_spec
+nr = s['pages'][0]['elements'][4]
+nr['controlType'] = 'number-range'; nr.delete('selectionMode'); nr.delete('value')
+check(rule(lint(s), 'C7').any? { |e| e.include?('number-range') },
+      'C7: number-range with neither min nor max → violation', fails)
+nr['min'] = 0; nr['max'] = 100
+check(rule(lint(s), 'C7').empty?, 'C7: number-range with min/max → clean', fails)
 
 # ---- C8: includeNulls placement --------------------------------------------
 s = valid_spec
