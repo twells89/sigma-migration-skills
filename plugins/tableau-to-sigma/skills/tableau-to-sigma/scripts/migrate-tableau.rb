@@ -3232,6 +3232,13 @@ rescue WorkbookBuildError => e
   names = failed.empty? ? 'one or more fields' : failed.join(', ')
   n = failed.empty? ? 'some' : failed.size.to_s
   puts
+  puts '── EXIT 4 — WORKBOOK HANDOFF (this is NOT the finish line, and NOT a handoff to a human).'
+  puts '   This STOP is an instruction to YOU, the agent: the data model is posted; now build the'
+  puts '   workbook and re-enter the gated spine. A data model without its workbook is an INCOMPLETE'
+  puts '   migration — do NOT report success, do NOT ask the user to build the workbook, and do NOT'
+  puts '   substitute a "lighter"/"demo"/reduced-scope workbook. Keep going until verify-complete.rb'
+  puts '   exits 0. Pick ONE of the two paths below and continue in this same run:'
+  puts
   puts "── Mechanical path: data model built OK (dataModelId=#{dm_id}). The WORKBOOK " \
        "layer hit #{n} field(s) the mechanical path can't translate (#{names}). " \
        'Two ways forward:'
@@ -3251,6 +3258,8 @@ rescue WorkbookBuildError => e
   puts '          straight to the workbook layer — see --help.)'
   puts '   The data model is posted and ready to attach either way. A conversion is NOT done'
   puts '   until scripts/assert-phase6-ran.rb exits 0 — that hard gate applies on both paths.'
+  puts '   Reminder: continue now. Shipping only the data model, or a scaled-down "demo" workbook,'
+  puts '   does NOT satisfy this migration — the next action is yours.'
   # Authorize the hand-authoring re-entry: this STOP is the ONLY sanctioned way to
   # reach --wb-spec/--dm-spec. The token lets the re-run's manual-spec gate pass
   # (a COLD hand-author with no prior orchestrator run is refused).
