@@ -125,15 +125,20 @@ checkpoint, never silently ported or dropped).
 
 ## Prerequisites
 
-- **Cognos Analytics 11.1+** REST access (on-prem or CA on Cloud). Base path is
-  `<host>/bi/v1` (NOT `/api/v1`). Auth = a logged-in session: a **session cookie** +
-  the **`X-XSRF-Token`** header. On IBMid-SSO trials you can't log in headlessly —
-  grab a live session from the browser (DevTools → Network → any `coreBundle.js`-initiated
-  `bi/v1/...` XHR → **Copy as cURL**) and capture it with `scripts/get-cognos-session.sh`
-  (paste the **whole** Cookie header — incl. the Akamai `_abck`/`bm_sz`/`bm_sv`/`ak_bmsc`
-  cookies, or the WAF returns 441). CAoC sessions are short-lived: an `HTTP 441` means
-  re-login + re-copy. The **durable** path for a real engagement is a CA API key/service
-  credential where the tenant allows it — prefer it over session replay.
+- **Cognos Analytics 11.1+** REST access (on-prem or CA on Cloud). Two surfaces exist;
+  which reaches content is **instance-dependent** — try the durable one first:
+  1. **`/api/v1` + CA API key (preferred, headless).** `eval "$(scripts/cognos-apikey-session.sh)"`
+     with `COG_INSTANCE` + `COG_APIKEY` — it does `PUT /api/v1/session` with `CAMAPILoginKey`,
+     grabs the XSRF cookie, and gives you `cog_get`. **Verified 2026 on a paid CAoC instance:
+     `/api/v1` does full content read + write while `/bi/v1` returned 441.** No browser round-trip.
+  2. **`/bi/v1` session replay (fallback).** Auth = a **session cookie** + the **`X-XSRF-Token`**
+     header from a live browser session (DevTools → Network → any `bi/v1/...` XHR → **Copy as cURL**),
+     captured with `scripts/get-cognos-session.sh` (paste the **whole** Cookie header incl. the Akamai
+     `_abck`/`bm_sz`/`bm_sv`/`ak_bmsc` cookies). Needed on Akamai-walled IBMid-SSO trials where
+     `/api/v1` content calls 441/403. CAoC sessions are short-lived — `HTTP 441` means re-login + re-copy.
+
+  Probe `/api/v1` with the API key first; fall back to `/bi/v1` only if content calls 441/403.
+  (Note the paths differ — see `refs/design-notes.md → API access`.)
 - **Sigma** API token (via the `sigma-api` skill) to POST the data model + workbook.
 - **Node** for the converter (`converter/`: `npm install` once).
 
@@ -171,11 +176,11 @@ And keep pushing for the **durable path**: a CA **API key / service credential**
 (where the tenant allows it) removes the session-death problem entirely — batch
 windows are the workaround for session-replay auth, not a substitute for asking.
 
-- Samples folder, modules, and reports are discovered by walking `GET /objects/{id}/items`.
-- **Data Module spec**: `GET /bi/v1/metadata/modules/{id}` (NOT `/modules/{id}`, which is empty).
-- **Report spec**: `GET /bi/v1/objects/{id}?fields=specification` → the `specification` string is the report XML.
-- **Dashboard spec**: `GET /bi/v1/objects/{id}?fields=specification` → the `specification` string is **exploration JSON** (not XML). This is a different artifact the converter does NOT handle — hand-author per **`refs/dashboard-migration.md`**. ⚠️ A Cognos dashboard's **tabs (`spec.layout.items[]`) must become separate Sigma pages** — never flatten all widgets onto one page.
-- **Akamai/CAF wall**: plain `curl` of `/bi/v1` can return **441/403** (TLS fingerprinting) even with a good cookie/API key. Use the headed-Chrome Puppeteer bridge in `refs/dashboard-migration.md` for dashboard pulls + the dataset-query data path.
+- Folders, modules, and reports are discovered by walking folder items — `/api/v1/content/{id}/items` (API-key) or `/bi/v1/objects/{id}/items` (session-replay).
+- **Data Module spec**: `/api/v1/modules/{id}/metadata` (API-key) or `/bi/v1/metadata/modules/{id}` (session-replay; NOT the plain `/bi/v1/modules/{id}`, which is empty).
+- **Report spec**: `GET .../content|objects/{id}?fields=specification` → the `specification` string is the report XML.
+- **Dashboard spec**: `GET .../content|objects/{id}?fields=specification` → the `specification` string is **exploration JSON** (not XML). The converter does NOT handle it — hand-author per **`refs/dashboard-migration.md`**. ⚠️ A Cognos dashboard's **tabs (`spec.layout.items[]`) must become separate Sigma pages** — never flatten all widgets onto one page. (Note: on `/api/v1` a dashboard is content `type:"exploration"`; its `specification` is a **stringified** JSON on read AND write.)
+- **Akamai/CAF wall is `/bi/v1`-specific and tenant-dependent**: plain `curl` of `/bi/v1` can return **441/403** (TLS fingerprinting) on some tenants — but the **`/api/v1` API-key surface often bypasses it** (verified: a paid instance where `/bi/v1`=441 but `/api/v1` read+write worked). Try `/api/v1` first; if a tenant walls *both*, use the headed-Chrome Puppeteer bridge in `refs/dashboard-migration.md` for dashboard pulls + the dataset-query data path.
 - Prefer **warehouse-backed** modules (built on a Data server connection) over file-backed
   ones — they carry complete schemas. File-backed modules (uploaded `.xlsx`) are a
   *land-in-warehouse-first* case (see Verify/parity).

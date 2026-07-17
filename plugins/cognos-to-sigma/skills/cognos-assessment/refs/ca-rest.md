@@ -1,9 +1,11 @@
 # CA REST endpoints used by cognos-assessment
 
-All read-only. Base path is **`/bi/v1`** (NOT `/api/v1`). Auth = a logged-in
-session **cookie** + the **`X-XSRF-Token`** header (grab both from DevTools →
-Network → any `bi/v1/...` request → "Copy as cURL"). Sessions are short-lived —
-re-grab when a request 401/403s.
+All read-only. Base path is **instance-dependent**: prefer the durable **`/api/v1`**
+API-key surface (headless — `PUT /api/v1/session` with `CAMAPILoginKey`, then `X-XSRF-Token`
++ cookie jar; folder = `GET /api/v1/content/{id}/items`, module = `GET /api/v1/modules/{id}/metadata`),
+and fall back to the **`/bi/v1`** surface below (session **cookie** + **`X-XSRF-Token`** header,
+grabbed from DevTools → Network → any `bi/v1/...` request → "Copy as cURL") only if `/api/v1`
+content calls 441/403 (Akamai-walled tenant). Sessions are short-lived — re-grab when a request 401/403/441s.
 
 | Need | Endpoint | Notes |
 |---|---|---|

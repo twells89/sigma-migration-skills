@@ -29,14 +29,42 @@ Schema reference: [Cognos SDK v10.2.1 Report Specification Schema Reference v10.
 
 ## API access
 
-CA 11.1+ exposes REST at **`/bi/v1/...`** (NOT `/api/v1` — that base path only serves
-`PUT /api/v1/session` for login; content sub-resources 403 on it). Same surface
-on-prem and Cognos Analytics on Cloud (SaaS).
+CA 11.1+ exposes **two** REST surfaces; which one works for content is
+**instance-dependent** (WAF config), so try the durable one first and fall back:
 
-- Auth: session cookie + `X-XSRF-Token` (CAM credentials / API key via `PUT /api/v1/session`).
-- Discovery: `GET /bi/v1/objects/{id}/items?fields=defaultName,type,id`.
-- Report spec download: `GET /bi/v1/objects/{id}?fields=specification` — returns the report-spec XML as a string property.
-- Data module: `GET /bi/v1/metadata/modules/{id}` — returns the data module JSON (the plain `/modules/{id}` returns EMPTY).
+1. **`/api/v1/...`** — the durable, API-key surface. Authenticate headlessly with a
+   CA API login key: `PUT /api/v1/session` body `{"parameters":[{"name":"CAMAPILoginKey","value":"<key>"}]}`,
+   then send the `XSRF-TOKEN` cookie value as the `X-XSRF-Token` header + the cookie jar.
+   **Verified 2026 on a paid CAoC instance: `/api/v1` does full content read AND write**
+   (list datasources, create a Snowflake data server, register+import a schema, `POST /modules`,
+   `POST /content/{folder}/items` for an exploration) with plain curl — while `/bi/v1` returned
+   HTTP 441 from the Akamai WAF on that same tenant. Use `scripts/cognos-apikey-session.sh`.
+2. **`/bi/v1/...`** — the SPA "glass" surface. Session cookie + `X-XSRF-Token`, typically from a
+   replayed browser session (`scripts/get-cognos-session.sh`). On IBMid-SSO trials this is the
+   only surface that reaches content (Akamai TLS-fingerprints plain curl on some tenants).
+
+> The old assumption "`/api/v1` is login-only; content 403s there" held on an Akamai-walled
+> **trial**; it is NOT universal. Probe `/api/v1` with the API key first — it's the cleaner,
+> headless, durable path — and fall back to `/bi/v1` session-replay only if content calls 441/403.
+
+Endpoint mapping (the two surfaces name paths differently):
+
+| Need | `/api/v1` (API key) | `/bi/v1` (session replay) |
+|---|---|---|
+| List a folder | `GET /api/v1/content/{id}/items` | `GET /bi/v1/objects/{id}/items?fields=defaultName,type,id` |
+| Report-spec XML | `GET /api/v1/content/{id}?fields=specification` | `GET /bi/v1/objects/{id}?fields=specification` |
+| Data module JSON | `GET /api/v1/modules/{id}/metadata` | `GET /bi/v1/metadata/modules/{id}` (plain `/modules/{id}` = EMPTY) |
+| OpenAPI (this build) | `GET /api/api-docs/swagger.json` | — |
+
+## Sigma-target build gotchas (verified 2026-07 on a live Cognos→Sigma run)
+
+Building the migrated DM + workbook via the Sigma REST API surfaced three non-obvious rules — all cost a failed POST/round-trip if missed:
+
+1. **DM source formulas use the ACTUAL warehouse column names, not the Cognos labels.** The converter emits `[V_GRADES/Numeric Grade]` (prettified from the Cognos label); Snowflake exposes `NUMERIC_GRADE`, so that formula posts 200 but the column resolves to `type:"error"`. Reference the real column and set a pretty `name`: `{ "name": "Numeric Grade", "formula": "[V_GRADES/NUMERIC_GRADE]" }`. Always `validate_dm_columns` after POST (the `/columns` readback can be empty = vacuously "clean").
+2. **Workbook formulas on a DM element must be ELEMENT-QUALIFIED.** Bare `Avg([Numeric Grade])` in a workbook viz sourced from a data-model element fails with `Unknown name`. Qualify with the element name: `Avg([Grades/Numeric Grade])`. (`source.elementId` accepts the element id OR name.)
+3. **New warehouse tables/views need a connection sync before a DM can bind them.** A DM POST referencing a just-created view fails `Source not found` even with grants — Sigma's introspection is cached. Trigger it: `POST /v2/connections/{id}/sync` body `{"path":["<DB>","<SCHEMA>"]}` (path is `[db, schema]` or `[db, schema, table]`), then retry.
+
+Also: `POST /v2/{dataModels,workbooks}/spec` returns a **plain-text** body (`success: true` / `workbookId: …`), not JSON — parse accordingly.
 
 Working REST wrappers (use as reference, don't depend on them):
 - Python: [ykud/cognosanalyticspy](https://github.com/ykud/cognosanalyticspy) — real auth + content-tree traversal

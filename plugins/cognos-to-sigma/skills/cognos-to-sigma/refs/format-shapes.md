@@ -11,7 +11,11 @@ What the converter actually parses. Verified 2026 against IBM sample content on 
 | **Report-spec XML** | `GET /bi/v1/objects/{id}?fields=specification` | `data[0].specification` is the report XML string (schema 17.x) |
 | Data server connections | Manage → Data server connections | relational sources (e.g. GOSALES); warehouse-backed modules build on these |
 
-Auth: session cookie + `X-XSRF-Token`. Base path is **`/bi/v1`** (not `/api/v1`).
+Auth: session cookie + `X-XSRF-Token`. Base path is **instance-dependent** — prefer the
+durable **`/api/v1`** API-key surface (`scripts/cognos-apikey-session.sh`; module spec at
+`/api/v1/modules/{id}/metadata`, folder at `/api/v1/content/{id}/items`), and fall back to the
+**`/bi/v1`** session-replay surface above only if `/api/v1` content calls 441/403 (Akamai-walled
+tenant). See `refs/design-notes.md → API access` for the full endpoint mapping.
 
 ## Data Module JSON (`metadata/modules/{id}`)
 

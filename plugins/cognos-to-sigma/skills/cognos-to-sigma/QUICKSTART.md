@@ -42,11 +42,12 @@ connection reaches the same warehouse the Cognos content reports on.
 Duration: 2
 
 - **A coding agent that runs skills** — Claude Code (CLI or desktop), Cursor, Cortex Code, etc.
-- **Cognos Analytics 11.1+ REST access** (on-prem or CA on Cloud). Base path is `<host>/bi/v1`
-  (**not** `/api/v1`). Auth = a logged-in session: a **session cookie** + the **`X-XSRF-Token`**
-  header. On IBMid-SSO trials you can't log in headlessly — grab a live browser session
-  (DevTools → Network → any `…/bi/v1/…` request → **Copy as cURL**) and feed it to
-  `scripts/get-cognos-session.sh`.
+- **Cognos Analytics 11.1+ REST access** (on-prem or CA on Cloud). Two surfaces; try the durable
+  one first: **(1) `/api/v1` + a CA API key (preferred, headless)** — `scripts/cognos-apikey-session.sh`
+  (`PUT /api/v1/session` with `CAMAPILoginKey`; verified doing full content read+write on a paid
+  instance); **(2) `/bi/v1` session replay (fallback)** — a **session cookie** + **`X-XSRF-Token`**
+  from a live browser session (DevTools → Network → any `…/bi/v1/…` request → **Copy as cURL**) fed to
+  `scripts/get-cognos-session.sh`, for Akamai-walled IBMid-SSO trials where `/api/v1` content 441/403s.
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Cognos content reports on (for true parity).
 - The **Cognos → Sigma converter** — ships **inside the skill** as a prebuilt local bundle

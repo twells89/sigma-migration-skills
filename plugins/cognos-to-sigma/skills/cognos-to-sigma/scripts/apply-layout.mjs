@@ -27,7 +27,7 @@
 import { api, parseArgs } from './lib/sigma-rest.mjs';
 import { pythonArgv } from './lib/py_resolve.mjs';
 import { spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,7 +106,9 @@ function pageLayout(page, fallbackTitle) {
       // KPI panel: the whole run in ONE band container, rows of up to 3 TALL tiles
       let j = i; while (j < content.length && content[j].kind === 'kpi-chart') j++;
       const run = content.slice(i, j);
-      const perRow = Math.min(run.length, 3);
+      // exec headers commonly have 4 KPIs — keep them on ONE row (span 6 each)
+      // instead of 3+1 (a lonely wrapped tile reads as a layout bug); else cap at 3.
+      const perRow = run.length === 4 ? 4 : Math.min(run.length, 3);
       const span = Math.floor(24 / perRow);
       const lines = run.map((k, n) => {
         const col0 = 1 + (n % perRow) * span;
