@@ -162,8 +162,22 @@ check(out.include?('all names were null'), 'emits the null-name WARN (does not s
 out2, code2 = validate_dm_ctx(wb, { 'dataModelId' => 'dm-x', 'pages' => [{ 'id' => 'dp', 'elements' => [] }] })
 check(code2 != 0 && out2.include?('loaded 0 element names'), 'empty dm-context (0 elements) still aborts loudly', fails)
 
+puts 'Part H — Tableau date/text function leaks are HARD errors (non-dismissible), not WARNs'
+# Field-caught (2 runs): CurrentDate()/STR() fell to the dismissible WARN tier;
+# one run waved off the CurrentDate warning as a false "whitelist gap", shipping
+# 52 type=error columns. They must be tableau_leaks (exit 1) naming the fix.
+out, code = validate({ 'pages' => [{ 'elements' => [el('t1', 'T', formula: 'STR([Val])') ] }] })
+check(code == 1, "STR( → hard error, exit 1 (got #{code})", fails)
+check(out.include?('STR(x) → Sigma Text(x)'), 'STR error names the Sigma Text() fix', fails)
+out, code = validate({ 'pages' => [{ 'elements' => [el('t1', 'T', formula: 'CurrentDate()') ] }] })
+check(code == 1, "CurrentDate( → hard error, exit 1 (got #{code})", fails)
+check(out.include?('Today()'), 'CurrentDate error names the Sigma Today() fix', fails)
+# negative: Substring (contains "str") and a clean Today() must NOT be flagged
+out, _ = validate({ 'pages' => [{ 'elements' => [el('t1', 'T', formula: 'Substring([Val], 1, 2)') ] }] })
+check(!out.include?('→ Sigma Text'), 'Substring (contains "str") is NOT flagged as an STR leak', fails)
+
 if fails.empty?
-  puts 'OK — validate-spec ID-uniqueness + function-tier + envelope + null-name guards all pass'
+  puts 'OK — validate-spec ID-uniqueness + function-tier + tableau-leak + envelope + null-name guards all pass'
   exit 0
 else
   warn "FAIL — #{fails.size} check(s) failed:"

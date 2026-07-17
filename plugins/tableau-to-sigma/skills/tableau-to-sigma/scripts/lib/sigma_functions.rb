@@ -137,7 +137,15 @@ module SigmaFunctions
     /\bIsIn\s*\(/        => 'IsIn() is not a Sigma function — use Sigma In(value, list...) OR an or chain',
     /\bToText\s*\(/      => 'ToText() is not a Sigma function — use Sigma Text(...) instead',
     /\bToString\s*\(/    => 'ToString() is not a Sigma function — use Sigma Text(...) instead',
-    /\bToNumber\s*\(/    => 'ToNumber() is not a Sigma function — use Sigma Number(...) instead'
+    /\bToNumber\s*\(/    => 'ToNumber() is not a Sigma function — use Sigma Number(...) instead',
+    # Field-caught (2 live runs): agent-authored/converter-missed date+text
+    # function names that COMPILE-then-error on readback (type=error) and were
+    # only WARNed before (dismissible) — one run waved off the CurrentDate warning
+    # as a false "whitelist gap", cascading into 52 type=error columns. Promote
+    # to hard leaks with the exact Sigma equivalent (also auto-rewritten by
+    # FormulaNormalize::TABLEAU_RENAMES on the mechanical path).
+    /\bSTR\s*\(/i          => 'STR(x) → Sigma Text(x)',
+    /\bCURRENT_?DATE\s*\(/i => 'CurrentDate()/CURRENT_DATE() → Sigma Today() (or Now() for a timestamp)'
   }.freeze
 
   def self.tableau_leaks(formula)

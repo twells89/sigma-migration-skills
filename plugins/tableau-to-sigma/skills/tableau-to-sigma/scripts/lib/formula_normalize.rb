@@ -66,7 +66,25 @@ module FormulaNormalize
     | [A-Za-z_][A-Za-z0-9_]*(?=\s*\()     # candidate function name
   /x
 
+  # Tableau→Sigma NAME-ONLY function renames (deterministic, same signature):
+  # auto-rewrite the leaked spelling to its Sigma equivalent so the mechanical
+  # path never ships it as a type=error column. Only unambiguous 1:1 renames go
+  # here (STR→Text, CurrentDate→Today); anything needing arg reshaping stays a
+  # hard leak in sigma_functions.rb TABLEAU_LEAKS (validate-spec errors it).
+  # downcased Tableau spelling => canonical Sigma spelling.
+  TABLEAU_RENAMES = {
+    'str' => 'Text',
+    'currentdate' => 'Today',
+    'current_date' => 'Today',
+  }.freeze
+
   module_function
+
+  # Canonical Sigma spelling for a Tableau name-only leak (STR→Text,
+  # CurrentDate→Today); nil when +name+ isn't such a rename.
+  def tableau_rename_of(name)
+    TABLEAU_RENAMES[name.to_s.downcase]
+  end
 
   # True when +name+ exactly matches a known Sigma function spelling.
   def known_exact?(name)
@@ -92,6 +110,9 @@ module FormulaNormalize
       elsif (canon = case_variant_of(tok))
         rewrites << { from: tok, to: canon, path: path } if rewrites
         canon
+      elsif (sig = tableau_rename_of(tok))
+        rewrites << { from: tok, to: sig, path: path } if rewrites
+        sig # Tableau name-only leak (STR/CurrentDate) → Sigma equivalent
       else
         tok # exact known spelling, or not a known function — leave alone
       end

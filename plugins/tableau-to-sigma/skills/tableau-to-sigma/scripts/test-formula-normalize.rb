@@ -100,6 +100,19 @@ check(rewrites.map { |r| r[:from] }.sort == %w[DATETRUNC left round sum].sort,
 check(spec['pages'][0]['elements'][0]['columns'][2]['formula'] == 'Sum([Fact/Sales])',
       'already-clean formula byte-identical after normalize', fails)
 
+# Tableau name-only leaks (STR/CurrentDate) auto-rewrite to the Sigma spelling.
+tl = { 'pages' => [{ 'elements' => [{ 'columns' => [
+  { 'id' => 'c1', 'formula' => 'STR([Id]) & CurrentDate()' },
+  { 'id' => 'c2', 'formula' => 'CURRENT_DATE()' },
+  { 'id' => 'c3', 'formula' => 'Substring([Name], 1, 2)' } # contains "str" — must NOT change
+] }] }] }
+_, tlr = FormulaNormalize.normalize_spec!(tl)
+tf = ->(i) { tl['pages'][0]['elements'][0]['columns'][i]['formula'] }
+check(tf.call(0) == 'Text([Id]) & Today()', "STR→Text and CurrentDate→Today rewritten (got #{tf.call(0)})", fails)
+check(tf.call(1) == 'Today()', 'CURRENT_DATE→Today rewritten', fails)
+check(tf.call(2) == 'Substring([Name], 1, 2)', 'Substring (contains "str") left byte-identical', fails)
+check(tlr.any? { |r| r[:from] == 'STR' && r[:to] == 'Text' }, 'STR→Text recorded as a rewrite', fails)
+
 # idempotence: a second pass is a no-op
 _, second = FormulaNormalize.normalize_spec!(Marshal.load(Marshal.dump(spec)))
 check(second.empty?, 'normalize is idempotent (second pass rewrites nothing)', fails)
