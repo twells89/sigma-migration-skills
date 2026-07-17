@@ -119,6 +119,28 @@ new schema.
 `Sum(...)`/`Avg(...)`. Emit one `pages[]` entry per Cognos tab, and **one `<Page id>` block
 per page** inside the single top-level `layout` XML string.
 
+### Labels + formats fidelity (carry them — don't leave Sigma to guess)
+
+A migrated dashboard must reproduce the source's *display*, not just its numbers — same as
+tableau/powerbi. Two fidelity inputs, from two different places:
+
+- **Display labels** — the exploration widget dataItems carry `itemLabel` ("Numeric Grade",
+  "Graduation Rate", "School"); the report/module carry `label`. Use them as each Sigma
+  column's/tile's display `name`. Never ship raw warehouse ids (`NUMERIC_GRADE`) — they're
+  ugly *and* trip the layout lint's raw-id gate.
+- **Number formats** — ⚠️ the **exploration JSON does NOT store formats** (Cognos applies a
+  default numeric display it never serializes into the dashboard spec). Formats live on the
+  **Data Module** query items (`queryItem.format` = Cognos `numberFormat`/`percentFormat`/
+  `currencyFormat`). So pull each measure's format **from the module**, not the dashboard, and
+  emit the matching Sigma column `format` (`{ kind: number, formatString: … }`) — reuse the
+  converter's mapping vocabulary (`cli.mjs` `formatFromCognos` / `refs/format-shapes.md`):
+  percent → `,.N%`, currency → `$,.Nf`, scaled → `…s`, plain → `,.Nf`.
+- **Percent SCALE gotcha (verified live):** check the actual value range before picking a
+  percent format. A rate stored as **percentage-points** (e.g. Graduation Rate = `52.24`
+  meaning 52.24 %, range ~50–85) must use `{ formatString: ",.2f", suffix: "%" }` (or divide
+  by 100 first, then `,.2%`) — NOT `,.2%` alone, which multiplies by 100 and shows `5224%`.
+  Only a true 0–1 fraction takes a bare `,.2%`.
+
 ### Workbook gotchas hit on this build (all live-verified 2026-06-26)
 
 - **`text` element** uses `body:` (Markdown). No `name`, no `content`.
