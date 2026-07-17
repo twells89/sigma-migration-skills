@@ -1582,6 +1582,24 @@ if mechanical
   # FALLBACK: extract-custom-sql.rb (Metadata GraphQL) for Custom SQL. Then
   # hydrate-custom-sql.rb splices the real relation (table or SQL) so the
   # converter's normal path builds the model. No-ops for non-sqlproxy workbooks.
+  # ── #7a: propagate the REAL db/schema from the .twb ─────────────────────────
+  # A live-warehouse workbook whose db.schema the operator did NOT pin defaults to
+  # the CSA.TJ placeholder, which 404s on catalog sync (field-caught on 2 live
+  # runs — the real db.schema was only recoverable by hand-reading the .twb).
+  # Derive it from the .twb's first live-warehouse datasource so all four
+  # consumers (land/hydrate/converter/db=) inherit the real path. Embedded
+  # extracts (which legitimately land at CSA.TJ) and sqlproxy stubs are excluded
+  # inside derive_db_schema_from_twb; --db/--schema still win.
+  if have_twb && opts[:db].nil? && opts[:schema].nil? && !HydrateCustomSql.twb_has_sqlproxy?(twb)
+    d_db, d_sch = MechanicalSpecs.derive_db_schema_from_twb(twb)
+    if d_db && d_sch
+      opts[:db] = d_db
+      opts[:schema] = d_sch
+      line "db/schema: derived #{d_db}.#{d_sch} from the .twb's live-warehouse datasource " \
+           '(instead of the CSA.TJ placeholder) — pass --db/--schema to override'
+    end
+  end
+
   # ── Embedded-extract (file-based) source routing ────────────────────────────
   # A workbook whose datasources are ALL embedded file federations (excel-direct /
   # textscan / hyper / ogrdirect / csv / msexcel) has no live warehouse for Sigma

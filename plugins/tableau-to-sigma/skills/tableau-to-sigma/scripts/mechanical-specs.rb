@@ -87,6 +87,59 @@ module MechanicalSpecs
     formula.to_s =~ /\[[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]/i
   end
 
+  # #7a — derive the REAL [db, schema] from a .twb's first LIVE-warehouse
+  # datasource table relation, so the DM/converter/land steps stop defaulting to
+  # the CSA.TJ placeholder (which 404s on catalog sync — field-caught on 2 live
+  # runs; the real db.schema was only recoverable by hand-reading the .twb).
+  # Returns [db, schema] or [nil, nil]. NEVER derives for embedded-file extracts
+  # (those legitimately land at CSA.TJ) or published/sqlproxy stubs. Self-
+  # contained REXML parse — does not require the un-guarded scan-workbook-gaps.rb.
+  EMBEDDED_CONN_CLASSES = %w[excel-direct textscan hyper ogrdirect csv msexcel].freeze
+  NONDATA_CONN_CLASSES  = %w[mapbox tableau-map wms wms-server].freeze
+  def derive_db_schema_from_twb(twb_path)
+    return [nil, nil] unless twb_path && File.exist?(twb_path)
+    require 'rexml/document'
+    xml = REXML::Document.new(File.read(twb_path, encoding: 'UTF-8'))
+    xml.elements.each('/workbook/datasources/datasource') do |ds|
+      name = ds.attributes['name'].to_s
+      next if name.empty? || name.start_with?('Parameters')
+      # the real (non-wrapper) connection for this datasource
+      conn = nil
+      ds.elements.each('.//connection') do |c|
+        cls = c.attributes['class'].to_s.downcase
+        next if cls.empty? || cls == 'federated'
+        conn ||= c
+      end
+      next unless conn
+      cls = conn.attributes['class'].to_s.downcase
+      # live warehouse only — skip embedded extracts, basemaps, and published stubs
+      next if EMBEDDED_CONN_CLASSES.include?(cls) || NONDATA_CONN_CLASSES.include?(cls) || cls == 'sqlproxy'
+      # first physical table relation (skip the [sqlproxy] published-source stub)
+      rel = nil
+      ds.elements.each('.//relation') do |r|
+        next unless r.attributes['type'].to_s == 'table' && r.attributes['table']
+        next if r.attributes['table'].to_s == '[sqlproxy]'
+        rel ||= r
+      end
+      next unless rel
+      parts = rel.attributes['table'].to_s.scan(/\[([^\]]+)\]/).flatten
+      parts = [rel.attributes['table'].to_s.gsub(/[\[\]]/, '')] if parts.empty?
+      conn_db  = conn.attributes['dbname']
+      conn_sch = conn.attributes['schema']
+      db, sch = case parts.length
+                when 3 then [parts[0], parts[1]]        # [DB].[SCHEMA].[TABLE]
+                when 2 then [conn_db, parts[0]]         # [SCHEMA].[TABLE] + conn dbname
+                else        [conn_db, conn_sch]         # [TABLE] + conn dbname/schema
+                end
+      db = nil if db.to_s.strip.empty?
+      sch = nil if sch.to_s.strip.empty?
+      return [db, sch] if db && sch
+    end
+    [nil, nil]
+  rescue StandardError
+    [nil, nil]
+  end
+
   # Map each Tableau internal field GUID -> its master display name. The
   # converter encodes the raw warehouse column name (a UUID-shaped Tableau field
   # id) as the suffix of the column's sigma inode id ("inode-<hash>/<RAW_UUID>"),
