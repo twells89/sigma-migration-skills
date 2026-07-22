@@ -60,6 +60,7 @@ TEMPORAL = re.compile(r"DATE|MONTH|YEAR|QUARTER|WEEK|DAY", re.I)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import coverage_catalog as _cc  # noqa: E402
 import trellis_emit as _te      # noqa: E402  shared native-trellis emitter (supported-kind gate + fallbacks)
+import metric_binding as _mb    # noqa: E402  shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 
 # Native-trellis round-trip sidecar records (element_id/kind/name/axis/columnId).
 # Populated by emit_trellis; written to native-trellis-emitted.json ONLY when a
@@ -461,8 +462,10 @@ def emit_trellis(el, c, resolve, warnings):
     warnings.append(f"native trellis: '{el.get('name')}' -> ONE {el['kind']} element with "
                     f"trellis.{axis_key} (orientation={orientation}, facet column {facet_col['id']})")
 
-def build_element(c, resolve, warnings):
-    """One Qlik chart object -> one Sigma element (or None + warning)."""
+def build_element(c, resolve, warnings, metrics=None):
+    """One Qlik chart object -> one Sigma element (or None + warning). `metrics`
+    (DM metrics referenceable on the master) lets a measure bind to a governed
+    [Metrics/<name>] reference; None/empty keeps every measure inline."""
     title = c.get("title") or c.get("vizType")
     dims_raw = [(d[0] if isinstance(d, list) else d) for d in (c.get("dimensions") or [])]
     dim_disp = [resolve(d) for d in dims_raw]
@@ -496,6 +499,9 @@ def build_element(c, resolve, warnings):
         if f is None:
             warnings.append(f"'{title}': measure not translated: {mexpr}")
             continue
+        # Prefer a governed [Metrics/<name>] ref when this inline aggregate matches a
+        # DM metric by formula equivalence; safe no-op (inline) otherwise.
+        f = _mb.metric_ref_or_inline(f, MASTER, metrics)
         mname = mlabels[i] or (title if kind == "kpi-chart" else f"Measure {i+1}")
         cid = nid("y")
         _mcol = {"id": cid, "formula": f, "name": mname}
@@ -767,6 +773,11 @@ def main():
     ap.add_argument("--denorm", required=True)
     ap.add_argument("--dm-id", required=True)
     ap.add_argument("--denorm-element-id", required=True)
+    ap.add_argument("--dm-spec", default=None,
+                    help="DM spec JSON (build-sigma-dm.py --spec-out). When present, a measure "
+                         "whose inline aggregate matches a metric on the denorm element binds to "
+                         "a governed [Metrics/<name>] reference instead of re-deriving it inline. "
+                         "Absent (or on the DM-reuse path) → inline, byte-identical to before.")
     ap.add_argument("--name", required=True)
     ap.add_argument("--folder")
     ap.add_argument("--dry-run", action="store_true")
@@ -813,6 +824,21 @@ def main():
     denorm_cols = [(c["name"], (re.search(r"\[Custom SQL/(.+)\]", c["formula"]) or [None, c["name"]])[1])
                    for c in denorm["columns"]]
     resolve = Resolver(denorm_cols)
+
+    # DM metrics referenceable on the master (it sources the denorm element): a
+    # measure whose translated inline aggregate matches one binds to [Metrics/<name>]
+    # (governed) instead of re-deriving it. No dm-spec / DM-reuse path → empty list
+    # → every measure stays inline (byte-identical). Resolution + formula-equivalence
+    # matching live in the shared binder (shared/lib/metric_binding.py).
+    metrics = []
+    if a.dm_spec and os.path.exists(a.dm_spec):
+        try:
+            _dm = json.load(open(a.dm_spec))
+            _by_id = {e.get("id"): e for pg in _dm.get("pages", []) for e in (pg.get("elements") or [])}
+            metrics = _mb.available_metrics(a.denorm_element_id, _by_id)
+        except (ValueError, OSError) as e:
+            warnings_dm_spec = f"--dm-spec unreadable ({e}); measures stay inline"
+            print(warnings_dm_spec, file=sys.stderr)
 
     master = {"id": MASTER_ID, "name": MASTER, "kind": "table",
               "source": {"dataModelId": a.dm_id, "elementId": a.denorm_element_id, "kind": "data-model"},
@@ -876,7 +902,7 @@ def main():
                 if c is None: continue
                 if c["vizType"] not in CHARTY and not (c.get("measures") or c.get("dimensions")):
                     warnings.append(f"skip '{cell['objectId']}' ({c['vizType']}): not a chart"); continue
-                el = build_element(c, resolve, warnings)
+                el = build_element(c, resolve, warnings, metrics)
                 if el is None: continue
                 emit_trellis(el, c, resolve, warnings)   # native trellis (no-op if no signal)
                 elems.append(el); placed.append((cell, el))
@@ -908,7 +934,7 @@ def main():
             c = trellis_base(c, charts, warnings)   # container -> its base child chart
             if c is None: continue
             if not (c.get("measures")): continue
-            el = build_element(c, resolve, warnings)
+            el = build_element(c, resolve, warnings, metrics)
             if el is None: continue
             emit_trellis(el, c, resolve, warnings)   # native trellis (no-op if no signal)
             elems.append(el)

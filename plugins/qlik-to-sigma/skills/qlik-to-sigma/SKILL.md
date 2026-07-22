@@ -282,6 +282,18 @@ The Qlik cell grid maps 1:1 onto the 24-col Sigma grid. Element shapes + the
 `source.dataModelId` requirement in `refs/sigma-build-gotchas.md`.
 POST `/v2/workbooks/spec`, then `scripts/vendor/put-layout.rb` applies the layout XML.
 
+**DM metric references (leverage the semantic layer, don't duplicate it).** A measure
+column prefers a governed **`[Metrics/<name>]`** reference over re-deriving the aggregation
+inline, when the measure's translated inline aggregate matches a metric hosted on the denorm
+element the master sources. Match is by FORMULA equivalence — strip the master prefix so
+`Sum([Master/Net Revenue])` equals a metric's `Sum([Net Revenue])` — so it's naming-independent
+and SAFE: ratios with no exact-metric match, measures in a different representation (e.g. the
+inline `CountDistinct(...)` vs a Qlik-form `Count(DISTINCT ...)` metric), and any non-match all
+fall back to inline. `migrate-qlik.rb` hands the freshly-built DM spec to the builder via
+`--dm-spec`; the shared binder (`scripts/lib/metric_binding.py`, resolving own + inherited
+metrics through the `source.elementId` chain) does the matching. No `--dm-spec` / the DM-reuse
+path → inline, byte-identical to before. Verified: `tests/test_metric_reference.py`.
+
 **Filterpanes/listboxes → controls (NOT skipped).** Each filterpane child
 listbox (discovered via `qChildList` + per-listbox layout) and standalone
 listbox becomes a Sigma **list control** — or a **date-range control** when the

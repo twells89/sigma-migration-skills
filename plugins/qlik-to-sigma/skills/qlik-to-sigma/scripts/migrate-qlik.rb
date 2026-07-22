@@ -689,6 +689,11 @@ wb_cmd = [*PyResolve.argv, File.join(HERE, 'build-sigma-workbook.py'),
           '--out', File.join(WORK, 'wb-result.json'), '--spec-out', File.join(WORK, 'wb-spec.json'),
           '--layout-out', File.join(WORK, 'layout.xml'),
           '--element-map', File.join(WORK, 'element-map.json')]
+# Freshly-built DM only: hand the workbook builder the DM spec so measures whose
+# inline aggregate matches a metric on the denorm element bind to [Metrics/<name>]
+# (governed) instead of re-deriving inline. The reuse path writes no dm-spec.json,
+# so measures stay inline there (unchanged) until a live metric-fetch exists.
+wb_cmd += ['--dm-spec', File.join(WORK, 'dm-spec.json')] unless opts[:reuse_dm]
 wb_cmd += ['--folder', (opts[:folder] || dm_res['folderId'] || prep[:folder_id])] if opts[:folder] || dm_res['folderId'] || prep[:folder_id]
 wb_cmd << '--dry-run' if opts[:dry_run]
 run!(wb_cmd)
