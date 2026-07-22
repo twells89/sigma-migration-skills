@@ -49,6 +49,7 @@ import sys
 # the beads-sigma-kvza / -93ps contract: catalog = data, code = thin resolver.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import coverage_catalog as _cc  # noqa: E402
+import metric_binding as _mb    # noqa: E402  shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 _CAT_DIR = _cc.default_catalog_dir(__file__)
 AGG_CAT = _cc.load(_CAT_DIR, "aggregation")     # MSTR group function -> Sigma/SQL aggregate
 FMT_CAT = _cc.load(_CAT_DIR, "number-format")   # MSTR format category -> Sigma number format
@@ -1039,10 +1040,20 @@ def build_ae_page(b: Bundle, args, ch_name, report, cfg, dm_id, el_ref,
     }
 
 
-def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None):
+def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None, dm_elements=None):
     dm_id = args.data_model_id or "{{DATA_MODEL_ID}}"
     dm_element_ids = dm_element_ids or {}
     join_name = args.join_element_name
+
+    # DM metrics referenceable on the join element (which the workbook measures source):
+    # a measure whose expanded inline aggregate matches one binds to [Metrics/<name>]
+    # (governed) instead of re-deriving it. Own metrics live on the join element; the
+    # shared binder (scripts/lib/metric_binding.py) does the formula-equivalence match.
+    # No dm_elements → empty list → every measure stays inline (byte-identical).
+    _els = dm_elements or []
+    _by_id = {e.get("id"): e for e in _els}
+    _join_el = next((e for e in _els if e.get("name") == join_name), None)
+    metrics = _mb.available_metrics(_join_el["id"], _by_id) if _join_el else []
 
     def el_ref(name):
         if name == join_name and args.orders_element_id:
@@ -1134,11 +1145,14 @@ def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None):
                     mid = el["id"]
                     mname = b.metrics[mid]["information"]["name"]
                     cid = f"c-{slug(ch_name)}-{slug(mname)}"
+                    # Prefer a governed [Metrics/<name>] ref when this expanded inline
+                    # aggregate matches a DM metric by formula equivalence; safe no-op
+                    # (inline) otherwise (ratios/composites expand and won't match).
+                    _inline = b.metric_formula(mid, wb_ref, expand_metrics=True)
                     col = {
                         "id": cid,
                         "name": mname,
-                        "formula": b.metric_formula(mid, wb_ref,
-                                                    expand_metrics=True),
+                        "formula": _mb.metric_ref_or_inline(_inline, join_name, metrics),
                     }
                     fmt = b.metric_display_format(mid)
                     if fmt:
@@ -1267,8 +1281,11 @@ def main():
                       if args.dm_element_ids else None)
 
     dm = build_dm_spec(b, args, inode_map, ae_winners)
+    # thread the built DM's elements so workbook measures can bind to governed
+    # [Metrics/<name>] refs (own metrics live on the join element)
+    _dm_elements = [e for pg in dm.get("pages", []) for e in (pg.get("elements") or [])]
     wb, report_keys, layout_xml, control_scope, warnings = \
-        build_workbook_spec(b, args, ae_winners, dm_element_ids)
+        build_workbook_spec(b, args, ae_winners, dm_element_ids, _dm_elements)
     json.dump(dm, open(args.out_dm, "w"), indent=1)
     json.dump(wb, open(args.out_wb, "w"), indent=1)
     json.dump(report_keys, open("parity_keys.json", "w"), indent=1)

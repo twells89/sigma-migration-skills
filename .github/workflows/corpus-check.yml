@@ -301,6 +301,7 @@ jobs:
             plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/test_scout_ledger_integrity.py
             plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_metric_reference.py
             plugins/gooddata-to-sigma/skills/gooddata-to-sigma/tests/test_metric_reference.py
+            plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/tests/test_metric_reference.py
           )
           fail=0
           for t in "${tests[@]}"; do
