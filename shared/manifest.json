@@ -13,6 +13,25 @@
    ]
   },
   {
+   "canonical": "shared/lib/metric_binding.py",
+   "targets": [
+    "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/lib/metric_binding.py",
+    "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/metric_binding.py",
+    "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/lib/metric_binding.py",
+    "plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/lib/metric_binding.py",
+    "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/metric_binding.py",
+    "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/lib/metric_binding.py"
+   ]
+  },
+  {
+   "canonical": "shared/lib/metric_binding.rb",
+   "targets": [
+    "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/metric_binding.rb",
+    "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/lib/metric_binding.rb",
+    "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/lib/metric_binding.rb"
+   ]
+  },
+  {
    "canonical": "shared/lib/coverage_catalog.rb",
    "targets": [
     "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/lib/coverage_catalog.rb",

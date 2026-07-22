@@ -260,6 +260,7 @@ jobs:
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-scout-ledger-integrity.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-trellis-emit.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-qs-trellis.rb
+            shared/lib/test_metric_binding.rb
           )
           fail=0
           for t in "${tests[@]}"; do
@@ -291,6 +292,7 @@ jobs:
             plugins/looker-to-sigma/skills/looker-to-sigma/tests/test_look_migration.py
             plugins/looker-to-sigma/skills/looker-to-sigma/tests/test_grounding.py
             plugins/looker-to-sigma/skills/looker-to-sigma/tests/test_metric_reference.py
+            shared/lib/test_metric_binding.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_sigma_rest.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_tableau_rest.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_pick_destination.py
