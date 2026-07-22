@@ -24,6 +24,7 @@ import os, sys
 # code = thin resolver + cited compositional predicates.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import coverage_catalog as _cc  # noqa: E402
+import metric_binding as _mb    # noqa: E402  shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 _CAT_DIR = _cc.default_catalog_dir(__file__)
 VIZ_CAT  = _cc.load(_CAT_DIR, "viz-kind")        # TS chart_type   -> Sigma element kind
 FMT_CAT  = _cc.load(_CAT_DIR, "number-format")   # currency ISO    -> Unicode symbol
@@ -870,6 +871,13 @@ def _element_core(spec, resolver, master="OFV"):
     mtypes = spec.get("mtypes") or {}
     dref = lambda b: f"[{master}/{_bucket_friendly(b) or _resolve(resolver, b)['friendly']}]"
 
+    # DM metrics referenceable on the master (m-ofv sources the denorm "<X> View"
+    # element, which inherits the base fact's metrics via source.elementId). A plain
+    # or aggregate-formula measure whose inline aggregate matches one binds to a
+    # governed [Metrics/<name>] ref (shared binder); the synthesized timeshift/growth/
+    # window measures stay inline. Empty (or reuse-DM path) → inline, byte-identical.
+    _mets = resolver.get("__metrics__") or []
+
     def mref(b):
         mt = mtypes.get(b)
         if mt and mt.get("kind") == "timeshift":      # sales(this year) / sales(last year)
@@ -881,12 +889,12 @@ def _element_core(spec, resolver, master="OFV"):
         if mt and mt.get("kind") == "growth":         # period-over-period (flagged): show base agg
             return f"Sum([{master}/{_resolve(resolver, mt['base'])['friendly']}])"
         if mt and mt.get("kind") == "aggregate":      # answer/model aggregate formula
-            return ts_expr_to_sigma(mt["expr"], lambda n: dref(n))
+            return _mb.metric_ref_or_inline(ts_expr_to_sigma(mt["expr"], lambda n: dref(n)), master, _mets)
         if mt and mt.get("kind") == "window":         # FLAGGED: inner raw aggregate fallback
             inner = window_inner_ref(mt.get("expr")) or b
             return f"Sum([{master}/{_resolve(resolver, inner)['friendly']}])"
         agg = _resolve_agg((mt or {}).get("agg"), context=b)
-        return f"{agg}([{master}/{_resolve(resolver, b)['friendly']}])"
+        return _mb.metric_ref_or_inline(f"{agg}([{master}/{_resolve(resolver, b)['friendly']}])", master, _mets)
 
     def mfmt(b):
         # Format follows the underlying measure: a period-shifted/growth measure

@@ -38,6 +38,7 @@ import argparse, json, os, re, ssl, subprocess, sys, time, urllib.request, urlli
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import yaml, ts_common, apply_layouts, scout_gate
+import metric_binding as _mb    # shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 yaml.SafeLoader.add_constructor("tag:yaml.org,2002:value", lambda l, n: l.construct_scalar(n))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -483,6 +484,7 @@ def main():
             r = (match or {}).get("rationale") or "no candidate"
             print(f"  DM-reuse scan: no safe match ({r}) — building a new DM")
 
+    dm_metrics = []
     if a.reuse_dm:
         dm = a.reuse_dm
         denorm_id, denorm_name = find_denorm(dm)
@@ -490,10 +492,20 @@ def main():
     else:
         conv = convert_model(model_tml, wd, a.converted)
         dm, denorm_id, denorm_name = build_dm(conv, f"{prefix}{model_name} (from ThoughtSpot)", folder)
+        # DM metrics referenceable on the denorm "<X> View" element (own + inherited
+        # base-fact metrics via source.elementId) → a workbook measure whose inline
+        # aggregate matches one binds to a governed [Metrics/<name>] ref. Reuse-DM
+        # path keeps metrics empty (no conv) → inline, byte-identical.
+        try:
+            _els = conv["model"]["pages"][0]["elements"]
+            dm_metrics = _mb.available_metrics(denorm_id, {e["id"]: e for e in _els})
+        except (KeyError, TypeError, IndexError):
+            dm_metrics = []
 
     # chasm-trap guard inputs: the DM's raw table elements, for dimension-grain
     # measures that must NOT be aggregated over the fanned-out denorm view
     resolver["__dm_id__"] = dm
+    resolver["__metrics__"] = dm_metrics
     try:
         resolver["__dim_elements__"] = find_table_elements(dm)
     except Exception as ex:

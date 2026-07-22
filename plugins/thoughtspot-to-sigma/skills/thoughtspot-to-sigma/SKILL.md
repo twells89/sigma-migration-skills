@@ -228,6 +228,17 @@ python3 scripts/migrate.py --model-tml fixtures/retail-analytics-model.tml \
    `{"columnId": c}`; donut `value`/`color` use `{"id": c}`; grouped tables need
    `groupings:[{groupBy, calculations}]`. Full spec shapes:
    **`refs/liveboard-to-workbook.md`** (charts) + **`refs/model-conversion-rules.md`** (DM).
+   **DM metric references (leverage the semantic layer, don't duplicate it):** a
+   measure column prefers a governed **`[Metrics/<name>]`** reference over re-deriving
+   the aggregate inline, when its inline aggregate matches a metric referenceable on
+   the master (formula-equivalence match via the shared binder
+   `scripts/lib/metric_binding.py` — strip the `OFV` prefix so `Sum([OFV/Net Revenue])`
+   equals a metric's `Sum([Net Revenue])`). `migrate.py` resolves the metrics off the
+   denorm "<root> View" element (0 own metrics; it inherits the base fact's via
+   `source.elementId`) and stashes them on the resolver. SAFE: synthesized
+   timeshift/growth/window measures, dim-grain KPIs, ratios, and any non-match fall
+   back to inline; the DM-reuse path (no conv) stays inline, byte-identical. Verified:
+   `tests/test_metric_reference.py`.
 5. **Layout** — `apply_layouts.py` maps the Liveboard's OWN `layout.tiles`
    geometry (x/y/w/h on ThoughtSpot's 12-col grid) onto Sigma's 24-col grid
    (cols ×2, rows ×ROW_SCALE min 2 so axis/KPI labels render), as the **LAST**
