@@ -28,6 +28,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { resetIds, sigmaShortId, sigmaDisplayName } from './sigma-ids.js';
 import { translateCognosExpr, type CognosQuerySubject } from './cognos.js';
+import { metricRefOrInline, type BindMetric } from './metric-binding.js';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false, attributeNamePrefix: '@_', trimValues: true,
@@ -76,7 +77,15 @@ export interface CognosReportResult {
   warnings: string[];
   stats: Record<string, number>;
 }
-export interface CognosReportOptions { dataModelId?: string; workbookName?: string; }
+export interface CognosReportOptions {
+  dataModelId?: string;
+  workbookName?: string;
+  // DM metrics referenceable per query-subject element, keyed by the element's
+  // Sigma display name (= sigmaDisplayName(subject), the `[Subject/…]` prefix). A
+  // measure whose inline aggregate matches one binds to a governed [Metrics/<name>]
+  // reference instead of re-deriving it inline. Absent → inline, byte-identical.
+  metrics?: Record<string, BindMetric[]>;
+}
 
 // ── ingest ────────────────────────────────────────────────────────────────────
 interface DataItem { name: string; expression: string; aggregate?: string; dataType?: string; }
@@ -284,6 +293,22 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   // rewrites it to the real posted element id.
   const dmSource = (q: Query) => ({ kind: 'data-model', dataModelId: options.dataModelId || '<DM_ID — wire after posting the data model>', elementId: q.subject ? sigmaDisplayName(q.subject) : '<element>' });
 
+  // Prefer a governed [Metrics/<name>] ref over an inline aggregate when it matches
+  // a DM metric by formula equivalence. A list/crosstab/chart measure can reference
+  // a column from a DIFFERENT subject than the query's own (e.g. Sum([Sales/rev]) on
+  // a "Products Sales" query), so try the query subject first, then every subject in
+  // the map — each attempt strips only its own [Subject/…] prefix, so only the one
+  // matching the formula's actual prefix can bind (no cross-subject false positive).
+  const bindMeasure = (formula: string, q: Query): string => {
+    const map = options.metrics || {};
+    const subjects = q.subject ? [sigmaDisplayName(q.subject), ...Object.keys(map)] : Object.keys(map);
+    for (const s of subjects) {
+      const out = metricRefOrInline(formula, s, map[s]);
+      if (out !== formula) return out;
+    }
+    return formula;
+  };
+
   // Per-query detail filters → Sigma element filters, applied to every element built
   // on that query (never silently dropped). Handles:
   //   [Col] = <literal>      → list filter, values:[literal]
@@ -372,7 +397,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       const id = sigmaShortId();
       // a row-level formula must aggregate to render as a single KPI value;
       // formulas over already-aggregated sibling columns stay as-is.
-      cols.push({ id, name: sigmaDisplayName(nm), formula: referencesSibling || hasAgg ? formula : `Sum(${formula})` });
+      cols.push({ id, name: sigmaDisplayName(nm), formula: bindMeasure(referencesSibling || hasAgg ? formula : `Sum(${formula})`, q) });
       idByName.set(nm, id);
       return id;
     };
@@ -428,7 +453,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
         const _aggk = di.aggregate!.toLowerCase();
         if (!AGG[_aggk]) warnings.push(`list measure "${di.name}" (query "${qName}"): unmapped Cognos aggregate '${di.aggregate}' — defaulted to Sum (degraded); verify parity or add the mapping (refs/cognos-coverage.md).`);
         const fn = AGG[_aggk] || 'Sum';
-        columns.push({ id, name: sigmaDisplayName(di.name), formula: /^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(formula) ? formula : `${fn}(${formula})` });
+        columns.push({ id, name: sigmaDisplayName(di.name), formula: bindMeasure(/^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(formula) ? formula : `${fn}(${formula})`, q) });
         measureIds.push(id);
       } else {
         columns.push({ id, name: sigmaDisplayName(di.name), formula });
@@ -473,7 +498,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       const di = q.items.get(ref); if (!di) { warnings.push(`crosstab "${qName}" member "${ref}" not in query — skipped.`); return null; }
       const { formula, warns } = translate(di.expression, q); warns.forEach((w) => warnings.push(`"${qName}.${ref}": ${w}`));
       const id = sigmaShortId();
-      cols.push({ id, name: sigmaDisplayName(di.name), formula: agg ? `Sum(${formula})` : formula });
+      cols.push({ id, name: sigmaDisplayName(di.name), formula: agg ? bindMeasure(`Sum(${formula})`, q) : formula });
       return { id };
     };
     const rowsBy = rowRefs.map((r) => mk(r, false)).filter(Boolean) as Array<{ id: string }>;
@@ -642,7 +667,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
         if (_rk && !ROLLUP_AGG[_rk]) warnings.push(`chart "${vizName}" measure "${nm}": unmapped Cognos rollup '${e.rollup}' — defaulted to Sum (degraded); verify parity (refs/cognos-coverage.md).`);
         fn = ROLLUP_AGG[_rk] || 'Sum';
       }
-      const col: WbColumn = { id, name: nm, formula: measure ? `${fn}(${formula})` : formula };
+      const col: WbColumn = { id, name: nm, formula: measure ? bindMeasure(`${fn}(${formula})`, q) : formula };
       if (e.format) col.format = e.format;
       cols.push(col);
       seen.set(nm, id); return id;

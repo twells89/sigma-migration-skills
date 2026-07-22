@@ -246,7 +246,19 @@ node scripts/apply-layout.mjs --workbook <workbookId>          # clean dashboard
 Each Cognos **list/crosstab/chart/map** becomes the matching Sigma element sourced from
 the migrated DM element. The converter emits each element's `source.elementId` as the
 query **subject name** (a placeholder) — `remap-wb-to-dm-ids.mjs` rewrites those to the
-real ids from Phase 2's readback (matched by element name). Then post-and-readback POSTs
+real ids from Phase 2's readback (matched by element name).
+
+**DM metric references (leverage the semantic layer, don't duplicate it).** A measure
+column prefers a governed **`[Metrics/<name>]`** reference over re-deriving the aggregate
+inline, when its inline aggregate matches a metric on the referenced subject element
+(formula-equivalence match via the cognos-local binder `converter/metric-binding.ts` —
+strip the `[Subject/…]` prefix so `Sum([Sheet 1/Revenue])` equals a metric's
+`Sum([Revenue])`). `migrate-cognos.mjs` passes the DM's metrics (keyed by element
+display name) to the converter via `--metrics`. SAFE: KPI/crosstab measures are always
+`Sum(…)`-wrapped, so a non-Sum metric won't match (stays inline); composite/param-switch
+measures and any non-match fall back to inline; no `--metrics` is byte-identical.
+**Re-vendor after editing `converter/*.ts`:** `tools/vendor-converters.sh <mcp> cognos`
+rebuilds `converter/cli.mjs`. Verified: `scripts/test-metric-reference.mjs`. Then post-and-readback POSTs
 the workbook and re-runs the error-column gate. **`apply-layout.mjs` then gives the page a
 clean 24-col grid** (controls on top, content stacked full-width with per-kind heights) —
 Sigma auto-arrange otherwise squishes every element to the same height. It writes the

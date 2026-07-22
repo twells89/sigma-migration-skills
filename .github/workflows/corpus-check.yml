@@ -321,6 +321,7 @@ jobs:
           set -uo pipefail
           tests=(
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-scout-ledger-integrity.mjs
+            plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-metric-reference.mjs
           )
           fail=0
           for t in "${tests[@]}"; do

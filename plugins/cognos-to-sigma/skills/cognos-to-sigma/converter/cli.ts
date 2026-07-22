@@ -32,10 +32,20 @@ const file = args.find((a) => !a.startsWith('--'));
 const opt = (k: string, d = '') => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
 if (!file) { console.error('usage: cli.ts <module.json|report.xml> [--connection X --database DB --schema S --dm ID]'); process.exit(1); }
 
+// --metrics <file>: JSON map { "<Subject display name>": [{name, formula}, …] } of
+// the posted DM's referenceable metrics, so a report measure binds to a governed
+// [Metrics/<name>] ref instead of re-deriving the aggregate inline. Absent → inline.
+function loadMetrics() {
+  const p = opt('metrics');
+  if (!p) return undefined;
+  try { return JSON.parse(readFileSync(p, 'utf8')); }
+  catch (e) { console.error(`[metrics] could not read ${p} (${(e as Error).message}); measures stay inline`); return undefined; }
+}
+
 const xml = readFileSync(file, 'utf8');
 const isReport = file.endsWith('.xml') || xml.trimStart().startsWith('<');
 const res = isReport
-  ? convertCognosReportToSigma(xml, { dataModelId: opt('dm', '<DM_ID>') })
+  ? convertCognosReportToSigma(xml, { dataModelId: opt('dm', '<DM_ID>'), metrics: loadMetrics() })
   : convertCognosToSigma(xml, { connectionId: opt('connection', '<CONNECTION_ID>'), database: opt('database'), schema: opt('schema'), learnedRules: loadLearnedRules() });
 
 const payload = isReport ? (res as any).workbook : (res as any).model;
