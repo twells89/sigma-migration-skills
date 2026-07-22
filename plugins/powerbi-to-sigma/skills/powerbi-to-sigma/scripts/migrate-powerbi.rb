@@ -936,8 +936,14 @@ conv_elements.each_with_index do |cel, cel_idx|
     field_map["#{cname}.#{c['_leaf']}"] ||= ref
   end
   cols.each { |c| c.delete('_leaf') } # internal-only; keep master columns clean
+  # DM metrics (name + ORIGINAL bare formula, e.g. Sum([Net Revenue])) so the
+  # workbook builder can bind a measure to a governed [Metrics/<name>] ref instead
+  # of re-deriving the aggregation inline: it strips the `mid` prefix off the
+  # emitted formula and matches by formula equivalence (shared binder). Kept bare
+  # (not the [mid/…]-rewritten measure ref) so the strip+match lines up.
+  metrics_for_master = (cel['metrics'] || []).map { |mm| { 'name' => mm['name'], 'formula' => mm['formula'] } }
   masters[mkey] = { 'id' => mid, 'element_id' => dmel['id'], 'data_model' => dm_id,
-                    'columns' => cols }
+                    'columns' => cols, 'metrics' => metrics_for_master }
   # measure field refs: a translated metric "Sum([Sales])" -> rewrite bare col refs
   # to the master, set agg=null and pass the FULL formula as `ref` (build script
   # uses ref verbatim when agg is nil — handles ratios like DIVIDE too).

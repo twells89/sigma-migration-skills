@@ -256,6 +256,7 @@ jobs:
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-pbi-trellis.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-control-lint.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-conflicting-page-defaults.rb
+            plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-metric-reference.rb
             plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/test-scout-ledger-integrity.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-window-native.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-scout-ledger-integrity.rb

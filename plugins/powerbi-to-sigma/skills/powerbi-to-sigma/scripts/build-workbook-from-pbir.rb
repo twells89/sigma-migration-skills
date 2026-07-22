@@ -55,6 +55,7 @@ require_relative 'lib/pbi_style'
 require_relative 'lib/pbi_conditional_formats'
 require_relative 'lib/coverage_catalog'
 require_relative 'lib/trellis_emit' # shared native-trellis emitter (supported-kind gate + fallbacks)
+require_relative 'lib/metric_binding' # shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 include SigmaLayout
 
 # ---------------------------------------------------------------------------
@@ -130,6 +131,10 @@ end
 mmap    = JSON.parse(File.read(opts[:mmap]))
 fields  = mmap['fields'] || {}
 masters = mmap['masters'] || {}
+# Bridge the per-master DM metrics to measure_formula (a top-level def that can't see
+# this local). A measure prefers a governed [Metrics/<name>] ref over its inline
+# aggregate when they match by formula equivalence; absent metrics → inline.
+$PBI_MASTERS = masters
 
 # ---------------------------------------------------------------------------
 # Slicer relationship scope (control-targeting wave, workstream B).
@@ -686,29 +691,42 @@ def measure_ref?(fs)
   !(fs['ref'].to_s =~ /\A\[[^\]]+\]\z/)
 end
 
+# Prefer a governed [Metrics/<name>] ref over an inline aggregate `f`, when `f`
+# matches a DM metric on the measure's master (strip the master `id` prefix, then
+# formula-equivalence via the shared binder). Safe no-op when no metrics / no match.
+def bind_metric_formula(f, fs)
+  m = ($PBI_MASTERS || {})[fs['master']] || {}
+  mets = m['metrics'] || []
+  return f if mets.empty?
+  MetricBinding.metric_ref_or_inline(f, m['id'].to_s, mets)
+end
+
 def measure_formula(fs)
   # bead qb2i: an explicit `formula` wins — lets the master-map emit a verbatim
   # Sigma expression (e.g. a window calc "Lag(Sum([X/v]), 1)" / "Rank(Sum([X/v]),
   # \"desc\")" / percent-of-total "Sum([X/v]) / GrandTotal(Sum([X/v]))") the
   # agg/`?` encodings can't express, instead of falling back to a wrong stub.
-  return fs['formula'] if fs['formula'].is_a?(String) && !fs['formula'].empty?
-  agg = fs['agg']
-  return fs['ref'] if agg.nil? || (agg.respond_to?(:empty?) && agg.empty?)
-  # Multi-arg aggregator support (bead 14w c): PercentileCont(col, 0.9), etc.
-  # Two encodings are honored, both keeping the extra arg(s) verbatim:
-  #   1. fs['agg'] contains a '?' placeholder -> substitute the column ref.
-  #      e.g. agg="PercentileCont(?, 0.9)" -> "PercentileCont([EMP/Salary], 0.9)"
-  #   2. fs['agg_args'] is an array of extra args appended after the column ref.
-  #      e.g. agg="PercentileCont", agg_args=["0.9"] -> "PercentileCont([EMP/Salary], 0.9)"
-  # We never fabricate an aggregator from a measure *label* — the agg comes only
-  # from the master-map's explicit decision.
-  if agg.to_s.include?('?')
-    agg.to_s.gsub('?', fs['ref'])
-  elsif fs['agg_args'].is_a?(Array) && !fs['agg_args'].empty?
-    "#{agg}(#{([fs['ref']] + fs['agg_args']).join(', ')})"
-  else
-    "#{agg}(#{fs['ref']})"
-  end
+  f =
+    if fs['formula'].is_a?(String) && !fs['formula'].empty?
+      fs['formula']
+    elsif (agg = fs['agg']).nil? || (agg.respond_to?(:empty?) && agg.empty?)
+      fs['ref']
+    # Multi-arg aggregator support (bead 14w c): PercentileCont(col, 0.9), etc.
+    # Two encodings are honored, both keeping the extra arg(s) verbatim:
+    #   1. fs['agg'] contains a '?' placeholder -> substitute the column ref.
+    #      e.g. agg="PercentileCont(?, 0.9)" -> "PercentileCont([EMP/Salary], 0.9)"
+    #   2. fs['agg_args'] is an array of extra args appended after the column ref.
+    #      e.g. agg="PercentileCont", agg_args=["0.9"] -> "PercentileCont([EMP/Salary], 0.9)"
+    # We never fabricate an aggregator from a measure *label* — the agg comes only
+    # from the master-map's explicit decision.
+    elsif agg.to_s.include?('?')
+      agg.to_s.gsub('?', fs['ref'])
+    elsif fs['agg_args'].is_a?(Array) && !fs['agg_args'].empty?
+      "#{agg}(#{([fs['ref']] + fs['agg_args']).join(', ')})"
+    else
+      "#{agg}(#{fs['ref']})"
+    end
+  bind_metric_formula(f, fs)
 end
 
 # bead (A) reference lines: PBI analytics-pane constant lines (rec['ref_lines'],
