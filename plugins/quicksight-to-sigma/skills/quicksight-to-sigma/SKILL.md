@@ -210,6 +210,8 @@ ruby scripts/post-and-readback.rb --type datamodel --spec dm-spec.json --out dm-
 
 `--fixup` forces `schemaVersion: 1`, names every element + its passthrough columns (so workbook masters can reference them), rewrites sql refs to `[Custom SQL/<ALIAS>]` form, and injects `folderId`. `post-and-readback.rb` confirms every column resolved to a concrete type — **no `error` columns**.
 
+**DM metric references (emit-first — leverage the semantic layer, don't duplicate it).** QuickSight has no source-side metrics, so `--fixup` also **EMITS** a governed metric per field-well aggregation (reads `analysis.json`, resolves the aggregation via the same `aggregation.json` catalog the builder uses, and attaches `{name, formula:"<Agg>([<Col>])"}` to the element(s) that carry the column). Then `build-workbook-from-quicksight.rb` prefers a **`[Metrics/<name>]`** reference over its inline aggregate when they match by formula equivalence (strip the master prefix so `Sum([Master/Net Revenue])` equals the metric's `Sum([Net Revenue])`) — via the shared binder `scripts/lib/metric_binding.rb`. SAFE: an unmapped aggregation is skipped (the builder loudly neutralizes it), window/calc/no-match measures fall back to inline, and no emitted metrics is byte-identical. Verified: `scripts/test-metric-reference.rb`.
+
 ## Phase 5 — Build the workbook
 
 ```bash

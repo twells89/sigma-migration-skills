@@ -33,6 +33,27 @@
 require 'json'
 require 'optparse'
 require 'set'
+require_relative 'lib/coverage_catalog' # aggregation catalog (same source the workbook builder uses)
+
+# Every field-well MEASURE across an analysis (recursive: any NumericalMeasureField /
+# CategoricalMeasureField, whatever the visual type) → [rawColumnName, AGG_TOKEN].
+# Mirrors build-workbook-from-quicksight.rb's field_role measure branches so the
+# emitted DM metric matches the workbook's inline aggregate. (bead 7bun.10)
+def field_well_measures(node, out = [])
+  if node.is_a?(Hash)
+    if (mf = node['NumericalMeasureField'])
+      col = mf.dig('Column', 'ColumnName')
+      out << [col, (mf.dig('AggregationFunction', 'SimpleNumericalAggregation') || 'SUM').to_s.upcase] if col
+    elsif (mf = node['CategoricalMeasureField'])
+      col = mf.dig('Column', 'ColumnName')
+      out << [col, (mf['AggregationFunction'] || 'COUNT').to_s.upcase] if col
+    end
+    node.each_value { |v| field_well_measures(v, out) }
+  elsif node.is_a?(Array)
+    node.each { |v| field_well_measures(v, out) }
+  end
+  out
+end
 
 opts = {}
 OptionParser.new do |o|
@@ -357,6 +378,42 @@ if opts[:fixup]
   if dir && !filter_exprs.empty?
     File.write(File.join(dir, 'dm-filters.json'), JSON.pretty_generate('filters' => filter_exprs.uniq))
     STDERR.puts "fixup: surfaced #{filter_exprs.uniq.size} dataset filter(s) -> dm-filters.json (#{filter_exprs.uniq.join('; ')})"
+  end
+
+  # --- EMIT DM metrics from field-well aggregations (bead 7bun.10) ------------
+  # The workbook builder re-derives each measure inline (Sum([Master/Col])); emit the
+  # matching governed metric on the element(s) that carry the column so the builder can
+  # bind [Metrics/<name>] instead. AGG is catalog-resolved (same source the builder
+  # uses) — an unmapped aggregation is skipped (the builder loudly neutralizes it).
+  # The metric formula references the column by titleize(rawCol), which equals the
+  # builder's disp() and the element's column name (sans sanitize_name paren-stripping),
+  # so the strip-prefix formula-equivalence match fires. No analysis / no match → no
+  # metrics emitted → builder inline, byte-identical.
+  analysis_path = dir && File.join(dir, 'analysis.json')
+  analysis = (analysis_path && File.exist?(analysis_path)) ? (JSON.parse(File.read(analysis_path)) rescue nil) : nil
+  if analysis
+    agg_map = Coverage.load_all(Coverage.default_catalog_dir(__FILE__)).fetch('aggregation')
+                      .rows.each_with_object({}) { |r, h| h[r['source']] = r['sigma'] if r['sigma'] }
+    metric_defs = {} # "sig|dispName" => {name, formula}
+    field_well_measures(analysis).each do |rawcol, agg|
+      sig = agg_map[agg] or next
+      dn = titleize(rawcol)
+      metric_defs["#{sig}|#{dn}"] ||= { 'name' => "#{sig} of #{dn}", 'formula' => "#{sig}([#{dn}])" }
+    end
+    emitted = 0
+    unless metric_defs.empty?
+      (model['pages'] || []).each do |pg|
+        (pg['elements'] || []).each do |el|
+          colnames = (el['columns'] || []).map { |c| c['name'] }.compact.to_set
+          add = metric_defs.values.select { |m| colnames.include?(m['formula'][/\[([^\]]+)\]/, 1]) }
+          next if add.empty?
+          existing = (el['metrics'] ||= [])
+          have = existing.map { |m| m['name'] }.to_set
+          add.each { |m| (existing << m; have << m['name']; emitted += 1) unless have.include?(m['name']) }
+        end
+      end
+    end
+    STDERR.puts "fixup: emitted #{emitted} DM metric(s) from #{metric_defs.size} field-well aggregation(s) for [Metrics/<name>] refs" if emitted.positive?
   end
 
   out = opts[:out] || 'dm-spec.json'

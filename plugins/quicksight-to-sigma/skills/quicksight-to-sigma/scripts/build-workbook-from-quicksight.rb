@@ -31,6 +31,7 @@ require 'securerandom'
 require 'set'
 require_relative 'lib/coverage_catalog'
 require_relative 'lib/trellis_emit' # shared native-trellis emitter (supported-kind gate + fallbacks)
+require_relative 'lib/metric_binding' # shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 
 opts = {}
 OptionParser.new do |o|
@@ -187,6 +188,13 @@ DMEL = dm_el_obj['name'] || 'Custom SQL'   # DM element name — master refs col
 # own name — not the fixture leftover 'Orders', which is wrong for any non-Orders
 # dashboard and confused an early customer migration (RCA #10, bead 3goo.13).
 M = opts[:mname] || DMEL
+# DM metrics referenceable on the master (own on the host element + inherited via
+# source.elementId): a measure whose inline aggregate matches one binds to a governed
+# [Metrics/<name>] ref instead of re-deriving inline (bead 7bun.10 — emitted from the
+# field-well aggregations by convert-model.rb --fixup). Global so the top-level
+# meas_col / qs_reference_lines defs can read it; empty (or reuse-DM) → inline.
+$QS_METRICS = MetricBinding.available_metrics(dm_el, rb_els.each_with_object({}) { |e, h| h[e['id']] = e })
+STDERR.puts "metric-binding: #{$QS_METRICS.size} referenceable DM metric(s) for [Metrics/<name>] refs" if $QS_METRICS.any?
 
 def nid(p = 'el'); "#{p}-" + SecureRandom.hex(5); end
 NUM = ->(fs) { { 'kind' => 'number', 'formatString' => fs } }
@@ -475,7 +483,7 @@ def qs_reference_lines(inner, calc, master_cols, dmel, m, title, warnings)
                         'reason' => "dynamic reference-line aggregation '#{aggk}' has no documented Sigma mapping — line skipped (was silently defaulting to Avg); add a cited row to refs/catalogs/aggregation.json if it should map" }
           next
         end
-        formula = "#{sig_agg}([#{m}/#{ref['name']}])"
+        formula = MetricBinding.metric_ref_or_inline("#{sig_agg}([#{m}/#{ref['name']}])", m, $QS_METRICS || [])
       end
     end
     if formula.nil? || formula.empty?
@@ -811,7 +819,8 @@ def meas_col(role, calc, mc, dmel, m)
       # aggregate itself as the measure (refs resolve to the master via the `m` prefix).
       calc[col].scan(/\{([^}]+)\}/).flatten.each { |bc| master_ref(bc.strip, calc, mc, dmel) }
       id = nid('m')
-      col_h = { 'id' => id, 'formula' => expr, 'name' => col }
+      # governed [Metrics/<name>] ref when this aggregate calc matches a DM metric
+      col_h = { 'id' => id, 'formula' => MetricBinding.metric_ref_or_inline(expr, m, $QS_METRICS || []), 'name' => col }
       (fs = fmt_for(col)) && (col_h['format'] = NUM.(fs))
       return [col_h, id]
     end
@@ -832,7 +841,9 @@ def meas_col(role, calc, mc, dmel, m)
     return [{ 'id' => id, 'formula' => 'Null', 'name' => ref['name'],
               'description' => "unmapped QuickSight aggregation '#{agg}' — re-author in Sigma" }, id]
   end
-  col_h = { 'id' => id, 'formula' => "#{sig_agg}([#{m}/#{ref['name']}])", 'name' => ref['name'] }
+  col_h = { 'id' => id,
+            'formula' => MetricBinding.metric_ref_or_inline("#{sig_agg}([#{m}/#{ref['name']}])", m, $QS_METRICS || []),
+            'name' => ref['name'] }
   (fs = fmt_for(ref['name'])) && (col_h['format'] = NUM.(fs))
   [col_h, id]
 end
