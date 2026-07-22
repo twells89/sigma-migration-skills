@@ -40,6 +40,7 @@ cleanly; **flag what doesn't** (runtime macros, running-totals, localization) in
 of emitting wrong logic.
 
 > **READ FIRST — `refs/operating-contract.md`**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
+> **Modeling strategy — `refs/modeling-strategy.md`**: faithful reproduction of the source model is the DEFAULT (parity is the gate); an upstream OBT or Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same parity oracle. The converter never auto-flattens.
 > Read `refs/` before relying on shapes: `design-notes.md` (translation surface + scope),
 > `format-shapes.md` (the real CA Data-Module JSON + report-spec XML structures),
 > `expression-dsl.md` (the Cognos-expression → Sigma-formula mapping table),

@@ -58,6 +58,7 @@ require 'open3'
 require 'time'
 require_relative 'lib/scout_gate'
 require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
+begin; require_relative 'lib/modeling_advisory'; rescue LoadError; end # shared, vendor-neutral CDW join-cost advisory (optional; synced from shared/)
 
 $stdout.sync = true # lane/foreground progress lines interleave correctly
 
@@ -401,6 +402,8 @@ cstats = conv['stats'] || {}
 puts "   #{cstats['elements']} element(s), #{cstats['columns']} column(s), " \
      "#{cstats['metrics']} metric(s), #{cstats['relationships']} relationship(s); " \
      "#{conv_warnings.size} converter warning(s)"
+# Vendor-neutral CDW join-cost advisory (informational only; never gates). See refs/modeling-strategy.md.
+ModelingAdvisory.print_if_relevant(cstats['relationships']) if defined?(ModelingAdvisory)
 mark('phase2-convert')
 
 # ---------------------------------------------------------------------------

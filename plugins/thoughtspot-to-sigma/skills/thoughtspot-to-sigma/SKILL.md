@@ -28,6 +28,7 @@ If the user didn't supply a destination (no `SIGMA_FOLDER_ID`), ASK before build
 If `SIGMA_FOLDER_ID` is already set, honor it silently — don't ask.
 
 > **READ FIRST — `refs/operating-contract.md`**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
+> **Modeling strategy — `refs/modeling-strategy.md`**: faithful reproduction of the source model is the DEFAULT (parity is the gate); an upstream OBT or Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same parity oracle. The converter never auto-flattens.
 
 Recreate a ThoughtSpot **model/worksheet** as a Sigma **data model**, and its
 **Liveboards** as Sigma **workbooks**, with parity verified against the live

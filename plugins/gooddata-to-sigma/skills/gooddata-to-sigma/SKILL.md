@@ -22,6 +22,7 @@ user-invocable: true
 > **Windows / first run — run the environment doctor before anything else:**
 > `bash scripts/doctor.sh` (macOS/Linux/Git Bash) or `powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1` (Windows).
 > It checks Ruby/Python/Node/bash and flags the Python "Store stub" + CRLF with exact fixes. Details: `refs/environment.md`.
+> **Modeling strategy — `refs/modeling-strategy.md`**: faithful reproduction of the source model is the DEFAULT (parity is the gate); an upstream OBT or Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same parity oracle. The converter never auto-flattens.
 
 > **Status: LIVE-VALIDATED — exact parity, data model + workbook.**
 > Proven end-to-end on a GoodData Cloud trial → Sigma (both on Snowflake): a

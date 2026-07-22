@@ -50,6 +50,7 @@ require 'fileutils'
 require 'open3'
 require_relative 'lib/scout_gate'
 require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
+begin; require_relative 'lib/modeling_advisory'; rescue LoadError; end # shared, vendor-neutral CDW join-cost advisory (optional; synced from shared/)
 
 HERE = __dir__
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
@@ -268,6 +269,8 @@ conv_warnings = conv['warnings'] || []
 model = conv['sigmaDataModel'] || conv['model'] || conv
 el_ct = (model['pages'] || []).flat_map { |p| p['elements'] || [] }.size
 puts "   #{el_ct} DM element(s) emitted; #{conv_warnings.size} converter warning(s)"
+# Vendor-neutral CDW join-cost advisory (informational only; never gates). See refs/modeling-strategy.md.
+ModelingAdvisory.from_dm_spec(model) if defined?(ModelingAdvisory) && ModelingAdvisory.respond_to?(:from_dm_spec)
 
 # ---------------------------------------------------------------------------
 # DECISIONS CHECKPOINT — surface the genuine human questions

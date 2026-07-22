@@ -96,6 +96,7 @@ workbook that mirrors the Tableau dashboard layout as closely as possible.
 
 **Read ALL of the following before replying or taking any action. Do not make assumptions about skill conventions, prompts, or global instructions — read the files.**
 - `refs/operating-contract.md` — **READ FIRST.** The non-negotiable guardrails: obtain the source render + calcs, build from the source's own logic (not `SUM(col)`), render + value-check EVERY page against the source, never ship empty or waive silently, don't spin.
+- `refs/modeling-strategy.md` — faithful reproduction is the DEFAULT (parity is the gate); an upstream OBT / Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same oracle. The converter never auto-flattens.
 - `refs/composition-recipe.md` — composition pass (hero/panels/carded KPIs + brand-from-source), value-fidelity rules, controls/params rebuild, spec/API gotchas.
 - `refs/column-gotchas.md` — column naming rules and special-character landmines
 - `refs/data-model-spec.md` — data model JSON schema, element format, relationship format

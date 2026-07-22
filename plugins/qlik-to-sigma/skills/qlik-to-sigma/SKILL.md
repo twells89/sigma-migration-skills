@@ -92,6 +92,7 @@ independently runnable script if you need to intervene mid-pipeline.
 
 **Read ALL of the following before replying or taking any action:**
 - `refs/operating-contract.md` — **READ FIRST**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
+- `refs/modeling-strategy.md` — faithful reproduction is the DEFAULT (parity is the gate); an upstream OBT / Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same oracle. The converter never auto-flattens.
 - `refs/sigma-build-gotchas.md` — the hard-won spec rules (SQL element, workbook master, YAML responses). **This is the difference between a 2xx that errors at query time and a working migration.**
 - The repo `~/Desktop/sigma-data-model-mcp/CLAUDE.md` — Sigma DM spec correctness rules + the verified DEMO_DB.DEMO test connection.
 - `~/sigma-skills/sigma-workbooks/SKILL.md` + the Sigma OpenAPI — canonical workbook spec.

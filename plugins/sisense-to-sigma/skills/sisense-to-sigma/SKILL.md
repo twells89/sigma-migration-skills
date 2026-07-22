@@ -54,6 +54,7 @@ widgets) — never emit confidently-wrong logic.
 >   nothing to verify is not done.
 >
 > **READ FIRST — `refs/operating-contract.md`**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
+> **Modeling strategy — `refs/modeling-strategy.md`**: faithful reproduction of the source model is the DEFAULT (parity is the gate); an upstream OBT or Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same parity oracle. The converter never auto-flattens.
 > Read `refs/` before relying on shapes: `sisense-rest-api.md` (validated
 > endpoint map + auth + the access-key-vs-token gotcha), `jaql-mapping.md`
 > (JAQL → Sigma formula + what's flagged), `widget-type-mapping.md` (widget →

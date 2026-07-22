@@ -121,6 +121,7 @@ require 'optparse'
 require 'fileutils'
 require 'open3'
 require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
+begin; require_relative 'lib/modeling_advisory'; rescue LoadError; end # shared, vendor-neutral CDW join-cost advisory (optional; synced from shared/)
 require 'date'
 require 'time'
 require 'set'
@@ -1324,6 +1325,8 @@ if opts[:dm_spec] || opts[:wb_spec]
     if dm_json && !(dm_json.is_a?(Hash) && dm_json['pages'].is_a?(Array))
   abort 'FATAL: --wb-spec JSON is not a page-bearing workbook spec (no top-level "pages" array)' \
     unless wb_json.is_a?(Hash) && wb_json['pages'].is_a?(Array)
+  # Vendor-neutral CDW join-cost advisory (informational only; never gates). See refs/modeling-strategy.md.
+  ModelingAdvisory.from_dm_spec(dm_json) if dm_json && defined?(ModelingAdvisory) && ModelingAdvisory.respond_to?(:from_dm_spec)
   Object.const_set(:Specs, Module.new do
     # nil on the --reuse-dm path: the DM is read back from the API, never rebuilt
     # from this module (so dm_spec is only consulted on the fresh --dm-spec path).

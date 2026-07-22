@@ -68,6 +68,7 @@ logic.
 > "Data Model" object are roadmap (`refs/design-notes.md`).
 
 > **READ FIRST — `refs/operating-contract.md`**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
+> **Modeling strategy — `refs/modeling-strategy.md`**: faithful reproduction of the source model is the DEFAULT (parity is the gate); an upstream OBT or Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same parity oracle. The converter never auto-flattens.
 > Read `refs/` before relying on shapes: `mstr-rest-api.md` (every verified
 > REST gotcha — changesets, locks, lowercase response headers, session-bound
 > dossier flows), `ae-row-collapse.md` (the one MSTR behavior no clean SQL
