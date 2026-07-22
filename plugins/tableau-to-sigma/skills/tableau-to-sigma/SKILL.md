@@ -278,7 +278,7 @@ it when a STOP routes you to a script.
 | `escalate-gap.py` | Opt-in issue filer (dry-run by default; `--yes` to file) |
 | `learned-rules.rb` | Merges `learned/starter-rules.yaml` + `~/.tableau-to-sigma/learned-rules.yaml` |
 | `parse-twb-layout.rb` | `.twb` → per-dashboard zone list + `*-meta.json` (+ `story-plan.json` for stories) |
-| `build-charts-from-signals.rb` | Zones + CSVs + master map → Sigma chart specs; writes `coverage.json`; 🚧 requires `png-read.json` |
+| `build-charts-from-signals.rb` | Zones + CSVs + master map → Sigma chart specs; writes `coverage.json`; 🚧 requires `png-read.json`. `--metrics` (from `migrate-tableau.rb`, resolved off the fact element's own + `source.elementId`-inherited metrics) makes a measure prefer a governed **`[Metrics/<name>]`** ref over its inline aggregate when they match by formula equivalence (strip the `Master` prefix); ratios/LODs/table-calcs/no-match stay inline — no `--metrics` is byte-identical. Verified: `test-metric-reference.rb` |
 | `extract-custom-sql.rb` / `resolve-published-ds.rb` / `hydrate-custom-sql.rb` | Custom-SQL + published-DS (sqlproxy) resolution/hydration — never a phantom table |
 | `lib/tableau_rest.rb` | Tableau REST wrapper |
 | `estimate-cost.rb` | Phase 0c scope + token-cost estimate → `cost-estimate.json` + run-state ack |

@@ -67,6 +67,7 @@ require_relative 'lib/series_colors'  # PR-12: ordered per-series color schemes
 require_relative 'lib/threshold_halo'  # C2: threshold-halo (computed-boolean color) detection
 require_relative 'lib/integer_dim'    # PR-18: integer-coded dimension decode-to-text routing
 require_relative 'lib/trellis_emit'   # shared native-trellis emitter (supported-kind gate + fallbacks)
+require_relative 'lib/metric_binding' # shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 require 'erb'
 
 opts = { master_id: 'master' }
@@ -100,8 +101,18 @@ OptionParser.new do |p|
   # 🚧 GATE escape hatch — waive the Phase 1d dashboard-read requirement. Use ONLY
   # when the source dashboard PNG genuinely cannot be read; name the reason in your report.
   p.on('--skip-dashboard-read REASON', 'waive the Phase 1d dashboard-read gate (REQUIRED reason; name it in your report)') { |v| opts[:skip_dashboard_read] = v }
+  # DM metrics referenceable on the master (name+formula, own + inherited via
+  # source.elementId) — a measure whose inline aggregate matches one binds to a
+  # governed [Metrics/<name>] ref instead of re-deriving inline. Absent → inline.
+  p.on('--metrics PATH', 'JSON array of DM metrics {name,formula} referenceable on the master element') { |v| opts[:metrics_file] = v }
 end.parse!
 %i[tab layout mmap out].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
+
+# Load the referenceable DM metrics once; every measure-emission site prefers a
+# governed [Metrics/<name>] ref over its inline aggregate when they match by formula
+# equivalence (strip the literal 'Master' prefix). Empty/absent → inline, byte-identical.
+opts[:metrics] = (opts[:metrics_file] && File.exist?(opts[:metrics_file]) ?
+                  JSON.parse(File.read(opts[:metrics_file], encoding: 'UTF-8')) : [])
 
 # 🚧 GATE (Phase 1d) — refuse to build charts until the SOURCE dashboard PNG has
 # been read and enumerated. png-read.json is the artifact of that read; without it
@@ -3987,6 +3998,9 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
   end
 
   measure_col_id = "k-#{el_id}"
+  # Prefer a governed [Metrics/<name>] ref when this KPI aggregate matches a DM
+  # metric by formula equivalence; safe no-op (inline) otherwise.
+  formula = MetricBinding.metric_ref_or_inline(formula, 'Master', opts[:metrics])
   measure_col = {
     'id'      => measure_col_id,
     'name'    => master['name'].to_s.strip,
@@ -4406,6 +4420,7 @@ layout.each do |dash|
                 { 'kind' => 'number', 'formatString' => ',.0f' }
         # Column NAME = the Tableau measure-name label verbatim — the parity
         # plan pivots the long CSV and matches Sigma columns by display name.
+        formula = MetricBinding.metric_ref_or_inline(formula, 'Master', opts[:metrics])
         y_cols << { 'id' => "y#{i}-#{el_id}", 'name' => label, 'formula' => formula, 'format' => fmt }
       end
       if y_cols.any?
@@ -4772,6 +4787,9 @@ layout.each do |dash|
                       else
                         render_agg(sigma_agg, "[Master/#{meas['name']}]")
                       end
+    # Prefer a governed [Metrics/<name>] ref when this inline aggregate matches a
+    # DM metric by formula equivalence; safe no-op (inline) otherwise.
+    measure_formula = MetricBinding.metric_ref_or_inline(measure_formula, 'Master', opts[:metrics])
     # v5.4: NUMERIC aggregates over a TEXT column compile to type=error on the
     # live workbook (Sum/Avg/Median are numeric-only). Tableau's CSV header
     # order can hand a string column to the measure slot (the scatter
@@ -5204,6 +5222,7 @@ layout.each do |dash|
       meas2 = map_column(meas2_hdr, mmap) ||
               { 'id' => "m-#{meas2_hdr.downcase.gsub(/\W+/,'-')}", 'name' => meas2_hdr }
       meas2_formula = meas2['formula'] || render_agg(sigma_agg, "[Master/#{meas2['name']}]")
+      meas2_formula = MetricBinding.metric_ref_or_inline(meas2_formula, 'Master', opts[:metrics])
       extra_meas_col = {
         'id'      => "y2-#{el_id}",
         'name'    => meas2['name'],

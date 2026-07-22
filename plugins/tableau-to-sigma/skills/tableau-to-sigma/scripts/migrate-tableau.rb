@@ -134,6 +134,7 @@ require_relative 'lib/offramp' # structured "where did this run leave the golden
 require_relative 'lib/fast_path' # FAST-PATH routing + BOM-tolerant JSON reads
 require_relative 'lib/phase_cache' # sha-stamped phase-output reuse on re-entry (refs/performance.md)
 require_relative 'lib/sigma_rest' # in-process Sigma token minting (no bash/eval)
+require_relative 'lib/metric_binding' # shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 require_relative 'lib/tableau_rest' # in-process Tableau token minting (Windows-safe; no bash/eval)
 require_relative 'hydrate-custom-sql'
 
@@ -3439,6 +3440,21 @@ if mechanical
   File.write(mmap_path, JSON.pretty_generate(mmap))
   line "master-map: #{master_columns.size} master column(s) (fact element '#{fact['name']}', #{real_labels ? real_labels.size : 0} readback labels)"
 
+  # DM metrics referenceable on the master (own on the fact element + inherited via
+  # source.elementId): a chart/KPI measure whose inline aggregate matches one binds
+  # to a governed [Metrics/<name>] ref instead of re-deriving inline (formula
+  # equivalence; ratios/LODs/table-calcs/no-match stay inline — byte-identical).
+  metrics_path = File.join(WORK, 'metrics.json')
+  begin
+    els_by_id = MechanicalSpecs.all_elements(conv['model']).each_with_object({}) { |e, h| h[e['id']] = e }
+    wb_metrics = MetricBinding.available_metrics(conv_fact['id'], els_by_id)
+  rescue StandardError => e
+    line "metric-binding: could not resolve DM metrics (#{e.class}: #{e.message}) — measures stay inline"
+    wb_metrics = []
+  end
+  File.write(metrics_path, JSON.pretty_generate(wb_metrics))
+  line "metric-binding: #{wb_metrics.size} referenceable DM metric(s) for [Metrics/<name>] refs" if wb_metrics.any?
+
   # 2) Build the chart-element specs from the parsed zones + view CSVs + map.
   #    ONE SIGMA PAGE PER TABLEAU DASHBOARD (bead ptrt) — a fat workbook's 4
   #    dashboards become 4 laid-out pages, each with its own banded layout.
@@ -3446,6 +3462,7 @@ if mechanical
   build_cmd = ['ruby', File.join(HERE, 'build-charts-from-signals.rb'),
                '--tableau-dir', WORK, '--layout', layout_json,
                '--master-map', mmap_path, '--master-element-id', 'master',
+               '--metrics', metrics_path,
                '--page-per-dashboard',
                '--out', charts_path,
                '--coverage-out', File.join(WORK, 'coverage.json')]
