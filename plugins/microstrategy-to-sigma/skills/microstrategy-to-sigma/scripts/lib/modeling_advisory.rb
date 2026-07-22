@@ -33,4 +33,27 @@ module ModelingAdvisory
     io.puts "   repeatedly-queried reports. Default here is faithful reproduction. See #{ref}."
     true
   end
+
+  # Count activatable joins in a Sigma data-model spec (Hash/Array) by summing every
+  # `relationships` array anywhere in the spec — the standard place a DM spec records
+  # them (per element). For orchestrators that hold the DM spec but no converter stats.
+  def self.count_joins(spec)
+    n = 0
+    walk = lambda do |o|
+      case o
+      when Hash
+        o.each { |k, v| n += v.size if k.to_s == 'relationships' && v.is_a?(Array); walk.call(v) }
+      when Array
+        o.each { |x| walk.call(x) }
+      end
+    end
+    walk.call(spec)
+    n
+  end
+
+  # Convenience: count joins straight from a DM spec, then advise. Returns true if printed.
+  def self.from_dm_spec(spec, io: $stdout, ref: REF)
+    return false unless spec.is_a?(Hash) || spec.is_a?(Array)
+    print_if_relevant(count_joins(spec), io: io, ref: ref)
+  end
 end
