@@ -25,6 +25,7 @@ import jaql_expr as J
 # map is loaded the same way inside jaql_expr.py.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import coverage_catalog as _cc  # noqa: E402
+import metric_binding as _mb    # noqa: E402  shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 _CAT_DIR = _cc.default_catalog_dir(__file__)
 VIZ_CAT  = _cc.load(_CAT_DIR, "viz-kind")        # Sisense widget type -> Sigma element kind
 FMT_CAT  = _cc.load(_CAT_DIR, "number-format")   # JAQL format mask    -> Sigma number format
@@ -142,8 +143,42 @@ def probe_directions(model, schema, database, snow_conn):
             directions[frozenset({a, b})] = a[0]
     return directions
 
+def harvest_metrics(dashboards):
+    """Governed DM metrics harvested from the dashboards' JAQL measure panels
+    (bead 7bun.11). Sisense has no source-side metrics, so a measure's aggregation
+    only exists in a widget's JAQL. Each measure item → {name: jaql.title, formula:
+    <J.classify output, NOT masterized>} — the bare DM-column form (e.g. Sum([Revenue]))
+    that matches the workbook's inline once the [Master/…] prefix is stripped. Deduped
+    by name; J.Unsupported items are skipped (they never become a metric)."""
+    out, seen = [], set()
+    for d in dashboards or []:
+        for w in d.get("widgets", []):
+            for p in w.get("metadata", {}).get("panels", []):
+                for it in p.get("items", []):
+                    jaql = it.get("jaql", {})
+                    if not jaql:
+                        continue
+                    try:
+                        k, formula = J.classify(jaql)
+                    except J.Unsupported:
+                        continue
+                    if k != "measure":
+                        continue
+                    name = jaql.get("title") or "measure"
+                    if name in seen:
+                        continue
+                    seen.add(name)
+                    out.append({"name": name, "formula": formula})
+    return out
+
+
+def _metric_ref_cols(formula):
+    """The bare [Col] refs a metric formula depends on (for host-element matching)."""
+    return {m for m in re.findall(r"\[([^/\]]+)\]", formula or "")}
+
+
 def convert_model(model, connection_id, schema="SISENSE_ECOMMERCE",
-                  database="DEMO_DB", name=None, directions=None):
+                  database="DEMO_DB", name=None, directions=None, metrics=None):
     """Sisense Live/ElastiCube model export -> (Sigma DM spec, flags).
     Plain tables -> warehouse-table elements (source = connectionId + path).
     Tables with an `expression` (ElastiCube custom SQL) -> custom-SQL ('sql')
@@ -217,6 +252,20 @@ def convert_model(model, connection_id, schema="SISENSE_ECOMMERCE",
                               "targetColumnId": col_id[(tt, tc)]}],
                     "name": tt.upper()})  # clean workbook cross-refs: [Fact/DIM/Col]
     elements.sort(key=lambda e: 1 if e.get("relationships") else 0)  # dims before fact
+    # EMIT governed DM metrics harvested from the dashboards' JAQL (bead 7bun.11) onto
+    # every element that carries their referenced columns — so the fact element (which
+    # the workbook master sources) gets them and the workbook can bind [Metrics/<name>]
+    # instead of re-deriving the aggregate inline. No metrics → no change (byte-identical).
+    for m in (metrics or []):
+        cols_needed = _metric_ref_cols(m["formula"])
+        if not cols_needed:
+            continue
+        for el in elements:
+            names = {c["name"] for c in el.get("columns", [])}
+            if cols_needed <= names:
+                bag = el.setdefault("metrics", [])
+                if m["name"] not in {x["name"] for x in bag}:
+                    bag.append({"name": m["name"], "formula": m["formula"]})
     spec = {"name": name or f"{model.get('title', 'Model')} (from Sisense)",
             "pages": [{"id": "p1", "name": "Model", "elements": elements}]}
     return spec, flags
@@ -447,7 +496,7 @@ def build_layout(dashboards, control_ids, wid2elem):
     return '<?xml version="1.0" encoding="utf-8"?>\n' + data_page + "\n" + main_page
 
 
-def convert_dashboard(dashboards, model, dm_info):
+def convert_dashboard(dashboards, model, dm_info, dm_metrics=None):
     """Emit a Sigma workbook spec from Sisense dashboards.
     dm_info = {dataModelId, factElementId, factName}. Builds a Master data
     element on the fact DM element (own cols + cross-ref dim cols) and one viz
@@ -509,7 +558,13 @@ def convert_dashboard(dashboards, model, dm_info):
                     for m in re.finditer(r"\[([^.\]/]+)\.([^\]]+)\]", J.raw_dims(jaql)):
                         master_ref(m.group(1), m.group(2))
                     vid = "c_" + cid()
-                    spec = {"id": vid, "formula": _masterize(formula),
+                    _f = _masterize(formula)
+                    if k == "measure":
+                        # governed [Metrics/<name>] ref when this inline aggregate matches
+                        # a metric on the fact element (strip the "Master" prefix); safe
+                        # no-op (inline) otherwise or when no --dm-spec metrics passed.
+                        _f = _mb.metric_ref_or_inline(_f, "Master", dm_metrics)
+                    spec = {"id": vid, "formula": _f,
                             "name": jaql.get("title") or k}
                     if k == "measure":
                         _fmt_warns = []
@@ -631,7 +686,13 @@ if __name__ == "__main__":
             conn = sys.argv[sys.argv.index("--verify-card") + 1]
             directions = probe_directions(model, schema, database, conn)
             print(f"cardinality-resolved {len(directions)} relationship directions")
-        spec, flags = convert_model(model, connection_id, schema, database, directions=directions)
+        # --dashboards <file>: harvest governed metrics from the dashboards' JAQL and
+        # EMIT them onto the DM elements, so the workbook can reference [Metrics/<name>]
+        # (bead 7bun.11). Absent → no metrics emitted (byte-identical).
+        metrics = None
+        if "--dashboards" in sys.argv:
+            metrics = harvest_metrics(json.load(open(sys.argv[sys.argv.index("--dashboards") + 1])))
+        spec, flags = convert_model(model, connection_id, schema, database, directions=directions, metrics=metrics)
         json.dump(spec, open("sigma_dm_spec.json", "w"), indent=2)
         print(f"wrote sigma_dm_spec.json ({len(spec['pages'][0]['elements'])} elements)")
         if flags:
@@ -655,7 +716,15 @@ if __name__ == "__main__":
             only = sys.argv[sys.argv.index("--only") + 1]
             dashboards = [{**d, "widgets": [w for w in d.get("widgets", []) if d.get("title") == only or True]}
                           for d in dashboards if d.get("title") == only]
-        spec, flags = convert_dashboard(dashboards, model, dm_info)
+        # --dm-spec <sigma_dm_spec.json>: bind workbook measures to the posted DM's
+        # ACTUAL metrics (emitted by the `model --dashboards` step) — never references a
+        # metric that isn't on the DM. Absent → measures stay inline (byte-identical).
+        dm_metrics = None
+        if "--dm-spec" in sys.argv:
+            _dm = json.load(open(sys.argv[sys.argv.index("--dm-spec") + 1]))
+            _by_id = {e.get("id"): e for pg in _dm.get("pages", []) for e in (pg.get("elements") or [])}
+            dm_metrics = _mb.available_metrics(dm_info["factElementId"], _by_id)
+        spec, flags = convert_dashboard(dashboards, model, dm_info, dm_metrics=dm_metrics)
         json.dump(spec, open("sigma_workbook_spec.json", "w"), indent=2)
         print(f"wrote sigma_workbook_spec.json ({len(spec['pages'][1]['elements'])} viz elements, "
               f"{len(spec['pages'][0]['elements'][0]['columns'])} master cols)")

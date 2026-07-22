@@ -306,6 +306,7 @@ jobs:
             plugins/gooddata-to-sigma/skills/gooddata-to-sigma/tests/test_metric_reference.py
             plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/tests/test_metric_reference.py
             plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/tests/test_metric_reference.py
+            plugins/sisense-to-sigma/skills/sisense-to-sigma/tests/test_metric_reference.py
           )
           fail=0
           for t in "${tests[@]}"; do
