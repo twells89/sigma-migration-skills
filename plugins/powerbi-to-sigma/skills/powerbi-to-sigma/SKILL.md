@@ -59,6 +59,7 @@ If the user didn't supply a destination (no `--folder <id>`), ASK before buildin
 If a destination is already supplied, honor it silently — don't ask.
 
 > **READ FIRST — `refs/operating-contract.md`**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
+> **Modeling strategy — `refs/modeling-strategy.md`**: faithful star reproduction is the DEFAULT (parity is the gate); an upstream OBT or Sigma-native materialization is an OPT-IN optimization for hot, join-heavy dashboards, re-verified against the same parity oracle. The converter never auto-flattens. (Measured: flat beats live-join joins by 1.35–2.5× on join queries, but is neutral/worse join-free.)
 > Status: **foundation** (validated end-to-end 2026-05-31 on the "Employee Dashboard" workforce report).
 > Beads: build = `beads-sigma-cs2`; converter gaps = `j89` (M-Snowflake path), `tkd` (element names / schemaVersion / folderId).
 > Defers to: `sigma-workbooks` (canonical workbook spec), `sigma-data-models` (DM spec), the `convert_powerbi_to_sigma` MCP tool, and `tableau-to-sigma/scripts/*` (reused verbatim for posting + layout + parity).
@@ -185,6 +186,7 @@ The converter output (`sigmaDataModel`) needs 3 fixups before `POST /v2/dataMode
 1. **`schemaVersion: 1`** at top level (else `schemaVersion: Invalid 1: undefined`).
 2. **`folderId` + `ownerId`** at top level — pull from a reference DM (the **tableau-to-sigma reuse logic**, `find-or-pick-dm.rb`).
 3. **Element `name`** on each base warehouse-table element (= `source.path[-1]`) — the converter only names joined View elements, but workbook masters reference DM elements by name.
+   > These joined View elements are query-time joins Sigma runs in the warehouse. For *why* Sigma modeling differs and when to consider an upstream OBT / Sigma-native materialization instead (an opt-in optimization, not something this skill does automatically), see `refs/modeling-strategy.md`. When the converted model has ≥2 joins, the orchestrator prints a one-line MODELING ADVISORY pointing there.
 Then: `tableau-to-sigma/scripts/post-and-readback.rb --type datamodel`. See `refs/spec-fixups.md`.
 
 > **What Phase 4 "validation" catches — and what it does NOT (read before trusting a clean DM).**

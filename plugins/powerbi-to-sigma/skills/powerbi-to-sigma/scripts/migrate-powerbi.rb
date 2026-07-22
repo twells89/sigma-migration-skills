@@ -63,6 +63,7 @@ require 'open3'
 require 'digest'
 require 'set'
 require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
+begin; require_relative 'lib/modeling_advisory'; rescue LoadError; end # shared, vendor-neutral CDW join-cost advisory (optional; synced from shared/)
 
 HERE = __dir__
 $LOAD_PATH.unshift File.expand_path('lib', HERE)
@@ -506,6 +507,8 @@ conv_warnings = conv['warnings'] || []
 conv_stats = conv['stats'] || {}
 puts "   #{conv_stats['elements'] || (dm_model['pages'] || []).flat_map { |p| p['elements'] || [] }.size} element(s), " \
      "#{conv_stats['columns']} column(s), #{conv_stats['metrics']} metric(s); #{conv_warnings.size} converter warning(s)"
+# Vendor-neutral CDW join-cost advisory (informational only; never gates). See refs/modeling-strategy.md.
+ModelingAdvisory.print_if_relevant(conv_stats['relationships']) if defined?(ModelingAdvisory)
 
 # ---------------------------------------------------------------------------
 # DECISIONS CHECKPOINT — surface the genuine human questions
