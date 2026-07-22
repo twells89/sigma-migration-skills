@@ -258,7 +258,8 @@ display name) to the converter via `--metrics`. SAFE: KPI/crosstab measures are 
 `Sum(…)`-wrapped, so a non-Sum metric won't match (stays inline); composite/param-switch
 measures and any non-match fall back to inline; no `--metrics` is byte-identical.
 **Re-vendor after editing `converter/*.ts`:** `tools/vendor-converters.sh <mcp> cognos`
-rebuilds `converter/cli.mjs`. Verified: `scripts/test-metric-reference.mjs`. Then post-and-readback POSTs
+rebuilds `converter/cli.mjs` (production runs the bundle). This is **enforced** — `tools/check-cognos-bundle.rb`
+(governance hook + CI) fails if a `converter/*.ts` edit ships without re-bundling. Verified: `scripts/test-metric-reference.mjs`. Then post-and-readback POSTs
 the workbook and re-runs the error-column gate. **`apply-layout.mjs` then gives the page a
 clean 24-col grid** (controls on top, content stacked full-width with per-kind heights) —
 Sigma auto-arrange otherwise squishes every element to the same height. It writes the

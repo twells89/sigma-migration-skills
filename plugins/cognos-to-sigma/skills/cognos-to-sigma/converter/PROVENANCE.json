@@ -1,6 +1,14 @@
 {
-  "source": "in-skill converter/cli.ts (cognos.ts + cognos-report.ts + sigma-ids.ts)",
+  "source": "in-skill converter/cli.ts (cli.ts + cognos-report.ts + cognos.ts + metric-binding.ts + sigma-ids.ts)",
   "bundler": "esbuild --bundle --format=esm --platform=node",
   "vendored_modules": "cli.mjs",
-  "note": "Self-contained bundle of the skill's own pinned Cognos converter. Refresh with tools/vendor-converters.sh after editing converter/*.ts."
+  "source_sha256": "26cb0f41485300760aa8ba2b52a167280bfa988955a47663898f8ffaa191b434",
+  "sources": [
+    "cli.ts",
+    "cognos-report.ts",
+    "cognos.ts",
+    "metric-binding.ts",
+    "sigma-ids.ts"
+  ],
+  "note": "cli.mjs is GENERATED from converter/*.ts — do not hand-edit. After editing any converter/*.ts, re-run tools/vendor-converters.sh <sigma-data-model-mcp> cognos (rebuilds cli.mjs + refreshes source_sha256). CI gate: tools/check-cognos-bundle.rb."
 }

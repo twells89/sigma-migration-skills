@@ -71,15 +71,10 @@ for mod in "${WANT[@]}"; do
     [ -d "$dest/node_modules/fast-xml-parser" ] || ( cd "$dest" && npm install --silent )
     "$ESBUILD" "$entry" --bundle --format=esm --platform=node --outfile="$out" >/dev/null
     echo "✓ $skill/converter/cli.mjs  ($(du -h "$out" | cut -f1))  [bundled from in-skill cli.ts]"
-    # cognos provenance tracks the in-repo TS source, not the mcp commit.
-    cat > "$dest/PROVENANCE.json" <<EOF
-{
-  "source": "in-skill converter/cli.ts (cognos.ts + cognos-report.ts + sigma-ids.ts)",
-  "bundler": "esbuild --bundle --format=esm --platform=node",
-  "vendored_modules": "cli.mjs",
-  "note": "Self-contained bundle of the skill's own pinned Cognos converter. Refresh with tools/vendor-converters.sh after editing converter/*.ts."
-}
-EOF
+    # cognos provenance tracks the in-repo TS source, not the mcp commit. Writing the
+    # source_sha256 here (single owner: tools/check-cognos-bundle.rb) is what lets the
+    # freshness gate detect a converter/*.ts edit that skipped this re-bundle.
+    ruby "$ROOT/tools/check-cognos-bundle.rb" --write
     continue
   fi
 
