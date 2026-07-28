@@ -175,6 +175,32 @@ module Sigma
     end
   end
 
+  # Exhaustively read a paginated LIST endpoint: GET `path` with limit=1000
+  # (the documented API maximum; the server default is 50) and follow
+  # `nextPage` tokens until exhausted, returning the concatenated `entries`.
+  # Unpaginated single-page responses reached END OF SUPPORT on 2026-06-02 —
+  # a bare first-page GET now silently truncates at the default page size
+  # (field case: a 599-column workbook whose error-column audit saw only the
+  # first page). `path` may already carry a query string. The nextPage token
+  # is opaque (URL-encoded on reuse); a repeated token or a non-Hash body ends
+  # the loop defensively rather than spinning.
+  def list_entries(path, limit: 1000, http: nil)
+    entries = []
+    page = nil
+    seen = {}
+    loop do
+      qs = "limit=#{limit.to_i}"
+      qs += "&page=#{URI.encode_www_form_component(page)}" if page
+      data = request(:get, "#{path}#{path.include?('?') ? '&' : '?'}#{qs}", http: http)
+      break unless data.is_a?(Hash)
+      entries.concat(data['entries'] || [])
+      page = data['nextPage']
+      break if page.nil? || page.to_s.empty? || seen[page]
+      seen[page] = true
+    end
+    entries
+  end
+
   def request(method, path, body: nil, content_type: 'application/json', accept: 'application/json', binary: false, http: nil)
     uri = URI("#{base_url}#{path}")
     attempts = 0
