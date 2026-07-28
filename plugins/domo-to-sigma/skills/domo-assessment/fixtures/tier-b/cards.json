@@ -1,12 +1,12 @@
 {
-  "columns": ["Card ID", "Card Title", "Card Type", "Page ID", "DataSet ID", "Owner Name", "Last Modified", "Beast Mode Refs"],
+  "columns": ["Card ID", "Card Title", "Card Type", "Page ID", "DataSet ID", "Owner Name", "Last Modified"],
   "rows": [
-    ["card-001", "Regional Sales Trend", "bar", "pg-001", "ds-001", "Dana Ruiz", "2026-07-22T09:00:00Z", "bm-001:Total Revenue:SUM(`Revenue`)"],
-    ["card-002", "Sales Rep Leaderboard", "table", "pg-001", "ds-001", "Dana Ruiz", "2026-07-18T09:00:00Z", "bm-002:Active Rep Count:COUNT(DISTINCT `Rep ID`)"],
-    ["card-003", "Deprecated Route Report", "line", "pg-001", "ds-001", "Dana Ruiz", "2026-03-01T09:00:00Z", ""],
-    ["card-004", "Campaign ROI Breakdown", "table", "pg-002", "ds-002", "Alex Chen", "2026-07-10T09:00:00Z", "bm-003:Legacy Distance Ratio:SQRT(`Distance`) / `Total Trips`"],
-    ["card-005", "Marketing Spend Summary", "single-value", "pg-002", "ds-002", "Alex Chen", "2026-07-11T09:00:00Z", "bm-004:Rounded Max Spend:CEILING(`Marketing Spend`)"],
-    ["card-006", "Support Ticket Volume", "bar", "pg-003", "ds-003", "Jordan Kim", "2026-07-25T09:00:00Z", "bm-005:Ticket Volume Flag:COUNT(`Ticket ID`)"],
-    ["card-007", "Budget vs Actual", "table", "pg-003", "ds-004", "Jordan Kim", "2026-07-05T09:00:00Z", "bm-006:Budget Utilization:CASE WHEN `Budget` > `Actual Spend` THEN 'Under' ELSE 'Over' END"]
+    ["card-001", "Regional Sales Trend", "bar", "pg-001", "ds-001", "Dana Ruiz", "2026-07-22T09:00:00Z"],
+    ["card-002", "Sales Rep Leaderboard", "table", "pg-001", "ds-001", "Dana Ruiz", "2026-07-18T09:00:00Z"],
+    ["card-003", "Deprecated Route Report", "line", "pg-001", "ds-001", "Dana Ruiz", "2026-03-01T09:00:00Z"],
+    ["card-004", "Campaign ROI Breakdown", "table", "pg-002", "ds-002", "Alex Chen", "2026-07-10T09:00:00Z"],
+    ["card-005", "Marketing Spend Summary", "single-value", "pg-002", "ds-002", "Alex Chen", "2026-07-11T09:00:00Z"],
+    ["card-006", "Support Ticket Volume", "bar", "pg-003", "ds-003", "Jordan Kim", "2026-07-25T09:00:00Z"],
+    ["card-007", "Budget vs Actual", "table", "pg-003", "ds-004", "Jordan Kim", "2026-07-05T09:00:00Z"]
   ]
 }
