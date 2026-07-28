@@ -301,6 +301,14 @@ jobs:
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-reuse-check.rb
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-green-gates.rb
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-assert-phase6.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-helper.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-fixtures.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-probe.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-discover.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-score.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-render.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-score-noaudit.rb
+            plugins/domo-to-sigma/skills/domo-assessment/test/test-discover-malformed.rb
           )
           fail=0
           for t in "${tests[@]}"; do
