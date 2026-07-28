@@ -16,12 +16,22 @@
 #     — unlike 3/4 — do NOT fail closed without creds: they print a [SKIP]
 #     WARN and continue. Already covered (against the libs directly) by
 #     test-green-gates.rb; this harness only relies on their offline no-op.
-#   - Gate 10 (telemetry) delegates to scripts/assert-telemetry-ran.rb, which
-#     is NOT vendored in this plugin, so gate 10 is an unconditional WARN
-#     no-op here — nothing to contract-test in this plugin's copy.
-#   - Gate 14 (visual-similarity) needs scripts/visual-similarity.py (also not
-#     vendored here) plus a real python3 + image pair; left untested (see
-#     bottom-of-file NOTE) rather than faked.
+#   - Gate 10 (telemetry) delegates to scripts/assert-telemetry-ran.rb.
+#     write_good_fixtures seeds a telemetry-sent.json marker (status
+#     "declined") so this gate is satisfied at ZERO waiver-budget cost
+#     regardless of whether the delegate script happens to be vendored
+#     alongside this gate: an unconditional WARN no-op where it is absent
+#     (e.g. domo-to-sigma's copy), a genuine marker-satisfied pass where it
+#     IS vendored (e.g. this canonical's own location, and most other
+#     plugins' copies) — either way every scenario below reaches its own
+#     targeted gate, never gate 10's exit 12.
+#   - Gate 14 (visual-similarity) needs scripts/visual-similarity.py plus a
+#     real python3 + image pair; no scenario below ever supplies BOTH a
+#     source dashboard PNG AND reaches this gate without exiting earlier
+#     (the one scenario with a source PNG, gate 13, always exits first), so
+#     gate 14 stays an inert [SKIP] N/A here whether or not the delegate
+#     script is vendored — left untested (see bottom-of-file NOTE) rather
+#     than faked.
 #   - Gate 7b (runtime control flip) and gate 4b (layout-phase sentinel) are
 #     opt-in / tool-gated respectively; both have genuine offline-triggerable
 #     paths (a file-driven enforced-fallback for 7b, a tool-registry check for
@@ -92,6 +102,14 @@ def write_good_fixtures(dir)
     f.write("\x89PNG\r\n\x1a\n".b)
     f.write("\x00".b * 6_000)
   end
+  # Gate 10 (telemetry consent decision) — satisfied via the marker file
+  # itself, at ZERO waiver-budget cost, rather than via --skip-telemetry-gate.
+  # assert-telemetry-ran.rb requires BOTH the marker's existence AND a
+  # status of sent/declined/skipped; harmless where the delegate script is
+  # not vendored alongside this gate (an unconditional WARN no-op there, as
+  # in domo-to-sigma's copy) and correctly satisfies it where it IS vendored
+  # (e.g. the shared canonical's own location, and most other plugins' copies).
+  write_json(dir, 'telemetry-sent.json', 'status' => 'declined')
 end
 
 # Every offline scenario needs gates 3 (--skip-column-check) and 4
@@ -301,14 +319,22 @@ if $failures.zero? then puts 'ALL PASS'; exit 0 else puts "#{$failures} FAILURE(
 #     harness only relies on their credential-less no-op (implicit in every
 #     scenario above, since SIGMA_BASE_URL/TOKEN are always forced empty and
 #     none of the scenarios ever fail at gate 6 or 7).
-#   - Gate 10 (telemetry): scripts/assert-telemetry-ran.rb is not vendored in
-#     this plugin's copy, so this gate is an unconditional WARN no-op in this
-#     copy of the shared script — nothing to assert here.
-#   - Gate 14 (visual-similarity floor): scripts/visual-similarity.py is not
-#     vendored in this plugin's copy either (the gate is entirely invisible when
-#     the script is absent); testing it would require vendoring a stub script,
-#     a real python3 subprocess, and entangles with gate 13's source-PNG
-#     discovery. Left untested rather than faked.
+#   - Gate 10 (telemetry): satisfied above via the telemetry-sent.json
+#     fixture in write_good_fixtures (zero waiver-budget cost), not by
+#     asserting a specific WARN-vs-pass behavior — that behavior legitimately
+#     differs by copy (WARN no-op where scripts/assert-telemetry-ran.rb is
+#     absent, e.g. domo-to-sigma; a real marker-satisfied pass where it is
+#     vendored, e.g. this canonical and most other plugins' copies). Both
+#     paths are exercised implicitly (every scenario below reaches its own
+#     targeted gate either way); nothing further to assert.
+#   - Gate 14 (visual-similarity floor): stays an inert [SKIP] N/A in every
+#     scenario above regardless of whether scripts/visual-similarity.py is
+#     vendored in this copy, because no scenario supplies both a source
+#     dashboard PNG and reaches this gate without exiting earlier (gate 13's
+#     scenario is the only one with a source PNG, and it always exits before
+#     gate 14 runs). Actually exercising a measured pass/fail would require
+#     vendoring a stub script, a real python3 subprocess, and entangles with
+#     gate 13's source-PNG discovery. Left untested rather than faked.
 #   - Gate 9's sub-checks (attested-empty-tile cross-check, gate 9b
 #     shape_match) share gate 9's exit code (11); only the base
 #     "no manifest at all" path is exercised above.
