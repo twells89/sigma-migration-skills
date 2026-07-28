@@ -1,0 +1,12 @@
+{
+  "_comment": "Private per-card definitions (Domo /api/content/v1/cards shape) — its reachability is one of the two Tier-A signals (probe-governance.rb), the other being the presence of beast-modes.json. Adds structural detail (filters/drill paths) not visible on the public Cards governance dataset.",
+  "cards": [
+    {"card_id": "card-001", "filters": [], "drill_path": [], "beast_mode_ids": ["bm-001"]},
+    {"card_id": "card-002", "filters": [], "drill_path": [], "beast_mode_ids": ["bm-002"]},
+    {"card_id": "card-003", "filters": [], "drill_path": [], "beast_mode_ids": []},
+    {"card_id": "card-004", "filters": [{"column": "Region", "operator": "IN", "values": ["West", "East"]}], "drill_path": [], "beast_mode_ids": ["bm-003"]},
+    {"card_id": "card-005", "filters": [], "drill_path": [], "beast_mode_ids": ["bm-004"]},
+    {"card_id": "card-006", "filters": [], "drill_path": ["Support Ticket Detail"], "beast_mode_ids": ["bm-005"]},
+    {"card_id": "card-007", "filters": [], "drill_path": [], "beast_mode_ids": ["bm-006"]}
+  ]
+}

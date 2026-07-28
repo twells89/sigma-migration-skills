@@ -1,0 +1,7 @@
+{
+  "columns": ["DataFlow ID", "DataFlow Name", "DataFlow Type", "Input DataSet IDs", "Output DataSet IDs", "Last Run", "Run Status"],
+  "rows": [
+    ["df-001", "Support Ticket ETL", "Magic ETL", "ds-002", "ds-003", "2026-07-25T02:00:00Z", "SUCCESS"],
+    ["df-002", "Web Sessions Enrichment", "SQL", "ds-005", "ds-006", "2026-07-27T06:00:00Z", "SUCCESS"]
+  ]
+}

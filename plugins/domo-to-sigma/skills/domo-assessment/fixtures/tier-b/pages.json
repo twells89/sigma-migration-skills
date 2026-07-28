@@ -1,0 +1,8 @@
+{
+  "columns": ["Page ID", "Page Title", "Owner Name", "Parent Page ID", "Card Count"],
+  "rows": [
+    ["pg-001", "Sales Overview", "Dana Ruiz", null, 3],
+    ["pg-002", "Marketing Performance", "Alex Chen", null, 2],
+    ["pg-003", "Support Operations", "Jordan Kim", "pg-001", 2]
+  ]
+}

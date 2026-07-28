@@ -1,0 +1,11 @@
+{
+  "columns": ["Beast Mode ID", "Beast Mode Name", "SQL Text", "DataSet ID"],
+  "rows": [
+    ["bm-001", "Total Revenue", "SUM(`Revenue`)", "ds-001"],
+    ["bm-002", "Active Rep Count", "COUNT(DISTINCT `Rep ID`)", "ds-001"],
+    ["bm-003", "Legacy Distance Ratio", "SQRT(`Distance`) / `Total Trips`", "ds-002"],
+    ["bm-004", "Rounded Max Spend", "CEILING(`Marketing Spend`)", "ds-002"],
+    ["bm-005", "Ticket Volume Flag", "COUNT(`Ticket ID`)", "ds-003"],
+    ["bm-006", "Budget Utilization", "CASE WHEN `Budget` > `Actual Spend` THEN 'Under' ELSE 'Over' END", "ds-004"]
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "columns": ["Policy ID", "DataSet ID", "Policy Name", "Filter Column", "Filter Predicate", "Applied User IDs"],
+  "rows": [
+    ["pdp-001", "ds-004", "Finance - Region Restricted", "Region", "= 'West'", "user-001,user-003"],
+    ["pdp-002", "ds-005", "Web Traffic - Team Restricted", "Team", "IN ('Marketing')", "user-002"]
+  ]
+}

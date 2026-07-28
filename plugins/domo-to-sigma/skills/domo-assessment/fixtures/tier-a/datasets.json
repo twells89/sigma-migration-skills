@@ -1,0 +1,11 @@
+{
+  "columns": ["DataSet ID", "DataSet Name", "Owner Name", "Connector Type", "Row Count", "Last Updated", "Update Schedule"],
+  "rows": [
+    ["ds-001", "Sales Transactions", "Dana Ruiz", "snowflake", 250000, "2026-07-20T10:00:00Z", "daily"],
+    ["ds-002", "Marketing Campaigns", "Alex Chen", "csv", 1200, "2026-06-15T08:00:00Z", "manual"],
+    ["ds-003", "Support Tickets", "Jordan Kim", "dataflow", 45000, "2026-07-25T02:00:00Z", "daily"],
+    ["ds-004", "Finance Budget", "Dana Ruiz", "snowflake", 8000, "2026-07-01T00:00:00Z", "weekly"],
+    ["ds-005", "Website Traffic", "Alex Chen", "google-analytics", 900000, "2026-07-27T05:00:00Z", "hourly"],
+    ["ds-006", "Web Sessions Enriched", "Alex Chen", "dataflow", 900000, "2026-07-27T06:00:00Z", "hourly"]
+  ]
+}

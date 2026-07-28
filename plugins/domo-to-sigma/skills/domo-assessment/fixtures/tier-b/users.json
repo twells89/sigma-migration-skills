@@ -1,0 +1,13 @@
+{
+  "columns": ["User ID", "User Name", "Email", "Role", "Last Login", "Created Date"],
+  "rows": [
+    ["user-001", "Dana Ruiz", "user-001@acme-analytics.example", "Admin", "2026-07-27T08:00:00Z", "2024-01-15"],
+    ["user-002", "Alex Chen", "user-002@acme-analytics.example", "Privileged", "2026-07-26T08:00:00Z", "2024-02-01"],
+    ["user-003", "Jordan Kim", "user-003@acme-analytics.example", "Privileged", "2026-07-25T08:00:00Z", "2024-03-10"],
+    ["user-004", "Sam Patel", "user-004@acme-analytics.example", "Participant", "2026-07-20T08:00:00Z", "2024-04-05"],
+    ["user-005", "Riley Nguyen", "user-005@acme-analytics.example", "Participant", "2026-07-19T08:00:00Z", "2024-05-12"],
+    ["user-006", "Casey Brooks", "user-006@acme-analytics.example", "Participant", "2026-07-18T08:00:00Z", "2024-06-01"],
+    ["user-007", "Morgan Lee", "user-007@acme-analytics.example", "Social", "2026-06-01T08:00:00Z", "2024-07-20"],
+    ["user-008", "Taylor Reyes", "user-008@acme-analytics.example", "Privileged", "2026-07-27T08:00:00Z", "2024-08-03"]
+  ]
+}
