@@ -600,7 +600,8 @@
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/doctor.sh",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-assessment/scripts/doctor.sh",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/doctor.sh",
-        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/doctor.sh"
+        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/doctor.sh",
+        "plugins/domo-to-sigma/skills/domo-assessment/scripts/doctor.sh"
       ]
     },
     {
@@ -627,7 +628,8 @@
         "plugins/tableau-to-sigma/skills/tableau-assessment/scripts/bootstrap.sh",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/bootstrap.sh",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-assessment/scripts/bootstrap.sh",
-        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/bootstrap.sh"
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/bootstrap.sh",
+        "plugins/domo-to-sigma/skills/domo-assessment/scripts/bootstrap.sh"
       ]
     },
     {
@@ -655,7 +657,8 @@
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/doctor.ps1",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-assessment/scripts/doctor.ps1",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/doctor.ps1",
-        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/doctor.ps1"
+        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/doctor.ps1",
+        "plugins/domo-to-sigma/skills/domo-assessment/scripts/doctor.ps1"
       ]
     },
     {
@@ -682,7 +685,8 @@
         "plugins/tableau-to-sigma/skills/tableau-assessment/scripts/bootstrap.ps1",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/bootstrap.ps1",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-assessment/scripts/bootstrap.ps1",
-        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/bootstrap.ps1"
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/bootstrap.ps1",
+        "plugins/domo-to-sigma/skills/domo-assessment/scripts/bootstrap.ps1"
       ]
     },
     {
