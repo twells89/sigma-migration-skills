@@ -25,7 +25,7 @@
 # carry an Activity Log; Tier A/B only changes whether Beast Mode buckets exist).
 #
 # Tags, evaluated IN ORDER (first match wins):
-#   views == 0                                    -> retire
+#   AUDIT && views == 0                            -> retire
 #   n_unhandled >= 1                              -> needs-gap-scout
 #   score >= 20 && (n_manual + n_unhandled) == 0  -> migrate-first
 #   score >= 10                                    -> easy-win
@@ -126,7 +126,7 @@ artifacts = cards.map do |card|
   score = value / (1.0 + cost)
 
   tag =
-    if views.zero?
+    if AUDIT && views.zero?
       'retire'
     elsif n_unhandled >= 1
       'needs-gap-scout'

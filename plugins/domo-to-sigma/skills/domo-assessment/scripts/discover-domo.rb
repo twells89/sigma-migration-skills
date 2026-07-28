@@ -79,15 +79,33 @@ def make_col(table_name)
 end
 
 # { "columns" => [...], "rows" => [[...], ...] } -> { colname => index }
-def build_colidx(table)
+#
+# TOLERANT SHAPE GUARD: a governance table is expected to be a {columns,rows}
+# Hash, but that shape is reconstructed from docs/community, not guaranteed --
+# if the top-level JSON is something else entirely (e.g. a bare array),
+# `table['columns']` would raise TypeError (Array#[] doesn't take a String
+# key). That's exactly the crash the tolerant-parse promise above rules out,
+# so degrade instead: empty column index + one table-level _shapeSuspect
+# warning (mirrors the "table absent" warning recorded below for nil tables).
+def build_colidx(table, table_name = nil)
   idx = {}
-  Array(table && table['columns']).each_with_index { |c, i| idx[c] = i }
+  return idx if table.nil?
+  unless table.is_a?(Hash) && table['columns'].is_a?(Array)
+    WARNINGS << { '_shapeSuspect' => true, 'table' => table_name, 'column' => nil,
+                  'reason' => "table's top-level JSON is not a {columns,rows} Hash (got #{table.class}) -- treating as empty" }
+    return idx
+  end
+  table['columns'].each_with_index { |c, i| idx[c] = i }
   idx
 end
 
 # { "columns" => [...], "rows" => [[...], ...] } -> [ { colname => value }, ... ]
+# Same malformed-table guard as build_colidx (whose warning already covers
+# this table when called first, as every call site here does) -- just
+# degrade to no rows instead of raising on `table['rows']`.
 def build_rows(table, colidx)
-  Array(table && table['rows']).map do |arr|
+  rows = table.is_a?(Hash) ? table['rows'] : nil
+  Array(rows).map do |arr|
     h = {}
     colidx.each { |name, i| h[name] = arr[i] }
     h
@@ -149,7 +167,7 @@ tables.each do |name, tbl|
 end
 
 # ---- datasets ---------------------------------------------------------------
-ds_colidx = build_colidx(tables['datasets'])
+ds_colidx = build_colidx(tables['datasets'], 'datasets')
 ds_col = make_col('datasets')
 datasets_out = build_rows(tables['datasets'], ds_colidx).map do |row|
   {
@@ -164,7 +182,7 @@ datasets_out = build_rows(tables['datasets'], ds_colidx).map do |row|
 end
 
 # ---- pages -------------------------------------------------------------------
-pg_colidx = build_colidx(tables['pages'])
+pg_colidx = build_colidx(tables['pages'], 'pages')
 pg_col = make_col('pages')
 pages_out = build_rows(tables['pages'], pg_colidx).map do |row|
   {
@@ -177,7 +195,7 @@ pages_out = build_rows(tables['pages'], pg_colidx).map do |row|
 end
 
 # ---- users -------------------------------------------------------------------
-us_colidx = build_colidx(tables['users'])
+us_colidx = build_colidx(tables['users'], 'users')
 us_col = make_col('users')
 users_out = build_rows(tables['users'], us_colidx).map do |row|
   {
@@ -191,14 +209,14 @@ users_out = build_rows(tables['users'], us_colidx).map do |row|
 end
 
 # ---- pdp: DataSet IDs carrying at least one policy ---------------------------
-pdp_colidx = build_colidx(tables['pdp'])
+pdp_colidx = build_colidx(tables['pdp'], 'pdp')
 pdp_col = make_col('pdp')
 pdp_dataset_ids = build_rows(tables['pdp'], pdp_colidx)
                   .map { |row| pdp_col.call(row, pdp_colidx, 'DataSet ID') }
                   .compact.to_set
 
 # ---- dataflows: DataSet IDs that are a DataFlow OUTPUT -----------------------
-df_colidx = build_colidx(tables['dataflows'])
+df_colidx = build_colidx(tables['dataflows'], 'dataflows')
 df_col = make_col('dataflows')
 dataflow_output_ids = build_rows(tables['dataflows'], df_colidx).flat_map do |row|
   raw = df_col.call(row, df_colidx, 'Output DataSet IDs')
@@ -208,7 +226,7 @@ end.reject(&:empty?).to_set
 # ---- activity-log -> usage_by_card -------------------------------------------
 usage_by_card = {}
 if tables['activity-log']
-  al_colidx = build_colidx(tables['activity-log'])
+  al_colidx = build_colidx(tables['activity-log'], 'activity-log')
   al_col = make_col('activity-log')
   build_rows(tables['activity-log'], al_colidx).each do |row|
     obj_type = al_col.call(row, al_colidx, 'Object Type')
@@ -224,7 +242,7 @@ if tables['activity-log']
 end
 
 # ---- cards: join pages/datasets/pdp/dataflows/usage/beast-mode-refs ---------
-cd_colidx = build_colidx(tables['cards'])
+cd_colidx = build_colidx(tables['cards'], 'cards')
 cd_col = make_col('cards')
 cards_out = build_rows(tables['cards'], cd_colidx).map do |row|
   id         = cd_col.call(row, cd_colidx, 'Card ID')

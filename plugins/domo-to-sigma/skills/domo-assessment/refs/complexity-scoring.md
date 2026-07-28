@@ -17,7 +17,9 @@ complexity is degraded (see §4).
 
 Tags (identical vocabulary to the other assessments), evaluated **in this
 order** — first match wins:
-- `views == 0` (audit mode) → **retire**
+- `audit mode && views == 0` → **retire** (outside audit mode a 0-view card
+  falls through to the score-based tags below instead — there's no usage
+  signal to justify retiring it, see §4/`refs/governance-datasets.md`)
 - `n_unhandled >= 1` → **needs-gap-scout**
 - `score >= 20 and (n_manual + n_unhandled) == 0` → **migrate-first**
 - `score >= 10` → **easy-win**

@@ -56,9 +56,13 @@ installed else a Beast-Mode-count proxy, `score = value / (1 + cost)`, tagged
 
 **Read-only.** Every live call is a `GET` or a `POST .../query/execute` SELECT
 against a Domo-owned system dataset. Nothing in Domo is created, edited, or
-deleted. **No Sigma credentials are used or required anywhere in this skill**
-— the assessment never authenticates to Sigma and never posts anything to it;
-every artifact is local JSON/Markdown until a human shares it deliberately.
+deleted. **No Sigma credentials are used or required by this assessment's
+pipeline (probe → discover → score → render)** — that pipeline never
+authenticates to Sigma and never posts anything to it; every artifact is
+local JSON/Markdown until a human shares it deliberately. (The vendored
+`doctor.sh`/`bootstrap.sh` scripts are the exception — see "Scripts" below
+and `PRIVACY.md` — they check for Sigma credentials but are not part of this
+pipeline.)
 
 ## When to use / Not for
 Use this to scope a Domo→Sigma migration, prioritize which cards/pages to
