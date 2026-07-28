@@ -44,6 +44,7 @@ reading the relevant `SKILL.md` and executing its scripts.
 | Convert a GoodData Cloud / .CN workspace (LDM + MAQL + insights + dashboards) → Sigma | `gooddata-to-sigma` | `plugins/gooddata-to-sigma/skills/gooddata-to-sigma/` |
 | Scope/assess a GoodData workspace | `gooddata-assessment` | `plugins/gooddata-to-sigma/skills/gooddata-assessment/` |
 | Convert a Domo dashboard (DataSets + Beast Modes + cards) → Sigma | `domo-to-sigma` | `plugins/domo-to-sigma/skills/domo-to-sigma/` |
+| Scope/assess a Domo instance | `domo-assessment` | `plugins/domo-to-sigma/skills/domo-assessment/` |
 | Land a Tableau published-datasource/extract in Snowflake or Databricks | `tableau-vds-to-cdw` | `plugins/tableau-to-sigma/skills/tableau-vds-to-cdw/` |
 | Land an Import-mode Power BI model's data in Snowflake (before converting) | `powerbi-import-to-snowflake` | `plugins/powerbi-to-sigma/skills/powerbi-import-to-snowflake/` |
 

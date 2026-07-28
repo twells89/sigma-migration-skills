@@ -152,7 +152,7 @@
     {
       "name": "domo-to-sigma",
       "source": "./plugins/domo-to-sigma",
-      "description": "Domo → Sigma — DataSets → Sigma data model (flat materialized tables → table elements), Beast Mode calc fields → Sigma formulas (MySQL-dialect SQL), and cards → charts/KPIs/pivots (every card's Summary Number → a KPI, never a table). Ports page + card filters as controls, detects PDP policies for opt-in row-level security, and verifies warehouse parity (live step). A read-only domo-assessment skill is scaffolded and ships in a later release.",
+      "description": "Domo → Sigma — DataSets → Sigma data model (flat materialized tables → table elements), Beast Mode calc fields → Sigma formulas (MySQL-dialect SQL), and cards → charts/KPIs/pivots (every card's Summary Number → a KPI, never a table). Ports page + card filters as controls, detects PDP policies for opt-in row-level security, and verifies warehouse parity (live step). Bundles a read-only domo-assessment skill (public governance-dataset inventory → value/cost-ranked migration-readiness readout).",
       "category": "migration",
       "keywords": ["domo", "beast-mode", "pdp", "migration", "bi"]
     }
