@@ -315,6 +315,11 @@ jobs:
             plugins/domo-to-sigma/skills/domo-assessment/test/test-render.rb
             plugins/domo-to-sigma/skills/domo-assessment/test/test-score-noaudit.rb
             plugins/domo-to-sigma/skills/domo-assessment/test/test-discover-malformed.rb
+            plugins/looker-to-sigma/skills/looker-to-sigma/test/test-assert-phase6.rb
+            plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/test/test-assert-phase6.rb
+            plugins/powerbi-to-sigma/skills/powerbi-to-sigma/test/test-assert-phase6.rb
+            plugins/quicksight-to-sigma/skills/quicksight-to-sigma/test/test-assert-phase6.rb
+            plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/test/test-assert-phase6.rb
           )
           fail=0
           for t in "${tests[@]}"; do
