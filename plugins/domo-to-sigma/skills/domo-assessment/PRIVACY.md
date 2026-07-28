@@ -11,8 +11,11 @@ against Domo-owned metadata datasets) and, when a `DOMO_DEV_TOKEN` is
 available (Tier A), read-only calls against the private card-definition API
 to pull Beast Mode SQL text. It scores every card locally for migration
 readiness and renders a Markdown readout. It **never** creates, edits,
-schedules, or deletes anything in Domo, and it **never** touches Sigma — no
-Sigma credentials are used or required anywhere in this skill.
+schedules, or deletes anything in Domo. The assessment pipeline itself
+(probe → discover → score → render) uses no Sigma credentials and never
+posts to Sigma. (See the caveat about `doctor.sh`/`bootstrap.sh` under "Auth
+handling" below — those two scripts are vendored into this skill folder for
+family-consistency but are **not part of the assessment pipeline**.)
 
 ## What crosses the LLM (Anthropic) API
 
@@ -34,15 +37,30 @@ It never includes row-level warehouse data or card result sets.
 
 ## Auth handling
 
-The skill authenticates to **Domo only** — obtained via
+The assessment pipeline authenticates to **Domo only** — obtained via
 `../domo-to-sigma/scripts/get-domo-token.sh`, which exchanges
 `DOMO_CLIENT_ID`/`DOMO_CLIENT_SECRET` for a short-lived
 `DOMO_ACCESS_TOKEN` (public API) and, for Tier A, also reads a
 user-supplied `DOMO_DEV_TOKEN` (private card-definition API). These
-credentials/tokens are read from environment variables at run time, used
-only as request headers, and are **never echoed to stdout, written to any
-output file, or committed**. The skill uses no Sigma credentials at all —
-it never authenticates to Sigma and never posts anything to it.
+credentials/tokens are read from environment variables at run time and used
+only as request headers; they are never written to any output file or
+committed. Following the standard `eval "$(...)"` shell idiom,
+`get-domo-token.sh` does print `export DOMO_ACCESS_TOKEN=<token>` to stdout
+so the calling shell can capture it — that's local-shell-to-local-shell
+output, not logging or persistence: the token stays in the local shell's
+environment, is not written to disk, not sent anywhere but Domo's own auth
+endpoint, and is never committed.
+
+This skill folder also vendors `scripts/doctor.sh`/`doctor.ps1` and
+`scripts/bootstrap.sh`/`bootstrap.ps1` from the `*-to-sigma` skill family for
+cross-skill consistency and a future Sigma hand-off. **These are not part of
+the assessment pipeline** (probe → discover → score → render never calls
+them). They check for `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` and, if a user
+separately runs them with those set, will perform a live Sigma OAuth
+token-mint smoke test — the only way this skill folder touches Sigma at all,
+and only when a user deliberately invokes one of those two scripts outside
+the normal flow. The assessment's real preflight is `probe-governance.rb`,
+not `doctor.sh`.
 
 ## Where outputs go
 
