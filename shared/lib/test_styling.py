@@ -1,3 +1,4 @@
+import base64
 import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import styling
@@ -90,9 +91,10 @@ class StylingHelpersTest(unittest.TestCase):
         with open(os.path.join(os.path.dirname(__file__), "testdata", "styling_golden.json")) as f:
             self.golden = json.load(f)
 
-    def test_surfaces_all_6_task1_surfaces_are_go(self):
+    def test_surfaces_all_8_surfaces_are_go(self):
         expected = ["categorical_scheme", "chart_color_by", "container_style",
-                    "format_string", "kpi_name_color", "typography"]
+                    "format_string", "kpi_name_color", "typography",
+                    "gradient_header", "motif"]
         self.assertEqual(sorted(styling.SURFACES.keys()), sorted(expected))
         self.assertTrue(all(styling.SURFACES.values()))
 
@@ -179,8 +181,121 @@ class StylingHelpersTest(unittest.TestCase):
             "format_for_decimal": styling.format_for("decimal"),
             "header": styling.header("hdr", "Dashboard", theme),
             "section_card": styling.section_card("card-1", band, theme),
+            "gradient_header_glow": styling.gradient_header(
+                "ghdr", "Command Center", subtitle="Live metrics", logo_url="https://example.com/logo.png"),
+            "gradient_header_rings_left": styling.gradient_header(
+                "ghdr2", "Ops", motif="rings", motif_side="left"),
+            "gradient_header_none": styling.gradient_header("ghdr3", "Plain", motif="none"),
+            "gradient_header_byo": styling.gradient_header("ghdr4", "Custom", motif="https://example.com/art.png"),
         }
         self.assertEqual(json.dumps(_sort(actual)), json.dumps(_sort(self.golden)))
+
+
+class MotifsTest(unittest.TestCase):
+    def test_default_theme_header_gradient_is_neutral_2_3_stop_hex_not_red(self):
+        hg = styling.DEFAULT_THEME["header_gradient"]
+        self.assertIsInstance(hg, list)
+        self.assertIn(len(hg), (2, 3))
+        for h in hg:
+            self.assertRegex(h, r"\A#[0-9A-Fa-f]{6}\Z")
+        self.assertNotIn("#E4002B", hg)
+        self.assertNotIn("#FF0000", hg)
+
+    def test_motifs_exactly_the_6_menu_keys(self):
+        self.assertEqual(sorted(styling.MOTIFS.keys()), sorted(["dots", "glow", "grid", "none", "rings", "waves"]))
+
+    def test_motifs_non_empty_deterministic_fragments(self):
+        for k in ["glow", "rings", "grid", "waves", "dots"]:
+            frag = styling.MOTIFS[k]()
+            self.assertIsInstance(frag, str)
+            self.assertNotEqual(frag, "")
+            self.assertEqual(frag, styling.MOTIFS[k]())
+
+    def test_motifs_none_returns_empty_string(self):
+        self.assertEqual(styling.MOTIFS["none"](), "")
+
+
+class GradientHeaderTest(unittest.TestCase):
+    def _decode(self, h):
+        url = h["element"][0]["backgroundImage"]["url"]
+        return base64.b64decode(url.replace("data:image/svg+xml;base64,", "")).decode()
+
+    def test_default_glow_right_container_shape(self):
+        h = styling.gradient_header("ghdr", "Command Center")
+        bg = h["element"][0]
+        self.assertEqual(bg["kind"], "container")
+        self.assertEqual(bg["style"], {"borderRadius": "round"})
+        self.assertTrue(bg["backgroundImage"]["url"].startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(bg["backgroundImage"]["style"], {"fit": "cover"})
+        self.assertTrue(any(e["kind"] == "text" and e["id"] == "ghdr-title" for e in h["element"]))
+        self.assertIn("<GridContainer", h["layout"])
+        self.assertIn('elementId="ghdr-title"', h["layout"])
+
+    def test_decoded_svg_carries_gradient_and_requested_motif(self):
+        h = styling.gradient_header("ghdr", "X", motif="rings")
+        svg = self._decode(h)
+        self.assertIn("linearGradient", svg)
+        self.assertIn('<circle r="40"/>', svg)
+        self.assertIn('<g transform="translate(1440,86)">', svg)
+
+    def test_motif_none_has_no_motif_group(self):
+        h = styling.gradient_header("ghdr", "X", motif="none")
+        svg = self._decode(h)
+        self.assertNotIn("<g transform=", svg)
+
+    def test_motif_side_left_translates_to_x_160(self):
+        h = styling.gradient_header("ghdr", "X", motif="rings", motif_side="left")
+        svg = self._decode(h)
+        self.assertIn("translate(160,86)", svg)
+
+    def test_logo_url_present_adds_logo_element_and_split_layout(self):
+        h = styling.gradient_header("ghdr", "X", logo_url="https://example.com/logo.png")
+        self.assertEqual(len(h["element"]), 3)
+        self.assertEqual(h["element"][1], {"id": "ghdr-logo", "kind": "image",
+                                            "url": "https://example.com/logo.png", "style": {"fit": "contain"}})
+        self.assertIn('elementId="ghdr-logo" gridColumn="1 / 3"', h["layout"])
+        self.assertIn('elementId="ghdr-title" gridColumn="3 / 25"', h["layout"])
+
+    def test_no_logo_url_title_spans_full_width(self):
+        h = styling.gradient_header("ghdr", "X")
+        self.assertFalse(any(e["kind"] == "image" for e in h["element"]))
+        self.assertIn('elementId="ghdr-title" gridColumn="1 / 25"', h["layout"])
+
+    def test_subtitle_adds_separate_element_and_split_rows(self):
+        h = styling.gradient_header("ghdr", "X", subtitle="Sub")
+        self.assertEqual(len(h["element"]), 3)
+        self.assertEqual(h["element"][2]["kind"], "text")
+        self.assertEqual(h["element"][2]["id"], "ghdr-subtitle")
+        self.assertIn("Sub", h["element"][2]["body"])
+        self.assertIn('elementId="ghdr-title" gridColumn="1 / 25" gridRow="1 / 3"', h["layout"])
+        self.assertIn('elementId="ghdr-subtitle" gridColumn="1 / 25" gridRow="3 / 4"', h["layout"])
+
+    def test_bring_your_own_http_url_used_verbatim(self):
+        h = styling.gradient_header("ghdr", "X", motif="https://example.com/art.png")
+        self.assertEqual(h["element"][0]["backgroundImage"]["url"], "https://example.com/art.png")
+
+    def test_bring_your_own_data_url_used_verbatim(self):
+        uri = "data:image/png;base64,AAAA"
+        h = styling.gradient_header("ghdr", "X", motif=uri)
+        self.assertEqual(h["element"][0]["backgroundImage"]["url"], uri)
+
+    def test_gradient_wrong_stop_count_raises(self):
+        with self.assertRaises(ValueError):
+            styling.gradient_header("ghdr", "X", gradient=["#111111"])
+
+    def test_no_go_gradient_header_falls_back_to_flat_header(self):
+        surfaces = dict(styling.SURFACES, gradient_header=False)
+        h = styling.gradient_header("ghdr", "X", surfaces=surfaces)
+        expected = styling.header("ghdr", "X", styling.DEFAULT_THEME, surfaces=surfaces)
+        self.assertEqual(h, expected)
+
+    def test_no_go_motif_drops_motif_group_keeps_gradient(self):
+        surfaces = dict(styling.SURFACES, motif=False)
+        h = styling.gradient_header("ghdr", "X", motif="https://example.com/art.png", surfaces=surfaces)
+        bg = h["element"][0]["backgroundImage"]["url"]
+        svg = base64.b64decode(bg.replace("data:image/svg+xml;base64,", "")).decode()
+        self.assertTrue(bg.startswith("data:image/svg+xml;base64,"))
+        self.assertNotIn("<g transform=", svg)
 
 
 if __name__ == "__main__":

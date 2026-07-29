@@ -2,6 +2,7 @@
 styling helpers that decorate Composition output: theme (palette), chart color,
 KPI accent, number format, header/section container. Byte-identical output.
 """
+import base64
 import copy
 import composition  # sibling module in shared/lib; caller must have this dir on sys.path (see test_styling.py)
 
@@ -15,6 +16,10 @@ DEFAULT_THEME = {
               "borderWidth": 1, "borderRadius": "round"},
     "header": {"backgroundColor": "#0F172A", "borderRadius": "round"},
     "accent": "#2563EB",
+    # WS4 Task 2: neutral 3-stop gradient (dark slate -> navy -> accent blue)
+    # for gradient_header(). NOT red -- red is a caller override, same
+    # discipline as theme(accent=) tinting the flat palette above.
+    "header_gradient": ["#0F172A", "#1E3A8A", "#2563EB"],
 }
 
 def theme(accent=None):
@@ -42,6 +47,15 @@ SURFACES = {
     "format_string": True,       # format:{kind:"number",formatString:<d3>} -- Excel-style formatString is 400-rejected, never emitted
     "container_style": True,     # container style:{backgroundColor,borderRadius,borderColor,borderWidth} (borderRadius, NOT cornerRadius; never combine with padding)
     "typography": True,          # themeOverrides.titleFont + per-element name:{fontSize} -- GO, but no helper below emits it (out of this task's scope); kept for a complete surface map
+    # WS4 Task 2 (build-plugs-command-center.rb HDRBG probe): container
+    # backgroundImage:{url:"data:image/svg+xml;base64,...",style:{fit:"cover"}}
+    # carrying a composed <linearGradient>+motif SVG survived readback + a
+    # real render. Two independent gates: gradient_header (the whole surface;
+    # NO-GO falls back to the flat header() band) and motif (the optional
+    # decorative <g> layered on top; NO-GO degrades to a plain gradient with
+    # no motif, never a broken shape).
+    "gradient_header": True,
+    "motif": True,
 }
 
 # d3-format grammar (NOT Excel) -- Task-1 verified surviving strings.
@@ -51,6 +65,45 @@ D3_FORMATS = {
     "percent": ".1%",
     "decimal": ",.2f",
 }
+
+# Motif menu for gradient_header() (WS4 Task 2, design doc "Component B" +
+# the live-verified HDRBG concentric-ring <g> in
+# build-plugs-command-center.rb). Each fragment is a fixed, deterministic SVG
+# string local to its own origin (0,0) -- gradient_header wraps it in a
+# positioning <g transform="translate(x,86)"> per motif_side, so the
+# fragments themselves never hardcode a page position. All geometric,
+# trademark-free, white low-opacity strokes/fills. "none" is the
+# empty-string identity (no motif layered on the gradient).
+GLOW_MOTIF_FRAGMENT = ('<defs><radialGradient id="motif-glow" cx="0.5" cy="0.5" r="0.6">'
+                       '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.2"/>'
+                       '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient></defs>'
+                       '<rect x="-260" y="-105" width="520" height="210" fill="url(#motif-glow)"/>')
+RINGS_MOTIF_FRAGMENT = ('<g fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1.4">'
+                        '<circle r="40"/><circle r="74"/><circle r="108"/>'
+                        '<line x1="-130" y1="0" x2="130" y2="0"/><line x1="0" y1="-130" x2="0" y2="130"/></g>')
+GRID_MOTIF_FRAGMENT = ('<defs><pattern id="motif-grid" width="40" height="40" patternUnits="userSpaceOnUse">'
+                       '<path d="M 40 0 L 0 0 0 40" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1"/>'
+                       '</pattern></defs><rect x="-260" y="-105" width="520" height="210" fill="url(#motif-grid)"/>')
+WAVES_MOTIF_FRAGMENT = ('<g fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="2">'
+                        '<path d="M -150 0 A 150 150 0 0 1 150 0"/>'
+                        '<path d="M -110 0 A 110 110 0 0 1 110 0"/>'
+                        '<path d="M -70 0 A 70 70 0 0 1 70 0"/></g>')
+DOTS_MOTIF_FRAGMENT = ('<defs><pattern id="motif-dots" width="24" height="24" patternUnits="userSpaceOnUse">'
+                       '<circle cx="4" cy="4" r="2" fill="#FFFFFF" fill-opacity="0.16"/></pattern></defs>'
+                       '<rect x="-260" y="-105" width="520" height="210" fill="url(#motif-dots)"/>')
+
+MOTIFS = {
+    "glow": lambda: GLOW_MOTIF_FRAGMENT,
+    "rings": lambda: RINGS_MOTIF_FRAGMENT,
+    "grid": lambda: GRID_MOTIF_FRAGMENT,
+    "waves": lambda: WAVES_MOTIF_FRAGMENT,
+    "dots": lambda: DOTS_MOTIF_FRAGMENT,
+    "none": lambda: "",
+}
+
+# motif_side -> x translate (page-space, viewBox 0 0 1600 210); y is fixed
+# at 86 for every side (matches the HDRBG reference's vertical placement).
+GRADIENT_MOTIF_X = {"right": 1440, "left": 160, "center": 800}
 
 
 def chart_color(theme, categorical=False, surfaces=None):
@@ -145,3 +198,97 @@ def section_card(id, band, theme, page_cols=24, surfaces=None):
         '</GridContainer>',
     ])
     return {"element": container_el, "wrap": wrap}
+
+
+def bring_your_own_motif(motif):
+    """True when `motif` is a caller-supplied image reference (bring-your-own),
+    not a MOTIFS menu key.
+    """
+    return isinstance(motif, str) and (motif.startswith("http") or motif.startswith("data:"))
+
+
+def svg_data_uri(svg):
+    """data:image/svg+xml;base64,... URI for an inline SVG string."""
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+def compose_gradient_svg(gradient, motif, motif_side):
+    """Composes the gradient_header background SVG: viewBox 0 0 1600 210, a
+    linearGradient from `gradient`'s 2-3 hex stops, plus an optional motif
+    <g> positioned per motif_side. `motif` here is always a MOTIFS key
+    (bring-your-own URLs are handled by the caller before this is reached --
+    see gradient_header).
+    """
+    if not isinstance(gradient, list) or len(gradient) not in (2, 3):
+        raise ValueError("compose_gradient_svg: gradient must be a list of 2-3 hex stops (got %r)" % (gradient,))
+    offsets = ["0", "1"] if len(gradient) == 2 else ["0", "0.5", "1"]
+    stops = "".join('<stop offset="%s" stop-color="%s"/>' % (offsets[i], hex_) for i, hex_ in enumerate(gradient))
+    motif_fn = MOTIFS.get(motif)
+    if motif_fn is None:
+        raise ValueError("compose_gradient_svg: unknown motif %r" % (motif,))
+    frag = motif_fn()
+    tx = GRADIENT_MOTIF_X.get(motif_side, GRADIENT_MOTIF_X["right"])
+    motif_group = "" if frag == "" else '<g transform="translate(%d,86)">%s</g>' % (tx, frag)
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 210" preserveAspectRatio="xMidYMid slice">'
+            '<defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="0.45">%s</linearGradient></defs>'
+            '<rect width="1600" height="210" fill="url(#hg)"/>%s</svg>') % (stops, motif_group)
+
+
+def gradient_header(id, title, subtitle=None, gradient=None, motif="glow", motif_side="right",
+                     logo_url=None, page_cols=24, surfaces=None):
+    """Sleek gradient header band (rows 1..4): a container whose
+    backgroundImage is a composed data-URI SVG (linearGradient + optional
+    motif), an optional left-side logo image, a white title text element,
+    and an optional subtitle text element. Same {"element":, "layout":}
+    contract as header(). `motif` is a MOTIFS key (default "glow") or a
+    bring-your-own `http`/`data:` URL string used verbatim as the background
+    (SVG compose skipped). NO-GO gradient_header falls back to the existing
+    flat header() band (graceful, never a broken/fake surface). NO-GO motif
+    (gradient_header still GO) silently drops the motif <g>, keeping the
+    plain gradient -- also graceful, never broken.
+    """
+    s = SURFACES if surfaces is None else surfaces
+    if not s["gradient_header"]:
+        return header(id, title, DEFAULT_THEME, page_cols=page_cols, surfaces=surfaces)
+
+    grad = DEFAULT_THEME["header_gradient"] if gradient is None else gradient
+    effective_motif = motif if s["motif"] else "none"
+    if bring_your_own_motif(effective_motif):
+        bg_url = effective_motif
+    else:
+        bg_url = svg_data_uri(compose_gradient_svg(grad, effective_motif, motif_side))
+
+    container_id = "%s-bg" % id
+    logo_id = "%s-logo" % id
+    title_id = "%s-title" % id
+    subtitle_id = "%s-subtitle" % id
+
+    container_el = {"id": container_id, "kind": "container", "style": {"borderRadius": "round"},
+                     "backgroundImage": {"url": bg_url, "style": {"fit": "cover"}}}
+    title_el = {"id": title_id, "kind": "text", "verticalAlign": "middle",
+                "body": '# <span style="color: #FFFFFF">%s</span>' % title}
+
+    elements = [container_el]
+    if logo_url:
+        elements.append({"id": logo_id, "kind": "image", "url": logo_url, "style": {"fit": "contain"}})
+    elements.append(title_el)
+    if subtitle:
+        elements.append({"id": subtitle_id, "kind": "text", "verticalAlign": "middle",
+                          "body": '<span style="color: #CBD5E1">%s</span>' % subtitle})
+
+    r0, r1 = 1, 4
+    title_r1 = 3 if subtitle else r1
+    text_c0 = 3 if logo_url else 1
+    lines = ['<GridContainer elementId="%s" type="grid" gridColumn="1 / %d" gridRow="%d / %d" '
+             'gridTemplateColumns="repeat(%d, 1fr)" gridTemplateRows="auto">' % (
+                 container_id, page_cols + 1, r0, r1, page_cols)]
+    if logo_url:
+        lines.append('  <LayoutElement elementId="%s" gridColumn="1 / 3" gridRow="%d / %d"/>' % (logo_id, r0, r1))
+    lines.append('  <LayoutElement elementId="%s" gridColumn="%d / %d" gridRow="%d / %d"/>' % (
+        title_id, text_c0, page_cols + 1, r0, title_r1))
+    if subtitle:
+        lines.append('  <LayoutElement elementId="%s" gridColumn="%d / %d" gridRow="%d / %d"/>' % (
+            subtitle_id, text_c0, page_cols + 1, title_r1, r1))
+    lines.append('</GridContainer>')
+
+    return {"element": elements, "layout": "\n".join(lines)}

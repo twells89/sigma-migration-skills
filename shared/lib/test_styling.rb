@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 # test_styling.rb — run directly: ruby shared/lib/test_styling.rb
 require 'json'
+require 'base64'
 require_relative 'styling'
 require_relative 'composition'
 $failures = 0
@@ -84,8 +85,9 @@ end
 
 # --- Task 3: chart_color, kpi_accent, format_for, header, section_card ---
 
-check('SURFACES: all 6 Task-1 surfaces are GO') do
-  expected = %i[categorical_scheme chart_color_by container_style format_string kpi_name_color typography]
+check('SURFACES: all 8 surfaces (Task-1 six + WS4 gradient_header/motif) are GO') do
+  expected = %i[categorical_scheme chart_color_by container_style format_string kpi_name_color typography
+                gradient_header motif]
   Styling::SURFACES.keys.sort == expected.sort && Styling::SURFACES.values.all? { |v| v == true }
 end
 
@@ -158,6 +160,114 @@ check('section_card: NO-GO container_style returns bare band render, no containe
   sc[:element].nil? && !sc[:wrap].include?('GridContainer') && sc[:wrap].scan('<LayoutElement').length == 2
 end
 
+# --- Task 2: Styling::MOTIFS + Styling.gradient_header ---
+
+check('DEFAULT_THEME[:header_gradient] is a neutral 2-3 stop hex gradient, not red') do
+  hg = Styling::DEFAULT_THEME[:header_gradient]
+  hg.is_a?(Array) && [2, 3].include?(hg.length) && hg.all? { |h| h =~ /\A#[0-9A-Fa-f]{6}\z/ } &&
+    !hg.include?('#E4002B') && !hg.include?('#FF0000')
+end
+
+check('MOTIFS: exactly the 6 menu keys') do
+  Styling::MOTIFS.keys.sort == %i[dots glow grid none rings waves].sort
+end
+
+check('MOTIFS: glow/rings/grid/waves/dots each return a non-empty deterministic SVG fragment') do
+  %i[glow rings grid waves dots].all? do |k|
+    frag = Styling::MOTIFS[k].call
+    frag.is_a?(String) && !frag.empty? && frag == Styling::MOTIFS[k].call
+  end
+end
+check('MOTIFS: :none returns an empty string') do
+  Styling::MOTIFS[:none].call == ''
+end
+
+check('gradient_header (default :glow, :right): container has data-URI SVG backgroundImage + title element + GridContainer layout') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'Command Center')
+  bg = h[:element][0]
+  bg['kind'] == 'container' && bg['style'] == { 'borderRadius' => 'round' } &&
+    bg['backgroundImage']['url'].start_with?('data:image/svg+xml;base64,') &&
+    bg['backgroundImage']['style'] == { 'fit' => 'cover' } &&
+    h[:element].any? { |e| e['kind'] == 'text' && e['id'] == 'ghdr-title' } &&
+    h[:layout].include?('<GridContainer') && h[:layout].include?('elementId="ghdr-title"')
+end
+
+check('gradient_header: decoded SVG carries the linearGradient + the requested motif group') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: :rings)
+  svg = Base64.decode64(h[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  svg.include?('linearGradient') && svg.include?('<circle r="40"/>') && svg.include?('<g transform="translate(1440,86)">')
+end
+
+check('gradient_header motif :none: no motif <g> group in the decoded SVG') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: :none)
+  svg = Base64.decode64(h[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  !svg.include?('<g transform=')
+end
+
+check('gradient_header motif_side: :left translates the motif group to x=160') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: :rings, motif_side: :left)
+  svg = Base64.decode64(h[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  svg.include?('translate(160,86)')
+end
+
+check('gradient_header: logo_url present -> logo element + logo/title split layout (logo col 1/3)') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', logo_url: 'https://example.com/logo.png')
+  h[:element].length == 3 &&
+    h[:element][1] == { 'id' => 'ghdr-logo', 'kind' => 'image', 'url' => 'https://example.com/logo.png',
+                         'style' => { 'fit' => 'contain' } } &&
+    h[:layout].include?('elementId="ghdr-logo" gridColumn="1 / 3"') &&
+    h[:layout].include?('elementId="ghdr-title" gridColumn="3 / 25"')
+end
+
+check('gradient_header: no logo_url -> title spans full width, no logo element') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X')
+  h[:element].none? { |e| e['kind'] == 'image' } &&
+    h[:layout].include?('elementId="ghdr-title" gridColumn="1 / 25"')
+end
+
+check('gradient_header: subtitle -> separate subtitle text element + split layout rows') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', subtitle: 'Sub')
+  h[:element].length == 3 &&
+    h[:element][2]['kind'] == 'text' && h[:element][2]['id'] == 'ghdr-subtitle' &&
+    h[:element][2]['body'].include?('Sub') &&
+    h[:layout].include?('elementId="ghdr-title" gridColumn="1 / 25" gridRow="1 / 3"') &&
+    h[:layout].include?('elementId="ghdr-subtitle" gridColumn="1 / 25" gridRow="3 / 4"')
+end
+
+check('gradient_header: bring-your-own http(s) URL used verbatim, SVG compose skipped') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: 'https://example.com/art.png')
+  h[:element][0]['backgroundImage']['url'] == 'https://example.com/art.png'
+end
+check('gradient_header: bring-your-own data: URL used verbatim') do
+  uri = 'data:image/png;base64,AAAA'
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: uri)
+  h[:element][0]['backgroundImage']['url'] == uri
+end
+
+check('gradient_header: gradient with != 2-3 stops raises ArgumentError') do
+  begin
+    Styling.gradient_header(id: 'ghdr', title: 'X', gradient: ['#111111'])
+    false
+  rescue ArgumentError
+    true
+  end
+end
+
+check('gradient_header: NO-GO gradient_header surface falls back to flat Styling.header output') do
+  surfaces = Styling::SURFACES.merge(gradient_header: false)
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', surfaces: surfaces)
+  expected = Styling.header(id: 'ghdr', title: 'X', theme: Styling::DEFAULT_THEME, surfaces: surfaces)
+  h == expected
+end
+
+check('gradient_header: NO-GO motif surface (gradient_header still GO) drops the motif group, keeps the gradient') do
+  surfaces = Styling::SURFACES.merge(motif: false)
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: 'https://example.com/art.png', surfaces: surfaces)
+  bg = h[:element][0]['backgroundImage']['url']
+  svg = Base64.decode64(bg.sub('data:image/svg+xml;base64,', ''))
+  bg.start_with?('data:image/svg+xml;base64,') && !svg.include?('<g transform=')
+end
+
 golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'styling_golden.json')))
 check('helpers match styling_golden.json (sorted-key identical)') do
   theme = Styling::DEFAULT_THEME
@@ -171,7 +281,12 @@ check('helpers match styling_golden.json (sorted-key identical)') do
     'format_for_percent' => Styling.format_for(:percent),
     'format_for_decimal' => Styling.format_for(:decimal),
     'header' => Styling.header(id: 'hdr', title: 'Dashboard', theme: theme),
-    'section_card' => Styling.section_card(id: 'card-1', band: band, theme: theme)
+    'section_card' => Styling.section_card(id: 'card-1', band: band, theme: theme),
+    'gradient_header_glow' => Styling.gradient_header(id: 'ghdr', title: 'Command Center', subtitle: 'Live metrics',
+                                                        logo_url: 'https://example.com/logo.png'),
+    'gradient_header_rings_left' => Styling.gradient_header(id: 'ghdr2', title: 'Ops', motif: :rings, motif_side: :left),
+    'gradient_header_none' => Styling.gradient_header(id: 'ghdr3', title: 'Plain', motif: :none),
+    'gradient_header_byo' => Styling.gradient_header(id: 'ghdr4', title: 'Custom', motif: 'https://example.com/art.png')
   }
   JSON.generate(sort_deep(actual)) == JSON.generate(sort_deep(golden))
 end
