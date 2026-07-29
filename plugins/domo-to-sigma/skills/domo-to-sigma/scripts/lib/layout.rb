@@ -380,12 +380,13 @@ module SigmaLayout
     inter / [[ax1 - ax0, bx1 - bx0].min, 0.1].max
   end
 
-  # A chart zone that reads as a KPI card: declared kpi, or a short plotting
-  # tile that isn't a wide strip.
+  # A chart zone that reads as a KPI card: declared kpi (or Domo's 'kpi-chart'
+  # tag — build-domo-layout.rb's kind_hint emits that, not the bare 'kpi'),
+  # or a short plotting tile that isn't a wide strip.
   def kpi_like_zone?(z)
     return false unless z.is_a?(Hash) && z['kind'] == 'chart'
     return false unless ZoneCensus.plots?(z)
-    return true if z['chart_kind'].to_s == 'kpi'
+    return true if %w[kpi kpi-chart].include?(z['chart_kind'].to_s)
     (z['h_pct'] || 100).to_f <= KPI_MAX_H_PCT && (z['w_pct'] || 100).to_f <= KPI_MAX_W_PCT
   end
 

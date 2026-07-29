@@ -37,6 +37,17 @@ def mref(display) "[Master/#{display}]" end
 $warnings = []
 def warn_card(card, msg) $warnings << { 'card' => card['title'] || card['id'], 'warning' => msg } end
 
+# A page whose cards carry no grid geometry (Task 1's merge_geometry 'x'/'y'
+# fields, sourced from domo-discover's --pages capture) has nothing for
+# build-domo-layout.rb/build-dashboard-layout.rb to place — it silently falls
+# back to a single-column stack. Warn loudly instead of shipping that quietly.
+def warn_missing_geometry(pname, pcards)
+  return if pcards.empty?
+  return if pcards.any? { |c| c['x'] || c['y'] }
+  warn_card(pcards.first, "no grid geometry for page '#{pname}' — layout will fall back to a " \
+                          'single-column stack; ensure domo-discover captured x/y/w/h')
+end
+
 # Split a card's columns into dimensions (grouped / non-aggregated) and measures.
 def split_cols(card)
   cols = card['columns'] || []
@@ -211,6 +222,7 @@ if $PROGRAM_NAME == __FILE__
     Array(p['cardIds'] || p['cards']).each { |cid| card_page[cid.to_s] = p['title'] || p['name'] || p['id'] }
   end
   cards.each { |c| by_page[card_page[c['id'].to_s] || 'Overview'] << c }
+  by_page.each { |pname, pcards| warn_missing_geometry(pname, pcards) }
 
   out_pages = by_page.map do |pname, pcards|
     els = pcards.map { |c| build_element(c, overrides) }.compact

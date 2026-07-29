@@ -81,5 +81,19 @@ eq(ctrls.size, 2, 'deduped to distinct filter columns (region, status)')
 eq(ctrls[0]['filters'], [{ 'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => 'm-region' }],
    'control binds to master column → fans out to every element (fixes fall-off)')
 
+puts "== Phase-5 geometry gate: warn when a page's cards carry no x/y =="
+$warnings = []
+warn_missing_geometry('Overview', [{ 'id' => 'c7', 'title' => 'No Geometry' }, { 'id' => 'c8' }])
+ok($warnings.any? { |w| w['warning'].include?("no grid geometry for page 'Overview'") && w['warning'].include?('single-column stack') },
+   "page with no card x/y warns loudly (Task 1's merge_geometry never ran / found nothing)")
+
+$warnings = []
+warn_missing_geometry('Overview', [{ 'id' => 'c9', 'x' => 0, 'y' => 0, 'w' => 3, 'h' => 2 }, { 'id' => 'c10' }])
+ok($warnings.empty?, 'no warning once at least one card on the page carries geometry')
+
+$warnings = []
+warn_missing_geometry('Empty', [])
+ok($warnings.empty?, 'no warning for an empty page (nothing to place)')
+
 puts
 if $failures.zero? then puts "ALL PASS"; exit 0 else puts "#{$failures} FAILURE(S)"; exit 1 end
