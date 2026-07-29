@@ -32,17 +32,16 @@ puts "== build_dashboard: a KPI card's zone carries chart_kind=='kpi' =="
 # Two cards so max_x/max_y come from their combined extent — the KPI card's
 # own w_pct/h_pct end up WAY over the plain size heuristic thresholds
 # (KPI_MAX_W_PCT 40 / KPI_MAX_H_PCT 12), isolating detection via the
-# chart_kind tag rather than a heuristic size coincidence.
-page_layout = {
-  'title' => 'Overview',
-  'cards' => [
-    { 'cardId' => 'kpi1', 'title' => 'Total Revenue', 'chartType' => 'badge',
-      'x' => 0, 'y' => 0, 'w' => 80, 'h' => 50 },
-    { 'cardId' => 't1', 'title' => 'Detail', 'chartType' => 'table',
-      'x' => 80, 'y' => 0, 'w' => 20, 'h' => 10 },
-  ],
-}
-dashboard = build_dashboard(page_layout)
+# chart_kind tag rather than a heuristic size coincidence. Cards use cards.json's
+# own 'id' field (domo-discover.rb's normalize_card), not the old capture-visuals
+# 'cardId' shape — build-domo-layout.rb now sources geometry from cards.json.
+cards = [
+  { 'id' => 'kpi1', 'title' => 'Total Revenue', 'chartType' => 'badge',
+    'x' => 0, 'y' => 0, 'w' => 80, 'h' => 50 },
+  { 'id' => 't1', 'title' => 'Detail', 'chartType' => 'table',
+    'x' => 80, 'y' => 0, 'w' => 20, 'h' => 10 },
+]
+dashboard = build_dashboard('Overview', cards)
 kpi_zone = dashboard['zones'].find { |z| z['id'] == 'kpi1' }
 ok(kpi_zone, 'KPI card produced a zone')
 eq(kpi_zone['chart_kind'], 'kpi', "zone chart_kind is the logical 'kpi', not the element kind 'kpi-chart'")

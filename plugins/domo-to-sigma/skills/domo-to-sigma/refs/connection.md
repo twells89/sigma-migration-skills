@@ -181,9 +181,14 @@ mandatory layout-visual-qa gate — see `shared/refs/layout-visual-qa.md`,
 `feedback_phase1d_dashboard_png`, `batch_converter_png_brief`):
 
 1. **Layout geometry** — `GET /api/content/v1/pages/{pageId}` carries each card's
-   position/size on Domo's page grid. Normalize it so `build-dashboard-layout.rb`
-   places elements faithfully (hero viz keeps its weight) instead of auto-stacking
-   into an equal-weight "spreadsheet of cards."
+   position/size on Domo's page grid. This capture happens in Phase 1a,
+   **`domo-discover.rb --pages <ids>`**: `DomoSigma.merge_geometry`
+   (`lib/domo_sigma_util.rb`) copies each card's x/y/w/h straight onto its
+   `discovery/cards.json` record. `scripts/build-domo-layout.rb` reads that —
+   it is the ONE geometry source; there is no separate layout-geometry capture
+   or file. (Earlier revisions had `domo-capture-visuals.rb` ALSO extract
+   geometry into a duplicate `discovery/layout/<pageId>.json` that nothing
+   downstream read — removed; see `scripts/build-domo-layout.rb`'s header.)
 2. **Card render** — `PUT /api/content/v1/cards/kpi/{cardId}/render` returns the
    card exactly as the app shows it. Body params (all optional):
    ```json
@@ -195,10 +200,10 @@ mandatory layout-visual-qa gate — see `shared/refs/layout-visual-qa.md`,
    instances return raw image bytes. `lib/domo_rest.rb#decode_render` handles
    **both** — confirm the exact field on first contact and prune the unused branch.
 
-`scripts/domo-capture-visuals.rb --pages <ids>` runs both: writes
-`discovery/layout/<pageId>.json`, a per-card `discovery/png/cards/<cardId>.png`,
-and a full-page `discovery/png/pages/<pageId>.pdf` (the source-fidelity reference
-the QA gate compares the Sigma render against).
+`scripts/domo-capture-visuals.rb --pages <ids>` handles path 2 only: writes a
+per-card `discovery/png/cards/<cardId>.png` and a full-page
+`discovery/png/pages/<pageId>.pdf` (the source-fidelity reference the QA gate
+compares the Sigma render against). It emits no geometry file.
 
 ⚠️ This is a **Tier A** capability (needs the dev token). It is the *automated
 upgrade* of the manual-PNG fallback below — when a dev token exists, you no longer

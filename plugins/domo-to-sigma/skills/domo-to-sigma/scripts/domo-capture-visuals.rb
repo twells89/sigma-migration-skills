@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-# Phase 1b — visual + layout capture for domo-to-sigma.
+# Phase 1b — visual capture for domo-to-sigma.
 #
 #   ruby scripts/domo-capture-visuals.rb --pages 123,456
 #   ruby scripts/domo-capture-visuals.rb --pages 123 --no-pdf      # skip page PDF
@@ -8,20 +8,24 @@
 # WHY THIS EXISTS
 # A Domo migration that only reads DataSets + chart-type strings rebuilds
 # dashboards from guesses, and the output looks generically templated (the
-# "design still a big issue" feedback). This script captures the two things that
-# fix fidelity, mirroring the proven Tableau flow:
-#
-#   1. LAYOUT geometry  — card positions/sizes on Domo's page grid, normalized
-#      so build-dashboard-layout.rb can place elements faithfully instead of
-#      auto-stacking. (was the gap that produced equal-weight "spreadsheet of
-#      cards" output)
-#   2. VISUAL reference — a true PNG per card + a full-page PDF, fed to the build
-#      step and the MANDATORY layout-visual-qa gate (compare Sigma render <->
-#      Domo source, page-to-page). See shared refs/layout-visual-qa.md,
-#      feedback_phase1d_dashboard_png, batch_converter_png_brief.
+# "design still a big issue" feedback). This script captures a VISUAL
+# reference — a true PNG per card + a full-page PDF, fed to the build step and
+# the MANDATORY layout-visual-qa gate (compare Sigma render <-> Domo source,
+# page-to-page). See shared refs/layout-visual-qa.md,
+# feedback_phase1d_dashboard_png, batch_converter_png_brief.
 #
 # This is the automated upgrade of the old Tier-B "manually export each card as
 # PNG" fallback in refs/connection.md — it needs the private dev token (Tier A).
+#
+# NOTE on layout geometry: this script used to ALSO extract card x/y/w/h into
+# discovery/layout/<pageId>.json (normalize_layout). That path was a dead end —
+# domo-discover.rb's --pages run never read it, so a migration's real card
+# coordinates never reached build-domo-layout.rb (it auto-stacked instead).
+# Task 1 (lib/domo_sigma_util.rb's DomoSigma.merge_geometry) now copies the
+# SAME private-API page-layout geometry directly onto discovery/cards.json
+# during domo-discover.rb --pages, which build-domo-layout.rb reads. That is
+# the ONE geometry source; this script no longer extracts or emits geometry —
+# it only stages PNG/PDF visual references.
 #
 # Prereqs (see refs/connection.md):
 #   export DOMO_INSTANCE=acme DOMO_DEV_TOKEN=...
@@ -29,7 +33,6 @@
 #   eval "$(scripts/get-domo-token.sh)"                     # sets DOMO_ACCESS_TOKEN
 #
 # Outputs:
-#   discovery/layout/<pageId>.json     normalized card geometry + chart types
 #   discovery/png/cards/<cardId>.png   per-card visual reference
 #   discovery/png/pages/<pageId>.pdf   full-page source reference (for QA gate)
 
@@ -39,10 +42,9 @@ require 'optparse'
 require_relative 'lib/domo_rest'
 
 OUT       = File.expand_path('../discovery', __dir__)
-LAYOUT_D  = File.join(OUT, 'layout')
 CARD_PNG  = File.join(OUT, 'png', 'cards')
 PAGE_PDF  = File.join(OUT, 'png', 'pages')
-[LAYOUT_D, CARD_PNG, PAGE_PDF].each { |d| FileUtils.mkdir_p(d) }
+[CARD_PNG, PAGE_PDF].each { |d| FileUtils.mkdir_p(d) }
 
 opts = { pdf: true }
 OptionParser.new do |o|
@@ -56,7 +58,7 @@ end.parse!(ARGV)
 if Domo.dev_token.nil?
   warn <<~MSG
     DOMO_DEV_TOKEN is unset => TIER B (public API only).
-    Visual + layout capture requires the private render endpoint, so it is not
+    Visual capture requires the private render endpoint, so it is not
     available. Fall back to the manual path in refs/connection.md:
       - export each card as a PNG from the Domo UI,
       - drop them in discovery/png/cards/ named <cardId>.png,
@@ -69,37 +71,14 @@ end
 WIDTH  = opts[:width]  || 1000
 HEIGHT = opts[:height] || 700
 
-# --- layout normalization ---------------------------------------------------
-# Domo's page-layout response is undocumented and version-dependent. We probe a
-# few known shapes and emit a stable descriptor; unknown fields land in `_raw`
-# so nothing is silently lost.
-# TODO(on-access): confirm the geometry field names + units against a live page
-# (col/row grid vs px) and the card-collection nesting. Domo has historically
-# used `cards[].{x,y,width,height}` and a `pageLayoutV4`/`collections` block.
-def normalize_layout(page_id, layout, public_page)
-  cards = []
-  raw_cards = (layout && (layout['cards'] || layout.dig('pageLayoutV4', 'cards'))) ||
-              public_page['cards'] || []
-  Array(raw_cards).each do |c|
-    geom = c['layout'] || c # geometry sometimes nested under "layout"
-    cards << {
-      'cardId'    => c['id'] || c['cardId'] || c['urn'],
-      'title'     => c['title'] || c['cardTitle'],
-      'chartType' => c['chartType'] || c.dig('metadata', 'chartType'),
-      # geometry — keep both the source units and a note on what to confirm
-      'x'         => geom['x'] || geom['col']  || geom['gridX'],
-      'y'         => geom['y'] || geom['row']  || geom['gridY'],
-      'w'         => geom['width']  || geom['colSpan'] || geom['sizeX'],
-      'h'         => geom['height'] || geom['rowSpan'] || geom['sizeY'],
-      '_raw'      => geom.reject { |k, _| %w[x y col row gridX gridY width height colSpan rowSpan sizeX sizeY].include?(k) }
-    }
-  end
-  {
-    'pageId'    => page_id,
-    'title'     => (layout && layout['title']) || public_page['name'] || public_page['title'],
-    'gridUnits' => 'TODO(on-access): confirm px vs grid-cell; Domo grid is typically a wide column count',
-    'cards'     => cards
-  }
+# Card ids for a page, from the PUBLIC page() response — the same field
+# domo-discover.rb reads (`page['cardIds'] || page['cards']`). No private-API
+# layout call is needed here anymore; geometry lives solely in cards.json via
+# domo-discover.rb's merge_geometry.
+def page_card_ids(public_page)
+  Array(public_page['cardIds'] || public_page['cards']).map do |c|
+    c.is_a?(Hash) ? (c['id'] || c['cardId'] || c['urn']) : c
+  end.compact
 end
 
 def write_bytes(path, bytes)
@@ -120,13 +99,10 @@ if opts[:pages]
   opts[:pages].each do |pid|
     warn "page #{pid}:"
     public_page = (Domo.page(pid) rescue {}) || {}
-    layout      = Domo.page_layout(pid) rescue nil
+    card_ids    = page_card_ids(public_page)
+    warn "  #{card_ids.size} card(s)"
 
-    descriptor = normalize_layout(pid, layout, public_page)
-    File.write(File.join(LAYOUT_D, "#{pid}.json"), JSON.pretty_generate(descriptor))
-    warn "  wrote #{File.join(LAYOUT_D, "#{pid}.json")} (#{descriptor['cards'].size} cards)"
-
-    descriptor['cards'].map { |c| c['cardId'] }.compact.each { |cid| capture_card(cid) }
+    card_ids.each { |cid| capture_card(cid) }
 
     if opts[:pdf]
       # Full-page reference for the layout-visual-qa source-fidelity comparison.
@@ -154,5 +130,6 @@ unless opts[:pages] || opts[:cards]
   abort 'nothing to do — pass --pages <ids> and/or --cards <ids>'
 end
 
-warn "\nNext: feed discovery/layout/*.json to build-dashboard-layout.rb, and READ"
-warn "discovery/png/** during build + the mandatory layout-visual-qa gate."
+warn "\nNext: run domo-discover.rb --pages <ids> for cards.json geometry (merge_geometry),"
+warn "then build-domo-layout.rb. READ discovery/png/** during build + the mandatory"
+warn "layout-visual-qa gate."

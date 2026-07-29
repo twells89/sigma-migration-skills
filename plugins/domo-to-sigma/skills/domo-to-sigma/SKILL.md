@@ -180,18 +180,19 @@ Outputs `discovery/datasets.json`, `discovery/cards.json`, `discovery/pages.json
 
 **This is the step that prevents generically-templated output.** Rebuilding from
 DataSets + chart-type strings alone is why early Domo migrations "didn't look
-good." Capture a true visual + real geometry so the build has something to match:
+good." Capture a true visual so the build has something to match; real card
+geometry (x/y/w/h) is a separate, earlier capture — see Phase 1a's
+`domo-discover.rb --pages` (`DomoSigma.merge_geometry` copies it onto
+`discovery/cards.json`), the ONE geometry source:
 
 `ruby scripts/domo-capture-visuals.rb --pages <id,...>` →
-- `discovery/layout/<pageId>.json` — card positions/sizes on Domo's grid (so the
-  hero viz keeps its weight instead of collapsing to an equal-weight grid)
 - `discovery/png/cards/<cardId>.png` — per-card visual reference
 - `discovery/png/pages/<pageId>.pdf` — full-page source image for the QA gate
 
 Tier A (dev token) does this automatically via the card render endpoint. **Tier B:
 export the same PNGs/PDF from the Domo UI into those same paths** — the build and
-QA steps consume them identically (see `refs/connection.md` "Visual + layout
-capture"). Either way, **READ these images** before and during Phase 5.
+QA steps consume them identically (see `refs/connection.md` "Visual capture").
+Either way, **READ these images** before and during Phase 5.
 
 ---
 
@@ -273,9 +274,11 @@ Then translate the rest per the ref:
   unsupported/dropped item → a Phase-5e warning, never a silent substitution
 
 ### Phase 5d — Layout
-Reuse `build-dashboard-layout.rb` + `put-layout.rb`: feed `discovery/layout/<pageId>.json`
-(card geometry from Phase 1b) → 24-col grid, preserving relative position and the
-hero viz's weight.
+`ruby scripts/build-domo-layout.rb` turns `discovery/cards.json` geometry (from
+Phase 1a's `merge_geometry`) + `discovery/pages.json` names into
+`discovery/dashboard-layout.json`. Reuse `build-dashboard-layout.rb` +
+`put-layout.rb`: feed that file → 24-col grid, preserving relative position and
+the hero viz's weight.
 
 ### Phase 5e — Layout visual QA (MANDATORY gate)
 Run the layout-visual-qa loop (`refs/layout-visual-qa.md`): render the full Sigma

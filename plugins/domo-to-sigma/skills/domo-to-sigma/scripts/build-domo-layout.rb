@@ -1,8 +1,17 @@
 #!/usr/bin/env ruby
 # Phase 5d (pre) — Domo page geometry → the zone-schema dashboard-layout.json that
-# the reused build-dashboard-layout.rb consumes. Reads the per-page capture output
-# (discovery/layout/<pageId>.json from domo-capture-visuals.rb) and emits
-# discovery/dashboard-layout.json (an array of dashboards).
+# the reused build-dashboard-layout.rb consumes.
+#
+# Geometry source: discovery/cards.json — specifically the x/y/w/h fields
+# DomoSigma.merge_geometry (Task 1, lib/domo_sigma_util.rb) copies onto each
+# card from the page's private-API layout during domo-discover.rb's --pages
+# run. This is the ONE geometry source for the layout builder; there is no
+# separate extractor. (Earlier revisions read a duplicate
+# discovery/layout/<pageId>.json produced by domo-capture-visuals.rb's own
+# normalize_layout — that path never received Task 1's merge_geometry output,
+# so a migration's real card coordinates never reached the layout builder.
+# domo-capture-visuals.rb now only stages PNG/PDF references; it emits no
+# geometry file.)
 #
 # Geometry is normalized RELATIVE to each page's own max extent (x/(maxX), etc.),
 # so it works whether Domo reports card geometry in grid cells or pixels — no need
@@ -44,8 +53,13 @@ def kind_hint(chart_type)
   'bar-chart'
 end
 
-def build_dashboard(page_layout)
-  cards = Array(page_layout['cards']).select { |c| c['x'] && c['y'] && c['w'] && c['h'] }
+# Build one dashboard's zone tree from its own geometry-bearing cards (already
+# scoped to one page by the caller). `cards` — this page's cards.json records
+# that carry x/y/w/h (Task 1's merge_geometry). `name` — the page title, used
+# as the dashboard name build-dashboard-layout.rb matches against the workbook
+# page name.
+def build_dashboard(name, cards)
+  cards = Array(cards).select { |c| c['x'] && c['y'] && c['w'] && c['h'] }
   return nil if cards.empty?
   max_x = cards.map { |c| c['x'].to_f + c['w'].to_f }.max
   max_y = cards.map { |c| c['y'].to_f + c['h'].to_f }.max
@@ -55,7 +69,7 @@ def build_dashboard(page_layout)
     kh = kind_hint(c['chartType'])
     is_filter = kh == 'filter'
     {
-      'id'        => c['cardId'],
+      'id'        => c['id'],
       'x_pct'     => (c['x'].to_f * 100.0 / max_x).round(2),
       'y_pct'     => (c['y'].to_f * 100.0 / max_y).round(2),
       'w_pct'     => (c['w'].to_f * 100.0 / max_x).round(2),
@@ -68,15 +82,30 @@ def build_dashboard(page_layout)
       'children'  => [],
     }.compact
   end
-  name = page_layout['title'] || page_layout['pageId']
   { 'dashboard' => name, 'zone_tree' => zones, 'zones' => zones }
 end
 
 if $PROGRAM_NAME == __FILE__
-  layout_dir = File.join(OUT, 'layout')
-  files = Dir.glob(File.join(layout_dir, '*.json')).sort
-  abort("  no capture layouts in #{layout_dir} — run domo-capture-visuals.rb first") if files.empty?
-  dashboards = files.map { |f| build_dashboard(JSON.parse(File.read(f))) }.compact
+  cards = JSON.parse(File.read(File.join(OUT, 'cards.json'))) rescue []
+  pages = JSON.parse(File.read(File.join(OUT, 'pages.json'))) rescue []
+
+  cards = cards.reject { |c| c['_error'] || c['_tierB'] }
+
+  # Group cards by page — same membership resolution build-workbook.rb uses,
+  # so a page's layout dashboard and its workbook page carry the SAME cards.
+  card_page = {}
+  pages.each do |p|
+    pname = p['title'] || p['name'] || p['id']
+    Array(p['cardIds'] || p['cards']).each { |cid| card_page[cid.to_s] = pname }
+  end
+  by_page = Hash.new { |h, k| h[k] = [] }
+  cards.each { |c| by_page[card_page[c['id'].to_s] || 'Overview'] << c }
+
+  dashboards = by_page.map { |pname, pcards| build_dashboard(pname, pcards) }.compact
+  abort("  no cards with x/y/w/h geometry in #{File.join(OUT, 'cards.json')} — " \
+        'run domo-discover.rb --pages <ids> first (its merge_geometry copies the ' \
+        'private-API page layout onto each card); an image/PNG capture is not required.') if dashboards.empty?
+
   FileUtils.mkdir_p(OUT)
   out = File.join(OUT, 'dashboard-layout.json')
   File.write(out, JSON.pretty_generate(dashboards))

@@ -243,8 +243,9 @@ redesign. Rules:
   — don't quietly omit it or replace it with something prettier.
 - **Keep the source's numbers, labels, and formats.** Pull the label and number
   format from the card def / PNG; don't relabel or reformat to taste.
-- **Match layout weight from the captured geometry** (`discovery/layout/…`),
-  not an equal-weight auto-grid — the hero viz keeps its size.
+- **Match layout weight from the captured geometry** (`discovery/cards.json`'s
+  x/y/w/h, via `discovery/dashboard-layout.json`), not an equal-weight
+  auto-grid — the hero viz keeps its size.
 - Every deviation from the source (unsupported chart kind, dropped filter,
   UI-only spark) goes in the **Phase 5e warnings list**, surfaced to the user.
   A migration with 6 honest warnings beats one that silently took liberties.
