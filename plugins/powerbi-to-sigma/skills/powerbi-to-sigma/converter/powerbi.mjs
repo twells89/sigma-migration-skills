@@ -1,4 +1,4 @@
-// ../wt-pbi-mparser/build/sigma-ids.js
+// ../wt-pbi-dax-fidelity/build/sigma-ids.js
 var SIGMA_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var _usedIds = /* @__PURE__ */ new Set();
 var _idCounter = 0;
@@ -10,6 +10,16 @@ function encodeBase62(n, len) {
   }
   return s.padStart(len, SIGMA_CHARS[0]);
 }
+function fnv1a32(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+var NS_MODULUS = 62 ** 4;
+var NS_BLOCK = 1e6;
 var SIGMA_LOWERCASE_WORDS = /* @__PURE__ */ new Set([
   "a",
   "an",
@@ -33,9 +43,15 @@ var SIGMA_LOWERCASE_WORDS = /* @__PURE__ */ new Set([
   "via",
   "per"
 ]);
-function resetIds() {
+function resetIds(seed) {
   _usedIds.clear();
-  _idCounter = 0;
+  _idCounter = seed == null ? 0 : fnv1a32(seed) % NS_MODULUS * NS_BLOCK;
+}
+function clampId(id, max = 64) {
+  if (id.length <= max)
+    return id;
+  const suffix = "~" + encodeBase62(fnv1a32(id) % 62 ** 6, 6);
+  return id.slice(0, max - suffix.length) + suffix;
 }
 function sigmaShortId(len = 10) {
   let id;
@@ -47,7 +63,7 @@ function sigmaShortId(len = 10) {
 }
 function sigmaInodeId(identifier, casing = "upper") {
   const phys = casing === "lower" ? identifier.toLowerCase() : identifier.toUpperCase();
-  return `inode-${sigmaShortId(22)}/${phys}`;
+  return clampId(`inode-${sigmaShortId(22)}/${phys}`);
 }
 function sigmaPhysicalName(s, casing = "upper") {
   const r = (s || "").trim();
@@ -264,7 +280,7 @@ function buildDerivedElements(elements) {
   return derived;
 }
 
-// ../wt-pbi-mparser/build/powerbi.js
+// ../wt-pbi-dax-fidelity/build/powerbi.js
 var PBI_COMMUNITY_LINKS = {
   lod: "community.sigmacomputing.com/t/tableau-level-of-detail-or-lod-calculations-in-sigma/6427",
   groupings: "community.sigmacomputing.com/t/how-to-use-groupings-aggregate-calculations/2003",
@@ -460,6 +476,26 @@ function rewriteCombineValues(f) {
     const vals = args.slice(1);
     const joined = vals.join(` & ${sep} & `);
     f = f.slice(0, m.index) + joined + f.slice(endPos);
+  }
+  return f;
+}
+function rewriteFormatNumeric(f) {
+  const re = /\bFORMAT\s*\(/gi;
+  for (let guard = 0; guard < 20; guard++) {
+    re.lastIndex = 0;
+    const m = re.exec(f);
+    if (!m)
+      break;
+    const { args, endPos } = splitCallArgs(f, m.index + m[0].length);
+    if (args.length !== 2)
+      break;
+    const expr = args[0].trim();
+    if (/^[A-Za-z0-9_()\-+*/. ]+$/.test(expr) && /[A-Za-z]\s*\(/.test(expr) && !/["'\[]/.test(expr)) {
+      const rep = `Text(${recaseDateFns(expr)})`;
+      f = f.slice(0, m.index) + rep + f.slice(endPos);
+      continue;
+    }
+    break;
   }
   return f;
 }
@@ -702,6 +738,19 @@ function translateDaxPredicate(predRaw) {
   let p = (predRaw || "").trim();
   if (!p)
     return { ok: false, reason: "empty predicate" };
+  {
+    const capDp = (s) => ({ MONTH: "Month", YEAR: "Year", DAY: "Day" })[s.toUpperCase()] || s;
+    const bareDp = (x) => x.replace(/'[^']+'\[([^\]]+)\]/g, "[$1]").replace(/\b[A-Za-z_]\w*\[([^\]]+)\]/g, "[$1]");
+    const DP_TODAY = String.raw`(MONTH|YEAR|DAY)\s*\(\s*TODAY\s*\(\s*\)\s*\)`;
+    const DP_COL = String.raw`(MONTH|YEAR|DAY)\s*\(\s*('?[A-Za-z_][\w ]*'?\[[^\]]+\])\s*\)`;
+    const OP = String.raw`(<>|>=|<=|=|>|<)`;
+    let dpm = p.match(new RegExp(`^\\s*${DP_TODAY}\\s*${OP}\\s*${DP_COL}\\s*$`, "i"));
+    if (dpm)
+      return { ok: true, sigma: `${capDp(dpm[1])}(Today()) ${dpm[2] === "<>" ? "!=" : dpm[2]} ${capDp(dpm[3])}(${bareDp(dpm[4])})` };
+    dpm = p.match(new RegExp(`^\\s*${DP_COL}\\s*${OP}\\s*${DP_TODAY}\\s*$`, "i"));
+    if (dpm)
+      return { ok: true, sigma: `${capDp(dpm[1])}(${bareDp(dpm[2])}) ${dpm[3] === "<>" ? "!=" : dpm[3]} ${capDp(dpm[4])}(Today())` };
+  }
   if (/\b(CALCULATE|FILTER|ALL|ALLEXCEPT|ALLSELECTED|REMOVEFILTERS|KEEPFILTERS|VALUES|RELATEDTABLE|EARLIER|TREATAS|USERELATIONSHIP|SELECTEDVALUE)\s*\(/i.test(p)) {
     return { ok: false, reason: `predicate contains filter-context functions (${p.slice(0, 60)})` };
   }
@@ -741,7 +790,7 @@ function translateDaxPredicate(predRaw) {
     const chain = negate ? items.map((v) => `${ref} != ${v}`).join(" and ") : items.map((v) => `${ref} = ${v}`).join(" or ");
     p = p.slice(0, m.index) + `(${chain})` + p.slice(i + 1);
   }
-  p = p.replace(/\bNOT\s*\(/gi, "Not(");
+  p = p.replace(/\bNOT\s*\(/gi, "Not (");
   p = p.replace(/\bISBLANK\s*\(/gi, "IsNull(");
   p = p.replace(/\bTRUE\s*\(\s*\)/gi, "True").replace(/\bFALSE\s*\(\s*\)/gi, "False");
   p = p.replace(/<>/g, "!=");
@@ -755,7 +804,11 @@ function translateDaxPredicate(predRaw) {
   }
   return { ok: true, sigma: p.replace(/\s+/g, " ").trim() };
 }
-var CALC_TIME_INTEL_RE = /\b(TOTALYTD|TOTALQTD|TOTALMTD|SAMEPERIODLASTYEAR|DATEADD|DATESYTD|DATESBETWEEN|DATESINPERIOD|PARALLELPERIOD|PREVIOUSMONTH|PREVIOUSQUARTER|PREVIOUSYEAR|PREVIOUSDAY|NEXTMONTH|NEXTQUARTER|NEXTYEAR)\s*\(/i;
+var CALC_TIME_INTEL_DEFER_RE = /\b(TOTALYTD|TOTALQTD|TOTALMTD|SAMEPERIODLASTYEAR|DATEADD|DATESYTD|DATESINPERIOD|PARALLELPERIOD|PREVIOUSMONTH|PREVIOUSQUARTER|PREVIOUSYEAR|PREVIOUSDAY|NEXTMONTH|NEXTQUARTER|NEXTYEAR)\s*\(/i;
+function recaseDateFns(expr) {
+  const map = { TODAY: "Today", NOW: "Now", DATE: "Date", YEAR: "Year", MONTH: "Month", DAY: "Day" };
+  return expr.replace(/\b(TODAY|NOW|DATE|YEAR|MONTH|DAY)\b/gi, (w) => map[w.toUpperCase()] || w);
+}
 function expandMeasureRefs(dax, measureDax) {
   let out = String(dax).trim();
   for (let depth = 0; depth < 8; depth++) {
@@ -799,7 +852,7 @@ function rewriteCalculateConditionals(fIn, warnings, measureName, measureDax, ra
       f = f.slice(0, m.index) + args[0].trim() + f.slice(endPos);
       continue;
     }
-    if (CALC_TIME_INTEL_RE.test(args.join(","))) {
+    if (CALC_TIME_INTEL_DEFER_RE.test(args.join(","))) {
       cursor = m.index + m[0].length;
       continue;
     }
@@ -831,15 +884,20 @@ function rewriteCalculateConditionals(fIn, warnings, measureName, measureDax, ra
     };
     const sigmaAggCond = (fn, arg, combined2) => {
       const F = fn.toUpperCase();
-      if (F === "COUNTROWS" || F === "COUNT" || F === "COUNTA")
+      const col = bareRef(arg.trim());
+      const hasCol = /\[[^\]]+\]/.test(col);
+      if (F === "COUNTROWS" || (F === "COUNT" || F === "COUNTA") && !hasCol)
         return `CountIf(${combined2})`;
+      if (F === "COUNT" || F === "COUNTA")
+        return `CountIf(${combined2} and IsNotNull(${col}))`;
       if (F === "DISTINCTCOUNT")
-        return `CountDistinctIf(${bareRef(arg.trim())}, ${combined2})`;
+        return `CountDistinct(If(${combined2}, ${col}, null))`;
       const map = { SUM: "SumIf", AVERAGE: "AvgIf", MIN: "MinIf", MAX: "MaxIf" };
-      return `${map[F] || "SumIf"}(${bareRef(arg.trim())}, ${combined2})`;
+      return `${map[F] || "SumIf"}(${col}, ${combined2})`;
     };
     let grandTotal = false;
     const preds = [];
+    const filterRemovalCols = [];
     let flagged = null;
     for (let a of args.slice(1).map((x) => x.trim())) {
       const km = a.match(/^KEEPFILTERS\s*\(/i);
@@ -854,13 +912,27 @@ function rewriteCalculateConditionals(fIn, warnings, measureName, measureDax, ra
       }
       const colStrip = a.match(/^(ALL|REMOVEFILTERS)\s*\(\s*('?[A-Za-z_][\w ]*'?\[[^\]]+\])\s*\)$/i);
       if (colStrip) {
-        grandTotal = true;
+        filterRemovalCols.push(colStrip[2]);
         if (warnings)
-          warnings.push(`\u26A0 "${measureName}": ${colStrip[1].toUpperCase()}(${colStrip[2]}) strips filter context on ONE column \u2014 translated as GrandTotal(\u2026), which is EXACT when ${colStrip[2].replace(/^.*\[/, "[")} is the only grouping in the visual. In a multi-dimension visual, re-express as a window total over the remaining dimensions in a grouped workbook element. Original DAX: ${daxNote}`);
+          warnings.push(`\u26A0 "${measureName}": ${colStrip[1].toUpperCase()}(${colStrip[2]}) removes filter context on ONE column \u2014 translated as a filter-scoped metric that IGNORES any control bound to ${colStrip[2].replace(/^.*\[/, "[")}. Configure this metric in the workbook to ignore that control; it must NOT collapse to a GrandTotal. Original DAX: ${daxNote}`);
         continue;
       }
       if (/^(ALLEXCEPT|ALLSELECTED|ALL|REMOVEFILTERS)\s*\(/i.test(a)) {
         flagged = `\u26A0 "${measureName}": CALCULATE filter ${a.slice(0, 70)} re-scopes filter context (subtotal semantics) \u2014 no faithful Sigma scalar-metric equivalent. Recreate as a grouped workbook element (group by the kept dimensions, aggregate, then window-total). Original DAX: ${daxNote}`;
+        break;
+      }
+      const dbm = a.match(/^DATESBETWEEN\s*\(/i);
+      if (dbm) {
+        const dbr = splitCallArgs(a, dbm[0].length);
+        const colM = dbr.args.length === 3 ? dbr.args[0].match(/('?[A-Za-z_][\w ]*'?\[[^\]]+\])\s*$/) : null;
+        if (colM) {
+          const col = bareRef(colM[1]);
+          const start = recaseDateFns(dbr.args[1].trim());
+          const end = recaseDateFns(dbr.args[2].trim());
+          preds.push(`${col} >= ${start} and ${col} <= ${end}`);
+          continue;
+        }
+        flagged = `\u26A0 "${measureName}": DATESBETWEEN filter isn't the <date column>, <start>, <end> shape \u2014 recreate the window manually. Original DAX: ${daxNote}`;
         break;
       }
       const fm = a.match(/^FILTER\s*\(/i);
@@ -898,23 +970,28 @@ function rewriteCalculateConditionals(fIn, warnings, measureName, measureDax, ra
       return { f, dropped: true };
     }
     const aggFnEarly = aggM ? aggM[1].toUpperCase() : "";
+    const plainAgg = () => {
+      if (composite)
+        return `(${composite.replace(SIMPLE_AGG_RE, (_mm, fn, arg) => sigmaAggPlain(fn, arg))})`;
+      if (aggFnEarly === "COUNTROWS")
+        return "Count()";
+      const map = { SUM: "Sum", AVERAGE: "Avg", MIN: "Min", MAX: "Max", COUNT: "Count", COUNTA: "Count", DISTINCTCOUNT: "CountDistinct" };
+      return `${map[aggFnEarly]}(${bareRef(aggM[2].trim())})`;
+    };
     if (!preds.length) {
-      if (!grandTotal) {
-        cursor = m.index + m[0].length;
+      if (grandTotal) {
+        const gOut = `GrandTotal(${plainAgg()})`;
+        f = f.slice(0, m.index) + gOut + f.slice(endPos);
+        cursor = m.index + gOut.length;
         continue;
       }
-      let aggSigma;
-      if (composite) {
-        aggSigma = `(${composite.replace(SIMPLE_AGG_RE, (_mm, fn, arg) => sigmaAggPlain(fn, arg))})`;
-      } else if (aggFnEarly === "COUNTROWS")
-        aggSigma = "Count()";
-      else {
-        const map = { SUM: "Sum", AVERAGE: "Avg", MIN: "Min", MAX: "Max", COUNT: "Count", COUNTA: "Count", DISTINCTCOUNT: "CountDistinct" };
-        aggSigma = `${map[aggFnEarly]}(${bareRef(aggM[2].trim())})`;
+      if (filterRemovalCols.length) {
+        const frOut = plainAgg();
+        f = f.slice(0, m.index) + frOut + f.slice(endPos);
+        cursor = m.index + frOut.length;
+        continue;
       }
-      const gOut = `GrandTotal(${aggSigma})`;
-      f = f.slice(0, m.index) + gOut + f.slice(endPos);
-      cursor = m.index + gOut.length;
+      cursor = m.index + m[0].length;
       continue;
     }
     const combined = preds.length === 1 ? preds[0] : preds.map((p) => /\b(or)\b/i.test(p) ? `(${p})` : p).join(" and ");
@@ -922,13 +999,8 @@ function rewriteCalculateConditionals(fIn, warnings, measureName, measureDax, ra
     let out;
     if (composite) {
       out = `(${composite.replace(SIMPLE_AGG_RE, (_mm, fn, arg) => sigmaAggCond(fn, arg, combined))})`;
-    } else if (aggFn === "COUNTROWS" || aggFn === "COUNT" || aggFn === "COUNTA") {
-      out = `CountIf(${combined})`;
-    } else if (aggFn === "DISTINCTCOUNT") {
-      out = `CountDistinctIf(${bareRef(aggM[2].trim())}, ${combined})`;
     } else {
-      const aggMap = { SUM: "SumIf", AVERAGE: "AvgIf", MIN: "MinIf", MAX: "MaxIf" };
-      out = `${aggMap[aggFn] || "SumIf"}(${bareRef(aggM[2].trim())}, ${combined})`;
+      out = sigmaAggCond(aggFn, aggM[2], combined);
     }
     if (grandTotal)
       out = `GrandTotal(${out})`;
@@ -972,6 +1044,7 @@ function pbiDaxToSigma(dax, warnings, measureName, measureDax = {}) {
   }
   f = rewriteStatIterators(f);
   f = rewriteCombineValues(f);
+  f = rewriteFormatNumeric(f);
   f = rewriteSearch(f);
   f = rewriteSingleValue(f);
   f = rewriteSwitchTrue(f);
@@ -1064,7 +1137,7 @@ function pbiDaxToSigma(dax, warnings, measureName, measureDax = {}) {
       if (alt && alt.trim()) {
         replacement = `If((${den}) = 0, ${alt.trim()}, (${num}) / (${den}))`;
       } else {
-        replacement = `(${num}) / (${den})`;
+        replacement = `(${num}) / NullIf((${den}), 0)`;
       }
       f = f.slice(0, divideMatch.index) + replacement + f.slice(endPos);
     }
@@ -1087,7 +1160,7 @@ function pbiDaxToSigma(dax, warnings, measureName, measureDax = {}) {
   f = f.replace(/\bISBLANK\s*\(/gi, "IsNull(");
   f = f.replace(/\bCOALESCE\s*\(/gi, "Coalesce(");
   f = f.replace(/\bBLANK\s*\(\s*\)/gi, "null");
-  f = f.replace(/\bNOT\s*\(/gi, "Not(");
+  f = f.replace(/\bNOT\s*\(/gi, "Not (");
   f = f.replace(/\bTRUE\s*\(\s*\)/gi, "True");
   f = f.replace(/\bFALSE\s*\(\s*\)/gi, "False");
   f = f.replace(/&&/g, " and ");
@@ -1167,11 +1240,6 @@ function pbiExtractPathFromM(mExpr) {
         tbl = m[1];
     }
     if (tbl) {
-      if (!db && sch) {
-        const bare0 = mExpr.match(/\{\s*\[\s*Name\s*=\s*"([^"]+)"\s*\]\s*\}\s*\[\s*Data\s*\]/i);
-        if (bare0)
-          db = bare0[1];
-      }
       const parts = [db, sch, tbl].filter((s) => !!s);
       if (parts.length >= 2)
         return parts.map((s) => s.toUpperCase());
@@ -1188,34 +1256,9 @@ function pbiExtractPathFromM(mExpr) {
   if (nameNavMatches.length === 2) {
     return [nameNavMatches[0][1].toUpperCase(), nameNavMatches[1][1].toUpperCase()];
   }
-  const flatRec = mExpr.match(/\{\s*\[([^\]]*\bItem\s*=\s*"[^"]+"[^\]]*)\]\s*\}/i);
-  if (flatRec) {
-    const body = flatRec[1];
-    const key = (k) => (body.match(new RegExp("\\b" + k + '\\s*=\\s*"([^"]+)"', "i")) || [])[1] || null;
-    const item = key("Item");
-    const schema = key("Schema");
-    const recCatalog = key("Catalog");
-    const recDatabase = key("Database");
-    const sqlServerDb = (mExpr.match(/\bSql\.Database\s*\(\s*"[^"]*"\s*,\s*"([^"]+)"/i) || [])[1] || null;
-    const top = recCatalog || recDatabase || sqlServerDb;
-    if (item) {
-      const parts = [top, schema, item].filter((s) => !!s);
-      if (parts.length >= 2)
-        return parts.map((s) => s.toUpperCase());
-    }
-  }
-  const sql = mExpr.replace(/#\(lf\)|#\(tab\)|#\(cr\)/gi, " ");
-  const fromM = sql.match(/\bFROM\s+([`"\[]?[\w$-]+[`"\]]?(?:\s*\.\s*[`"\[]?[\w$-]+[`"\]]?){1,2})/i);
-  if (fromM) {
-    let parts = fromM[1].split(".").map((s) => s.replace(/[`"\[\]\s]/g, "")).filter(Boolean);
-    if (parts.length === 2) {
-      const navDb = (sql.match(/\[\s*Name\s*=\s*"([^"]+)"\s*,\s*Kind\s*=\s*"Database"\s*\]/i) || [])[1] || (sql.match(/\bCatalog\s*=\s*"([^"]+)"/i) || [])[1] || (sql.match(/\bSql\.Database\s*\(\s*"[^"]*"\s*,\s*"([^"]+)"/i) || [])[1] || null;
-      if (navDb && !/\bPostgreSQL\.Database\s*\(|\bAmazonRedshift\.Database\s*\(/i.test(mExpr)) {
-        parts = [navDb, ...parts];
-      }
-    }
-    if (parts.length >= 2)
-      return parts.map((s) => s.toUpperCase());
+  const tblMatch = mExpr.match(/FROM\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?\.\[?(\w+)\]?/i);
+  if (tblMatch) {
+    return [tblMatch[1] || "", tblMatch[2], tblMatch[3]].filter(Boolean).map((s) => s.toUpperCase());
   }
   return null;
 }
@@ -1307,9 +1350,28 @@ function buildCalcTableSql(dax, seriesColName, colDisplayNames = []) {
   if (/\bCALENDAR\s*\(/i.test(dax)) {
     return buildCalendarSpineSql(dax, colDisplayNames);
   }
+  if (/\b(TODAY|NOW)\s*\(\s*\)/i.test(dax) && !/\bGENERATESERIES|\bADDCOLUMNS/i.test(dax) && !/\[[^\]]+\]/.test(dax)) {
+    const isNow = /\bNOW\s*\(\s*\)/i.test(dax);
+    const col2 = seriesColName || (isNow ? "Now" : "Date");
+    return { ok: true, sql: `SELECT ${isNow ? "CURRENT_TIMESTAMP" : "CURRENT_DATE"} AS "${col2}"` };
+  }
+  const braceList = dax.match(/\{\s*([^{}]*?)\s*\}/);
+  if (braceList && braceList[1].trim() && !/\[[^\]]+\]/.test(braceList[1])) {
+    const items = splitInList(braceList[1]).filter(Boolean);
+    const isLiteral = (v) => /^(".*"|'.*'|-?\d+(\.\d+)?)$/.test(v.trim());
+    if (items.length && items.every(isLiteral)) {
+      const col2 = seriesColName || "Value";
+      const rows2 = items.map((v) => {
+        const tkn = v.trim();
+        const sqlv = /^["']/.test(tkn) ? `'${tkn.slice(1, -1).replace(/'/g, "''")}'` : tkn;
+        return `SELECT ${sqlv} AS "${col2}"`;
+      }).join(" UNION ALL ");
+      return { ok: true, sql: rows2 };
+    }
+  }
   const gm = dax.match(/\bGENERATESERIES\s*\(/i);
   if (!gm) {
-    return { ok: false, reason: "DAX calculated table is not a GENERATESERIES or CALENDAR \u2014 no warehouse source exists; recreate manually as a Sigma SQL element or input table." };
+    return { ok: false, reason: "DAX calculated table is not a GENERATESERIES / CALENDAR / TODAY / literal-list constructor \u2014 no warehouse source exists; recreate manually as a Sigma SQL element or input table." };
   }
   const { args } = splitCallArgs(dax, gm.index + gm[0].length);
   if (args.length < 2) {
@@ -2252,15 +2314,30 @@ SELECT 1 AS _placeholder`;
   }
   if (measureOnlyTables.size > 0) {
     const factEl = elements.reduce((best, e) => (e.columns || []).length > (best.columns || []).length ? e : best, elements[0]);
+    const homeElFor = (rawDax) => {
+      const refs = [...String(rawDax).matchAll(/(?:'([^']+)'|\b([A-Za-z_]\w*))\s*\[([^\]]+)\]/g)];
+      for (const r of refs) {
+        const tbl = (r[1] || r[2] || "").trim();
+        const colName = r[3];
+        const elId = tableIdMap[tbl];
+        if (!elId || !(tableColMap[tbl] && colName in tableColMap[tbl]))
+          continue;
+        const el = elements.find((e) => e.id === elId);
+        if (el && (el.columns || []).length)
+          return el;
+      }
+      return factEl;
+    };
     if (factEl) {
       for (const tName of measureOnlyTables) {
         const t = model.tables.find((tb) => tb.name === tName);
         if (!t)
           continue;
         for (const m of t.measures || []) {
-          if (m.name)
-            measureToElementId[m.name] = factEl.id;
           const moExpr = processUseRelationships(m.name, Array.isArray(m.expression) ? m.expression.join("\n") : String(m.expression || ""));
+          const homeEl = homeElFor(moExpr);
+          if (m.name)
+            measureToElementId[m.name] = homeEl.id;
           let sigmaFormula = pbiDaxToSigma(moExpr, warnings, m.name, measureDaxMap);
           if (sigmaFormula && hasBareWindowFn(sigmaFormula)) {
             warnings.push(`\u26D4 "${m.name}": window-function measure has no Sigma DM-metric equivalent \u2014 use a workbook Rank()/ordered table or a grouped element. Dropped.`);
@@ -2270,18 +2347,21 @@ SELECT 1 AS _placeholder`;
             sigmaFormula = sigmaFormula.replace(/\[([^\]\/]+)\]/g, (_m2, colName) => {
               return allPbiToSigmaNames[colName] ? `[${allPbiToSigmaNames[colName]}]` : `[${colName}]`;
             });
-            if (!factEl.metrics)
-              factEl.metrics = [];
+            if (!homeEl.metrics)
+              homeEl.metrics = [];
             const _moFmt = inferSigmaFormat(sigmaFormula, m.name, m.formatString);
             const metric = { id: sigmaShortId(), formula: sigmaFormula, name: m.name };
             if (_moFmt)
               metric.format = _moFmt;
             if (m.description)
               metric.description = m.description;
-            factEl.metrics.push(metric);
+            homeEl.metrics.push(metric);
+            if (homeEl !== factEl) {
+              warnings.push(`\u2139 "${m.name}": bound to its home fact element "${homeEl.source?.path?.[homeEl.source.path.length - 1] || homeEl.id}" (the table that owns its aggregated column), not the largest element \u2014 preserves the measure's source fact (dax-fidelity #4).`);
+            }
           }
         }
-        warnings.push(`\u2139 Measures table "${tName}" \u2192 measures moved to "${factEl.source?.path?.[factEl.source.path.length - 1]}"`);
+        warnings.push(`\u2139 Measures table "${tName}" \u2192 measures moved to their home fact element(s).`);
       }
     }
   }
