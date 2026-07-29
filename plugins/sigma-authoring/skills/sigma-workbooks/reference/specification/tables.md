@@ -186,7 +186,7 @@ The `input-table` element is an editable table — users type values directly in
 `source` is one of:
 
 - `{ kind: empty, connectionId: <YOUR_CONNECTION_ID> }` — provisions a fresh, blank warehouse table.
-- `{ kind: linked, from: <elementId> }` — rows are linked to another element; the connection is inherited, and editable rows are matched to source rows by the `key` columns.
+- `{ kind: linked, from: <elementId> }` — rows are linked to another element, matched to source rows by the `key` columns. ⚠ A linked input table carries its **own** `connectionId` (the write target); it is NOT simply inherited from the parent and may differ from the parent's connection — cross-connection linking (write-conn child, read-conn parent) is supported. See `input-tables.md` → *Cross-connection linked tables*.
 
 `columns[]` items come in four shapes (each also accepts optional `name`, `description`, `hidden`, `format`):
 
