@@ -213,9 +213,11 @@ staleness) blocks GREEN.
 > parity is **warehouse-only** (Sigma vs. the source warehouse — no Qlik-side value snapshot), and
 > chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against — do the
 > Phase-5 visual-QA review). Relationships are inferred from **shared field names only** (a `-prj`
-> folder carries no row counts) → review join directions in Sigma. The parser handles the authentic
-> QlikView `<GraphProperties>` schema (validated against a real `.qvw` export), not every version's
-> object variants — an unmapped `GraphMode` falls back to a bar chart with a loud warning.
+> folder carries no row counts) → review join directions in Sigma. All **13 QlikView chart types**
+> are mapped (bar/line/combo/pie/scatter/straight-table/pivot-table exactly; gauge→KPI, and
+> radar/grid/block/funnel/mekko→closest Sigma kind, each flagged as an **approximation** in the
+> warnings since Sigma has no exact equivalent). An unrecognized `GraphMode` variant falls back to a
+> bar chart with a loud warning — never a silent wrong default.
 
 ## Phase 2 — Convert (convert_qlik_to_sigma)
 **Local by default, zero-config, no MCP.** `migrate-qlik.rb` runs

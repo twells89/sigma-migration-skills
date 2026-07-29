@@ -26,20 +26,48 @@ Usage:  python3 qlik-prj-discover.py --prj <path/to/Name-prj> --out <workdir>
 import argparse, glob, json, os, re, sys
 import xml.etree.ElementTree as ET
 
-# QlikView <GraphMode> -> Qlik-Sense vizType (the viz-kind catalog's `source` keys,
-# which build-sigma-workbook.py maps to Sigma element kinds). Unknown modes fall
-# back to barchart with a LOUD warning (no silent wrong-default).
+# QlikView <GraphMode> -> Sigma vizType. Sigma's supported set (viz-kind catalog,
+# consumed by build-sigma-workbook.py): barchart linechart combochart piechart
+# scatterplot table pivot-table kpi map. QlikView has 13 chart types; ALL are mapped
+# here. The 5 with NO native Sigma equivalent (radar/grid/gauge/block/funnel/mekko)
+# map to the closest kind and are flagged `approx` -> a LOUD per-chart warning, so a
+# fidelity gap is never silent. Keys are NORMALIZED (GRAPH_MODE_ prefix stripped,
+# non-letters removed, uppercased) so constant-name variants still resolve.
+#   value = (sigma vizType, approximated?)
 GRAPHMODE_VIZ = {
-    "GRAPH_MODE_BAR": "barchart",
-    "GRAPH_MODE_LINE": "linechart",
-    "GRAPH_MODE_PIE": "piechart",
-    "GRAPH_MODE_STRAIGHT_TABLE": "table",
-    "GRAPH_MODE_PIVOT_TABLE": "pivot-table",
-    "GRAPH_MODE_SCATTER": "scatterplot",
-    "GRAPH_MODE_COMBO": "combochart",
-    "GRAPH_MODE_GAUGE": "kpi",
+    "BAR": ("barchart", False),
+    "LINE": ("linechart", False),
+    "COMBO": ("combochart", False),
+    "PIE": ("piechart", False),
+    "SCATTER": ("scatterplot", False),
+    "STRAIGHTTABLE": ("table", False),
+    "PIVOTTABLE": ("pivot-table", False),
+    "GAUGE": ("kpi", True),        # single-value gauge -> KPI
+    "RADAR": ("linechart", True),  # polar line/area -> line
+    "GRID": ("scatterplot", True), # 2-dim grid w/ size/colour -> scatter
+    "BLOCK": ("barchart", True),   # block/treemap -> bar (Sigma set has no treemap)
+    "FUNNEL": ("barchart", True),  # ranked stages -> bar
+    "MEKKO": ("barchart", True),   # marimekko (variable-width stacked) -> bar
 }
+# Substring fallbacks for constant-name variants (checked most-specific first).
+_VIZ_KEYWORDS = [
+    ("STRAIGHT", ("table", False)), ("PIVOT", ("pivot-table", False)),
+    ("COMBO", ("combochart", False)), ("BAR", ("barchart", False)),
+    ("LINE", ("linechart", False)), ("PIE", ("piechart", False)),
+    ("SCATTER", ("scatterplot", False)), ("XY", ("scatterplot", False)),
+    ("RADAR", ("linechart", True)), ("GRID", ("scatterplot", True)),
+    ("GAUGE", ("kpi", True)), ("SPEED", ("kpi", True)), ("METER", ("kpi", True)),
+    ("BLOCK", ("barchart", True)), ("FUNNEL", ("barchart", True)),
+    ("MEKKO", ("barchart", True)), ("TABLE", ("table", False)),
+]
 GRID_COLS = 24
+
+
+def _norm_mode(mode):
+    """GRAPH_MODE_STRAIGHT_TABLE -> STRAIGHTTABLE (prefix stripped, letters only)."""
+    up = (mode or "").upper()
+    up = up[len("GRAPH_MODE_"):] if up.startswith("GRAPH_MODE_") else up
+    return "".join(ch for ch in up if ch.isalpha())
 
 warnings = []
 
@@ -166,19 +194,28 @@ def parse_chart(root):
 
 def viz_for(chart):
     mode, meas = chart["mode"], chart["measures"]
-    # Combo only on a GENUINE split — some expressions bar-only, others line-only.
+    title = chart["title"] or "?"
+    norm = _norm_mode(mode)
+    viz, approx = GRAPHMODE_VIZ.get(norm, (None, None))
+    if viz is None:                                  # variant name -> substring match
+        for kw, mapped in _VIZ_KEYWORDS:
+            if kw in norm:
+                viz, approx = mapped
+                break
+    if viz is None:                                  # truly unknown -> loud fallback
+        warnings.append("chart '%s': unmapped GraphMode %r -> barchart (review)" % (title, mode))
+        return "barchart"
+    # Combo override: a GENUINE bar-only/line-only split promotes bar/line -> combo.
     # (Real QlikView charts set ShowAsBar AND ShowAsLine true by default, so a plain
-    #  "both true" is noise, not a combo.)
-    if mode in ("GRAPH_MODE_BAR", "GRAPH_MODE_LINE") \
+    #  "both true" is noise, not a combo — hence the "-only" test.)
+    if viz in ("barchart", "linechart") \
        and any(m["asBar"] and not m["asLine"] for m in meas) \
        and any(m["asLine"] and not m["asBar"] for m in meas):
         return "combochart"
-    viz = GRAPHMODE_VIZ.get(mode)
-    if viz:
-        return viz
-    warnings.append("chart '%s': unmapped GraphMode %r -> defaulting to barchart (review)"
-                    % (chart["title"] or "?", mode))
-    return "barchart"
+    if approx:
+        warnings.append("chart '%s': QlikView %s has no exact Sigma equivalent -> approximated as %s (review)"
+                        % (title, mode or "?", viz))
+    return viz
 
 
 # ── absolute-canvas Rects -> 24-col grid cells (aspect-preserving) ───────────

@@ -68,6 +68,33 @@ def test_converter_input():
     assert len(measures) >= 3 and all("expr" in m for m in measures)
 
 
+def test_viz_map_covers_all_13_qlikview_chart_types():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("qpd", os.path.join(SCRIPTS, "qlik-prj-discover.py"))
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    supported = {"barchart", "linechart", "combochart", "piechart", "scatterplot",
+                 "table", "pivot-table", "kpi", "map"}
+    # All 13 QlikView chart types -> a supported Sigma viz.
+    expect = {
+        "GRAPH_MODE_BAR": "barchart", "GRAPH_MODE_LINE": "linechart",
+        "GRAPH_MODE_COMBO": "combochart", "GRAPH_MODE_PIE": "piechart",
+        "GRAPH_MODE_SCATTER": "scatterplot", "GRAPH_MODE_STRAIGHT_TABLE": "table",
+        "GRAPH_MODE_PIVOT_TABLE": "pivot-table", "GRAPH_MODE_GAUGE": "kpi",
+        "GRAPH_MODE_RADAR": "linechart", "GRAPH_MODE_GRID": "scatterplot",
+        "GRAPH_MODE_BLOCK": "barchart", "GRAPH_MODE_FUNNEL": "barchart",
+        "GRAPH_MODE_MEKKO": "barchart",
+    }
+    for mode, want in expect.items():
+        m.warnings.clear()
+        got = m.viz_for({"mode": mode, "title": "t", "measures": []})
+        assert got == want, f"{mode} -> {got}, want {want}"
+        assert got in supported, f"{mode} -> unsupported {got}"
+    # An unknown GraphMode must fall back loudly, never crash.
+    m.warnings.clear()
+    assert m.viz_for({"mode": "GRAPH_MODE_ZZZ", "title": "t", "measures": []}) == "barchart"
+    assert any("unmapped" in w for w in m.warnings)
+
+
 def test_delegation():
     # migrate-qlik.rb --prj must auto-detect a -prj folder and hand off to discovery.
     src = open(os.path.join(SCRIPTS, "migrate-qlik.rb")).read()
