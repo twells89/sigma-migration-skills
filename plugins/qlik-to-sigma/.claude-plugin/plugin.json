@@ -3,7 +3,7 @@
   "name": "qlik-to-sigma",
   "displayName": "Qlik → Sigma",
   "version": "1.2.0",
-  "description": "Migrate Qlik Sense / Qlik Cloud apps to Sigma — discovery via qlik-cli, Qlik-expression → Sigma-formula translation (incl. Set Analysis + a gap-scout), data model + workbook build, and parity verification. Also migrates legacy QlikView (.qvw) data models via the -prj project folder. Includes a tenant assessment skill.",
+  "description": "Migrate Qlik Sense / Qlik Cloud apps to Sigma — discovery via qlik-cli, Qlik-expression → Sigma-formula translation (incl. Set Analysis + a gap-scout), data model + workbook build, and parity verification. Also migrates legacy QlikView (.qvw) apps — data model AND workbook — from the -prj project folder. Includes a tenant assessment skill.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",
   "keywords": ["qlik", "qlik-sense", "qlik-cloud", "qlikview", "qvw", "sigma", "migration", "bi", "converter"],

@@ -140,22 +140,23 @@ OptionParser.new do |o|
   o.on('--print-converter')   {     opts[:print_converter] = true }
 end.parse!
 
-# QlikView (.qvw) has no Cloud/REST API and no sheets — a "-prj" project folder
-# migrates via a dedicated, converter-only path (data model, no discovery/parity).
-# Delegate to migrate-qlikview.rb and exit BEFORE the Qlik Sense discovery pipeline,
-# which reads Qlik-Sense-shaped artifacts (charts/measures/layout/snapshot) a -prj
-# folder can't provide.
+# QlikView (.qvw) has no Cloud/REST API. A "-prj" project folder is the migration
+# surface: qlik-prj-discover.py parses it into the SAME discovery artifacts the Qlik
+# Sense pipeline consumes (script.qvs, converter-input.json, charts.json, measures.json,
+# layout.json), so the rest of this script (convert -> data model -> workbook) runs
+# UNCHANGED via the --from-discovery path. There is no live engine, so the Qlik-side
+# value snapshot / parity leg simply stays empty (warehouse-only parity downstream).
 if opts[:prj]
-  require 'rbconfig'
-  qv_argv = ['--prj', opts[:prj]]
-  qv_argv += ['--connection', opts[:conn]] if opts[:conn]
-  qv_argv += ['--database', opts[:database]] if opts[:database]
-  qv_argv += ['--schema', opts[:schema]] if opts[:schema]
-  qv_argv += ['--folder', opts[:folder]] if opts[:folder]
-  qv_argv += ['--name', opts[:name]] if opts[:name]
-  qv_argv += ['--out', opts[:out]] if opts[:out]
-  qv_argv << '--dry-run' if opts[:dry_run]
-  exec(RbConfig.ruby, File.join(HERE, 'migrate-qlikview.rb'), *qv_argv)
+  abort "FATAL: --prj dir not found: #{opts[:prj]}" unless File.directory?(opts[:prj])
+  prj_slug = File.basename(opts[:prj]).sub(/-prj\z/i, '').gsub(/[^A-Za-z0-9_-]/, '-')
+  disc_dir = opts[:out] || File.expand_path("~/qlik-migration/#{prj_slug}-prj")
+  FileUtils.mkdir_p(disc_dir)
+  warn "QlikView -prj → discovery artifacts in #{disc_dir}"
+  ok = system(*PyResolve.argv, File.join(HERE, 'qlik-prj-discover.py'),
+              '--prj', opts[:prj], '--out', disc_dir)
+  abort 'FATAL: qlik-prj-discover.py failed' unless ok
+  opts[:from] = disc_dir           # hand off to the standard --from-discovery pipeline
+  opts[:app]  = nil
 end
 
 # Converter resolution (issue #227). The pinned VENDORED bundle is the DEFAULT so a

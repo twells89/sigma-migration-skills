@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Grounding test for the QlikView (.qvw) "-prj" migration path (migrate-qlikview.rb).
+"""Grounding test for the QlikView (.qvw) "-prj" migration path.
 
-Offline (no Sigma): runs the dedicated QlikView entry point in --dry-run over the
-committed fixture and asserts the LOCAL vendored converter produces a well-formed,
-POST-shaped data model. The LIVE column-resolution check (0 error-typed columns)
-is exercised by the converter repo's `npm run regression -- qvw` gate; this test
-guards the skill-side wiring (delegation, file gather, converter invocation, spec
-shape) without needing credentials.
+Offline (no Sigma): runs qlik-prj-discover.py over the committed real-schema fixture
+and asserts it produces the Qlik-Sense-shaped discovery artifacts the rest of the
+pipeline (convert -> data model -> workbook) consumes — so QlikView reuses that
+machinery unchanged. The LIVE end-to-end (DM + workbook POST, 0 error columns,
+faithful render) is exercised by a full `migrate-qlik.rb --prj` run in review.
+
+The fixture's chart XML uses the AUTHENTIC QlikView schema (<GraphProperties> /
+<GraphMode> / ChartDimensionDataDef / ArrayOfMainExpressionData), and the same
+parser was validated against a genuine QVSource .qvw -prj export.
 
 Run: python3 tests/test_qlikview_prj.py   (exit 0 = pass)
 """
@@ -18,35 +21,58 @@ SCRIPTS = os.path.join(SKILL, "scripts")
 FIX = os.path.join(SKILL, "fixtures", "qlikview-retail-prj")
 
 
-def _run_dry(entry_args):
-    with tempfile.TemporaryDirectory() as d:
-        r = subprocess.run(
-            ["ruby", *entry_args, "--prj", FIX, "--out", d, "--dry-run",
-             "--database", "CSA", "--schema", "TJ"],
-            capture_output=True, text=True)
-        assert r.returncode == 0, "dry-run failed:\n" + r.stdout + r.stderr
-        conv = json.load(open(os.path.join(d, "converter-out.json")))
-        spec = json.load(open(os.path.join(d, "dm-spec.json")))
-        return conv, spec, (r.stdout + r.stderr)
+def _discover():
+    d = tempfile.mkdtemp()
+    r = subprocess.run(["python3", os.path.join(SCRIPTS, "qlik-prj-discover.py"),
+                        "--prj", FIX, "--out", d], capture_output=True, text=True)
+    assert r.returncode == 0, "qlik-prj-discover failed:\n" + r.stdout + r.stderr
+    load = lambda n: json.load(open(os.path.join(d, n)))
+    assert os.path.exists(os.path.join(d, "script.qvs")), "script.qvs not emitted"
+    return load("charts.json"), load("layout.json"), load("converter-input.json"), load("measures.json")
 
 
-def test_dedicated_entrypoint():
-    conv, spec, out = _run_dry([os.path.join(SCRIPTS, "migrate-qlikview.rb")])
-    stats = conv.get("stats", {})
-    # Same shape the converter's expected.summary.json asserts, verified skill-side.
-    assert stats.get("elements", 0) >= 3, stats
-    assert stats.get("relationships", 0) >= 2, stats
-    assert stats.get("metrics", 0) >= 3, stats
-    assert spec.get("schemaVersion") == 1, spec.get("schemaVersion")
-    # Honesty: a -prj folder has no row counts, so the shared-field-name caveat must surface.
-    assert any("shared field name" in w for w in conv.get("warnings", [])), conv.get("warnings")
+def test_charts():
+    charts, _, _, _ = _discover()
+    by_id = {c["id"]: c for c in charts}
+    assert len(charts) == 4, [c["id"] for c in charts]
+    # GraphMode -> vizType mapping (bar/pie/line/straight-table)
+    assert {c["vizType"] for c in charts} == {"barchart", "piechart", "linechart", "table"}, \
+        {c["id"]: c["vizType"] for c in charts}
+    bar = by_id["CH01"]
+    assert bar["vizType"] == "barchart" and bar["title"] == "Net Revenue by Category"
+    assert bar["dimensions"] == [["CATEGORY"]] and bar["measures"] == ["Sum(NET_REVENUE)"]
+    assert bar["measureLabels"] == ["Net Revenue"]
+    tbl = by_id["CH04"]
+    assert tbl["vizType"] == "table" and len(tbl["measures"]) == 3   # multi-measure table
 
 
-def test_delegation_from_migrate_qlik():
-    # `migrate-qlik.rb --prj` must delegate to the QlikView path and produce the same model.
-    conv, spec, out = _run_dry([os.path.join(SCRIPTS, "migrate-qlik.rb")])
-    assert conv.get("stats", {}).get("elements", 0) >= 3, conv.get("stats")
-    assert "QlikView -prj" in out, "delegation banner missing — migrate-qlik.rb may not be delegating"
+def test_layout():
+    _, layout, _, _ = _discover()
+    assert len(layout) == 1
+    sh = layout[0]
+    assert sh["title"] == "Executive Overview" and sh["columns"] == 24
+    cells = {c["objectId"]: c for c in sh["cells"]}
+    assert set(cells) == {"CH01", "CH02", "CH03", "CH04"}
+    for c in cells.values():                      # a real grid rect, in-bounds
+        assert 0 <= c["col"] < 24 and c["col"] + c["colspan"] <= 24
+        assert c["row"] >= 0 and c["rowspan"] >= 1
+    # 2x2 -> two distinct columns and two distinct rows
+    assert len({c["col"] for c in cells.values()}) == 2
+    assert len({c["row"] for c in cells.values()}) == 2
+
+
+def test_converter_input():
+    _, _, conv, measures = _discover()
+    assert {t["name"] for t in conv["tables"]} == {"ORDER_FACT", "CUSTOMER_DIM", "PRODUCT_DIM"}
+    assert len(conv["masterMeasures"]) >= 3 and all("qDef" in m for m in conv["masterMeasures"])
+    assert len(measures) >= 3 and all("expr" in m for m in measures)
+
+
+def test_delegation():
+    # migrate-qlik.rb --prj must auto-detect a -prj folder and hand off to discovery.
+    src = open(os.path.join(SCRIPTS, "migrate-qlik.rb")).read()
+    assert "qlik-prj-discover.py" in src and "opts[:from] = disc_dir" in src, \
+        "migrate-qlik.rb --prj does not delegate to qlik-prj-discover.py"
 
 
 if __name__ == "__main__":

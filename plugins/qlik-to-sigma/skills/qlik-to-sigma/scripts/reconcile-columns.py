@@ -55,7 +55,13 @@ def parse(qvs):
         src_m = SOURCE.search(full)
         field_part = body[:src_m.start()] if src_m and src_m.start() < len(body) else body
         sql_from, lib_file, resident, special = (src_m.groups() if src_m else (None, None, None, None))
-        source = (sql_from or "").strip('"') or (lib_file or "") or (f"RESIDENT {resident}" if resident else "") or (special or "?")
+        # A file load (QlikView QVD / CSV fixture) names the source by FILE — the
+        # warehouse table is the file stem, so drop the path + data-file extension
+        # (else the DM element resolves to a table literally named ".qvd").
+        lib_table = ""
+        if lib_file:
+            lib_table = re.sub(r"\.(qvd|qvx|csv|txt|xlsx?)$", "", lib_file.strip().split("/")[-1], flags=re.I)
+        source = (sql_from or "").strip('"') or lib_table or (f"RESIDENT {resident}" if resident else "") or (special or "?")
         fields = []
         for tok in split_fields(field_part):
             tok = tok.strip().strip(";").strip()

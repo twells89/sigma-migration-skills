@@ -1,0 +1,35 @@
+<!-- Real-schema QlikView -prj fixture (synthetic app over a retail star schema) -->
+<PrjQlikViewProject>
+  <GLOBAL>
+    <LoadScriptFileName>LoadScript.txt</LoadScriptFileName>
+    <TopLayoutFileName>TopLayout.xml</TopLayoutFileName>
+  </GLOBAL>
+  <SHEETS>
+    <PrjSheetProperties>
+      <SheetId>Document\SH01</SheetId>
+      <IsActive>true</IsActive>
+      <ChildObjects>
+        <PrjFrameParentDef>
+          <ObjectId>Document\CH01</ObjectId>
+          <Rect><Left>40</Left><Top>20</Top><Width>1950</Width><Height>1180</Height></Rect>
+          <ZedLevel>0</ZedLevel>
+        </PrjFrameParentDef>
+        <PrjFrameParentDef>
+          <ObjectId>Document\CH02</ObjectId>
+          <Rect><Left>2010</Left><Top>20</Top><Width>1950</Width><Height>1180</Height></Rect>
+          <ZedLevel>1</ZedLevel>
+        </PrjFrameParentDef>
+        <PrjFrameParentDef>
+          <ObjectId>Document\CH03</ObjectId>
+          <Rect><Left>40</Left><Top>1220</Top><Width>1950</Width><Height>1180</Height></Rect>
+          <ZedLevel>2</ZedLevel>
+        </PrjFrameParentDef>
+        <PrjFrameParentDef>
+          <ObjectId>Document\CH04</ObjectId>
+          <Rect><Left>2010</Left><Top>1220</Top><Width>1950</Width><Height>1180</Height></Rect>
+          <ZedLevel>3</ZedLevel>
+        </PrjFrameParentDef>
+      </ChildObjects>
+    </PrjSheetProperties>
+  </SHEETS>
+</PrjQlikViewProject>

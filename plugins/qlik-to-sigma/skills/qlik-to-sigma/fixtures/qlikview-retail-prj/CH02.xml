@@ -1,11 +1,10 @@
 <GraphProperties>
-  <GraphLayout><Frame><Name><v>Net Revenue by Category</v></Name></Frame></GraphLayout>
-  <GraphMode>GRAPH_MODE_BAR</GraphMode>
+  <GraphLayout><Frame><Name><v>Revenue Share by Segment</v></Name></Frame></GraphLayout>
+  <GraphMode>GRAPH_MODE_PIE</GraphMode>
   <Dimensions>
     <ChartDimensionDataDef>
-      <PseudoDef><Name>CATEGORY</Name><Type>IS_FIELD</Type></PseudoDef>
-      <Title><v>Category</v></Title>
-      <NullSuppression>true</NullSuppression>
+      <PseudoDef><Name>CUSTOMER_SEGMENT</Name><Type>IS_FIELD</Type></PseudoDef>
+      <Title><v>Segment</v></Title>
     </ChartDimensionDataDef>
   </Dimensions>
   <Expressions>
@@ -19,7 +18,7 @@
             </ExpressionData>
             <ExpressionVisual>
               <ExpType>BASE_EXP</ExpType>
-              <ShowAsBar>true</ShowAsBar>
+              <ShowAsBar>false</ShowAsBar>
               <ShowAsLine>false</ShowAsLine>
               <Label><v>Net Revenue</v></Label>
             </ExpressionVisual>

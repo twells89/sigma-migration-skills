@@ -129,8 +129,9 @@ qlik-cli context (OAuth M2M or API key). `qlik context use <ctx>`.
 > WebSocket): set up auth per `refs/connection-onprem.md` (certs or JWT virtual
 > proxy), then `export QLIK_BIN="$PWD/scripts/qlik-onprem-shim.py"` before
 > Phase 1. Everything else below is unchanged. **QlikView (`.qvw`) is a DIFFERENT
-> product** (no API, no sheets) — migrate it via the `-prj` folder path (see the
-> QlikView note in Phase 5/6 below); confirm which product you have first.
+> product** (no Cloud/REST API) — migrate it from its `-prj` project folder via
+> `--prj` (data model + workbook; see the QlikView note in Phase 5/6 below);
+> confirm which product you have first.
 
 ### Sigma access
 ```bash
@@ -192,26 +193,29 @@ Qlik app first if they need matching snapshots. Only DIVERGENT (delta NOT explai
 staleness) blocks GREEN.
 
 > **Legacy QlikView `.qvw`?** QlikView is a DIFFERENT product from Qlik Sense — no Cloud/REST
-> API, no `.qvw` parser, and no sheets to rebuild. Migrate it from the developer-opt-in
-> **`-prj` project folder**: have the customer enable "Create project folder" in QlikView
-> Desktop and send the whole `<name>-prj/` folder (`LoadScript.txt` + `CH*.xml`), then run
+> API and no `.qvw` parser. Migrate it from the developer-opt-in **`-prj` project folder**: have
+> the customer enable "Create project folder" in QlikView Desktop and send the whole
+> `<name>-prj/` folder, then run the SAME command as any migration:
 > ```bash
 > ruby scripts/migrate-qlik.rb --prj <path/to/Name-prj> --connection <SIGMA_CONNECTION_ID> \
 >   [--database DB --schema SCHEMA --folder <SIGMA_FOLDER_ID> --name '<prefix>']
 > ```
-> A `--prj` folder is auto-detected and delegated to `scripts/migrate-qlikview.rb`. It runs the
-> **LOCAL vendored converter** (`converter/qlik.mjs :: convertQvwPrjToSigma` — no MCP, no data
-> egress) over `LoadScript.txt` (tables/fields incl. `AS` renames) + `CH*.xml` (expression
-> measures — same Set Analysis / Range / Dual / Class translation as Phase 2), POSTs the Sigma
-> **data model**, and confirms every column resolves (0 error-typed columns). Use `--dry-run` to
-> emit `dm-spec.json` offline.
+> A `--prj` folder is auto-detected: `scripts/qlik-prj-discover.py` parses it into the SAME
+> discovery artifacts the Qlik Sense pipeline consumes, so **the full pipeline runs unchanged —
+> data model AND workbook**. It reads:
+> - `LoadScript.txt` → tables/fields (incl. `AS` renames; a `lib://…/T.qvd` load resolves to
+>   warehouse table `T`) → the Sigma data model.
+> - `QlikViewProject.xml` → sheets + each object's `<Rect>` → the Sigma page layout (24-col grid).
+> - `CH*.xml` → `<GraphMode>` (chart kind → Sigma viz), `<Dimensions>`, and `<Expressions>`
+>   (measures, same Set Analysis / Range / Dual / Class translation) → the workbook charts.
 >
-> **Scope:** QlikView delivers the **data model only** — a `-prj` folder has no sheets/charts to
-> rebuild and there's no live engine for Qlik-side parity, so build the workbook on top with the
-> **sigma-workbooks** skill or in the Sigma UI. Relationships are inferred from **shared field
-> names only** (a `-prj` folder carries no row counts) → review join directions in Sigma. (The
-> hosted MCP tool `mcp__sigma-data-model__convert_qlikview_prj_to_sigma` is a manual fallback if
-> the vendored bundle is ever unavailable.)
+> **Scope / caveats (be honest with customers):** a `-prj` folder has **no live engine**, so
+> parity is **warehouse-only** (Sigma vs. the source warehouse — no Qlik-side value snapshot), and
+> chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against — do the
+> Phase-5 visual-QA review). Relationships are inferred from **shared field names only** (a `-prj`
+> folder carries no row counts) → review join directions in Sigma. The parser handles the authentic
+> QlikView `<GraphProperties>` schema (validated against a real `.qvw` export), not every version's
+> object variants — an unmapped `GraphMode` falls back to a bar chart with a loud warning.
 
 ## Phase 2 — Convert (convert_qlik_to_sigma)
 **Local by default, zero-config, no MCP.** `migrate-qlik.rb` runs

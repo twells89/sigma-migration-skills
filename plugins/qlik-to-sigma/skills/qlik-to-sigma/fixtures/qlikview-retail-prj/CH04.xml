@@ -1,0 +1,59 @@
+<GraphProperties>
+  <GraphLayout><Frame><Name><v>Category Detail</v></Name></Frame></GraphLayout>
+  <GraphMode>GRAPH_MODE_STRAIGHT_TABLE</GraphMode>
+  <Dimensions>
+    <ChartDimensionDataDef>
+      <PseudoDef><Name>CATEGORY</Name><Type>IS_FIELD</Type></PseudoDef>
+      <Title><v>Category</v></Title>
+    </ChartDimensionDataDef>
+  </Dimensions>
+  <Expressions>
+    <ArrayOfMainExpressionData>
+        <MainExpressionData>
+          <Data>
+            <InternalId>-1</InternalId>
+            <ExpressionData>
+              <Definition><v>=Sum(NET_REVENUE)</v></Definition>
+              <Enable>true</Enable>
+            </ExpressionData>
+            <ExpressionVisual>
+              <ExpType>BASE_EXP</ExpType>
+              <ShowAsBar>false</ShowAsBar>
+              <ShowAsLine>false</ShowAsLine>
+              <Label><v>Net Revenue</v></Label>
+            </ExpressionVisual>
+          </Data>
+        </MainExpressionData>
+        <MainExpressionData>
+          <Data>
+            <InternalId>-1</InternalId>
+            <ExpressionData>
+              <Definition><v>=Count(DISTINCT ORDER_ID)</v></Definition>
+              <Enable>true</Enable>
+            </ExpressionData>
+            <ExpressionVisual>
+              <ExpType>BASE_EXP</ExpType>
+              <ShowAsBar>false</ShowAsBar>
+              <ShowAsLine>false</ShowAsLine>
+              <Label><v>Orders</v></Label>
+            </ExpressionVisual>
+          </Data>
+        </MainExpressionData>
+        <MainExpressionData>
+          <Data>
+            <InternalId>-1</InternalId>
+            <ExpressionData>
+              <Definition><v>=Sum(NET_PROFIT)</v></Definition>
+              <Enable>true</Enable>
+            </ExpressionData>
+            <ExpressionVisual>
+              <ExpType>BASE_EXP</ExpType>
+              <ShowAsBar>false</ShowAsBar>
+              <ShowAsLine>false</ShowAsLine>
+              <Label><v>Net Profit</v></Label>
+            </ExpressionVisual>
+          </Data>
+        </MainExpressionData>
+    </ArrayOfMainExpressionData>
+  </Expressions>
+</GraphProperties>

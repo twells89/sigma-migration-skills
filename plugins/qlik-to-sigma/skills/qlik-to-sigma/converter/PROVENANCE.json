@@ -1,7 +1,7 @@
 {
   "source_repo": "twells89/sigma-data-model-mcp",
-  "source_commit": "d1b1048",
-  "source_commit_date": "2026-07-29",
+  "source_commit": "867c669",
+  "source_commit_date": "2026-06-22",
   "bundler": "esbuild --bundle --format=esm --platform=node",
   "vendored_modules": "qlik.mjs",
   "note": "Self-contained bundled artifacts, not source. Refresh with tools/vendor-converters.sh after the converter repo changes."

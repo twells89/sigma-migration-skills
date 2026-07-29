@@ -57,8 +57,9 @@ Duration: 2
     (identical QIX protocol); the on-prem auth/QRS path is unproven live (see the
     note in the On-prem setup section). QlikView ≠ Qlik Sense: `.qvw` apps migrate
     via the developer-opt-in `-prj` project folder — `ruby scripts/migrate-qlik.rb
-    --prj <Name-prj> --connection <ID>` (delivers the **data model** only; no
-    sheets/charts or Qlik-side parity — see the QlikView note in SKILL.md).
+    --prj <Name-prj> --connection <ID>` runs the full pipeline (**data model +
+    workbook**, laid out from the `-prj` sheet geometry). Parity is warehouse-only
+    (no live Qlik engine) — see the QlikView note in SKILL.md.
 - **Qlik Cloud access** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible).
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity).

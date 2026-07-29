@@ -1,11 +1,10 @@
 <GraphProperties>
-  <GraphLayout><Frame><Name><v>Net Revenue by Category</v></Name></Frame></GraphLayout>
-  <GraphMode>GRAPH_MODE_BAR</GraphMode>
+  <GraphLayout><Frame><Name><v>Net Profit by Brand</v></Name></Frame></GraphLayout>
+  <GraphMode>GRAPH_MODE_LINE</GraphMode>
   <Dimensions>
     <ChartDimensionDataDef>
-      <PseudoDef><Name>CATEGORY</Name><Type>IS_FIELD</Type></PseudoDef>
-      <Title><v>Category</v></Title>
-      <NullSuppression>true</NullSuppression>
+      <PseudoDef><Name>BRAND</Name><Type>IS_FIELD</Type></PseudoDef>
+      <Title><v>Brand</v></Title>
     </ChartDimensionDataDef>
   </Dimensions>
   <Expressions>
@@ -14,14 +13,14 @@
           <Data>
             <InternalId>-1</InternalId>
             <ExpressionData>
-              <Definition><v>=Sum(NET_REVENUE)</v></Definition>
+              <Definition><v>=Sum(NET_PROFIT)</v></Definition>
               <Enable>true</Enable>
             </ExpressionData>
             <ExpressionVisual>
               <ExpType>BASE_EXP</ExpType>
-              <ShowAsBar>true</ShowAsBar>
-              <ShowAsLine>false</ShowAsLine>
-              <Label><v>Net Revenue</v></Label>
+              <ShowAsBar>false</ShowAsBar>
+              <ShowAsLine>true</ShowAsLine>
+              <Label><v>Net Profit</v></Label>
             </ExpressionVisual>
           </Data>
         </MainExpressionData>
