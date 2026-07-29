@@ -22,6 +22,7 @@
 
 require 'json'
 require 'fileutils'
+require 'base64'
 require_relative 'lib/domo_sigma_util'
 include DomoSigma
 
@@ -161,12 +162,51 @@ def build_pivot(card)
   }
 end
 
+# ---- image / logo / drawing cards (tableau build-charts-from-signals.rb:6655 pattern) ----
+# Inline data-URI — no hosting required. PNG/JPEG data-URIs POST + render cleanly
+# (only base64-SVG is WAF-blocked; Domo logos are raster PNG).
+IMAGE_CHART_TYPE_RE = /image|logo|drawing|richtext/i
+
+# The staged capture path capture_card (domo-capture-visuals.rb) writes to, or
+# the card's own override if the caller already resolved one.
+def png_path(card)
+  card['_pngPath'] || File.join(OUT, 'png', 'cards', "#{card['id']}.png")
+end
+
+# True for a card whose chartType names it as a static image/logo/drawing asset,
+# OR one with no data columns that nonetheless has a staged PNG (capture-visuals
+# rendered *something* — treat it as an image card rather than an empty chart).
+def image_card?(card)
+  return true if card['chartType'].to_s =~ IMAGE_CHART_TYPE_RE
+  path = png_path(card)
+  !path.nil? && File.exist?(path.to_s) && (card['columns'] || []).empty?
+end
+
+# build_image(card) -> {id, kind:'image', url:"data:image/png;base64,<b64>"} or
+# nil when no PNG was captured (Tier B / not captured) — the caller falls back
+# and warns; NEVER emit an image element with an empty/broken url.
+def build_image(card)
+  path = png_path(card)
+  return nil unless path && File.exist?(path.to_s)
+  { 'id' => eid(card), 'kind' => 'image',
+    'url' => "data:image/png;base64,#{Base64.strict_encode64(File.binread(path))}" }
+end
+
 def build_element(card, overrides)
   # Rule 0: a summary-number card with no real grouping → KPI, never a table.
   kind = card['sigmaKindHint']
   is_kpi = kind == 'kpi-chart' ||
            (card['summaryNumber'] && Array(card['groupBy']).empty? && (card['columns'] || []).size <= 1)
   return build_kpi(card, overrides) if is_kpi
+
+  if image_card?(card)
+    img = build_image(card)
+    return img if img
+    # PNG absent (Tier B / not captured) — honest fallback: fall through to the
+    # existing placeholder path below (unchanged) + flag it so it gets fixed by
+    # hand rather than shipping a broken/empty image element.
+    warn_card(card, "image card #{card['id']}: no captured PNG — export from Domo UI and embed manually.")
+  end
 
   case kind
   when 'bar-chart', 'line-chart', 'area-chart', 'combo-chart', 'scatter-chart'
