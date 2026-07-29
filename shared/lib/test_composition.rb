@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # test_composition.rb — run directly: ruby shared/lib/test_composition.rb
+require 'json'
 require_relative 'composition'
 $failures = 0
 def check(desc); ok = yield; puts(ok ? "[ok] #{desc}" : "[FAIL] #{desc}"); $failures += 1 unless ok; end
@@ -140,4 +141,64 @@ end
 check('regression: :master_detail golden still matches after adding :overview') do
   Composition.compose(md_els, pattern: :master_detail).strip == md_golden
 end
+
+# tabbed_container — labels-only element; <Tab> children map to tabs[] by
+# position; bare <LayoutElement> children only inside a <Tab> (a nested
+# GridContainer scrambles tab render order).
+tabbed_golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'composition_tabbed_golden.txt')))
+tabbed_tabs = [
+  { name: 'Overview', inner: Composition.le('a1', 1, 25, 1, 7) },
+  { name: 'Details', inner: Composition.le('b1', 1, 25, 1, 7) }
+]
+check('tabbed_container: element + layout match golden') do
+  out = Composition.tabbed_container(id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')
+  out[:element] == tabbed_golden['element'] && out[:layout] == tabbed_golden['layout']
+end
+check('tabbed_container: element tabs are labels-only, in order, with tabBar.alignment') do
+  out = Composition.tabbed_container(id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')
+  out[:element]['tabs'] == [{ 'name' => 'Overview' }, { 'name' => 'Details' }] &&
+    out[:element]['tabBar'] == { 'alignment' => 'start' }
+end
+check('tabbed_container: layout has exactly 2 ordered <Tab> blocks, each wrapping its inner') do
+  out = Composition.tabbed_container(id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')
+  out[:layout].scan('<Tab ').size == 2 &&
+    out[:layout].index('elementId="a1"') < out[:layout].index('elementId="b1"') &&
+    out[:layout].start_with?(
+      '<TabbedContainer elementId="tc" type="tabbed-container" gridColumn="1 / 25" gridRow="7 / 60">'
+    ) &&
+    out[:layout].end_with?('</TabbedContainer>')
+end
+check('tabbed_container: empty id raises ArgumentError') do
+  begin
+    Composition.tabbed_container(id: '', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')
+    false
+  rescue ArgumentError
+    true
+  end
+end
+check('tabbed_container: empty tabs raises ArgumentError') do
+  begin
+    Composition.tabbed_container(id: 'tc', tabs: [], grid_column: '1 / 25', grid_row: '7 / 60')
+    false
+  rescue ArgumentError
+    true
+  end
+end
+check('tabbed_container: a tab missing a name raises ArgumentError') do
+  begin
+    Composition.tabbed_container(id: 'tc', tabs: [{ name: '', inner: 'x' }], grid_column: '1 / 25', grid_row: '7 / 60')
+    false
+  rescue ArgumentError
+    true
+  end
+end
+check('tabbed_container: a tab with a missing (nil) name raises ArgumentError') do
+  begin
+    Composition.tabbed_container(id: 'tc', tabs: [{ inner: 'x' }], grid_column: '1 / 25', grid_row: '7 / 60')
+    false
+  rescue ArgumentError
+    true
+  end
+end
+
 exit($failures.zero? ? 0 : 1)

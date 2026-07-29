@@ -1,0 +1,12 @@
+{
+  "element": {
+    "id": "tc",
+    "kind": "tabbed-container",
+    "tabs": [
+      { "name": "Overview" },
+      { "name": "Details" }
+    ],
+    "tabBar": { "alignment": "start" }
+  },
+  "layout": "<TabbedContainer elementId=\"tc\" type=\"tabbed-container\" gridColumn=\"1 / 25\" gridRow=\"7 / 60\">\n  <Tab gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n    <LayoutElement elementId=\"a1\" gridColumn=\"1 / 25\" gridRow=\"1 / 7\"/>\n  </Tab>\n  <Tab gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n    <LayoutElement elementId=\"b1\" gridColumn=\"1 / 25\" gridRow=\"1 / 7\"/>\n  </Tab>\n</TabbedContainer>"
+}

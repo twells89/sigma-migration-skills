@@ -133,4 +133,46 @@ module Composition
     else raise ArgumentError, "compose: unknown pattern #{pattern.inspect}"
     end
   end
+
+  # tabbed_container: a Sigma {kind:"tabbed-container"} page element + its
+  # <TabbedContainer> layout XML. Per the live-verified shape: tabs[] in the
+  # JSON element are LABELS ONLY (no children); the <Tab> children in the
+  # layout map to tabs[] BY POSITION (1st <Tab> = 1st label).
+  #
+  # GOTCHA (verified): inside a <Tab>, callers pass BARE <LayoutElement>
+  # children only -- a nested <GridContainer> inside a <Tab> scrambles tab
+  # render order. The <Tab> is itself a mini-grid (gridTemplateColumns /
+  # gridTemplateRows), so elements position directly within it; no inner
+  # GridContainer is needed.
+  def self.tabbed_container(id:, tabs:, grid_column:, grid_row:, tab_bar_alignment: 'start')
+    raise ArgumentError, 'tabbed_container: id required' if id.to_s.empty?
+    raise ArgumentError, 'tabbed_container: tabs required' if tabs.nil? || tabs.empty?
+    tabs.each do |t|
+      raise ArgumentError, 'tabbed_container: every tab requires a non-empty name' if t[:name].to_s.empty?
+    end
+    element = {
+      'id' => id,
+      'kind' => 'tabbed-container',
+      'tabs' => tabs.map { |t| { 'name' => t[:name] } },
+      'tabBar' => { 'alignment' => tab_bar_alignment }
+    }
+    tab_blocks = tabs.map do |t|
+      "  <Tab gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n" \
+      "#{indent(t[:inner])}\n" \
+      '  </Tab>'
+    end
+    layout = "<TabbedContainer elementId=\"#{id}\" type=\"tabbed-container\" " \
+             "gridColumn=\"#{grid_column}\" gridRow=\"#{grid_row}\">\n" \
+             "#{tab_blocks.join("\n")}\n" \
+             '</TabbedContainer>'
+    { element: element, layout: layout }
+  end
+
+  # indent: prepend one indent level (2 spaces, this file's per-level unit)
+  # to every line of a multi-line XML fragment -- used to nest a tab's bare
+  # <LayoutElement> lines (already 2-space indented by le()) one level
+  # deeper inside a <Tab> (-> 4 spaces total, matching the verified shape).
+  def self.indent(text)
+    text.to_s.split("\n").map { |line| "  #{line}" }.join("\n")
+  end
 end

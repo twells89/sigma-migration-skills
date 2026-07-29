@@ -123,3 +123,48 @@ def compose(elements, pattern="exec", page_cols=24):
     if p == "overview":
         return _compose_overview(elements, page_cols)
     raise ValueError("compose: unknown pattern %r" % (pattern,))
+
+# _indent: prepend one indent level (2 spaces, this file's per-level unit) to
+# every line of a multi-line XML fragment -- used to nest a tab's bare
+# <LayoutElement> lines (already 2-space indented by _le()) one level deeper
+# inside a <Tab> (-> 4 spaces total, matching the verified shape).
+def _indent(text):
+    return "\n".join("  " + line for line in str(text).split("\n"))
+
+# tabbed_container: a Sigma {kind:"tabbed-container"} page element + its
+# <TabbedContainer> layout XML. Per the live-verified shape: tabs[] in the
+# JSON element are LABELS ONLY (no children); the <Tab> children in the
+# layout map to tabs[] BY POSITION (1st <Tab> = 1st label).
+#
+# GOTCHA (verified): inside a <Tab>, callers pass BARE <LayoutElement>
+# children only -- a nested <GridContainer> inside a <Tab> scrambles tab
+# render order. The <Tab> is itself a mini-grid (gridTemplateColumns /
+# gridTemplateRows), so elements position directly within it; no inner
+# GridContainer is needed.
+def tabbed_container(id, tabs, grid_column, grid_row, tab_bar_alignment="start"):
+    if not id:
+        raise ValueError("tabbed_container: id required")
+    if not tabs:
+        raise ValueError("tabbed_container: tabs required")
+    for t in tabs:
+        if not t.get("name"):
+            raise ValueError("tabbed_container: every tab requires a non-empty name")
+    element = {
+        "id": id,
+        "kind": "tabbed-container",
+        "tabs": [{"name": t["name"]} for t in tabs],
+        "tabBar": {"alignment": tab_bar_alignment},
+    }
+    tab_blocks = [
+        '  <Tab gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">\n'
+        + _indent(t["inner"]) + "\n"
+        + "  </Tab>"
+        for t in tabs
+    ]
+    layout = (
+        '<TabbedContainer elementId="%s" type="tabbed-container" gridColumn="%s" gridRow="%s">\n'
+        % (id, grid_column, grid_row)
+        + "\n".join(tab_blocks) + "\n"
+        + "</TabbedContainer>"
+    )
+    return {"element": element, "layout": layout}

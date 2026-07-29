@@ -1,4 +1,4 @@
-import os, sys, unittest
+import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import composition
 
@@ -148,6 +148,57 @@ class CompositionTest(unittest.TestCase):
         ]
         out = composition.compose(md_els, pattern="master_detail")
         self.assertEqual(out.strip(), md_golden)
+
+    # tabbed_container -- labels-only element; <Tab> children map to tabs[]
+    # by position; bare <LayoutElement> children only inside a <Tab> (a
+    # nested GridContainer scrambles tab render order).
+    def _tabbed_golden(self):
+        golden_path = os.path.join(os.path.dirname(__file__), "testdata", "composition_tabbed_golden.txt")
+        with open(golden_path) as f:
+            return json.load(f)
+
+    def _tabbed_tabs(self):
+        return [
+            {"name": "Overview", "inner": composition._le("a1", 1, 25, 1, 7)},
+            {"name": "Details", "inner": composition._le("b1", 1, 25, 1, 7)},
+        ]
+
+    def test_tabbed_container_matches_golden(self):
+        golden = self._tabbed_golden()
+        out = composition.tabbed_container("tc", self._tabbed_tabs(), "1 / 25", "7 / 60")
+        self.assertEqual(out["element"], golden["element"])
+        self.assertEqual(out["layout"], golden["layout"])
+
+    def test_tabbed_container_labels_only_in_order_with_tab_bar(self):
+        out = composition.tabbed_container("tc", self._tabbed_tabs(), "1 / 25", "7 / 60")
+        self.assertEqual(out["element"]["tabs"], [{"name": "Overview"}, {"name": "Details"}])
+        self.assertEqual(out["element"]["tabBar"], {"alignment": "start"})
+
+    def test_tabbed_container_layout_has_two_ordered_tab_blocks(self):
+        out = composition.tabbed_container("tc", self._tabbed_tabs(), "1 / 25", "7 / 60")
+        layout = out["layout"]
+        self.assertEqual(layout.count("<Tab "), 2)
+        self.assertLess(layout.index('elementId="a1"'), layout.index('elementId="b1"'))
+        self.assertTrue(layout.startswith(
+            '<TabbedContainer elementId="tc" type="tabbed-container" gridColumn="1 / 25" gridRow="7 / 60">'
+        ))
+        self.assertTrue(layout.endswith("</TabbedContainer>"))
+
+    def test_tabbed_container_empty_id_raises(self):
+        with self.assertRaises(ValueError):
+            composition.tabbed_container("", self._tabbed_tabs(), "1 / 25", "7 / 60")
+
+    def test_tabbed_container_empty_tabs_raises(self):
+        with self.assertRaises(ValueError):
+            composition.tabbed_container("tc", [], "1 / 25", "7 / 60")
+
+    def test_tabbed_container_tab_missing_name_raises(self):
+        with self.assertRaises(ValueError):
+            composition.tabbed_container("tc", [{"name": "", "inner": "x"}], "1 / 25", "7 / 60")
+
+    def test_tabbed_container_tab_with_no_name_key_raises(self):
+        with self.assertRaises(ValueError):
+            composition.tabbed_container("tc", [{"inner": "x"}], "1 / 25", "7 / 60")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
