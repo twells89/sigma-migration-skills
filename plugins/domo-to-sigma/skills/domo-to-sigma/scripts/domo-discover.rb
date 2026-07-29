@@ -28,6 +28,8 @@ require 'json'
 require 'fileutils'
 require 'optparse'
 require_relative 'lib/domo_rest'
+require_relative 'lib/domo_sigma_util'
+include DomoSigma   # merge_geometry — shared with build-domo-layout.rb
 
 OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
 FileUtils.mkdir_p(OUT)
@@ -319,17 +321,19 @@ if opts[:pages]
     page = Domo.page(pid) # PUBLIC: page hierarchy + card IDs
     pages_out << page
 
-    # PUBLIC gives card IDs; layout geometry + collections need PRIVATE.
+    # PUBLIC gives card IDs; layout geometry + collections need PRIVATE. Merged
+    # onto each of this page's cards below (merge_geometry) so cards.json
+    # carries real x/y/w/h for the 2D layout builder instead of auto-stacking.
     layout = (Domo.page_layout(pid) rescue nil)
-    page['_layout'] = layout if layout
 
     card_ids = Array(page['cardIds'] || page['cards'])
+    page_cards = []
 
     card_ids.each do |cid|
       if Domo.dev_token
         raw = fetch_card_def(cid)
         if raw.nil?
-          cards_out << { 'id' => cid, '_error' => 'card definition unavailable' }
+          page_cards << { 'id' => cid, '_error' => 'card definition unavailable' }
           next
         end
         card = normalize_card(raw, cid)
@@ -346,12 +350,14 @@ if opts[:pages]
 
         card['beastModes'] = dig_beast_modes(card, ds_formula_cache[dsid], template_cache)
         beast_out.concat(card['beastModes'])
-        cards_out << card
+        page_cards << card
       else
-        cards_out << { 'id' => cid, '_tierB' => true,
-                       '_note' => 'no private API — capture PNG + transcribe Beast Modes manually' }
+        page_cards << { 'id' => cid, '_tierB' => true,
+                        '_note' => 'no private API — capture PNG + transcribe Beast Modes manually' }
       end
     end
+
+    cards_out.concat(merge_geometry(page_cards, layout))
   end
 
   # De-dupe Beast Modes by id (a dataset formula shared by many cards appears once).

@@ -72,4 +72,40 @@ module DomoSigma
         'predicates' => Array(p['predicates']) }
     end
   end
+
+  # Merge Domo page-layout grid geometry (x/y/w/h) onto each card record by id —
+  # ports domo-capture-visuals.rb's normalize_layout coordinate extraction so
+  # domo-discover.rb's --pages path (not just the OPTIONAL capture-visuals
+  # script) hands build-domo-layout.rb real coordinates instead of forcing it to
+  # auto-stack every card. Pure/side-effect-free: returns a NEW array; a card
+  # with no matching layout entry (or no geometry fields on that entry) comes
+  # back unchanged — 'x'/'y'/'w'/'h' are OMITTED, never defaulted to 0 (0 is a
+  # valid top-left coordinate and must not be confused with "unknown").
+  def merge_geometry(cards, page_layout)
+    cards = Array(cards)
+    return cards unless page_layout.is_a?(Hash)
+
+    raw_cards = page_layout['cards'] || page_layout.dig('pageLayoutV4', 'cards') || []
+    geom_by_id = {}
+    Array(raw_cards).each do |c|
+      next unless c.is_a?(Hash)
+      id = c['id'] || c['cardId'] || c['urn']
+      next unless id
+      geom = c['layout'].is_a?(Hash) ? c['layout'] : c # geometry sometimes nested under "layout"
+      geom_by_id[id.to_s] = {
+        'x' => geom['x']     || geom['col']    || geom['gridX'],
+        'y' => geom['y']     || geom['row']    || geom['gridY'],
+        'w' => geom['w']     || geom['width']  || geom['colSpan'] || geom['sizeX'],
+        'h' => geom['h']     || geom['height'] || geom['rowSpan'] || geom['sizeY'],
+      }
+    end
+
+    cards.map do |card|
+      next card unless card.is_a?(Hash)
+      geom = geom_by_id[card['id'].to_s]
+      next card unless geom
+      coords = geom.each_with_object({}) { |(k, v), h| h[k] = v.to_i unless v.nil? }
+      coords.empty? ? card : card.merge(coords)
+    end
+  end
 end
