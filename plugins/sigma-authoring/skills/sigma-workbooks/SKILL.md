@@ -264,7 +264,7 @@ The reference is feature-sliced — don't read every file up-front. The index ha
 | `reference/specification/schema.md` | Always — load before drafting any spec. Top-level shape, required fields, response-only fields to strip. |
 | `reference/specification/formulas.md` | Always — load before drafting any spec. Formula syntax, qualification, special characters, the #1 mistake. |
 | `reference/specification/formatting.md` | Format, currency, percentage, date format, decimals — column formatting. |
-| `reference/specification/layout.md` | **Always load for multi-element workbooks.** Layout XML, GridContainer/LayoutElement, container elements, page visibility / background, auto-arrange fallback rules, when to write explicit layout vs. omit. |
+| `reference/specification/layout.md` | **Always load for multi-element workbooks.** Layout XML, GridContainer/LayoutElement, container elements, tabbed containers (pack multiple views into one region — spec-authorable, not UI-only), page visibility / background, auto-arrange fallback rules, when to write explicit layout vs. omit. |
 | `reference/specification/example-full.yaml` | A real multi-page reference spec (KPIs, charts, joins, controls, layout) — copy shapes from when in doubt. |
 
 ### Workflows
