@@ -37,23 +37,35 @@ module DomoSigma
   end
 
   # Domo number-format object → Sigma column format. Falls back to a name heuristic
-  # (the same precedence the Tableau KPI emitter uses).
+  # (the same precedence the Tableau KPI emitter uses) ONLY to pick a category
+  # (currency/percent/number) — never to build a format string.
+  #
+  # Field-proven shape only: {kind:"number", decimalPlaces:N} POSTs cleanly
+  # (a d3/Excel formatString can 400). Sigma's documented format schema
+  # (sigma-workbooks/reference/specification/formatting.md) has no distinct
+  # currency/percent `kind` — just `kind: number` with an optional raw
+  # formatString or structured fields (currencySymbol, prefix, …) that have
+  # NOT been field-verified in combination with decimalPlaces. So currency
+  # and percent are classified (for future use) but, absent a documented/
+  # verified currency|percent shape, both fall back to the same proven
+  # {kind:"number", decimalPlaces:prec} rather than guessing.
   def sigma_format(domo_fmt, name = nil)
     prec = (domo_fmt.is_a?(Hash) && (domo_fmt['precision'] || domo_fmt['decimals'])) || 0
     type = domo_fmt.is_a?(Hash) ? (domo_fmt['type'] || domo_fmt['format']).to_s.upcase : ''
-    fs =
+    category =
       case type
-      when 'CURRENCY', 'MONEY'         then "$,.#{prec}f"
-      when 'PERCENT', 'PERCENTAGE'     then ",.#{prec}%"
-      when 'COMMA', 'NUMBER', 'DECIMAL', 'LONG', 'DOUBLE' then ",.#{prec}f"
+      when 'CURRENCY', 'MONEY'                            then :currency
+      when 'PERCENT', 'PERCENTAGE'                        then :percent
+      when 'COMMA', 'NUMBER', 'DECIMAL', 'LONG', 'DOUBLE'  then :number
       else
         n = name.to_s.downcase
-        if    n =~ /revenue|sales|profit|cost|amount|budget|price|\$/ then '$,.0f'
-        elsif n =~ /rate|percent|pct|%|margin|ratio|share/            then ',.1%'
-        elsif !type.empty? || domo_fmt.is_a?(Hash)                    then ",.#{prec}f"
+        if    n =~ /revenue|sales|profit|cost|amount|budget|price|\$/ then :currency
+        elsif n =~ /rate|percent|pct|%|margin|ratio|share/            then :percent
+        elsif !type.empty? || domo_fmt.is_a?(Hash)                    then :number
         end
       end
-    fs ? { 'kind' => 'number', 'formatString' => fs } : nil
+    return nil unless category
+    { 'kind' => 'number', 'decimalPlaces' => prec }
   end
 
   # Does this column name look like a row-key / id (the Domo table-summary COUNT trap)?
