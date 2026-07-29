@@ -318,21 +318,36 @@ def gradient_card(id, kpi_element, gradient, page_cols=24, surfaces=None):
     build-plugs-command-center.rb). Decorate-only, like section_card():
     kpi_element is READ ONLY here (its "id" is read to build child_layout) --
     it is never mutated, and kpi_card.py (WS1, fanned to converters) is never
-    touched. Instead this returns a patch dict the caller merges onto their
-    own copy of the kpi element's value/name objects to turn the value +
-    title white (e.g. kpi_element["value"].update(patch["value"])) so they
-    read against the gradient, matching card(...)'s native-white KPI text.
-    gradient is required (one gradient per card -- distinct KPI cards
-    typically carry distinct gradients, matching the reference build's
-    per-KPI KG[i] array) and reuses compose_gradient_svg()/svg_data_uri()
-    from Task 2 with motif="none" (a plain gradient, no decorative motif --
-    a card this small has no room for one; motif_side is irrelevant when the
-    motif is "none" so "right" is passed as an inert default). child_layout
-    is only the inner <LayoutElement> fragment positioning kpi_element's id
-    inside the container at the composition kpi-band height (rows 1..7,
-    matching composition.bands()'s own "kpi" role height) -- placing the
-    container itself on the page is the caller's job (same "decorate, don't
-    own layout" contract as section_card()), so no outer <GridContainer> is
+    touched. Instead this returns a patch dict the caller MERGES (never
+    replaces) onto their own copy of three top-level keys on the kpi
+    element:
+        kpi_element["value"] = dict(kpi_element["value"], **patch["value"])
+        kpi_element["name"]  = dict(kpi_element["name"], **patch["name"])
+        kpi_element["style"] = dict(kpi_element.get("style", {}), **patch["style"])
+    A shallow merge is REQUIRED, not a wholesale replace of the value/name
+    dicts -- kpi_element["value"] carries columnId (and optionally
+    fontSize) that this patch must not clobber; merge overlays only the
+    color key. patch["style"] is new here (Task 6 live-render fix): the WS1
+    kpi_card.py shape never sets a style key of its own, so this is
+    additive, but callers should still merge rather than assign in case a
+    future kpi_element does carry one. Turning the value + title white is
+    not enough by itself -- the KPI element still keeps its own opaque
+    background, so a live render shows white-on-white; patch["style"] sets
+    backgroundColor:"transparent" (letting the gradient card behind show
+    through) and padding:"none" (edge-to-edge, matching card(...)'s native
+    shape in build-plugs-command-center.rb) so the white value/title are
+    actually legible against the gradient. gradient is required (one
+    gradient per card -- distinct KPI cards typically carry distinct
+    gradients, matching the reference build's per-KPI KG[i] array) and
+    reuses compose_gradient_svg()/svg_data_uri() from Task 2 with
+    motif="none" (a plain gradient, no decorative motif -- a card this small
+    has no room for one; motif_side is irrelevant when the motif is "none"
+    so "right" is passed as an inert default). child_layout is only the
+    inner <LayoutElement> fragment positioning kpi_element's id inside the
+    container at the composition kpi-band height (rows 1..7, matching
+    composition.bands()'s own "kpi" role height) -- placing the container
+    itself on the page is the caller's job (same "decorate, don't own
+    layout" contract as section_card()), so no outer <GridContainer> is
     returned here. NO-GO -> {"element":[],"child_layout":"","patch":{}}
     (graceful: nothing to merge, nothing to lay out, never a broken/
     half-decorated card).
@@ -346,7 +361,8 @@ def gradient_card(id, kpi_element, gradient, page_cols=24, surfaces=None):
                      "backgroundImage": {"url": bg_url, "style": {"fit": "cover"}}}
     child_layout = '<LayoutElement elementId="%s" gridColumn="1 / %d" gridRow="1 / 7"/>' % (
         kpi_element["id"], page_cols + 1)
-    patch = {"value": {"color": "#FFFFFF"}, "name": {"color": "#FFFFFF"}}
+    patch = {"value": {"color": "#FFFFFF"}, "name": {"color": "#FFFFFF"},
+             "style": {"backgroundColor": "transparent", "padding": "none"}}
     return {"element": [container_el], "child_layout": child_layout, "patch": patch}
 
 

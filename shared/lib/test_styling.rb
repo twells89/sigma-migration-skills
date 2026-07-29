@@ -304,7 +304,13 @@ check('gradient_card: GO returns a gradient container + child_layout positioning
     gc[:element][0]['backgroundImage']['url'].start_with?('data:image/svg+xml;base64,') &&
     gc[:element][0]['backgroundImage']['style'] == { 'fit' => 'cover' } &&
     gc[:child_layout] == '<LayoutElement elementId="kpi-rev" gridColumn="1 / 25" gridRow="1 / 7"/>' &&
-    gc[:patch] == { 'value' => { 'color' => '#FFFFFF' }, 'name' => { 'color' => '#FFFFFF' } }
+    gc[:patch] == { 'value' => { 'color' => '#FFFFFF' }, 'name' => { 'color' => '#FFFFFF' },
+                    'style' => { 'backgroundColor' => 'transparent', 'padding' => 'none' } }
+end
+
+check('gradient_card: patch style makes the KPI transparent + padding:none so white text is legible on the gradient (Task 6 live-render fix)') do
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB])
+  gc[:patch]['style'] == { 'backgroundColor' => 'transparent', 'padding' => 'none' }
 end
 
 check('gradient_card: decoded SVG carries the linearGradient stops (motif: :none -- no motif group)') do

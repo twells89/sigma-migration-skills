@@ -337,7 +337,16 @@ class GradientCardSparklineTest(unittest.TestCase):
         self.assertEqual(gc["element"][0]["backgroundImage"]["style"], {"fit": "cover"})
         self.assertEqual(gc["child_layout"],
                           '<LayoutElement elementId="kpi-rev" gridColumn="1 / 25" gridRow="1 / 7"/>')
-        self.assertEqual(gc["patch"], {"value": {"color": "#FFFFFF"}, "name": {"color": "#FFFFFF"}})
+        self.assertEqual(gc["patch"], {"value": {"color": "#FFFFFF"}, "name": {"color": "#FFFFFF"},
+                                        "style": {"backgroundColor": "transparent", "padding": "none"}})
+
+    def test_gradient_card_patch_style_is_transparent_padding_none_for_legibility(self):
+        """Task 6 live-render fix: value/name color alone renders white-on-white
+        because the KPI element keeps its own opaque background. The patch
+        must also carry style.backgroundColor=transparent + style.padding=none
+        so the gradient shows through and the white text is legible."""
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"])
+        self.assertEqual(gc["patch"]["style"], {"backgroundColor": "transparent", "padding": "none"})
 
     def test_gradient_card_decoded_svg_has_gradient_no_motif_group(self):
         gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"])

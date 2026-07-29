@@ -266,6 +266,11 @@ def build_gradient_kpi(id:, title:, cur_formula:, pri_formula:, fmt_sym:, gradie
   patched_card = JSON.parse(JSON.generate(card)) # deep copy, never mutate `card`
   patched_card['value'] = patched_card['value'].merge(gc[:patch]['value'])
   patched_card['name']  = patched_card['name'].merge(gc[:patch]['name'])
+  # Task 6 fix: gradient_card's patch also carries 'style' (backgroundColor:
+  # transparent, padding: none) so the KPI sits transparently on the gradient
+  # card behind it -- without this the white value/name text renders
+  # white-on-white against the KPI's own opaque background.
+  patched_card['style'] = (patched_card['style'] || {}).merge(gc[:patch]['style'] || {})
 
   spark = Styling.sparkline(id: "#{id}-spark", source_element_id: SRC_ID,
                              period_ref: 'DateTrunc("month",[Src/Date])',
