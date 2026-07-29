@@ -26,11 +26,16 @@ OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
 
 # Coarse chart_kind token for census/placement (the real Sigma kind is chosen by
 # build-workbook.rb; this is only for layout weighting). Substring map, kept
-# independent of domo-discover.rb.
+# independent of domo-discover.rb. NOTE: this is the zone's LOGICAL kind that
+# lib/layout.rb's kpi_like_zone? (vendored verbatim from tableau-to-sigma)
+# matches against — it expects the bare 'kpi', not the Sigma ELEMENT kind
+# 'kpi-chart' that domo-discover.rb's sigma_kind_hint separately emits for
+# build-workbook.rb's build_kpi. Emitting 'kpi-chart' here silently missed
+# KPI-row detection for any Domo KPI tile that failed the plain size heuristic.
 def kind_hint(chart_type)
   t = chart_type.to_s.downcase
   return 'filter'       if t.include?('filter')
-  return 'kpi-chart'    if t.include?('singlevalue') || t.include?('summary') || t == 'badge'
+  return 'kpi'          if t.include?('singlevalue') || t.include?('summary') || t == 'badge'
   return 'table'        if t.include?('datagrid') || t.include?('table')
   return 'bar-chart'    if t.include?('bar')
   return 'line-chart'   if t.include?('line')

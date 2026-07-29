@@ -1,12 +1,15 @@
 #!/usr/bin/env ruby
-# Offline: kpi_like_zone? must accept both 'kpi' AND 'kpi-chart' chart_kind
-# tags. build-domo-layout.rb's kind_hint (scripts/build-domo-layout.rb:33)
-# emits 'kpi-chart' for Domo summary-number/badge cards, but layout.rb:388
-# only matched the literal string 'kpi' — so a Domo KPI row silently fell
-# through to the plain size heuristic (and, for a wide/tall KPI tile, missed
-# KPI-row detection entirely instead of grouping into one GridContainer).
+# Offline: build-domo-layout.rb's zone chart_kind must be the LOGICAL 'kpi'
+# tag that lib/layout.rb's kpi_like_zone? (vendored VERBATIM from
+# tableau-to-sigma — do not diverge that copy) expects, not the Sigma
+# ELEMENT kind 'kpi-chart' that domo-discover.rb's separate sigma_kind_hint
+# emits for build-workbook.rb's build_kpi. build-domo-layout.rb's kind_hint
+# (scripts/build-domo-layout.rb:33) used to stamp 'kpi-chart' onto the zone,
+# so a Domo KPI tile that failed the plain size heuristic silently missed
+# KPI-row detection instead of grouping into one GridContainer.
 #   ruby test/test-layout-tag.rb
 require_relative '../scripts/lib/layout'
+require_relative '../scripts/build-domo-layout'
 
 $failures = 0
 def eq(actual, expected, msg)
@@ -19,18 +22,39 @@ def eq(actual, expected, msg)
 end
 def ok(cond, msg) eq(!!cond, true, msg) end
 
-puts "== kpi_like_zone?: 'kpi-chart' tag (Domo) detected, not just 'kpi' =="
-# w_pct/h_pct deliberately exceed the size-heuristic thresholds (KPI_MAX_H_PCT
-# 12 / KPI_MAX_W_PCT 40) so this only passes via the chart_kind tag match —
-# it would NOT pass via the size fallback, isolating the tag-mismatch fix.
-z = { 'kind' => 'chart', 'caption' => 'Total Revenue', 'chart_kind' => 'kpi-chart',
-      'measures' => ['value'], 'w_pct' => 50.0, 'h_pct' => 50.0 }
-ok(SigmaLayout.kpi_like_zone?(z), "chart_kind:'kpi-chart' zone detected as KPI-like")
+puts "== kind_hint: Domo singlevalue/summary/badge cards -> logical 'kpi' (not 'kpi-chart') =="
+eq(kind_hint('badge'), 'kpi', "chartType 'badge' -> 'kpi'")
+eq(kind_hint('singlevalue'), 'kpi', "chartType containing 'singlevalue' -> 'kpi'")
+eq(kind_hint('summary_number'), 'kpi', "chartType containing 'summary' -> 'kpi'")
+eq(kind_hint('filter'), 'filter', "chartType 'filter' unaffected")
 
-puts "== kpi_like_zone?: existing 'kpi' tag still detected (no regression) =="
-z2 = { 'kind' => 'chart', 'caption' => 'Total Revenue', 'chart_kind' => 'kpi',
-       'measures' => ['value'], 'w_pct' => 50.0, 'h_pct' => 50.0 }
-ok(SigmaLayout.kpi_like_zone?(z2), "chart_kind:'kpi' zone still detected as KPI-like")
+puts "== build_dashboard: a KPI card's zone carries chart_kind=='kpi' =="
+# Two cards so max_x/max_y come from their combined extent — the KPI card's
+# own w_pct/h_pct end up WAY over the plain size heuristic thresholds
+# (KPI_MAX_W_PCT 40 / KPI_MAX_H_PCT 12), isolating detection via the
+# chart_kind tag rather than a heuristic size coincidence.
+page_layout = {
+  'title' => 'Overview',
+  'cards' => [
+    { 'cardId' => 'kpi1', 'title' => 'Total Revenue', 'chartType' => 'badge',
+      'x' => 0, 'y' => 0, 'w' => 80, 'h' => 50 },
+    { 'cardId' => 't1', 'title' => 'Detail', 'chartType' => 'table',
+      'x' => 80, 'y' => 0, 'w' => 20, 'h' => 10 },
+  ],
+}
+dashboard = build_dashboard(page_layout)
+kpi_zone = dashboard['zones'].find { |z| z['id'] == 'kpi1' }
+ok(kpi_zone, 'KPI card produced a zone')
+eq(kpi_zone['chart_kind'], 'kpi', "zone chart_kind is the logical 'kpi', not the element kind 'kpi-chart'")
+ok(kpi_zone['w_pct'] > SigmaLayout::KPI_MAX_W_PCT || kpi_zone['h_pct'] > SigmaLayout::KPI_MAX_H_PCT,
+   'sanity: this zone geometry exceeds the size heuristic, so detection below can only come from the tag')
+
+puts "== lib/layout.rb's UNCHANGED kpi_like_zone? detects the corrected tag =="
+ok(SigmaLayout.kpi_like_zone?(kpi_zone), "build-domo-layout's 'kpi'-tagged zone is detected as KPI-like")
+
+puts "== no regression: a plain chart zone (non-KPI) is not swept in =="
+tbl_zone = dashboard['zones'].find { |z| z['id'] == 't1' }
+eq(tbl_zone['chart_kind'], 'table', "non-KPI card keeps its own chart_kind")
 
 puts
 if $failures.zero? then puts "ALL PASS"; exit 0 else puts "#{$failures} FAILURE(S)"; exit 1 end
