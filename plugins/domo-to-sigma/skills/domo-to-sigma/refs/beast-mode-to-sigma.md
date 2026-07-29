@@ -208,11 +208,13 @@ string** (`"day"`, `"month"`, `"year"`, …) and use **format tokens** (`YYYY`,
 | `DATE_FORMAT(d, fmt)` | `DateFormat([d], <translated tokens>)` — see specifier table |
 | `TIME_FORMAT(d, fmt)` | `DateFormat([d], <translated tokens>)` (hours/min/sec only) |
 | `STR_TO_DATE(s, fmt)` | `DateParse([s], <translated tokens>)` |
-| `UNIX_TIMESTAMP(d)` | `DateDiff("second", Date(1970,1,1), [d])` |
-| `FROM_UNIXTIME(n, fmt)` | `DateFormat(DateAdd("second", [n], Date(1970,1,1)), <tokens>)` |
-| `TO_DAYS(d)` / `FROM_DAYS(n)` | `DateDiff("day", Date(0,1,1), [d])` / inverse — rarely needed; warn |
+| `UNIX_TIMESTAMP(d)` | `DateDiff("second", MakeDate(1970,1,1), [d])` |
+| `FROM_UNIXTIME(n, fmt)` | `DateFormat(DateAdd("second", [n], MakeDate(1970,1,1)), <tokens>)` |
+| `TO_DAYS(d)` / `FROM_DAYS(n)` | `DateDiff("day", MakeDate(0,1,1), [d])` / inverse — rarely needed; warn |
 | `TIME_TO_SEC(d)` / `SEC_TO_TIME(n)` | arithmetic; no pure time type — warn |
 | `TIMESTAMP(d)` | `[d]` cast to datetime — usually a no-op in Sigma |
+
+> **Date construction:** Sigma's `Date()` is a **1-arg cast** (string/expr → date type). To build a date from year/month/day, use **`MakeDate(y, m, d)`** — never `Date(y, m, d)` (a 3-arg `Date(...)` fails the workbook/DM export).
 
 ### MySQL `DATE_FORMAT` specifier → Sigma `DateFormat` token
 
