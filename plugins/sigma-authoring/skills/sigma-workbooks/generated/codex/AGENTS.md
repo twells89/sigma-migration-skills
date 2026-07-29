@@ -239,8 +239,9 @@ The reference is feature-sliced — don't read every file up-front. The index ha
 | `refs/kpi-comparison.md` + `examples/comparative-kpi-card.yaml` | Comparative KPI card, delta badge, vs.-prior / vs.-target number. The verified, readback-stable `comparisonColumn` + `comparison:{display:"delta"}` shape, its gotchas, the `KpiCard.build`/`kpi_card.build` emitter that produces it, and a clone-able spec fragment. |
 | `reference/specification/controls.md` | Filter, dropdown, picker, multi-select, date range, date picker, text filter, number range, slider, segmented, hierarchy. |
 | `reference/specification/content-elements.md` | The non-data elements — `text` (Markdown + inline styling), `image`, `divider`, `embed` (external URLs). Titles, callouts, logos, rules, embedded content. |
-| `reference/specification/input-tables.md` | Operational supplement for `input-table` (spec shape lives in `tables.md`): write-connection requirement, the publish gate, reading data back via warehouse views, element endpoints for auditing, and migration patterns (Excel/planning models). |
-| `reference/specification/styling.md` | **Load when building a dashboard from scratch.** Design recipe library — vetted color palette, hero header strip, KPI card row, section headers, divider rhythm, categorical chart colors. Turns a default-arrange workbook into a designed-looking one without UI editing. |
+| `reference/specification/input-tables.md` | Operational supplement for `input-table` (spec shape lives in `tables.md`): write-connection requirement, the publish gate, reading data back via warehouse views, element endpoints for auditing, cross-connection linked-table pull, and migration patterns (Excel/planning models). |
+| `reference/specification/styling.md` | **Load when building a dashboard from scratch.** Design recipe library — vetted color palette, hero header strip, KPI card row, section headers, divider rhythm, categorical chart colors, gradient headers/cards + motif menu, the composite-sparkline pattern. Turns a default-arrange workbook into a designed-looking one without UI editing. |
+| `reference/specification/agents.md` | Workbook AI agent, chat panel, "ask a question about this data." The workbook-top-level `agents:[]` array + the `chat` element — read-only analyst vs. write/action-tool agent, the org-feature gate, and the graceful-degrade fallback. |
 
 ### Sources
 
@@ -269,6 +270,7 @@ The reference is feature-sliced — don't read every file up-front. The index ha
 | `reference/workflows/validate.md` | Pre-submit + post-create validation. Load before any POST or PUT. |
 | `reference/workflows/from-image.md` | The user supplied a target image (screenshot, mockup, BI-tool export) to reproduce. Load *before* discovery — it adds explicit observation and validation steps. |
 | `reference/workflows/element-rep.md` | **Large or multi-page workbooks, parallel element work, or iterative refinement.** `scripts/wb-rep.rb` explodes the spec into one small file per element (pull/status/push/render) so edits never drag the whole spec through context — element-level semantics over the whole-spec API, plus PNG renders to inspect what you built. |
+| `reference/workflows/actions.md` | Button, click-to-write, insert a row, reset/set a control, write-back workflow, append-only log, modal / overlay. Verified `insert-rows`/`clear-control`/`set-control-value` effect shapes (+ `open-overlay`/`close-overlay` for modals), the append-only-log recipe, and the masked-error catalog (`inputMode`, entry-control fields, element-scoped `clear-control`) — backed by `shared/lib/actions.rb`. |
 
 ## Quick Formula Rules
 

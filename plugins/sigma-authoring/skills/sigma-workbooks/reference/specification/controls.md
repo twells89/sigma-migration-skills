@@ -170,6 +170,40 @@ filters:
 
 The text control carries the match `mode` and the search string as flat top-level fields. `mode` values include `equals`, `does-not-equal`, `contains`, `does-not-contain`, `starts-with`, `ends-with`, `like`, `matches-regexp`, and their negations.
 
+### Entry (write) text controls — 4 fields are mandatory
+
+The `text`/`text-area` shape above is for **filtering** a downstream column. A
+`text`/`text-area` control used the other way — capturing free-typed input for
+a formula or an action effect's `values` (e.g. a "review note" field feeding an
+`insert-rows` effect, see `reference/workflows/actions.md`'s append-only-log
+pattern) — needs **four additional flat fields** or the element **masked-fails**
+as the opaque `Invalid kind: control`, which reads like the control kind itself
+is broken:
+
+```yaml
+kind: control
+id: note-ctl
+controlId: NoteCtl
+name: Add a review note
+controlType: text-area          # or: text
+mode: equals
+case: insensitive
+includeNulls: when-no-value-is-selected
+showOperators: false
+```
+
+| Field | Value (verified) | Notes |
+|---|---|---|
+| `mode` | `equals` | Same field name as the filter-mode above; `equals` is the verified entry-control value. |
+| `case` | `insensitive` | Case sensitivity for the (unused, in an entry context) match. |
+| `includeNulls` | `when-no-value-is-selected` | Same enum as the date-range control's `includeNulls`. |
+| `showOperators` | `false` | Hides the operator picker — this control is for typing a value, not building a filter expression. |
+
+No `filters` binding is needed on an entry control used this way — its value is
+read via `{ type: control, control: <controlId> }` from wherever it's
+consumed (an action effect's `values`, a formula), not wired to filter another
+element's column.
+
 ## Number Range
 
 ```yaml

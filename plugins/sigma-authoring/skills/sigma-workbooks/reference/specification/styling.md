@@ -597,6 +597,110 @@ output rather than hand-writing the container + child XML per dashboard:
   on the same container — POST 400s ("padding is 'none' but border fields... require default
   padding"); omit `padding` (its default) whenever a border is set.
 
+### `gradient_header(id:, title:, subtitle:, gradient:, motif:, motif_side:, logo_url:, page_cols: 24)` — sleek header via a data-URI SVG
+
+A step up from the flat `header` band above: instead of a solid `backgroundColor`,
+the container's `backgroundImage` is a composed **inline SVG, base64-encoded as a
+`data:image/svg+xml;base64,...` URI** — a `linearGradient` (the `gradient:` stops)
+optionally layered with a decorative motif `<g>`. Same `{ element:, layout: }`
+return contract as `header`, so it drops into the same composition call sites.
+
+```yaml
+- id: hdr-bg
+  kind: container
+  style: { borderRadius: round }
+  backgroundImage:
+    url: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0i..."   # composed gradient(+motif) SVG
+    style: { fit: cover }
+- id: hdr-title
+  kind: text
+  verticalAlign: middle
+  body: '# <span style="color: #FFFFFF">Overview</span>'
+```
+
+- `gradient:` is an array of **2–3 hex stops** (default: a neutral, host-agnostic
+  3-stop slate→navy→blue ramp in `DEFAULT_THEME[:header_gradient]` — not red; red,
+  like `theme(accent:)` elsewhere in this file, is a caller override, never a
+  built-in default).
+- `motif:` picks a decorative element layered on top of the gradient, positioned by
+  `motif_side:` (`:right` default, `:left`, `:center`). It's a **menu, not a fixed
+  look** — six geometric, trademark-free options in `Styling::MOTIFS`:
+
+  | Key | Look |
+  |---|---|
+  | `:glow` (default) | A soft radial highlight — the plainest, least busy option. |
+  | `:rings` | Concentric circles + crosshair lines — a "signal/target" mark. |
+  | `:grid` | A faint repeating grid pattern. |
+  | `:waves` | Three nested arcs — a soft "signal wave" mark. |
+  | `:dots` | A repeating dot pattern. |
+  | `:none` | No motif — a plain gradient. |
+
+  A **String** value for `motif:` starting with `http` or `data:` is treated as a
+  **bring-your-own image** and used verbatim as the background instead of composing
+  from the menu — useful for a caller with their own hero graphic. Every menu motif
+  is geometric (circles, grids, arcs, dots) — no logos, letterforms, or third-party
+  marks.
+- `logo_url:` (optional) adds a left-column `image` element inside the same band.
+- NO-GO on the `gradient_header` surface falls back to the plain `header` band
+  above (graceful — never a broken shape); NO-GO on just `motif` (surface still GO)
+  drops to a plain gradient with no decorative `<g>`.
+
+### `gradient_card(id:, kpi_element:, gradient:, page_cols: 24)` — gradient KPI card
+
+Decorate-only, like `section_card`: wraps a **caller-built** `kpi-chart` element
+(e.g. from `KpiCard.build`) in a gradient `backgroundImage` container — same
+composed-SVG technique as `gradient_header`, always `motif: :none` (a card this
+small has no room for a decorative mark). It never mutates `kpi_element` or
+`kpi_card.rb` — it returns `{ element:, child_layout:, patch: }`: the container
+element to add, the inner `<LayoutElement>` fragment positioning the KPI inside it,
+and a `patch` Hash (`{ value: { color: "#FFFFFF" }, name: { color: "#FFFFFF" } }`)
+the caller merges onto their own copy of the KPI's `value`/`name` objects so the
+title and value read white against the gradient. NO-GO returns the empty
+`{ element: [], child_layout: '', patch: {} }` marker — nothing half-decorated.
+
+### `sparkline(id:, source_element_id:, period_ref:, value_formula:, period_format:)` — the composite in-card sparkline (refines the earlier NO-GO)
+
+`reference/workflows/composition.md` documents an **in-kpi date-column sparkline**
+as NO-GO: adding a real date dimension to a `kpi-chart`'s own `columns` renders no
+line — that finding **still stands**, unchanged.
+
+What **is** live-verified GO is a different shape entirely: a **separate,
+borderless `line-chart`** element stacked *below* the KPI inside the same
+`gradient_card` (or any card) container — not a field on the KPI element at all.
+`Styling.sparkline` builds exactly this:
+
+```yaml
+- id: k-rev-spark
+  kind: line-chart
+  source: { kind: table, elementId: src }
+  columns:
+    - id: k-rev-spark-period
+      formula: '[Src/Period]'
+      format: { kind: datetime, formatString: "%b %Y" }
+    - id: k-rev-spark-value
+      formula: Sum([Src/Revenue])
+  xAxis: { columnId: k-rev-spark-period, format: { marks: none, labels: hidden } }
+  yAxis:
+    columnIds: [k-rev-spark-value]
+    format: { labels: hidden, marks: none, scale: { type: linear, zero: false, hideZeroLine: true } }
+  name: { visibility: hidden }
+  legend: { visibility: hidden }
+  lineAreaStyle: { interpolation: monotone }
+  style: { backgroundColor: transparent, padding: none }
+```
+
+Both axes hide their labels/marks (no chart chrome competing with the KPI above
+it); `scale.zero: false` so a small real trend isn't flattened against a forced
+zero baseline; `name`/`legend` hidden (no title, no legend on a mini chart);
+`backgroundColor: transparent` so it blends into the card around it. Place it in
+the same container as a `gradient_card`-wrapped (or plain) KPI, sized as a thin
+strip beneath the value.
+
+**So:** "no sparkline field on the KPI element" is still true and always will be
+(it's UI-only there) — but "no sparkline in the card" is not. The composite
+pattern (KPI + a stacked borderless line-chart, same card) is the GO way to get
+one.
+
 ## Things that are NOT designable via spec (as of 2026-05-29)
 
 Don't waste a round-trip trying to set these — the spec API silently drops them.

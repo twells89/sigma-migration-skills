@@ -15,15 +15,41 @@ table, and a data model can read it through a warehouse view.
 
 1. **Write-enabled connection required.** `source: { kind: empty, connectionId }`
    must point at a connection with `writeAccess: true` (`GET /v2/connections`).
-   A non-write connection fails at POST. Linked tables (`kind: linked`) inherit
-   the parent's connection.
-2. **Data lands in `SIGDS_`-prefixed tables** in the connection's write schema.
+   A non-write connection fails at POST. A linked table's `source` carries its
+   **own** `connectionId` — see *Cross-connection linked tables* below; it is
+   not always simply inherited from the parent element.
+2. **`inputMode` is mandatory — omitting it masked-fails.** Every `input-table`
+   element requires `inputMode: edit | explore | view` (see `tables.md`). Leave
+   it out and the POST doesn't fail with a helpful "missing inputMode" — it
+   fails with the generic **`Invalid kind: "input-table"`**, which reads like
+   the element kind itself is rejected. If you hit that error on an
+   input-table, check `inputMode` first before suspecting anything else about
+   the shape.
+3. **Data lands in `SIGDS_`-prefixed tables** in the connection's write schema.
    Don't query or modify those directly — see "Reading the data" below.
-3. **Data is invisible until Publish.** A query of an input table before the
+4. **Data is invisible until Publish.** A query of an input table before the
    workbook is published returns **0 rows** — the query layer reads the
    published version. Publish, then re-query.
-4. **System columns take no `type`** (`ID`, `CREATED_AT`, `CREATED_BY`,
-   `UPDATED_AT`, `UPDATED_BY`) — adding one breaks the column.
+5. **System columns take no `type`** (`ID`, `CREATED_AT`, `CREATED_BY`,
+   `UPDATED_AT`, `UPDATED_BY`) — adding one breaks the column. They're also
+   never included in an `insert-rows` action effect's `values` — Sigma
+   auto-fills them at insert time (see `reference/workflows/actions.md`).
+
+### Cross-connection linked tables (verified)
+
+A **linked** input table's `source: { kind: linked, from: <parentElementId>,
+connectionId: <connectionId> }` carries its own `connectionId` — and that
+connection **can differ from the parent element's**. Verified live: a
+write-back input table on a write-enabled connection, linked (`from`) to a
+parent element (a pivot/table) sourced on a completely separate, **read-only**
+connection — the linked table still pulled every key row from the parent
+correctly. In other words, cross-connection linking (write-conn child, read-conn
+parent) is a supported pattern, not just same-connection linking. This is a
+narrower, more precise claim than "the connection is inherited" — the parent
+supplies the *keys* (via `{ id, key }` columns), not the *connection*; the
+linked table's own `connectionId` is what determines where its write-back rows
+actually live, and it must be a write-enabled connection regardless of what the
+parent uses.
 
 ## Three types
 
