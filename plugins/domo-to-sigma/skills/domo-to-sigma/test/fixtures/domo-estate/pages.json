@@ -1,0 +1,7 @@
+[
+  {
+    "id": "p1",
+    "title": "Overview",
+    "cardIds": ["kpi1", "bar1", "img1", "table1"]
+  }
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "kpi1",
+    "title": "Total Sales",
+    "datasetId": "ds1",
+    "chartType": "badge_singlevalue",
+    "sigmaKindHint": "kpi-chart",
+    "groupBy": [],
+    "columns": [{ "column": "sales_amount", "aggregation": "SUM" }],
+    "summaryNumber": {
+      "column": "sales_amount",
+      "aggregation": "SUM",
+      "label": "Total Sales",
+      "format": { "type": "CURRENCY" },
+      "_defaultCountSuspect": false
+    },
+    "filters": [],
+    "x": 0, "y": 0, "w": 25, "h": 30
+  },
+  {
+    "id": "bar1",
+    "title": "Sales by Region",
+    "datasetId": "ds1",
+    "chartType": "badge_vert_bar",
+    "sigmaKindHint": "bar-chart",
+    "groupBy": ["region"],
+    "columns": [
+      { "column": "region" },
+      { "column": "sales_amount", "aggregation": "SUM", "alias": "Sales" }
+    ],
+    "filters": [],
+    "x": 25, "y": 0, "w": 50, "h": 30
+  },
+  {
+    "id": "img1",
+    "title": "Logo",
+    "datasetId": null,
+    "chartType": "image",
+    "columns": [],
+    "groupBy": [],
+    "filters": [],
+    "x": 75, "y": 0, "w": 25, "h": 30
+  },
+  {
+    "id": "table1",
+    "title": "Sales Detail",
+    "datasetId": "ds1",
+    "chartType": "badge_datagrid",
+    "sigmaKindHint": "table",
+    "groupBy": [],
+    "columns": [
+      { "column": "project_name" },
+      { "column": "sales_amount", "aggregation": "SUM" }
+    ],
+    "filters": [],
+    "x": 0, "y": 30, "w": 100, "h": 40
+  }
+]
