@@ -211,8 +211,12 @@ staleness) blocks GREEN.
 >
 > **Scope / caveats (be honest with customers):** a `-prj` folder has **no live engine**, so
 > parity is **warehouse-only** (Sigma vs. the source warehouse — no Qlik-side value snapshot), and
-> chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against — do the
-> Phase-5 visual-QA review). Relationships are inferred from **shared field names only** (a `-prj`
+> chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against). Because
+> QlikView has **no capture API**, the `--prj` discovery step (`qlik-prj-discover.py`) prints an
+> `[ASSIST]` telling you to **`AskUserQuestion` for a screenshot of each sheet** and drop them in
+> `<workdir>/dashboards/<sheetId>.png` — that **arms** the source-side gates (Phase-1d source-anchors,
+> visual-compare, visual-similarity). If the user has none, those gates are **WAIVED with a stated
+> reason** at Phase 6 (never a silent skip). Relationships are inferred from **shared field names only** (a `-prj`
 > folder carries no row counts) → review join directions in Sigma. All **13 QlikView chart types**
 > are mapped (bar/line/combo/pie/scatter/straight-table/pivot-table exactly; gauge→KPI, and
 > radar/grid/block/funnel/mekko→closest Sigma kind, each flagged as an **approximation** in the

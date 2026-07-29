@@ -764,8 +764,26 @@ unless opts[:dry_run]
   puts "   ✓ rendered #{pngs.size}/#{content_pages.size} full-page PNG(s) for visual QA → #{vqa}"
   if pngs.any?
     puts '   VISUAL QA (mandatory review — do not skip): open each PNG and check vs'
-    puts '   refs/layout-visual-qa.md AND the source Qlik sheet capture — populated controls,'
-    puts '   titles present, right chart kinds, sensible colors/heights, no overlaps/dead zones.'
+    if opts[:prj]
+      # QlikView has no capture API — the source reference is a USER-PROVIDED screenshot
+      # per sheet (landed by the qlik-prj-discover assist). Armed if present, else WAIVED.
+      dash = File.join(WORK, 'dashboards')
+      shots = Dir[File.join(dash, '*.{png,jpg,jpeg,PNG,JPG,JPEG}')]
+      if shots.any?
+        puts "   refs/layout-visual-qa.md AND the #{shots.size} user-provided QlikView screenshot(s) in"
+        puts "   #{dash} (QlikView has no capture API) — right chart kinds, titles, populated data,"
+        puts '   sensible colors/heights, no overlaps/dead zones. Transcribe source-anchor values from'
+        puts '   those screenshots (Phase 1d) so verify-anchors + visual-similarity arm.'
+      else
+        puts '   refs/layout-visual-qa.md ONLY. No source screenshots were provided for this QlikView'
+        puts "   app (drop one PNG per sheet in #{dash} to arm the source-side gates) — the source-anchor"
+        puts '   / visual-compare / visual-similarity gates are WAIVED; STATE that waiver + reason in the'
+        puts '   Phase-6 report (never a silent skip).'
+      end
+    else
+      puts '   refs/layout-visual-qa.md AND the source Qlik sheet capture — populated controls,'
+      puts '   titles present, right chart kinds, sensible colors/heights, no overlaps/dead zones.'
+    end
   end
 end
 mark('phase5b-visual-qa')

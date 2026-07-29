@@ -352,6 +352,30 @@ def main():
     for w in warnings:
         print("  ! " + w)
 
+    # Visual-fidelity assist. QlikView has NO live engine and NO reporting/capture API
+    # (qlik-screenshot.py is Qlik CLOUD only), so there is nothing to auto-render as the
+    # source reference — the visual gates (Phase-1d source-anchors, visual-compare,
+    # visual-similarity) can only run against a USER-PROVIDED screenshot of each sheet.
+    # Mirror intake.rb's file-mode assist: tell the agent to ASK for them, and land them
+    # where the gates read them. Without them the gates WAIVE with a stated reason.
+    dash = os.path.join(out, "dashboards")
+    os.makedirs(dash, exist_ok=True)
+    have = [f for f in os.listdir(dash) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
+    print()
+    if have:
+        print("  [visual] %d source screenshot(s) present in %s — visual gates ARMED." % (len(have), dash))
+    else:
+        print("  [ASSIST] QlikView has NO live source to auto-render (no engine, no capture API).")
+        print("  Source-side visual fidelity can only be checked against a SCREENSHOT of each sheet.")
+        print("  ASK THE USER (AskUserQuestion) for one PNG per QlikView sheet, drop them here:")
+        print("    %s/<sheetId>.png" % dash)
+        for sh in layout:
+            print('      - %s  "%s"  (%d chart(s))' % (sh["sheetId"], sh["title"], len(sh["cells"])))
+        print("  They ARM the visual gates (Phase-1d source-anchors, visual-compare, visual-similarity) —")
+        print("  the ONLY source-side fidelity check for QlikView, since chart kinds + layout cannot be")
+        print("  auto-verified. If the user has none, WAIVE those gates at Phase 6 with a stated reason")
+        print("  (never a silent skip).")
+
 
 def root_name(root):
     n = root.find("Name")
