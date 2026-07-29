@@ -165,7 +165,9 @@ end
 # ---- image / logo / drawing cards (tableau build-charts-from-signals.rb:6655 pattern) ----
 # Inline data-URI — no hosting required. PNG/JPEG data-URIs POST + render cleanly
 # (only base64-SVG is WAF-blocked; Domo logos are raster PNG).
-IMAGE_CHART_TYPE_RE = /image|logo|drawing|richtext/i
+# NOTE: 'richtext' is deliberately excluded — it overlaps the text/title row
+# (refs/card-to-element.md); richtext stays a text element, not an image.
+IMAGE_CHART_TYPE_RE = /image|logo|drawing|picture/i
 
 # The staged capture path capture_card (domo-capture-visuals.rb) writes to, or
 # the card's own override if the caller already resolved one.
@@ -173,13 +175,17 @@ def png_path(card)
   card['_pngPath'] || File.join(OUT, 'png', 'cards', "#{card['id']}.png")
 end
 
-# True for a card whose chartType names it as a static image/logo/drawing asset,
-# OR one with no data columns that nonetheless has a staged PNG (capture-visuals
-# rendered *something* — treat it as an image card rather than an empty chart).
+# True ONLY for a card whose chartType explicitly names it as a static
+# image/logo/drawing asset. Do NOT also key off "no data columns + a staged
+# PNG exists" — domo-capture-visuals.rb's capture_card renders a PNG for
+# EVERY card on a page (filter widgets, text/title cards included), so that
+# combination is not a useful discriminator and silently misroutes cards that
+# belong on the control path (chartType 'filter') or the text path (chartType
+# 'text'/'title') into a flat raster image with no warning. An image-ish card
+# that doesn't match this chartType check falls through to the existing
+# placeholder path + warn_card below — the honest fidelity-discipline default.
 def image_card?(card)
-  return true if card['chartType'].to_s =~ IMAGE_CHART_TYPE_RE
-  path = png_path(card)
-  !path.nil? && File.exist?(path.to_s) && (card['columns'] || []).empty?
+  card['chartType'].to_s =~ IMAGE_CHART_TYPE_RE ? true : false
 end
 
 # build_image(card) -> {id, kind:'image', url:"data:image/png;base64,<b64>"} or
