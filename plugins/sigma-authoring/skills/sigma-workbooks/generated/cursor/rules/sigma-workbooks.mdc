@@ -269,7 +269,7 @@ The reference is feature-sliced — don't read every file up-front. The index ha
 | File | When to load |
 |------|--------------|
 | `reference/workflows/discover.md` | Finding connections, tables, and column names. Load before composing a new spec. |
-| `reference/workflows/composition.md` | Open-ended design decisions — calibrating workbook complexity to the request, when to ask the user, what to ask, surfacing structural choices in the final summary, and a few safe defaults (hidden source pages, ranked-table sort direction). Load before drafting anything when the prompt leaves significant design choices unmade. |
+| `reference/workflows/composition.md` | Open-ended design decisions — calibrating workbook complexity to the request, when to ask the user, what to ask, surfacing structural choices in the final summary, and three opinionated layout patterns (`exec` KPI-strip dashboards, `master-detail` pick-one-see-its-detail, optional `overview` KPI/trend/pivot stack) backed by `shared/lib/composition.rb` — plus an optional, independently-selectable richness menu (comparative KPI cards, AI-insight callout, grain/filter controls, wide pivot) backed by `shared/lib/kpi_card.rb` and `shared/lib/richness.rb`. Load before drafting anything when the prompt leaves significant design choices unmade. |
 | `reference/workflows/crud.md` | POST / GET / PUT against the workbook spec endpoints. Load when creating, retrieving, or updating a workbook. |
 | `reference/workflows/validate.md` | Pre-submit + post-create validation. Load before any POST or PUT. |
 | `reference/workflows/from-image.md` | The user supplied a target image (screenshot, mockup, BI-tool export) to reproduce. Load *before* discovery — it adds explicit observation and validation steps. |

@@ -1,6 +1,6 @@
 # Layout
 
-Recipe book for the top-level `layout` XML — when to write it, the two-tag grammar, and the silent-failure traps to watch for. `layout` is a page-level property; its value is the XML string described below. **Default to writing explicit `layout` XML for multi-element workbooks.**
+Recipe book for the `layout` XML — when to write it, the two-tag grammar, and the silent-failure traps to watch for. `layout` is a **single workbook-top-level property** (one XML string holding one `<Page>` block per page — see the grammar below), **not** a per-page field: setting `pages[].layout` silently no-ops and Sigma falls back to auto-arrange (a common, hard-to-spot trap). Its value is the XML string described below. **Default to writing explicit `layout` XML for multi-element workbooks.**
 
 Container *elements* (the `kind: "container"` JSON placeholders that pair with `<GridContainer>` in this XML) are covered in **Container elements** below.
 
@@ -97,7 +97,7 @@ Use stacked rows when you want a section header above a row of charts inside the
 
 ## Page-level fields: `visibility` and `backgroundImage`
 
-Besides `id`, `name`, `elements`, and `layout`, a page supports two optional fields:
+Besides `id`, `name`, and `elements` — and the workbook-top-level `layout` XML whose `<Page id>` block references this page's elements (see the top of this doc; `layout` is NOT a page field) — a page supports two optional fields:
 
 - **`visibility`** — set to `hidden` to hide the page from end users. Omit for a visible page.
 - **`backgroundImage`** — a page-wide background image, same shape as a container's `backgroundImage`: a required `url` plus an optional `style` block (`fit`, `horizontalAlign`, `verticalAlign`, `tiling`). `url` supports `{{formula}}` references.

@@ -102,6 +102,7 @@ Every field below **round-trips and renders** — verified live 2026-06-26 (POST
 **Gotchas:**
 - The server **lowercases hex** on save (`#0F172A` → `#0f172a`) — cosmetic, not a drop; don't treat it as a failed round-trip.
 - `themeOverrides` is the spec path to **donut/pie slice colors** — set `categoricalScheme` here (the per-element `color.scheme` is still silently dropped on donut/pie — see Recipe 5). This supersedes the old "set the theme in the UI" workaround.
+- `titleFont` sets every element's title **by default**, but a per-element `name:{fontSize,color}` (live-verified 2026-07-28 — see *Things that are NOT designable via spec* below, now corrected) **wins over** `titleFont` for that one element when both are set. Use `titleFont` for a workbook-wide title style and per-element `name` only where one title needs to stand out.
 - Theme vs. the recipes below: a theme is the global skin (selected, org-managed). The recipes here style individual elements from spec fields and **stack on top of** whatever theme is set. For a migration, prefer the source dashboard's look; reach for a theme only when the user asks to apply one.
 
 ---
@@ -530,15 +531,81 @@ value: Week
 
 ---
 
+## Composition styling — the `Styling` module
+
+The recipes above are written to hand-author; the same moves are also available as a small
+shared helper library — Ruby `shared/lib/styling.rb`, with a byte-identical Python twin
+`shared/lib/styling.py` — for applying a professional look on top of a layout built with the
+`Composition` engine (`reference/workflows/composition.md`) instead of re-transcribing hex
+codes and container shapes into every dashboard. Every field these helpers emit is one of the
+Task-1 live-verified GO surfaces above (`.superpowers/sdd/styling-task-1-report.md`); each
+helper is gated behind an internal `SURFACES` map so a future regression can flip a surface off
+in one place instead of emitting an unverified (or now-rejected) shape at every call site.
+
+### Theme
+
+`Styling.theme(accent: nil)` returns `DEFAULT_THEME` — **one** professional, host-agnostic
+palette: an 8-color categorical scale, `ink`/`muted` text colors, and the card/header container
+shapes below — or a shallow variant with `accent` swapped into categorical slot 0 (and
+`theme[:accent]`) when the caller supplies one. There's no branding/logo support and no second
+built-in palette: one palette, optionally re-tinted, matches this doc's stance in the note at the
+top — reach for a theme when the user wants design polish with no stated brand direction; a
+migration's source fidelity or a user's own branding always overrides this.
+
+### `chart_color(theme, categorical: false)`
+
+- Single-series (default): `{ "color": { "by": "single", "value": theme[:categorical][0] } }` —
+  merge onto a bar/line/area/combo element (Recipe 5's single-hue case).
+- Categorical (`categorical: true`): `{ "themeOverrides": { "categoricalScheme": theme[:categorical] } }`
+  — merge at the **workbook** level (a sibling of `pages`/`layout`), not per-element. This is the
+  verified path for donut/pie slice colors too (per-element `color.scheme` is still silently
+  dropped there — see Recipe 5 / *Workbook theme* above).
+
+### `kpi_accent(theme)`
+
+Returns `{ "color": theme[:accent] }` — merge into a KPI element's `name` object
+(`{ "name": { "text": "Revenue", "color": "#2563EB" } }`). This is the KPI **title** color,
+live-verified 2026-07-28 (see the corrected claim under *Things that are NOT designable* below) —
+distinct from `value.color`, which tints the number itself (already documented under
+*Field-observed idioms* above); combine both for a fully accented KPI card.
+
+### `format_for(semantic)`
+
+Returns a `format` fragment — `{ "kind": "number", "formatString": <d3> }` — for one of four
+semantics: `:currency` → `"$,.0f"`, `:integer` → `",.0f"`, `:percent` → `".1%"`, `:decimal` →
+`",.2f"`. These are **d3-format** strings, not Excel-style masks: `"$#,##0"` is hard-rejected at
+POST with a 400 (`Invalid number format string`), never silently dropped — never hand-write an
+Excel-style format string. See Recipe 6 above and `formatting.md` for the full grammar.
+
+### `header(id:, title:, theme:, page_cols: 24)` / `section_card(id:, band:, theme:, page_cols: 24)`
+
+Apply the Recipe-1 hero-header and Recipe-2-style card idioms on top of `Composition.bands()`
+output rather than hand-writing the container + child XML per dashboard:
+
+- `header` emits a `kind: container` styled `theme[:header]`
+  (`{backgroundColor:"#0F172A", borderRadius:"round"}`) plus a separate `kind: text` title child —
+  a container has no field of its own that renders visible text, see `layout.md`'s Container
+  elements section — and the wrapping `<GridContainer>`/`<LayoutElement>` XML fragment.
+- `section_card` wraps one `Composition.bands()` band (`{role:, ids:, r0:, r1:}`) in a
+  `kind: container` styled `theme[:card]`
+  (`{backgroundColor:"#FFFFFF", borderColor:"#E2E8F0", borderWidth:1, borderRadius:"round"}`),
+  tiling the band's element ids side-by-side inside it at the same relative split
+  `Composition.band` would use unwrapped.
+- Both container `style` shapes use the field name **`borderRadius`** (`square|round|pill`) —
+  never the guessed `cornerRadius`, which is silently dropped on readback (the *container-style*
+  row of Task 1's GO/NO-GO table). And **never combine `padding` with `borderColor`/`borderWidth`**
+  on the same container — POST 400s ("padding is 'none' but border fields... require default
+  padding"); omit `padding` (its default) whenever a border is set.
+
 ## Things that are NOT designable via spec (as of 2026-05-29)
 
 Don't waste a round-trip trying to set these — the spec API silently drops them.
 
 - **Chart tooltip customization** (spec-findings #10)
 - **Trellis / small-multiples layout** (spec-findings #11)
-- **Donut / pie slice colors** (spec-findings #22)
-- **KPI title color or "hide title" toggle** — `name` always renders as a black title
-- **Element title font size / font family** — the `name` field has no `style` sibling. (Text *elements* CAN set fonts via `<span style="font-family: …">` — see field-observed idioms above; it's only the title `name` that can't.)
+- **Donut / pie slice colors** (spec-findings #22, per-element `color.scheme`; use workbook-level `themeOverrides.categoricalScheme` instead — see *Workbook theme* above)
+- ~~**KPI title color or "hide title" toggle** — `name` always renders as a black title~~ — **RESOLVED, live-verified 2026-07-28**: `name` on a `kpi-chart` (or any element) *is* colorable — `{ "name": { "text": "Revenue", "color": "#2563EB" } }` survives readback and renders the title in that color (workbook `e0586f0d-a2cd-431c-b495-555acf3ccae0`; see `.superpowers/sdd/styling-task-1-report.md`). This supersedes the "`name` always renders as a black title" claim this doc carried until now — for *this exact shape only*: there is still no `showTitle: false` / "hide title" toggle, so the `name: ' '` (single-space) workaround in Recipe 2 above still stands for suppressing a duplicate title.
+- ~~**Element title font size / font family** — the `name` field has no `style` sibling.~~ — **PARTIALLY RESOLVED, live-verified 2026-07-28**: a per-element `name` object also takes `fontSize` — `{ "name": { "text": "Category Detail", "fontSize": 22, "color": "#DC2626" } }` on a non-KPI element (e.g. a table) survives readback and renders both a visibly larger size and a distinct color, **overriding the workbook-wide `titleFont`** (see *Workbook theme* above) for that one element when both are set. This supersedes the "the `name` field has no `style` sibling" claim this doc carried until now. Font *family* per title remains untested — only `fontSize`/`color` were probed; `themeOverrides.fonts.textFont` (*Workbook theme* above) is still the only verified lever for text font family, and it's global, not per-title.
 - ~~**Workbook-level palette / theme** via spec~~ — **RESOLVED**: now spec-authorable via top-level `themeName` + `themeOverrides` (see *Workbook theme* above).
 - **Chart `tooltip` / `trellis*` fields** (UI-only)
 
