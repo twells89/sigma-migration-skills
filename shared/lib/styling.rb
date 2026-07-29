@@ -362,7 +362,7 @@ module Styling
       'name' => { 'visibility' => 'hidden' },
       'legend' => { 'visibility' => 'hidden' },
       'lineAreaStyle' => { 'interpolation' => 'monotone' },
-      'style' => { 'backgroundColor' => 'transparent' }
+      'style' => { 'backgroundColor' => 'transparent', 'padding' => 'none' }
     }
   end
 end

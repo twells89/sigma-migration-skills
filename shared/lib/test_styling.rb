@@ -346,7 +346,7 @@ check('sparkline: GO returns a borderless line-chart with hidden axes/legend/nam
     sp['yAxis']['format']['scale'] == { 'type' => 'linear', 'zero' => false, 'hideZeroLine' => true } &&
     sp['name'] == { 'visibility' => 'hidden' } && sp['legend'] == { 'visibility' => 'hidden' } &&
     sp['lineAreaStyle'] == { 'interpolation' => 'monotone' } &&
-    sp['style'] == { 'backgroundColor' => 'transparent' }
+    sp['style'] == { 'backgroundColor' => 'transparent', 'padding' => 'none' }
 end
 
 check('sparkline: custom period_format flows into the period column format') do

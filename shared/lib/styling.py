@@ -389,5 +389,5 @@ def sparkline(id, source_element_id, period_ref, value_formula, period_format="%
         "name": {"visibility": "hidden"},
         "legend": {"visibility": "hidden"},
         "lineAreaStyle": {"interpolation": "monotone"},
-        "style": {"backgroundColor": "transparent"},
+        "style": {"backgroundColor": "transparent", "padding": "none"},
     }

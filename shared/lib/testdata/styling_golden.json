@@ -259,7 +259,8 @@
       "interpolation": "monotone"
     },
     "style": {
-      "backgroundColor": "transparent"
+      "backgroundColor": "transparent",
+      "padding": "none"
     }
   }
 }

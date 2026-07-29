@@ -379,7 +379,7 @@ class GradientCardSparklineTest(unittest.TestCase):
         self.assertEqual(sp["name"], {"visibility": "hidden"})
         self.assertEqual(sp["legend"], {"visibility": "hidden"})
         self.assertEqual(sp["lineAreaStyle"], {"interpolation": "monotone"})
-        self.assertEqual(sp["style"], {"backgroundColor": "transparent"})
+        self.assertEqual(sp["style"], {"backgroundColor": "transparent", "padding": "none"})
 
     def test_sparkline_custom_period_format(self):
         sp = styling.sparkline("spark-rev", "tbl", "[Table/Month]", "Sum([Table/Revenue])", period_format="%Y-%m")
