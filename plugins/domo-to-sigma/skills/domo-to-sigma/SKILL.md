@@ -235,6 +235,19 @@ scope (out of scope for v1 — DataSets are treated as opaque source tables).
 
 ---
 
+## Phases 4–6 — turnkey (one command)
+
+**Run the whole build-and-post pipeline with the orchestrator — do NOT hand-chain the individual scripts (hand-chaining is what caused the field drift: an off-script agent reassembled the spec with wrong refs/formats and skipped the layout, producing a single-column stack):**
+
+```
+ruby scripts/migrate-domo.rb                                    # live: discover → … → assert-phase6 (creds in ENV; see refs/connection.md)
+ruby scripts/migrate-domo.rb --offline <fixtureDir> --out <dir> # offline dry-run over a discovery-shaped fixture
+```
+
+`migrate-domo.rb` chains every phase below — one log line per phase, a `run-state.json` ledger, fail-fast, idempotent (`--force` to redo), Windows-safe (argv shell-outs, no inline bash). It folds in the `build-dm` + DM `post-and-readback` that `build-workbook-spec.rb` requires. `--offline` proves the deterministic build end-to-end against a fixture, writing `workbook-spec.json` + a `layout-2d.flag` (`grid`|`stack`) computed from the **real** layout engine — so you can confirm a true 2D grid (not a stack), inline logos, and `decimalPlaces` formats with no creds.
+
+The phase sections below document what the orchestrator runs **internally** — read them to understand or debug a phase, not to run them by hand.
+
 ## Phase 4 — Post DM
 
 Reuse `post-and-readback.rb`: POST to `/v2/dataModels/spec`, GET back, capture
