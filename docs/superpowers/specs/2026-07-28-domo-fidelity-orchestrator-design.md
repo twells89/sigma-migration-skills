@@ -79,3 +79,24 @@ No customer identifiers or assets anywhere (scrubbed synthetic fixtures; no publ
 - **Live render unverified offline** — mitigated by asserting layout *structure*; flagged as deferred, not claimed.
 - **`build-dashboard-layout` fidelity on real Domo coord ranges** — the fixture uses representative coords; a real estate may need tuning (surface, don't silently degrade).
 - **Image host step is manual** — honest platform ceiling; documented, not hidden.
+
+---
+
+## Revision 2026-07-28 (post-approval — TJ directives: "images somehow, we've done it before" + "everything runs locally in the domo plugin")
+
+Two sections supersede the originals above:
+
+### Images — INLINE data-URI (NOT a ceiling). Supersedes Non-goal "True inline image auto-embed".
+The earlier "blocked by Sigma's API" claim was wrong — it repeated a stale doc note. Verified: `tableau-to-sigma` (`build-charts-from-signals.rb:6655`) embeds images inline as `{kind:"image", url:"data:image/png;base64,#{Base64.strict_encode64(File.binread(png))}"}`, and `refs/workbook-layout.md:1017` records PNG/JPEG data-URIs POST + render cleanly (only base64-**SVG** is WAF-blocked — XSS signature). Domo logos are raster.
+- **Approach:** `build_image(card)` renders the image card (`domo_rest.render_card_png`, Tier A; bytes already staged by capture-visuals) → base64 → inline `{kind:image, url:"data:image/png;base64,…"}`. No hosting, no governance issue.
+- **Honest caveat:** the render path is **field-probe-verified (2026-07-10/11), not CI-backed** — the offline test asserts the element *shape*, not a live render.
+
+### Formula translation — VENDORED LOCAL BUNDLE (option c). Supersedes Non-goal "Date→MakeDate is a separate PR2".
+domo is the only converter plugin with no `converter/` bundle — it depends on the live `convert_sql_to_sigma_formula` MCP. Per "everything runs locally", domo adopts the sibling pattern: a vendored `converter/sql.mjs` run via node (no MCP/network), and `Date(y,m,d)→MakeDate` is fixed **at the canonical source** so all converters benefit.
+
+### Multi-PR structure (the epic)
+1. **PR-A — `twells89/sigma-data-model-mcp` (external, foundational):** fix `Date(y,m,d)`→`MakeDate` in the canonical SQL→Sigma-formula source; ensure `convertSqlToSigmaFormula` is a bundleable export. Fixes bead `9777` for ALL converters at the source.
+2. **PR-B — `sigma-migration-skills` (vendor tooling + rewire):** extend `tools/vendor-converters.sh` (its `skill_for` map + the `^convert.*ToSigma$` export-name check, which `convertSqlToSigmaFormula` fails) to bundle the formula converter → `domo-to-sigma/converter/sql.mjs`; rewire `convert-beast-modes.rb` Phase-2 to call the local bundle via node instead of the MCP; re-vendor siblings to pick up the Date fix; fix the two `Date(1970,1,1)`/`Date(0,1,1)` entries in `refs/beast-mode-to-sigma.md:211,213`. (Shared/tooling PR.)
+3. **PR-C — `sigma-migration-skills` domo fidelity (one-plugin, the headline):** `migrate-domo.rb` orchestrator + geometry-into-discover + `kpi-chart` tag fix + Phase-5 geometry gate + `sigma_format`→`decimalPlaces` + inline data-URI `build_image` + `refs/card-to-element.md` image row. Offline E2E asserts a 2D-grid layout + the element shapes.
+
+Dependency: PR-A → PR-B (re-vendor picks up the fix). PR-C is independent of A/B except that the orchestrator's formula phase calls `convert-beast-modes.rb` (which B rewires) — so PR-C can build against the current convert-beast-modes and B rewires underneath. Sequence: A → B → C, or C in parallel then B rewires.
