@@ -319,6 +319,23 @@ check('gradient_card: decoded SVG carries the linearGradient stops (motif: :none
   svg.include?('linearGradient') && !svg.include?('<g transform=')
 end
 
+check('gradient_card: composed SVG layers a dark scrim (id="card-scrim") over the caller gradient so white ' \
+      'KPI text stays legible on any gradient, bright or dark (Task 6 live-render fix, user-reported)') do
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB])
+  svg = Base64.decode64(gc[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  svg.include?('id="card-scrim"') &&
+    svg.include?("stop-opacity=\"#{Styling::CARD_SCRIM_TOP_OPACITY}\"") &&
+    svg.include?('stop-opacity="0"') &&
+    svg.scan('<rect ').length == 2 # the caller's gradient rect, THEN the scrim rect on top
+end
+
+check('gradient_card: gradient: can be omitted -- defaults to DEFAULT_THEME[:card_gradient] (a dark slate pair)') do
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL)
+  svg = Base64.decode64(gc[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  default_gradient = Styling::DEFAULT_THEME[:card_gradient]
+  svg.include?(default_gradient[0]) && svg.include?(default_gradient[1])
+end
+
 check('gradient_card: does NOT mutate the passed kpi_element hash') do
   kpi_el = { 'id' => 'kpi-rev2', 'kind' => 'kpi-chart', 'name' => { 'text' => 'Revenue' },
              'value' => { 'columnId' => 'rev-cur', 'fontSize' => 32 } }

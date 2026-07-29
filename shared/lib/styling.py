@@ -20,6 +20,11 @@ DEFAULT_THEME = {
     # for gradient_header(). NOT red -- red is a caller override, same
     # discipline as theme(accent=) tinting the flat palette above.
     "header_gradient": ["#0F172A", "#1E3A8A", "#2563EB"],
+    # WS4 Task 6 (live-render fix): dark default so gradient_card()'s
+    # gradient can be omitted -- a caller with no brand gradient in mind
+    # still gets a legible dark card (paired with the scrim in
+    # compose_card_svg() below, white KPI text stays legible either way).
+    "card_gradient": ["#1E293B", "#0F172A"],
 }
 
 def theme(accent=None):
@@ -66,7 +71,11 @@ SURFACES = {
     # readback + a real render. NO-GO gradient_card -> the empty
     # {"element":[],"child_layout":"","patch":{}} marker (graceful -- never
     # mutates or half-decorates the caller's kpi_element). NO-GO sparkline ->
-    # {"opt_in":True,"id":} (never a faked chart shape).
+    # {"opt_in":True,"id":} (never a faked chart shape). WS4 Task 6
+    # (live-render fix, user-reported "can't see the numbers"):
+    # gradient_card()'s composed background now also carries a dark scrim
+    # (see compose_card_svg()/CARD_SCRIM_TOP_OPACITY) so white KPI text
+    # stays legible on ANY caller gradient, not just dark ones.
     "gradient_card": True,
     "sparkline": True,
 }
@@ -78,6 +87,13 @@ D3_FORMATS = {
     "percent": ".1%",
     "decimal": ",.2f",
 }
+
+# WS4 Task 6 (live-render fix, user-reported): opacity of the dark scrim
+# composed behind a gradient_card()'s top band (where the KPI name+value
+# sit), fading to 0 by the bottom (where a sparkline() sits) -- see
+# compose_card_svg(). A single named constant so a future legibility
+# regression is a one-line tune, not a hunt through the SVG string.
+CARD_SCRIM_TOP_OPACITY = 0.55
 
 # Motif menu for gradient_header() (WS4 Task 2, design doc "Component B" +
 # the live-verified HDRBG concentric-ring <g> in
@@ -311,7 +327,34 @@ def gradient_header(id, title, subtitle=None, gradient=None, motif="glow", motif
     return {"element": elements, "layout": "\n".join(lines)}
 
 
-def gradient_card(id, kpi_element, gradient, page_cols=24, surfaces=None):
+def compose_card_svg(gradient):
+    """Composes the gradient_card() background SVG (WS4 Task 6, live-render
+    fix, user-reported "can't see the numbers"): same viewBox + gradient-rect
+    technique as compose_gradient_svg() (always motif "none" -- a card this
+    small has no room for a decorative mark), PLUS a second rect layered on
+    top filled with a vertical black scrim linearGradient --
+    CARD_SCRIM_TOP_OPACITY opacity at the top (y=0, where the KPI name+value
+    sit) fading to 0 opacity by the bottom (y=210, where a sparkline() sits)
+    -- so a white KPI value stays legible on ANY caller gradient, bright or
+    dark, while the brand gradient still reads through in the lower half
+    (never fully blacked out). Kept as its own composer (not a
+    compose_gradient_svg() option) so gradient_header()'s output -- already
+    live-verified without a scrim -- is untouched.
+    """
+    if not isinstance(gradient, list) or len(gradient) not in (2, 3):
+        raise ValueError("compose_card_svg: gradient must be a list of 2-3 hex stops (got %r)" % (gradient,))
+    offsets = ["0", "1"] if len(gradient) == 2 else ["0", "0.5", "1"]
+    stops = "".join('<stop offset="%s" stop-color="%s"/>' % (offsets[i], hex_) for i, hex_ in enumerate(gradient))
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 210" preserveAspectRatio="xMidYMid slice">'
+            '<defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="0.45">%s</linearGradient>'
+            '<linearGradient id="card-scrim" x1="0" y1="0" x2="0" y2="1">'
+            '<stop offset="0" stop-color="#000000" stop-opacity="%s"/>'
+            '<stop offset="1" stop-color="#000000" stop-opacity="0"/></linearGradient></defs>'
+            '<rect width="1600" height="210" fill="url(#cg)"/><rect width="1600" height="210" fill="url(#card-scrim)"/></svg>') % (
+        stops, CARD_SCRIM_TOP_OPACITY)
+
+
+def gradient_card(id, kpi_element, gradient=None, page_cols=24, surfaces=None):
     """Wraps a caller-built kpi-chart element (a dict, e.g. from kpi_card.build)
     in a gradient backgroundImage CARD container (WS4 Task 3, design doc
     "Component B" + the live-verified card(...) shape in
@@ -327,7 +370,7 @@ def gradient_card(id, kpi_element, gradient, page_cols=24, surfaces=None):
     A shallow merge is REQUIRED, not a wholesale replace of the value/name
     dicts -- kpi_element["value"] carries columnId (and optionally
     fontSize) that this patch must not clobber; merge overlays only the
-    color key. patch["style"] is new here (Task 6 live-render fix): the WS1
+    color key. patch["style"] (Task 6 live-render fix): the WS1
     kpi_card.py shape never sets a style key of its own, so this is
     additive, but callers should still merge rather than assign in case a
     future kpi_element does carry one. Turning the value + title white is
@@ -336,27 +379,30 @@ def gradient_card(id, kpi_element, gradient, page_cols=24, surfaces=None):
     backgroundColor:"transparent" (letting the gradient card behind show
     through) and padding:"none" (edge-to-edge, matching card(...)'s native
     shape in build-plugs-command-center.rb) so the white value/title are
-    actually legible against the gradient. gradient is required (one
-    gradient per card -- distinct KPI cards typically carry distinct
-    gradients, matching the reference build's per-KPI KG[i] array) and
-    reuses compose_gradient_svg()/svg_data_uri() from Task 2 with
-    motif="none" (a plain gradient, no decorative motif -- a card this small
-    has no room for one; motif_side is irrelevant when the motif is "none"
-    so "right" is passed as an inert default). child_layout is only the
-    inner <LayoutElement> fragment positioning kpi_element's id inside the
-    container at the composition kpi-band height (rows 1..7, matching
-    composition.bands()'s own "kpi" role height) -- placing the container
-    itself on the page is the caller's job (same "decorate, don't own
-    layout" contract as section_card()), so no outer <GridContainer> is
-    returned here. NO-GO -> {"element":[],"child_layout":"","patch":{}}
-    (graceful: nothing to merge, nothing to lay out, never a broken/
-    half-decorated card).
+    actually legible against the gradient. gradient is OPTIONAL -- it
+    defaults to DEFAULT_THEME["card_gradient"] (a dark slate pair), so a
+    caller with no brand gradient in mind still gets a legible dark card;
+    pass a caller-specific 2-3 hex-stop list to override it (distinct KPI
+    cards typically carry distinct gradients, matching the reference
+    build's per-KPI KG[i] array). The composed background is now TWO layers
+    (see compose_card_svg()): the gradient rect, then a dark scrim -- this
+    is what makes the white value/title legible on a bright/medium gradient
+    too, not just a dark one (WS4 Task 6, user-reported "can't see the
+    numbers"). child_layout is only the inner <LayoutElement> fragment
+    positioning kpi_element's id inside the container at the composition
+    kpi-band height (rows 1..7, matching composition.bands()'s own "kpi"
+    role height) -- placing the container itself on the page is the
+    caller's job (same "decorate, don't own layout" contract as
+    section_card()), so no outer <GridContainer> is returned here.
+    NO-GO -> {"element":[],"child_layout":"","patch":{}} (graceful: nothing
+    to merge, nothing to lay out, never a broken/half-decorated card).
     """
     s = SURFACES if surfaces is None else surfaces
     if not s["gradient_card"]:
         return {"element": [], "child_layout": "", "patch": {}}
 
-    bg_url = svg_data_uri(compose_gradient_svg(gradient, "none", "right"))
+    grad = DEFAULT_THEME["card_gradient"] if gradient is None else gradient
+    bg_url = svg_data_uri(compose_card_svg(grad))
     container_el = {"id": id, "kind": "container", "style": {"borderRadius": "round"},
                      "backgroundImage": {"url": bg_url, "style": {"fit": "cover"}}}
     child_layout = '<LayoutElement elementId="%s" gridColumn="1 / %d" gridRow="1 / 7"/>' % (

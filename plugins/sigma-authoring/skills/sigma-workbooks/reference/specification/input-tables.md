@@ -57,7 +57,7 @@ parent uses.
 |---|---|---|
 | **Empty** | Blank table; rows added/typed/pasted from scratch | `source: { kind: empty, connectionId }` |
 | **CSV** | Pre-populated from a CSV upload, then editable | created from an upload (UI); element is otherwise an empty-style input table |
-| **Linked** | Child of a parent element; key columns bind rows to the parent, entry/formula columns sit alongside | `source: { kind: linked, from: <parentElementId> }` + `{ id, key }` columns |
+| **Linked** | Child of a parent element; key columns bind rows to the parent, entry/formula columns sit alongside | `source: { kind: linked, from: <parentElementId>, connectionId: <connectionId> }` + `{ id, key }` columns |
 
 **Linked tables are spec-authorable as of the 2026-06-11 release** —
 `source.kind: linked` + `from` + `{ id, key }` columns POST and round-trip

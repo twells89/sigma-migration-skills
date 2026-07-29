@@ -62,6 +62,7 @@ require 'time'
 require 'base64'
 require 'fileutils'
 require 'shellwords'
+require 'tmpdir'
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'sigma_rest'
@@ -475,7 +476,7 @@ end
 # Main
 # ---------------------------------------------------------------------------
 
-SCRATCH = ENV.fetch('SCRATCH_DIR', '/private/tmp/claude-502/-Users-tjwells/0fd12afc-2738-4328-a4d5-67e7ce57b185/scratchpad')
+SCRATCH = ENV.fetch('SCRATCH_DIR', Dir.tmpdir)
 FileUtils.mkdir_p(SCRATCH)
 
 verdict = { probe_completed: false }

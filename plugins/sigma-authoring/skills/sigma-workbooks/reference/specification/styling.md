@@ -645,17 +645,35 @@ return contract as `header`, so it drops into the same composition call sites.
   above (graceful — never a broken shape); NO-GO on just `motif` (surface still GO)
   drops to a plain gradient with no decorative `<g>`.
 
-### `gradient_card(id:, kpi_element:, gradient:, page_cols: 24)` — gradient KPI card
+### `gradient_card(id:, kpi_element:, gradient: DEFAULT_THEME[:card_gradient], page_cols: 24)` — gradient KPI card
 
 Decorate-only, like `section_card`: wraps a **caller-built** `kpi-chart` element
-(e.g. from `KpiCard.build`) in a gradient `backgroundImage` container — same
-composed-SVG technique as `gradient_header`, always `motif: :none` (a card this
-small has no room for a decorative mark). It never mutates `kpi_element` or
-`kpi_card.rb` — it returns `{ element:, child_layout:, patch: }`: the container
-element to add, the inner `<LayoutElement>` fragment positioning the KPI inside it,
-and a `patch` Hash (`{ value: { color: "#FFFFFF" }, name: { color: "#FFFFFF" } }`)
-the caller merges onto their own copy of the KPI's `value`/`name` objects so the
-title and value read white against the gradient. NO-GO returns the empty
+(e.g. from `KpiCard.build`) in a gradient `backgroundImage` container. `gradient:`
+is **optional** — it defaults to `DEFAULT_THEME[:card_gradient]` (a dark slate
+pair, `['#1E293B', '#0F172A']`), so a caller with no brand gradient in mind still
+gets a legible dark card; pass a caller-specific 2–3 hex-stop array to override it.
+
+The composed background is **two layers**, not one — the caller's (or default)
+gradient rect, THEN a dark **scrim**: a vertical `linearGradient` from black at
+~0.55 opacity at the top (where the KPI name+value sit) fading to 0 opacity
+toward the bottom (where a `sparkline` sits). This is what makes a white KPI
+value legible on **any** gradient, bright or dark — not just a dark one — while
+the brand gradient still reads through in the lower half (never fully blacked
+out). It never mutates `kpi_element` or `kpi_card.rb` — it returns
+`{ element:, child_layout:, patch: }`: the container element to add, the inner
+`<LayoutElement>` fragment positioning the KPI inside it, and a `patch` Hash
+the caller merges onto their own copy of the KPI's `value`/`name`/`style` objects:
+
+```yaml
+value: { color: "#FFFFFF" }
+name:  { color: "#FFFFFF" }
+style: { backgroundColor: transparent, padding: none }
+```
+
+so the title and value read white against the gradient. **Merge all three keys
+— `value`, `name`, AND `style`** — not just `value`/`name`: the KPI element keeps
+its own opaque background otherwise, so a live render shows white-on-white even
+with the scrim in place. NO-GO returns the empty
 `{ element: [], child_layout: '', patch: {} }` marker — nothing half-decorated.
 
 ### `sparkline(id:, source_element_id:, period_ref:, value_formula:, period_format:)` — the composite in-card sparkline (refines the earlier NO-GO)

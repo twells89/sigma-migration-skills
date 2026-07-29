@@ -355,6 +355,27 @@ class GradientCardSparklineTest(unittest.TestCase):
         self.assertIn("linearGradient", svg)
         self.assertNotIn("<g transform=", svg)
 
+    def test_gradient_card_svg_layers_dark_scrim_over_caller_gradient(self):
+        """Task 6 live-render fix, user-reported ("can't see the numbers"): the
+        composed background must be TWO layers -- the caller's gradient rect,
+        THEN a dark scrim rect on top -- so white KPI text stays legible on
+        any gradient, bright or dark."""
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"])
+        url = gc["element"][0]["backgroundImage"]["url"]
+        svg = base64.b64decode(url.replace("data:image/svg+xml;base64,", "")).decode()
+        self.assertIn('id="card-scrim"', svg)
+        self.assertIn('stop-opacity="%s"' % styling.CARD_SCRIM_TOP_OPACITY, svg)
+        self.assertIn('stop-opacity="0"', svg)
+        self.assertEqual(svg.count("<rect "), 2)  # the caller's gradient rect, THEN the scrim rect on top
+
+    def test_gradient_card_gradient_defaults_to_dark_slate_pair_when_omitted(self):
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL)
+        url = gc["element"][0]["backgroundImage"]["url"]
+        svg = base64.b64decode(url.replace("data:image/svg+xml;base64,", "")).decode()
+        default_gradient = styling.DEFAULT_THEME["card_gradient"]
+        self.assertIn(default_gradient[0], svg)
+        self.assertIn(default_gradient[1], svg)
+
     def test_gradient_card_does_not_mutate_kpi_element(self):
         kpi_el = {"id": "kpi-rev2", "kind": "kpi-chart", "name": {"text": "Revenue"},
                   "value": {"columnId": "rev-cur", "fontSize": 32}}
