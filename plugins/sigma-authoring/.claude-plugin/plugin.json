@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sigma-authoring",
   "displayName": "Sigma Authoring (Workbooks + Data Models)",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "The canonical Sigma authoring skills every migration converter defers to for the current spec surface: sigma-workbooks (workbook spec — element kinds, source kinds, controls, formulas, formatting, layout), sigma-data-models (data model authoring), and custom-sql-to-data-model. Install this alongside any converter — the converters assume it is present.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",
