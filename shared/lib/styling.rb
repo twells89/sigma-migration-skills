@@ -51,8 +51,11 @@ module Styling
     # carrying a composed <linearGradient>+motif SVG survived readback + a
     # real render. Two independent gates: gradient_header (the whole surface;
     # NO-GO falls back to the flat Styling.header band) and motif (the
-    # optional decorative <g> layered on top; NO-GO degrades to a plain
-    # gradient with no motif, never a broken shape).
+    # optional decorative <g> layered on top of a *menu-key* motif; NO-GO
+    # degrades that case to a plain gradient with no motif, never a broken
+    # shape. It does NOT touch a bring-your-own image URL -- that path has
+    # nothing to do with the decorative SVG-fragment library this gate
+    # protects, so it is honored unconditionally).
     gradient_header: true,
     motif: true
   }.freeze
@@ -225,18 +228,22 @@ module Styling
   # bring-your-own `http`/`data:` URL string used verbatim as the background
   # (SVG compose skipped). NO-GO gradient_header falls back to the existing
   # flat Styling.header band (graceful, never a broken/fake surface). NO-GO
-  # motif (gradient_header still GO) silently drops the motif <g>, keeping
-  # the plain gradient -- also graceful, never broken.
+  # motif (gradient_header still GO) silently drops the motif <g> for a
+  # *menu-key* motif, keeping the plain gradient -- also graceful, never
+  # broken. A bring-your-own motif URL is checked FIRST and honored
+  # unconditionally, regardless of SURFACES[:motif] -- that gate exists only
+  # to protect the decorative SVG-fragment library, not the caller's own
+  # image (an arbitrary URL in backgroundImage.url either way).
   def self.gradient_header(id:, title:, subtitle: nil, gradient: DEFAULT_THEME[:header_gradient],
                             motif: :glow, motif_side: :right, logo_url: nil, page_cols: 24, surfaces: SURFACES)
     unless surfaces[:gradient_header]
       return header(id: id, title: title, theme: DEFAULT_THEME, page_cols: page_cols, surfaces: surfaces)
     end
 
-    effective_motif = surfaces[:motif] ? motif : :none
-    bg_url = if bring_your_own_motif?(effective_motif)
-               effective_motif
+    bg_url = if bring_your_own_motif?(motif)
+               motif
              else
+               effective_motif = surfaces[:motif] ? motif : :none
                svg_data_uri(compose_gradient_svg(gradient, effective_motif, motif_side))
              end
 

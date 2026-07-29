@@ -52,8 +52,11 @@ SURFACES = {
     # carrying a composed <linearGradient>+motif SVG survived readback + a
     # real render. Two independent gates: gradient_header (the whole surface;
     # NO-GO falls back to the flat header() band) and motif (the optional
-    # decorative <g> layered on top; NO-GO degrades to a plain gradient with
-    # no motif, never a broken shape).
+    # decorative <g> layered on top of a *menu-key* motif; NO-GO degrades
+    # that case to a plain gradient with no motif, never a broken shape. It
+    # does NOT touch a bring-your-own image URL -- that path has nothing to
+    # do with the decorative SVG-fragment library this gate protects, so it
+    # is honored unconditionally).
     "gradient_header": True,
     "motif": True,
 }
@@ -244,18 +247,22 @@ def gradient_header(id, title, subtitle=None, gradient=None, motif="glow", motif
     bring-your-own `http`/`data:` URL string used verbatim as the background
     (SVG compose skipped). NO-GO gradient_header falls back to the existing
     flat header() band (graceful, never a broken/fake surface). NO-GO motif
-    (gradient_header still GO) silently drops the motif <g>, keeping the
-    plain gradient -- also graceful, never broken.
+    (gradient_header still GO) silently drops the motif <g> for a
+    *menu-key* motif, keeping the plain gradient -- also graceful, never
+    broken. A bring-your-own motif URL is checked FIRST and honored
+    unconditionally, regardless of SURFACES["motif"] -- that gate exists
+    only to protect the decorative SVG-fragment library, not the caller's
+    own image (an arbitrary URL in backgroundImage.url either way).
     """
     s = SURFACES if surfaces is None else surfaces
     if not s["gradient_header"]:
         return header(id, title, DEFAULT_THEME, page_cols=page_cols, surfaces=surfaces)
 
     grad = DEFAULT_THEME["header_gradient"] if gradient is None else gradient
-    effective_motif = motif if s["motif"] else "none"
-    if bring_your_own_motif(effective_motif):
-        bg_url = effective_motif
+    if bring_your_own_motif(motif):
+        bg_url = motif
     else:
+        effective_motif = motif if s["motif"] else "none"
         bg_url = svg_data_uri(compose_gradient_svg(grad, effective_motif, motif_side))
 
     container_id = "%s-bg" % id

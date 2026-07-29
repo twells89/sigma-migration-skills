@@ -289,13 +289,31 @@ class GradientHeaderTest(unittest.TestCase):
         expected = styling.header("ghdr", "X", styling.DEFAULT_THEME, surfaces=surfaces)
         self.assertEqual(h, expected)
 
-    def test_no_go_motif_drops_motif_group_keeps_gradient(self):
+    def test_no_go_motif_menu_key_falls_back_to_plain_gradient(self):
         surfaces = dict(styling.SURFACES, motif=False)
-        h = styling.gradient_header("ghdr", "X", motif="https://example.com/art.png", surfaces=surfaces)
+        h = styling.gradient_header("ghdr", "X", motif="rings", surfaces=surfaces)
         bg = h["element"][0]["backgroundImage"]["url"]
         svg = base64.b64decode(bg.replace("data:image/svg+xml;base64,", "")).decode()
         self.assertTrue(bg.startswith("data:image/svg+xml;base64,"))
+        self.assertIn("linearGradient", svg)
         self.assertNotIn("<g transform=", svg)
+
+    def test_no_go_motif_does_not_suppress_bring_your_own_url(self):
+        surfaces = dict(styling.SURFACES, motif=False)
+        h = styling.gradient_header("ghdr", "X", motif="https://example.com/art.png", surfaces=surfaces)
+        self.assertEqual(h["element"][0]["backgroundImage"]["url"], "https://example.com/art.png")
+
+    def test_motif_side_center_translates_to_x_800_and_is_valid(self):
+        h = styling.gradient_header("ghdr", "X", motif="rings", motif_side="center")
+        svg = self._decode(h)
+        self.assertIn("translate(800,86)", svg)
+        self.assertTrue(any(e["kind"] == "text" and e["id"] == "ghdr-title" for e in h["element"]))
+        self.assertIn("<GridContainer", h["layout"])
+        self.assertIn('elementId="ghdr-title"', h["layout"])
+
+    def test_unrecognized_motif_symbol_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            styling.gradient_header("ghdr", "X", motif="sparkles")
 
 
 if __name__ == "__main__":

@@ -260,12 +260,35 @@ check('gradient_header: NO-GO gradient_header surface falls back to flat Styling
   h == expected
 end
 
-check('gradient_header: NO-GO motif surface (gradient_header still GO) drops the motif group, keeps the gradient') do
+check('gradient_header: NO-GO motif surface + menu-key motif falls back to the plain gradient (:none)') do
   surfaces = Styling::SURFACES.merge(motif: false)
-  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: 'https://example.com/art.png', surfaces: surfaces)
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: :rings, surfaces: surfaces)
   bg = h[:element][0]['backgroundImage']['url']
   svg = Base64.decode64(bg.sub('data:image/svg+xml;base64,', ''))
-  bg.start_with?('data:image/svg+xml;base64,') && !svg.include?('<g transform=')
+  bg.start_with?('data:image/svg+xml;base64,') && svg.include?('linearGradient') && !svg.include?('<g transform=')
+end
+
+check('gradient_header: NO-GO motif surface does NOT suppress a bring-your-own URL (honored verbatim)') do
+  surfaces = Styling::SURFACES.merge(motif: false)
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: 'https://example.com/art.png', surfaces: surfaces)
+  h[:element][0]['backgroundImage']['url'] == 'https://example.com/art.png'
+end
+
+check('gradient_header motif_side: :center translates the motif group to x=800 and produces a valid header') do
+  h = Styling.gradient_header(id: 'ghdr', title: 'X', motif: :rings, motif_side: :center)
+  svg = Base64.decode64(h[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  svg.include?('translate(800,86)') &&
+    h[:element].any? { |e| e['kind'] == 'text' && e['id'] == 'ghdr-title' } &&
+    h[:layout].include?('<GridContainer') && h[:layout].include?('elementId="ghdr-title"')
+end
+
+check('gradient_header: unrecognized motif symbol raises ArgumentError') do
+  begin
+    Styling.gradient_header(id: 'ghdr', title: 'X', motif: :sparkles)
+    false
+  rescue ArgumentError
+    true
+  end
 end
 
 golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'styling_golden.json')))
