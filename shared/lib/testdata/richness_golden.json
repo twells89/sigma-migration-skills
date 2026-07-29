@@ -1,4 +1,45 @@
 {
+  "agent": {
+    "id": "ag-1",
+    "name": "Analyst",
+    "instructions": "Be a helpful retail analyst.",
+    "dataSources": [
+      {
+        "kind": "table",
+        "elementId": "src"
+      }
+    ]
+  },
+  "agent_with_tools": {
+    "id": "ag-2",
+    "name": "Assistant",
+    "instructions": "Act on my behalf.",
+    "dataSources": [
+      {
+        "kind": "table",
+        "elementId": "src"
+      }
+    ],
+    "tools": [
+      {
+        "toolId": "t-log-note",
+        "kind": "action",
+        "name": "Log note",
+        "description": "Insert a review note.",
+        "steps": [
+          {
+            "kind": "effect",
+            "effect": "insert-rows",
+            "table": "annotations",
+            "value": {
+              "type": "agent-input",
+              "inputName": "note"
+            }
+          }
+        ]
+      }
+    ]
+  },
   "ai_insight": {
     "body": "{{ Replace(CallText(\"SNOWFLAKE.CORTEX.COMPLETE\", \"llama3.1-8b\", \"Summarize revenue trends for the period.\") , '\"', \"\") }}",
     "id": "ai-rev",
@@ -8,6 +49,11 @@
     "body": "{{ Replace(CallText(\"SNOWFLAKE.CORTEX.COMPLETE\", \"mistral-large2\", \"Say one nice thing about the data.\") , '\"', \"\") }}",
     "id": "ai-rev2",
     "kind": "text"
+  },
+  "chat": {
+    "id": "chat-1",
+    "kind": "chat",
+    "agentId": "ag-1"
   },
   "filter_row": [
     {

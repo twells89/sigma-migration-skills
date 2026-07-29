@@ -14,8 +14,8 @@ def sort_deep(o)
   end
 end
 
-check('SURFACES: all 4 richness surfaces are GO') do
-  expected = %i[ai_insight dynamic_grain filter_row wide_pivot]
+check('SURFACES: all 5 richness surfaces are GO') do
+  expected = %i[agent ai_insight dynamic_grain filter_row wide_pivot]
   Richness::SURFACES.keys.sort == expected.sort && Richness::SURFACES.values.all? { |v| v == true }
 end
 
@@ -197,11 +197,80 @@ check('wide_pivot: NO-GO surface -> opt-in marker') do
   piv == { 'opt_in' => true, 'id' => 'piv-1' }
 end
 
+# --- agent / chat -------------------------------------------------------------
+
+AGENT_TOOLS = [
+  { 'toolId' => 't-log-note', 'kind' => 'action', 'name' => 'Log note', 'description' => 'Insert a review note.',
+    'steps' => [{ 'kind' => 'effect', 'effect' => 'insert-rows', 'table' => 'annotations',
+                  'value' => { 'type' => 'agent-input', 'inputName' => 'note' } }] }
+].freeze
+
+check('agent: read-only analyst (tools: []) OMITS the tools key entirely') do
+  el = Richness.agent(id: 'ag-1', name: 'Analyst', instructions: 'Be a helpful retail analyst.',
+                       data_source_ids: ['src'])
+  el == {
+    'id' => 'ag-1', 'name' => 'Analyst', 'instructions' => 'Be a helpful retail analyst.',
+    'dataSources' => [{ 'kind' => 'table', 'elementId' => 'src' }]
+  } && !el.key?('tools')
+end
+check('agent: multiple data_source_ids map to multiple dataSources entries, in order') do
+  el = Richness.agent(id: 'ag-1', name: 'Analyst', instructions: 'x', data_source_ids: %w[src-a src-b])
+  el['dataSources'] == [{ 'kind' => 'table', 'elementId' => 'src-a' }, { 'kind' => 'table', 'elementId' => 'src-b' }]
+end
+check('agent: non-empty tools: is added verbatim') do
+  el = Richness.agent(id: 'ag-2', name: 'Assistant', instructions: 'Act on my behalf.',
+                       data_source_ids: ['src'], tools: AGENT_TOOLS)
+  el['tools'] == AGENT_TOOLS && el.key?('tools')
+end
+check('agent: id required') do
+  begin
+    Richness.agent(id: '', name: 'A', instructions: 'x', data_source_ids: ['src']); false
+  rescue ArgumentError; true; end
+end
+check('agent: name required') do
+  begin
+    Richness.agent(id: 'ag-1', name: '', instructions: 'x', data_source_ids: ['src']); false
+  rescue ArgumentError; true; end
+end
+check('agent: instructions required') do
+  begin
+    Richness.agent(id: 'ag-1', name: 'A', instructions: '', data_source_ids: ['src']); false
+  rescue ArgumentError; true; end
+end
+check('agent: NO-GO surface -> opt-in marker, never a faked agent') do
+  el = Richness.agent(id: 'ag-1', name: 'A', instructions: 'x', data_source_ids: ['src'],
+                       surfaces: Richness::SURFACES.merge(agent: false))
+  el == { 'opt_in' => true, 'id' => 'ag-1' }
+end
+
+check('chat: {id, kind: chat, agentId} shape') do
+  Richness.chat(id: 'chat-1', agent_id: 'ag-1') == { 'id' => 'chat-1', 'kind' => 'chat', 'agentId' => 'ag-1' }
+end
+check('chat: id required') do
+  begin
+    Richness.chat(id: '', agent_id: 'ag-1'); false
+  rescue ArgumentError; true; end
+end
+check('chat: agent_id required') do
+  begin
+    Richness.chat(id: 'chat-1', agent_id: ''); false
+  rescue ArgumentError; true; end
+end
+check('chat: NO-GO surface -> opt-in marker, never a faked chat element') do
+  el = Richness.chat(id: 'chat-1', agent_id: 'ag-1', surfaces: Richness::SURFACES.merge(agent: false))
+  el == { 'opt_in' => true, 'id' => 'chat-1' }
+end
+
 # --- golden ------------------------------------------------------------------
 
 golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'richness_golden.json')))
 check('helpers match richness_golden.json (sorted-key identical)') do
   actual = {
+    'agent' => Richness.agent(id: 'ag-1', name: 'Analyst', instructions: 'Be a helpful retail analyst.',
+                               data_source_ids: ['src']),
+    'agent_with_tools' => Richness.agent(id: 'ag-2', name: 'Assistant', instructions: 'Act on my behalf.',
+                                          data_source_ids: ['src'], tools: AGENT_TOOLS),
+    'chat' => Richness.chat(id: 'chat-1', agent_id: 'ag-1'),
     'ai_insight' => Richness.ai_insight(id: 'ai-rev', prompt: 'Summarize revenue trends for the period.'),
     'ai_insight_custom_model' => Richness.ai_insight(id: 'ai-rev2', model: 'mistral-large2',
                                                       prompt: 'Say one nice thing about the data.'),

@@ -1,17 +1,20 @@
 # frozen_string_literal: true
 #
-# richness.rb — Ruby twin of shared/lib/richness.py. Four independent,
-# optional "richness" pieces for a dashboard page — each helper emits ONE
+# richness.rb — Ruby twin of shared/lib/richness.py. Independent, optional
+# "richness" pieces for a dashboard page — each helper emits ONE
 # spec-authorable fragment, never a whole workbook/page. Consumed by callers
 # that already have Composition/Styling output and want to layer in an
 # AI-generated insight, a dynamic date-grain control+dimension, a filter row,
-# or a wide (non-crosstab) pivot table. Ruby 2.6, stdlib only. Twins emit
-# byte-identical output (shared/lib/testdata/richness_golden.json).
+# a wide (non-crosstab) pivot table, or a workbook AI agent + chat element.
+# Ruby 2.6, stdlib only. Twins emit byte-identical output
+# (shared/lib/testdata/richness_golden.json).
 #
 #   require_relative 'lib/richness'
 #   Richness.ai_insight(id: 'ai-1', prompt: 'Say hello.')
 #   ctl = Richness.grain_control(id: 'GrainCtl')
 #   dim = Richness.trend_dimension(grain_control_id: 'GrainCtl', date_ref: '[Src/Date]')
+#   ag = Richness.agent(id: 'ag-1', name: 'Analyst', instructions: 'Be helpful.', data_source_ids: ['src'])
+#   chat = Richness.chat(id: 'chat-1', agent_id: 'ag-1')
 #
 # GO/NO-GO provenance (.superpowers/sdd/richness-task-1-report.md, workbook
 # 05cd3ac1-c8cc-4252-bad6-38b33d87bf45):
@@ -57,18 +60,31 @@
 #     "<id>-ctl") so the two always differ; trend_dimension's
 #     `grain_control_id:` must be given that `controlId` (not the element
 #     `id`) — see its docstring below.
+#
+# WS4 Task-1 addition — agent + chat (docs/superpowers/specs/
+# 2026-07-29-ws4-agent-gradient-actions-design.md, "Live-verified shape
+# facts"): the Sigma workbook AI agent is a workbook-TOP-LEVEL `agents:[]`
+# array entry (not a page element), verified live building a Plugs
+# command-center workbook (reference build: build-plugs-command-center.rb).
+# Read-only analyst = the entry OMITS `tools` entirely. The page-level
+# `chat` element just references the agent's id. Sigma's AI-agent feature is
+# an org-level toggle — when it's off for a target org, callers should
+# degrade to a static text element with sample prompts rather than POST a
+# chat element that will masked-fail; that fallback pattern is documented in
+# the actions/agent workflow doc, not re-derived here.
 
 require 'json'
 
 module Richness
-  # GO/NO-GO map. All 4 are GO today; a NO-GO flip makes the gated helper
+  # GO/NO-GO map. All 5 are GO today; a NO-GO flip makes the gated helper
   # return an empty/opt-in marker instead of emitting an unverified (or
   # 400-rejected) shape — never a silently-wrong fallback.
   SURFACES = {
     ai_insight: true,     # CallText/AI-insight text element (richness Task-1 GO; renders real text only where the target org's connection has Cortex configured — NEVER a fabricated summary)
     dynamic_grain: true,  # grain_control (segmented control) + trend_dimension (Switch+DateTrunc dimension formula) — richness Task-1 GO
     filter_row: true,     # list control(s) -> element filter, reusing the already-GO master-detail control/filter shape
-    wide_pivot: true      # pivot-table rowsBy + columnsBy:[] + values, reusing the already-GO general Sigma pivot shape
+    wide_pivot: true,     # pivot-table rowsBy + columnsBy:[] + values, reusing the already-GO general Sigma pivot shape
+    agent: true           # workbook-level agents[] entry + page-level {kind:"chat"} element — WS4 Task-1 GO; org-feature-gated on the Sigma side (see agent/chat docstrings for the graceful-degrade contract)
   }.freeze
 
   DEFAULT_MODEL = 'llama3.1-8b'
@@ -197,5 +213,51 @@ module Richness
       'columnsBy' => [],
       'values' => values
     }
+  end
+
+  # Returns a workbook-level `agents[]` entry (NOT a page element — the
+  # workbook spec's top-level `agents:` array; pair with `chat` below for the
+  # page-level element that surfaces it). `data_source_ids` map 1:1, in
+  # order, to `dataSources:[{kind:"table",elementId:}, ...]`. `tools:` empty
+  # (the default) means a READ-ONLY analyst — the returned Hash OMITS the
+  # `tools` key entirely (not `tools:[]`); this exact omission is the
+  # live-verified read-only shape (WS4 design doc). Pass a non-empty
+  # `tools:` array (already-shaped `{toolId,kind:"action",name,description,
+  # steps:[...]}` entries) for a write/action agent — added verbatim, never
+  # reshaped here. Sigma's AI-agent feature is an org-level gate: when it's
+  # off for the target org, the agent/chat surface degrades to a static
+  # element rather than a 400 (see `chat`'s docstring and the actions/agent
+  # workflow doc for the caller-side fallback pattern). NO-GO surface ->
+  # {'opt_in'=>true,'id'=>id}: never emit a faked agent.
+  def self.agent(id:, name:, instructions:, data_source_ids:, tools: [], surfaces: SURFACES)
+    raise ArgumentError, 'id required' if id.to_s.empty?
+    raise ArgumentError, 'name required' if name.to_s.empty?
+    raise ArgumentError, 'instructions required' if instructions.to_s.empty?
+    return { 'opt_in' => true, 'id' => id } unless surfaces[:agent]
+
+    out = {
+      'id' => id,
+      'name' => name,
+      'instructions' => instructions,
+      'dataSources' => (data_source_ids || []).map { |eid| { 'kind' => 'table', 'elementId' => eid } }
+    }
+    out['tools'] = tools unless tools.nil? || tools.empty?
+    out
+  end
+
+  # Returns the page-level `chat` element that surfaces an `agent` entry:
+  # {id, kind:"chat", agentId}. `agent_id` is the AGENT's `id` (the same
+  # string used in the `agents[]` entry `agent` built above), not an
+  # element id. Same org-feature gate as `agent` — when Sigma AI agents are
+  # off for the target org, callers should degrade to a static text element
+  # with sample prompts instead (Connor's fallback; documented in the
+  # actions/agent workflow doc, not re-derived here). NO-GO surface ->
+  # {'opt_in'=>true,'id'=>id}: never emit a faked chat element.
+  def self.chat(id:, agent_id:, surfaces: SURFACES)
+    raise ArgumentError, 'id required' if id.to_s.empty?
+    raise ArgumentError, 'agent_id required' if agent_id.to_s.empty?
+    return { 'opt_in' => true, 'id' => id } unless surfaces[:agent]
+
+    { 'id' => id, 'kind' => 'chat', 'agentId' => agent_id }
   end
 end

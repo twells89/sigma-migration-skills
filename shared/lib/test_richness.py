@@ -23,8 +23,8 @@ FILTER_CONTROLS = [
 
 
 class SurfacesTest(unittest.TestCase):
-    def test_surfaces_all_4_richness_surfaces_are_go(self):
-        expected = ["ai_insight", "dynamic_grain", "filter_row", "wide_pivot"]
+    def test_surfaces_all_5_richness_surfaces_are_go(self):
+        expected = ["agent", "ai_insight", "dynamic_grain", "filter_row", "wide_pivot"]
         self.assertEqual(sorted(richness.SURFACES.keys()), sorted(expected))
         self.assertTrue(all(richness.SURFACES.values()))
 
@@ -207,6 +207,72 @@ class WidePivotTest(unittest.TestCase):
         self.assertEqual(piv, {"opt_in": True, "id": "piv-1"})
 
 
+AGENT_TOOLS = [
+    {"toolId": "t-log-note", "kind": "action", "name": "Log note", "description": "Insert a review note.",
+     "steps": [{"kind": "effect", "effect": "insert-rows", "table": "annotations",
+                "value": {"type": "agent-input", "inputName": "note"}}]},
+]
+
+
+class AgentTest(unittest.TestCase):
+    def test_read_only_analyst_omits_tools_key_entirely(self):
+        el = richness.agent(id="ag-1", name="Analyst", instructions="Be a helpful retail analyst.",
+                             data_source_ids=["src"])
+        self.assertEqual(el, {
+            "id": "ag-1", "name": "Analyst", "instructions": "Be a helpful retail analyst.",
+            "dataSources": [{"kind": "table", "elementId": "src"}],
+        })
+        self.assertNotIn("tools", el)
+
+    def test_multiple_data_source_ids_map_to_multiple_data_sources_in_order(self):
+        el = richness.agent(id="ag-1", name="Analyst", instructions="x", data_source_ids=["src-a", "src-b"])
+        self.assertEqual(el["dataSources"], [
+            {"kind": "table", "elementId": "src-a"}, {"kind": "table", "elementId": "src-b"},
+        ])
+
+    def test_non_empty_tools_is_added_verbatim(self):
+        el = richness.agent(id="ag-2", name="Assistant", instructions="Act on my behalf.",
+                             data_source_ids=["src"], tools=AGENT_TOOLS)
+        self.assertEqual(el["tools"], AGENT_TOOLS)
+        self.assertIn("tools", el)
+
+    def test_id_required(self):
+        with self.assertRaises(ValueError):
+            richness.agent(id="", name="A", instructions="x", data_source_ids=["src"])
+
+    def test_name_required(self):
+        with self.assertRaises(ValueError):
+            richness.agent(id="ag-1", name="", instructions="x", data_source_ids=["src"])
+
+    def test_instructions_required(self):
+        with self.assertRaises(ValueError):
+            richness.agent(id="ag-1", name="A", instructions="", data_source_ids=["src"])
+
+    def test_no_go_surface_returns_opt_in_marker(self):
+        surfaces = dict(richness.SURFACES, agent=False)
+        el = richness.agent(id="ag-1", name="A", instructions="x", data_source_ids=["src"], surfaces=surfaces)
+        self.assertEqual(el, {"opt_in": True, "id": "ag-1"})
+
+
+class ChatTest(unittest.TestCase):
+    def test_id_kind_chat_agent_id_shape(self):
+        self.assertEqual(richness.chat(id="chat-1", agent_id="ag-1"),
+                          {"id": "chat-1", "kind": "chat", "agentId": "ag-1"})
+
+    def test_id_required(self):
+        with self.assertRaises(ValueError):
+            richness.chat(id="", agent_id="ag-1")
+
+    def test_agent_id_required(self):
+        with self.assertRaises(ValueError):
+            richness.chat(id="chat-1", agent_id="")
+
+    def test_no_go_surface_returns_opt_in_marker(self):
+        surfaces = dict(richness.SURFACES, agent=False)
+        el = richness.chat(id="chat-1", agent_id="ag-1", surfaces=surfaces)
+        self.assertEqual(el, {"opt_in": True, "id": "chat-1"})
+
+
 class GoldenTest(unittest.TestCase):
     def setUp(self):
         with open(os.path.join(os.path.dirname(__file__), "testdata", "richness_golden.json")) as f:
@@ -214,6 +280,11 @@ class GoldenTest(unittest.TestCase):
 
     def test_helpers_match_richness_golden(self):
         actual = {
+            "agent": richness.agent(id="ag-1", name="Analyst", instructions="Be a helpful retail analyst.",
+                                     data_source_ids=["src"]),
+            "agent_with_tools": richness.agent(id="ag-2", name="Assistant", instructions="Act on my behalf.",
+                                                data_source_ids=["src"], tools=AGENT_TOOLS),
+            "chat": richness.chat(id="chat-1", agent_id="ag-1"),
             "ai_insight": richness.ai_insight(id="ai-rev", prompt="Summarize revenue trends for the period."),
             "ai_insight_custom_model": richness.ai_insight(
                 id="ai-rev2", model="mistral-large2", prompt="Say one nice thing about the data."),
