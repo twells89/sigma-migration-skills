@@ -1,0 +1,122 @@
+{
+  "button": {
+    "id": "btn-log",
+    "kind": "button",
+    "text": "Log note",
+    "appearance": "filled",
+    "actions": [
+      {
+        "id": "a-btn-log",
+        "trigger": "on-click",
+        "effects": [
+          {
+            "effect": "insert-rows",
+            "table": "annotations",
+            "values": {
+              "an-note": {
+                "type": "control",
+                "control": "NoteCtl"
+              }
+            }
+          },
+          {
+            "effect": "clear-control",
+            "scope": {
+              "type": "page",
+              "page": "pg"
+            },
+            "usePublishedValue": true
+          }
+        ]
+      }
+    ]
+  },
+  "input_table_empty": {
+    "id": "annotations",
+    "kind": "input-table",
+    "inputMode": "edit",
+    "source": {
+      "kind": "empty",
+      "connectionId": "write-conn-1"
+    },
+    "columns": [
+      {
+        "id": "an-note",
+        "type": "text",
+        "name": "Review note"
+      },
+      {
+        "id": "CREATED_AT"
+      },
+      {
+        "id": "CREATED_BY"
+      }
+    ],
+    "name": {
+      "text": "Review log (append-only)",
+      "fontWeight": "bold",
+      "fontSize": 15,
+      "color": "#1A1A1A"
+    }
+  },
+  "input_table_linked": {
+    "id": "targets",
+    "kind": "input-table",
+    "inputMode": "edit",
+    "source": {
+      "kind": "linked",
+      "from": "fam-pivot",
+      "connectionId": "write-conn-1"
+    },
+    "columns": [
+      {
+        "id": "tg-fam",
+        "key": "fp-fam"
+      },
+      {
+        "id": "tg-actual",
+        "key": "fp-rev",
+        "name": "Actual Revenue"
+      },
+      {
+        "id": "tg-target",
+        "type": "number",
+        "name": "Target Revenue"
+      },
+      {
+        "id": "tg-var",
+        "name": "Variance vs Target",
+        "formula": "[Actual Revenue] - [Target Revenue]"
+      }
+    ]
+  },
+  "insert_rows_effect": {
+    "effect": "insert-rows",
+    "table": "annotations",
+    "values": {
+      "an-note": {
+        "type": "control",
+        "control": "NoteCtl"
+      }
+    }
+  },
+  "clear_control_effect": {
+    "effect": "clear-control",
+    "scope": {
+      "type": "page",
+      "page": "pg"
+    },
+    "usePublishedValue": true
+  },
+  "set_control_value_effect": {
+    "effect": "set-control-value",
+    "control": "RegionF",
+    "value": {
+      "type": "constant",
+      "value": {
+        "type": "text",
+        "value": "West"
+      }
+    }
+  }
+}
