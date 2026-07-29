@@ -85,9 +85,9 @@ end
 
 # --- Task 3: chart_color, kpi_accent, format_for, header, section_card ---
 
-check('SURFACES: all 8 surfaces (Task-1 six + WS4 gradient_header/motif) are GO') do
+check('SURFACES: all 10 surfaces (Task-1 six + WS4 gradient_header/motif/gradient_card/sparkline) are GO') do
   expected = %i[categorical_scheme chart_color_by container_style format_string kpi_name_color typography
-                gradient_header motif]
+                gradient_header motif gradient_card sparkline]
   Styling::SURFACES.keys.sort == expected.sort && Styling::SURFACES.values.all? { |v| v == true }
 end
 
@@ -291,6 +291,77 @@ check('gradient_header: unrecognized motif symbol raises ArgumentError') do
   end
 end
 
+# --- Task 3: Styling.gradient_card + Styling.sparkline ---
+
+GC_KPI_EL = { 'id' => 'kpi-rev', 'kind' => 'kpi-chart', 'name' => { 'text' => 'Revenue' },
+              'value' => { 'columnId' => 'rev-cur' } }.freeze
+
+check('gradient_card: GO returns a gradient container + child_layout positioning the kpi + a white-text patch') do
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB])
+  gc[:element].length == 1 &&
+    gc[:element][0]['id'] == 'card-1' && gc[:element][0]['kind'] == 'container' &&
+    gc[:element][0]['style'] == { 'borderRadius' => 'round' } &&
+    gc[:element][0]['backgroundImage']['url'].start_with?('data:image/svg+xml;base64,') &&
+    gc[:element][0]['backgroundImage']['style'] == { 'fit' => 'cover' } &&
+    gc[:child_layout] == '<LayoutElement elementId="kpi-rev" gridColumn="1 / 25" gridRow="1 / 7"/>' &&
+    gc[:patch] == { 'value' => { 'color' => '#FFFFFF' }, 'name' => { 'color' => '#FFFFFF' } }
+end
+
+check('gradient_card: decoded SVG carries the linearGradient stops (motif: :none -- no motif group)') do
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB])
+  svg = Base64.decode64(gc[:element][0]['backgroundImage']['url'].sub('data:image/svg+xml;base64,', ''))
+  svg.include?('linearGradient') && !svg.include?('<g transform=')
+end
+
+check('gradient_card: does NOT mutate the passed kpi_element hash') do
+  kpi_el = { 'id' => 'kpi-rev2', 'kind' => 'kpi-chart', 'name' => { 'text' => 'Revenue' },
+             'value' => { 'columnId' => 'rev-cur', 'fontSize' => 32 } }
+  snapshot = Marshal.load(Marshal.dump(kpi_el))
+  Styling.gradient_card(id: 'card-2', kpi_element: kpi_el, gradient: %w[#0F172A #2563EB])
+  kpi_el == snapshot
+end
+
+check('gradient_card: respects a custom page_cols in child_layout gridColumn span') do
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB], page_cols: 12)
+  gc[:child_layout] == '<LayoutElement elementId="kpi-rev" gridColumn="1 / 13" gridRow="1 / 7"/>'
+end
+
+check('gradient_card: NO-GO gradient_card surface -> empty element/child_layout/patch, no crash') do
+  surfaces = Styling::SURFACES.merge(gradient_card: false)
+  gc = Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB], surfaces: surfaces)
+  gc == { element: [], child_layout: '', patch: {} }
+end
+
+check('sparkline: GO returns a borderless line-chart with hidden axes/legend/name + transparent bg + datetime format') do
+  sp = Styling.sparkline(id: 'spark-rev', source_element_id: 'tbl', period_ref: '[Table/Month]',
+                          value_formula: 'Sum([Table/Revenue])')
+  sp['id'] == 'spark-rev' && sp['kind'] == 'line-chart' &&
+    sp['source'] == { 'kind' => 'table', 'elementId' => 'tbl' } &&
+    sp['columns'].length == 2 &&
+    sp['columns'][0]['formula'] == '[Table/Month]' &&
+    sp['columns'][0]['format'] == { 'kind' => 'datetime', 'formatString' => '%b %Y' } &&
+    sp['columns'][1]['formula'] == 'Sum([Table/Revenue])' &&
+    sp['xAxis']['format'] == { 'marks' => 'none', 'labels' => 'hidden' } &&
+    sp['yAxis']['format']['labels'] == 'hidden' && sp['yAxis']['format']['marks'] == 'none' &&
+    sp['yAxis']['format']['scale'] == { 'type' => 'linear', 'zero' => false, 'hideZeroLine' => true } &&
+    sp['name'] == { 'visibility' => 'hidden' } && sp['legend'] == { 'visibility' => 'hidden' } &&
+    sp['lineAreaStyle'] == { 'interpolation' => 'monotone' } &&
+    sp['style'] == { 'backgroundColor' => 'transparent' }
+end
+
+check('sparkline: custom period_format flows into the period column format') do
+  sp = Styling.sparkline(id: 'spark-rev', source_element_id: 'tbl', period_ref: '[Table/Month]',
+                          value_formula: 'Sum([Table/Revenue])', period_format: '%Y-%m')
+  sp['columns'][0]['format'] == { 'kind' => 'datetime', 'formatString' => '%Y-%m' }
+end
+
+check('sparkline: NO-GO sparkline surface -> opt_in marker, never a broken chart shape') do
+  surfaces = Styling::SURFACES.merge(sparkline: false)
+  sp = Styling.sparkline(id: 'spark-rev', source_element_id: 'tbl', period_ref: '[Table/Month]',
+                          value_formula: 'Sum([Table/Revenue])', surfaces: surfaces)
+  sp == { 'opt_in' => true, 'id' => 'spark-rev' }
+end
+
 golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'styling_golden.json')))
 check('helpers match styling_golden.json (sorted-key identical)') do
   theme = Styling::DEFAULT_THEME
@@ -309,7 +380,10 @@ check('helpers match styling_golden.json (sorted-key identical)') do
                                                         logo_url: 'https://example.com/logo.png'),
     'gradient_header_rings_left' => Styling.gradient_header(id: 'ghdr2', title: 'Ops', motif: :rings, motif_side: :left),
     'gradient_header_none' => Styling.gradient_header(id: 'ghdr3', title: 'Plain', motif: :none),
-    'gradient_header_byo' => Styling.gradient_header(id: 'ghdr4', title: 'Custom', motif: 'https://example.com/art.png')
+    'gradient_header_byo' => Styling.gradient_header(id: 'ghdr4', title: 'Custom', motif: 'https://example.com/art.png'),
+    'gradient_card' => Styling.gradient_card(id: 'card-1', kpi_element: GC_KPI_EL, gradient: %w[#0F172A #2563EB]),
+    'sparkline' => Styling.sparkline(id: 'spark-rev', source_element_id: 'tbl', period_ref: '[Table/Month]',
+                                      value_formula: 'Sum([Table/Revenue])')
   }
   JSON.generate(sort_deep(actual)) == JSON.generate(sort_deep(golden))
 end

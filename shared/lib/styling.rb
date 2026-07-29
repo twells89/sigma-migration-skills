@@ -57,7 +57,17 @@ module Styling
     # nothing to do with the decorative SVG-fragment library this gate
     # protects, so it is honored unconditionally).
     gradient_header: true,
-    motif: true
+    motif: true,
+    # WS4 Task 3 (build-plugs-command-center.rb `card(...)`/`_spark(...)` probe):
+    # a gradient backgroundImage CARD container (Styling.gradient_card, wrapping
+    # a caller-built kpi-chart with a white-text patch) and a separate borderless
+    # `line-chart` composite sparkline (Styling.sparkline) both survived readback
+    # + a real render. NO-GO gradient_card -> the empty {element:[],child_layout:
+    # '',patch:{}} marker (graceful — never mutates or half-decorates the
+    # caller's kpi_element). NO-GO sparkline -> {'opt_in'=>true,'id'=>} (never a
+    # faked chart shape).
+    gradient_card: true,
+    sparkline: true
   }.freeze
 
   # d3-format grammar (NOT Excel) — Task-1 verified surviving strings.
@@ -279,5 +289,80 @@ module Styling
     lines << '</GridContainer>'
 
     { element: elements, layout: lines.join("\n") }
+  end
+
+  # Wraps a caller-built kpi-chart element (a Hash, e.g. from KpiCard.build)
+  # in a gradient backgroundImage CARD container (WS4 Task 3, design doc
+  # "Component B" + the live-verified `card(...)` shape in
+  # build-plugs-command-center.rb). Decorate-only, like `section_card`:
+  # `kpi_element` is READ ONLY here (its `id` is read to build `child_layout`)
+  # -- it is never mutated, and `kpi_card.rb` (WS1, fanned to converters) is
+  # never touched. Instead this returns a `patch` Hash the caller merges onto
+  # their own copy of the kpi element's `value`/`name` objects to turn the
+  # value + title white (e.g. `kpi_element['value'].merge!(patch['value'])`)
+  # so they read against the gradient, matching `card(...)`'s native-white
+  # KPI text. `gradient:` is required (one gradient per card -- distinct KPI
+  # cards typically carry distinct gradients, matching the reference build's
+  # per-KPI `KG[i]` array) and reuses `compose_gradient_svg`/`svg_data_uri`
+  # from Task 2 with `motif: :none` (a plain gradient, no decorative motif --
+  # a card this small has no room for one; `motif_side` is irrelevant when
+  # the motif is `:none` so `:right` is passed as an inert default).
+  # `child_layout` is only the inner `<LayoutElement>` fragment positioning
+  # `kpi_element`'s id inside the container at the Composition kpi-band
+  # height (rows 1..7, matching `Composition.bands`' own `:kpi` role height)
+  # -- placing the container itself on the page is the caller's job (same
+  # "decorate, don't own layout" contract as `section_card`), so no outer
+  # `<GridContainer>` is returned here. NO-GO -> `{element:[],
+  # child_layout:'',patch:{}}` (graceful: nothing to merge, nothing to lay
+  # out, never a broken/half-decorated card).
+  def self.gradient_card(id:, kpi_element:, gradient:, page_cols: 24, surfaces: SURFACES)
+    return { element: [], child_layout: '', patch: {} } unless surfaces[:gradient_card]
+
+    bg_url = svg_data_uri(compose_gradient_svg(gradient, :none, :right))
+    container_el = { 'id' => id, 'kind' => 'container', 'style' => { 'borderRadius' => 'round' },
+                      'backgroundImage' => { 'url' => bg_url, 'style' => { 'fit' => 'cover' } } }
+    child_layout = "<LayoutElement elementId=\"#{kpi_element['id']}\" gridColumn=\"1 / #{page_cols + 1}\" gridRow=\"1 / 7\"/>"
+    patch = { 'value' => { 'color' => '#FFFFFF' }, 'name' => { 'color' => '#FFFFFF' } }
+    { element: [container_el], child_layout: child_layout, patch: patch }
+  end
+
+  # Composite in-card sparkline (WS4 Task 3): a separate, borderless mini
+  # `line-chart` element meant to sit BELOW a kpi-chart inside the same
+  # `gradient_card` container -- NOT a date column bound inside the
+  # kpi-chart itself (that in-kpi shape was the WS3 NO-GO; this standalone
+  # line-chart is the live-verified GO pattern, matching `_spark(...)` in
+  # build-plugs-command-center.rb). Two columns: a period dimension
+  # (`period_ref`'s formula, formatted `kind:"datetime"`/`period_format`)
+  # and a value (`value_formula`'s formula). Both axes hide their
+  # labels/marks so no chrome competes with the kpi above it; the y-axis
+  # scale is `zero:false` (a small trend doesn't get flattened against a
+  # forced-zero baseline) with `hideZeroLine:true`; `name`/`legend` are
+  # hidden (no title, no legend on a sparkline); the line uses a smooth
+  # `monotone` interpolation; the background is transparent so the chart
+  # blends into the gradient card above/around it. NO-GO -> `{'opt_in'=>
+  # true,'id'=>id}` (never a faked/broken chart shape).
+  def self.sparkline(id:, source_element_id:, period_ref:, value_formula:, period_format: '%b %Y', surfaces: SURFACES)
+    return { 'opt_in' => true, 'id' => id } unless surfaces[:sparkline]
+
+    period_col_id = "#{id}-period"
+    value_col_id = "#{id}-value"
+    {
+      'id' => id,
+      'kind' => 'line-chart',
+      'source' => { 'kind' => 'table', 'elementId' => source_element_id },
+      'columns' => [
+        { 'id' => period_col_id, 'formula' => period_ref, 'name' => 'Period',
+          'format' => { 'kind' => 'datetime', 'formatString' => period_format } },
+        { 'id' => value_col_id, 'formula' => value_formula, 'name' => 'Value' }
+      ],
+      'xAxis' => { 'columnId' => period_col_id, 'format' => { 'marks' => 'none', 'labels' => 'hidden' } },
+      'yAxis' => { 'columnIds' => [value_col_id],
+                    'format' => { 'labels' => 'hidden', 'marks' => 'none',
+                                  'scale' => { 'type' => 'linear', 'zero' => false, 'hideZeroLine' => true } } },
+      'name' => { 'visibility' => 'hidden' },
+      'legend' => { 'visibility' => 'hidden' },
+      'lineAreaStyle' => { 'interpolation' => 'monotone' },
+      'style' => { 'backgroundColor' => 'transparent' }
+    }
   end
 end

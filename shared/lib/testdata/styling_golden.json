@@ -35,6 +35,32 @@
     "formatString": ".1%",
     "kind": "number"
   },
+  "gradient_card": {
+    "element": [
+      {
+        "id": "card-1",
+        "kind": "container",
+        "style": {
+          "borderRadius": "round"
+        },
+        "backgroundImage": {
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAwIDIxMCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgc2xpY2UiPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iaGciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIwLjQ1Ij48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwRjE3MkEiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyNTYzRUIiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMTYwMCIgaGVpZ2h0PSIyMTAiIGZpbGw9InVybCgjaGcpIi8+PC9zdmc+",
+          "style": {
+            "fit": "cover"
+          }
+        }
+      }
+    ],
+    "child_layout": "<LayoutElement elementId=\"kpi-rev\" gridColumn=\"1 / 25\" gridRow=\"1 / 7\"/>",
+    "patch": {
+      "value": {
+        "color": "#FFFFFF"
+      },
+      "name": {
+        "color": "#FFFFFF"
+      }
+    }
+  },
   "gradient_header_byo": {
     "element": [
       {
@@ -178,5 +204,62 @@
       }
     },
     "wrap": "<GridContainer elementId=\"card-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 13\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <LayoutElement elementId=\"k1\" gridColumn=\"1 / 9\" gridRow=\"1 / 7\"/>\n  <LayoutElement elementId=\"k2\" gridColumn=\"9 / 17\" gridRow=\"1 / 7\"/>\n  <LayoutElement elementId=\"k3\" gridColumn=\"17 / 25\" gridRow=\"1 / 7\"/>\n</GridContainer>"
+  },
+  "sparkline": {
+    "id": "spark-rev",
+    "kind": "line-chart",
+    "source": {
+      "kind": "table",
+      "elementId": "tbl"
+    },
+    "columns": [
+      {
+        "id": "spark-rev-period",
+        "formula": "[Table/Month]",
+        "name": "Period",
+        "format": {
+          "kind": "datetime",
+          "formatString": "%b %Y"
+        }
+      },
+      {
+        "id": "spark-rev-value",
+        "formula": "Sum([Table/Revenue])",
+        "name": "Value"
+      }
+    ],
+    "xAxis": {
+      "columnId": "spark-rev-period",
+      "format": {
+        "marks": "none",
+        "labels": "hidden"
+      }
+    },
+    "yAxis": {
+      "columnIds": [
+        "spark-rev-value"
+      ],
+      "format": {
+        "labels": "hidden",
+        "marks": "none",
+        "scale": {
+          "type": "linear",
+          "zero": false,
+          "hideZeroLine": true
+        }
+      }
+    },
+    "name": {
+      "visibility": "hidden"
+    },
+    "legend": {
+      "visibility": "hidden"
+    },
+    "lineAreaStyle": {
+      "interpolation": "monotone"
+    },
+    "style": {
+      "backgroundColor": "transparent"
+    }
   }
 }

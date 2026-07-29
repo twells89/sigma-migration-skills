@@ -1,4 +1,5 @@
 import base64
+import copy
 import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import styling
@@ -91,10 +92,10 @@ class StylingHelpersTest(unittest.TestCase):
         with open(os.path.join(os.path.dirname(__file__), "testdata", "styling_golden.json")) as f:
             self.golden = json.load(f)
 
-    def test_surfaces_all_8_surfaces_are_go(self):
+    def test_surfaces_all_10_surfaces_are_go(self):
         expected = ["categorical_scheme", "chart_color_by", "container_style",
                     "format_string", "kpi_name_color", "typography",
-                    "gradient_header", "motif"]
+                    "gradient_header", "motif", "gradient_card", "sparkline"]
         self.assertEqual(sorted(styling.SURFACES.keys()), sorted(expected))
         self.assertTrue(all(styling.SURFACES.values()))
 
@@ -171,6 +172,8 @@ class StylingHelpersTest(unittest.TestCase):
     def test_helpers_match_styling_golden(self):
         theme = self.theme
         band = {"role": "kpi", "ids": ["k1", "k2", "k3"], "r0": 7, "r1": 13}
+        gc_kpi_el = {"id": "kpi-rev", "kind": "kpi-chart", "name": {"text": "Revenue"},
+                     "value": {"columnId": "rev-cur"}}
         actual = {
             "chart_color_single": styling.chart_color(theme),
             "chart_color_categorical": styling.chart_color(theme, categorical=True),
@@ -187,6 +190,8 @@ class StylingHelpersTest(unittest.TestCase):
                 "ghdr2", "Ops", motif="rings", motif_side="left"),
             "gradient_header_none": styling.gradient_header("ghdr3", "Plain", motif="none"),
             "gradient_header_byo": styling.gradient_header("ghdr4", "Custom", motif="https://example.com/art.png"),
+            "gradient_card": styling.gradient_card("card-1", gc_kpi_el, ["#0F172A", "#2563EB"]),
+            "sparkline": styling.sparkline("spark-rev", "tbl", "[Table/Month]", "Sum([Table/Revenue])"),
         }
         self.assertEqual(json.dumps(_sort(actual)), json.dumps(_sort(self.golden)))
 
@@ -314,6 +319,76 @@ class GradientHeaderTest(unittest.TestCase):
     def test_unrecognized_motif_symbol_raises_value_error(self):
         with self.assertRaises(ValueError):
             styling.gradient_header("ghdr", "X", motif="sparkles")
+
+
+class GradientCardSparklineTest(unittest.TestCase):
+    """WS4 Task 3: styling.gradient_card + styling.sparkline."""
+
+    GC_KPI_EL = {"id": "kpi-rev", "kind": "kpi-chart", "name": {"text": "Revenue"},
+                 "value": {"columnId": "rev-cur"}}
+
+    def test_gradient_card_go_returns_container_child_layout_and_white_patch(self):
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"])
+        self.assertEqual(len(gc["element"]), 1)
+        self.assertEqual(gc["element"][0]["id"], "card-1")
+        self.assertEqual(gc["element"][0]["kind"], "container")
+        self.assertEqual(gc["element"][0]["style"], {"borderRadius": "round"})
+        self.assertTrue(gc["element"][0]["backgroundImage"]["url"].startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(gc["element"][0]["backgroundImage"]["style"], {"fit": "cover"})
+        self.assertEqual(gc["child_layout"],
+                          '<LayoutElement elementId="kpi-rev" gridColumn="1 / 25" gridRow="1 / 7"/>')
+        self.assertEqual(gc["patch"], {"value": {"color": "#FFFFFF"}, "name": {"color": "#FFFFFF"}})
+
+    def test_gradient_card_decoded_svg_has_gradient_no_motif_group(self):
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"])
+        url = gc["element"][0]["backgroundImage"]["url"]
+        svg = base64.b64decode(url.replace("data:image/svg+xml;base64,", "")).decode()
+        self.assertIn("linearGradient", svg)
+        self.assertNotIn("<g transform=", svg)
+
+    def test_gradient_card_does_not_mutate_kpi_element(self):
+        kpi_el = {"id": "kpi-rev2", "kind": "kpi-chart", "name": {"text": "Revenue"},
+                  "value": {"columnId": "rev-cur", "fontSize": 32}}
+        snapshot = copy.deepcopy(kpi_el)
+        styling.gradient_card("card-2", kpi_el, ["#0F172A", "#2563EB"])
+        self.assertEqual(kpi_el, snapshot)
+
+    def test_gradient_card_respects_custom_page_cols(self):
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"], page_cols=12)
+        self.assertEqual(gc["child_layout"],
+                          '<LayoutElement elementId="kpi-rev" gridColumn="1 / 13" gridRow="1 / 7"/>')
+
+    def test_gradient_card_no_go_returns_empty_marker(self):
+        surfaces = dict(styling.SURFACES, gradient_card=False)
+        gc = styling.gradient_card("card-1", self.GC_KPI_EL, ["#0F172A", "#2563EB"], surfaces=surfaces)
+        self.assertEqual(gc, {"element": [], "child_layout": "", "patch": {}})
+
+    def test_sparkline_go_returns_borderless_line_chart(self):
+        sp = styling.sparkline("spark-rev", "tbl", "[Table/Month]", "Sum([Table/Revenue])")
+        self.assertEqual(sp["id"], "spark-rev")
+        self.assertEqual(sp["kind"], "line-chart")
+        self.assertEqual(sp["source"], {"kind": "table", "elementId": "tbl"})
+        self.assertEqual(len(sp["columns"]), 2)
+        self.assertEqual(sp["columns"][0]["formula"], "[Table/Month]")
+        self.assertEqual(sp["columns"][0]["format"], {"kind": "datetime", "formatString": "%b %Y"})
+        self.assertEqual(sp["columns"][1]["formula"], "Sum([Table/Revenue])")
+        self.assertEqual(sp["xAxis"]["format"], {"marks": "none", "labels": "hidden"})
+        self.assertEqual(sp["yAxis"]["format"]["labels"], "hidden")
+        self.assertEqual(sp["yAxis"]["format"]["marks"], "none")
+        self.assertEqual(sp["yAxis"]["format"]["scale"], {"type": "linear", "zero": False, "hideZeroLine": True})
+        self.assertEqual(sp["name"], {"visibility": "hidden"})
+        self.assertEqual(sp["legend"], {"visibility": "hidden"})
+        self.assertEqual(sp["lineAreaStyle"], {"interpolation": "monotone"})
+        self.assertEqual(sp["style"], {"backgroundColor": "transparent"})
+
+    def test_sparkline_custom_period_format(self):
+        sp = styling.sparkline("spark-rev", "tbl", "[Table/Month]", "Sum([Table/Revenue])", period_format="%Y-%m")
+        self.assertEqual(sp["columns"][0]["format"], {"kind": "datetime", "formatString": "%Y-%m"})
+
+    def test_sparkline_no_go_returns_opt_in_marker(self):
+        surfaces = dict(styling.SURFACES, sparkline=False)
+        sp = styling.sparkline("spark-rev", "tbl", "[Table/Month]", "Sum([Table/Revenue])", surfaces=surfaces)
+        self.assertEqual(sp, {"opt_in": True, "id": "spark-rev"})
 
 
 if __name__ == "__main__":
