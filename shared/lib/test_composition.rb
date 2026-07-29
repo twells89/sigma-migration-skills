@@ -145,7 +145,7 @@ end
 # tabbed_container — labels-only element; <Tab> children map to tabs[] by
 # position; bare <LayoutElement> children only inside a <Tab> (a nested
 # GridContainer scrambles tab render order).
-tabbed_golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'composition_tabbed_golden.txt')))
+tabbed_golden = JSON.parse(File.read(File.join(__dir__, 'testdata', 'composition_tabbed_golden.json')))
 tabbed_tabs = [
   { name: 'Overview', inner: Composition.le('a1', 1, 25, 1, 7) },
   { name: 'Details', inner: Composition.le('b1', 1, 25, 1, 7) }
@@ -158,6 +158,12 @@ check('tabbed_container: element tabs are labels-only, in order, with tabBar.ali
   out = Composition.tabbed_container(id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')
   out[:element]['tabs'] == [{ 'name' => 'Overview' }, { 'name' => 'Details' }] &&
     out[:element]['tabBar'] == { 'alignment' => 'start' }
+end
+check('tabbed_container: non-default tab_bar_alignment is honored (not hardcoded to start)') do
+  out = Composition.tabbed_container(
+    id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60', tab_bar_alignment: 'center'
+  )
+  out[:element]['tabBar'] == { 'alignment' => 'center' }
 end
 check('tabbed_container: layout has exactly 2 ordered <Tab> blocks, each wrapping its inner') do
   out = Composition.tabbed_container(id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')

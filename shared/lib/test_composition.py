@@ -153,7 +153,7 @@ class CompositionTest(unittest.TestCase):
     # by position; bare <LayoutElement> children only inside a <Tab> (a
     # nested GridContainer scrambles tab render order).
     def _tabbed_golden(self):
-        golden_path = os.path.join(os.path.dirname(__file__), "testdata", "composition_tabbed_golden.txt")
+        golden_path = os.path.join(os.path.dirname(__file__), "testdata", "composition_tabbed_golden.json")
         with open(golden_path) as f:
             return json.load(f)
 
@@ -173,6 +173,12 @@ class CompositionTest(unittest.TestCase):
         out = composition.tabbed_container("tc", self._tabbed_tabs(), "1 / 25", "7 / 60")
         self.assertEqual(out["element"]["tabs"], [{"name": "Overview"}, {"name": "Details"}])
         self.assertEqual(out["element"]["tabBar"], {"alignment": "start"})
+
+    def test_tabbed_container_honors_non_default_tab_bar_alignment(self):
+        out = composition.tabbed_container(
+            "tc", self._tabbed_tabs(), "1 / 25", "7 / 60", tab_bar_alignment="center"
+        )
+        self.assertEqual(out["element"]["tabBar"], {"alignment": "center"})
 
     def test_tabbed_container_layout_has_two_ordered_tab_blocks(self):
         out = composition.tabbed_container("tc", self._tabbed_tabs(), "1 / 25", "7 / 60")
