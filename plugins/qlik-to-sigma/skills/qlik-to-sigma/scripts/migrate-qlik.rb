@@ -130,6 +130,7 @@ OptionParser.new do |o|
   o.on('--answers JSON')      { |v| opts[:answers]  = v }
   o.on('--yes')               {     opts[:yes]      = true }
   o.on('--from-discovery DIR'){ |v| opts[:from]     = File.expand_path(v) }
+  o.on('--prj DIR')           { |v| opts[:prj]      = File.expand_path(v) }
   o.on('--reuse-dm ID')       { |v| opts[:reuse_dm] = v }
   o.on('--no-reuse')          {     opts[:no_reuse] = true }
   o.on('--dry-run')           {     opts[:dry_run]  = true }
@@ -138,6 +139,24 @@ OptionParser.new do |o|
   # exit 0 — no creds/args needed. Used by the converter-default regression test.
   o.on('--print-converter')   {     opts[:print_converter] = true }
 end.parse!
+
+# QlikView (.qvw) has no Cloud/REST API and no sheets — a "-prj" project folder
+# migrates via a dedicated, converter-only path (data model, no discovery/parity).
+# Delegate to migrate-qlikview.rb and exit BEFORE the Qlik Sense discovery pipeline,
+# which reads Qlik-Sense-shaped artifacts (charts/measures/layout/snapshot) a -prj
+# folder can't provide.
+if opts[:prj]
+  require 'rbconfig'
+  qv_argv = ['--prj', opts[:prj]]
+  qv_argv += ['--connection', opts[:conn]] if opts[:conn]
+  qv_argv += ['--database', opts[:database]] if opts[:database]
+  qv_argv += ['--schema', opts[:schema]] if opts[:schema]
+  qv_argv += ['--folder', opts[:folder]] if opts[:folder]
+  qv_argv += ['--name', opts[:name]] if opts[:name]
+  qv_argv += ['--out', opts[:out]] if opts[:out]
+  qv_argv << '--dry-run' if opts[:dry_run]
+  exec(RbConfig.ruby, File.join(HERE, 'migrate-qlikview.rb'), *qv_argv)
+end
 
 # Converter resolution (issue #227). The pinned VENDORED bundle is the DEFAULT so a
 # developer machine and a customer machine produce identical output for the same

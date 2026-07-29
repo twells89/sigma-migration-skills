@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ChartProperties Type="Chart">
+  <Dimensions><Dimension><FieldDefs><string>CATEGORY</string></FieldDefs></Dimension></Dimensions>
+  <Expressions>
+    <Expression><Definition>=Sum(NET_REVENUE)</Definition><Label>Net Revenue</Label></Expression>
+    <Expression><Definition>=Count(DISTINCT ORDER_ID)</Definition><Label>Order Count</Label></Expression>
+    <Expression><Definition>=Sum(NET_PROFIT) / Sum(NET_REVENUE)</Definition><Label>Net Margin</Label></Expression>
+  </Expressions>
+</ChartProperties>

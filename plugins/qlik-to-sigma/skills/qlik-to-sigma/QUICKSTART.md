@@ -55,7 +55,10 @@ Duration: 2
     Installation steps 4–5. A shim-driven discovery is verified output-identical to a
     qlik-cli run on the same app — though that verification was against Qlik *Cloud*
     (identical QIX protocol); the on-prem auth/QRS path is unproven live (see the
-    note in the On-prem setup section). QlikView ≠ Qlik Sense: not covered.
+    note in the On-prem setup section). QlikView ≠ Qlik Sense: `.qvw` apps migrate
+    via the developer-opt-in `-prj` project folder — `ruby scripts/migrate-qlik.rb
+    --prj <Name-prj> --connection <ID>` (delivers the **data model** only; no
+    sheets/charts or Qlik-side parity — see the QlikView note in SKILL.md).
 - **Qlik Cloud access** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible).
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity).
