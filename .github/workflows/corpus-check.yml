@@ -386,6 +386,11 @@ jobs:
             plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/tests/test_metric_reference.py
             plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/tests/test_metric_reference.py
             plugins/sisense-to-sigma/skills/sisense-to-sigma/tests/test_metric_reference.py
+            # hex-to-sigma (own converter/ package, no shared catalog/metric_binding usage)
+            plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_hex_yaml.py
+            plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_sigma_ids.py
+            plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_convert_dm.py
+            plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_convert_workbook.py
           )
           fail=0
           for t in "${tests[@]}"; do
