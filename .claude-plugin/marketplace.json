@@ -155,6 +155,13 @@
       "description": "Domo → Sigma — DataSets → Sigma data model (flat materialized tables → table elements), Beast Mode calc fields → Sigma formulas (MySQL-dialect SQL), and cards → charts/KPIs/pivots (every card's Summary Number → a KPI, never a table). Ports page + card filters as controls, detects PDP policies for opt-in row-level security, and verifies warehouse parity (live step). Bundles a read-only domo-assessment skill (public governance-dataset inventory → value/cost-ranked migration-readiness readout).",
       "category": "migration",
       "keywords": ["domo", "beast-mode", "pdp", "migration", "bi"]
+    },
+    {
+      "name": "hex-to-sigma",
+      "source": "./plugins/hex-to-sigma",
+      "description": "Hex → Sigma — SQL cells, single-value/METRIC cells, and EXPLORE charts → Sigma data model + workbook, built from a project's .hex.yaml export (Hex's REST API doesn't return cell content), with app layout carried over and warehouse parity verification. Bundles a read-only hex-assessment skill (scaffolded, not yet built out).",
+      "category": "migration",
+      "keywords": ["hex", "hex.tech", "migration", "bi"]
     }
   ]
 }
