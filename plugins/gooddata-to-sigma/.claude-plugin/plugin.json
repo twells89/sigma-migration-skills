@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "gooddata-to-sigma",
   "displayName": "GoodData → Sigma",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Migrate GoodData Cloud / GoodData.CN workspaces to Sigma — the declarative workspace layout (LDM + analytics model) → Sigma data model + workbook. Exports the full workspace via the declarative REST API (logicalModel + analyticsModel), maps datasets/attributes/facts/references to a Sigma data model, translates MAQL metrics to Sigma formulas, maps insights (visualizationObjects) to workbook charts/KPIs/pivots and analytical dashboards to workbook pages + layout, ports user data filters (RLS) to Sigma user attributes, and verifies parity against the same warehouse. Honors the sibling converters' 'flag, never fake' contract: MAQL constructs with no clean Sigma equivalent, GoodData-compute-only metrics, and unsupported widgets are surfaced as loud flags rather than silently mis-converted. Includes a read-only estate assessment. Companion to the sigma-migration-skills converters.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",

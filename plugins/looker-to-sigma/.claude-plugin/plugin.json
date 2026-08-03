@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "looker-to-sigma",
   "displayName": "Looker → Sigma",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Migrate Looker (LookML semantic model + dashboards) to Sigma — discovery via the Looker REST API 4.0 / Looker MCP (or offline .lkml), LookML→data-model conversion via convert_lookml_to_sigma, dashboard→workbook build from the Looker Dashboard API JSON (UDD or LookML dashboards), build via the Sigma REST API, and 3-way parity verification (Looker vs Sigma vs warehouse).",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",

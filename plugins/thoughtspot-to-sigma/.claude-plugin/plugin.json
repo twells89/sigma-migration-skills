@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "thoughtspot-to-sigma",
   "displayName": "ThoughtSpot → Sigma",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Migrate ThoughtSpot models/worksheets and Liveboards to Sigma — TML discovery, model→data-model conversion, Liveboard→workbook build (KPI/bar/line/pie/pivot/table + search-query filters), grid layout, and parity verification. Includes an instance assessment skill.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",
