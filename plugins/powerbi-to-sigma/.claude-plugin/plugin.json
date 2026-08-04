@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "powerbi-to-sigma",
   "displayName": "Power BI → Sigma",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "description": "Migrate Power BI models and reports to Sigma — TMSL + report extraction (incl. a fully-local .pbix front door: pbixray VertiPaq → TMSL model + UTF-16LE Report/Layout, no Fabric), DAX → Sigma formula translation (with a gap-scout for the hard cases), data model + workbook build, and parity verification. Includes a model assessment skill and an Import-mode → Snowflake data-landing skill for .pbix files with no live warehouse.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",

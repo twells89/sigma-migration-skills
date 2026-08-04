@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "microstrategy-to-sigma",
   "displayName": "MicroStrategy → Sigma",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Migrate MicroStrategy (Strategy One) to Sigma — dossier + classic semantic model (attributes/facts/metrics over a star schema) → Sigma data model + workbook, with deterministic reproduction of Analytical-Engine row-collapse quirks and row-level parity verification. Live-validated with exact parity on the classic-schema grid path; chart-viz emission and the newer REST-authorable Data Model object are roadmap. Includes a read-only estate assessment. Companion to the sigma-migration-skills converters.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",

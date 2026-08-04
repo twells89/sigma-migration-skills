@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "quicksight-to-sigma",
   "displayName": "QuickSight → Sigma",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Migrate Amazon QuickSight analyses and dashboards to Sigma — analysis + dataset + data-source extraction over the AWS CLI, calc-field / data-prep translation via the convert_quicksight_to_sigma MCP, data model + workbook build, layout, and parity verification. Includes a QuickSight assessment skill.",
   "author": { "name": "Thomas Wells" },
   "license": "MIT",
