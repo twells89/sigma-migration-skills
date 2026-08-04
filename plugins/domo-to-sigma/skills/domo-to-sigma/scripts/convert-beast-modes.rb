@@ -199,6 +199,53 @@ end
 
 NEEDS_REVIEW = %w[window lod].freeze
 
+# Is this `IN(`/`in(` occurrence a raw SQL INFIX construct (`x IN (a, b)`,
+# unsupported by Sigma) rather than Sigma's own `In([col], "a", "b")`
+# FUNCTION form (real, documented, must NOT be flagged — see
+# plugins/sigma-authoring/skills/sigma-workbooks/reference/specification/formulas.md)?
+#
+# Shape, not substring: a genuine infix always has a VALUE EXPRESSION
+# directly before the `IN` token (only whitespace between) — a `]`, a
+# closing `)`, a quoted string, or a bare identifier/number. Sigma's
+# function-call form instead sits in a function-NAME position: the very
+# start of the formula, or immediately after `(`, `,`, `and`, or `or` —
+# wherever a function name is syntactically expected.
+#
+# `not` is deliberately NOT treated as its own function-name-position marker
+# here (unlike a natural first reading of that rule): `not` is itself a
+# prefix operator in Sigma, so whatever precedes IT determines the shape —
+# `not In([c], "a")` (legitimate: `not` prefixing a real function call) and
+# `[c] not in (1, 2)` (a genuine, still-unsupported infix `NOT IN`) are
+# lexically identical right at the `in(` token, and only resolvable by
+# looking through the `not` to what's underneath it. So trailing `not`s are
+# stripped and the position underneath is re-checked (recursively, so
+# `not not In(...)` still resolves correctly) rather than treating `not`
+# itself as a free pass.
+def raw_infix_in_position?(prefix)
+  s = prefix.rstrip
+  loop do
+    return false if s.empty? # formula start → function-name position
+    return false if s =~ /(\(|,|\b(?:and|or)\b)\z/i # function-name position
+
+    stripped = s.sub(/\bnot\z/i, '')
+    return true if stripped == s # a real value sits directly before IN/In → infix
+
+    s = stripped.rstrip # strip one trailing "not" and re-check what's under it
+  end
+end
+
+# True if `f` contains at least one genuine infix `IN(`/`in(` occurrence
+# (checked per-occurrence via raw_infix_in_position?, not a single formula-wide
+# substring test — a formula can legitimately mix a real In(...) call with
+# other text elsewhere).
+def contains_raw_infix_in?(f)
+  f.to_s.enum_for(:scan, /\bIN\s*\(/i).each do
+    m = Regexp.last_match
+    return true if raw_infix_in_position?(f[0...m.begin(0)])
+  end
+  false
+end
+
 # Lint a translated Sigma formula for the traps that ship silently-broken output.
 # Returns [errors, warnings].
 def lint_formula(sigma, klass = nil)
@@ -206,9 +253,25 @@ def lint_formula(sigma, klass = nil)
   warnings = []
   f = sigma.to_s
 
-  # IN(...) survived translation → Sigma has no IsIn; it silently blanks the column.
-  if f =~ /\bIN\s*\(/i && f !~ /\bContains\s*\(/i
-    errors << 'Contains a raw IN(...) — Sigma has no IsIn; expand to an OR-chain ([c]=a or [c]=b) or it silently blanks the column (feedback_sigma_formula_isin).'
+  # A raw SQL infix `x IN (a, b)` survived translation → Sigma has no infix
+  # IN/IsIn operator; it silently blanks the column. Sigma's own `In(...)`
+  # FUNCTION form (e.g. `In([Region], "East", "West")`) is real, documented
+  # syntax and must NOT be flagged — see contains_raw_infix_in? /
+  # raw_infix_in_position? above for the shape this distinguishes on.
+  #
+  # (No separate `Contains(` guard here anymore — it used to blanket-suppress
+  # this whole check whenever a formula contained an unrelated Contains(...)
+  # call ANYWHERE, e.g. from a translated LIKE clause, which could mask a
+  # genuine infix-IN bug coexisting in the same formula. `\bIN\s*\(/i` never
+  # actually matches inside the word "Contains(" in the first place — \b
+  # requires "in" to start a fresh token, and "Contains(" doesn't create that
+  # boundary — so the guard was never protecting against a real false
+  # positive; it only ever introduced that false-negative loophole. The
+  # per-occurrence, shape-based check above already excludes legitimate
+  # Contains(...)/In(...) calls on its own, so the guard is both redundant
+  # and actively wrong to keep.)
+  if contains_raw_infix_in?(f)
+    errors << "Contains a raw SQL infix IN (...) — Sigma has no infix IN/IsIn operator; expand to an OR-chain ([c]=a or [c]=b), or rewrite as Sigma's own In([c], a, b) function, or it silently blanks the column (feedback_sigma_formula_isin)."
   end
 
   # And()/Or()/Not() as FUNCTION CALLS silently produce null rows — must be infix.

@@ -52,6 +52,69 @@ ok(errs.any? { |e| e.include?('IsIn') }, 'raw IN(...) → error (no IsIn)')
 errs, _ = lint_formula('If([col]="A" or [col]="B", 1, 0)')
 ok(errs.empty?, 'expanded OR-chain passes clean')
 
+# ---------------------------------------------------------------------------
+# bead kn8s — narrow the raw-IN( rule to SHAPE, not the bare substring "IN(".
+# Sigma has a real, documented `In([col], "a", "b")` FUNCTION (see
+# .../sigma-workbooks/reference/specification/formulas.md) that the old
+# `/\bIN\s*\(/i` substring check wrongly flagged as an error, because it can't
+# tell that form apart from a genuine unsupported SQL infix `x IN (a, b)`. The
+# distinguishing shape: a genuine infix always has a VALUE immediately before
+# the IN token (`]`, `)`, a quoted string, or a bare identifier/number);
+# Sigma's function form instead sits in a function-NAME position (formula
+# start, or right after `(` `,` `and` `or`, or a `not` that itself traces back
+# to one of those). Cases below are the ones enumerated by the bead itself,
+# reproduced here as real assertions (not eyeballed) — each false-positive
+# case is confirmed to have been WRONGLY flagged before this fix.
+# ---------------------------------------------------------------------------
+
+puts '== lint_formula (bead kn8s): genuine infix IN(...) still flags — unchanged =='
+errs, _ = lint_formula('If([Region] IN ("East", "West"), 1, 0)')
+ok(errs.any? { |e| e.include?('infix') }, 'infix right after ] (If-wrapped) still an error')
+errs, _ = lint_formula('[Status] IN (1, 2, 3)')
+ok(errs.any? { |e| e.include?('infix') }, 'infix right after ], bare condition, still an error')
+errs, _ = lint_formula('If(Sum([x]) IN (5, 10), 1, 0)')
+ok(errs.any? { |e| e.include?('infix') }, 'infix right after a closing ) (aggregate result) still an error')
+
+puts '== lint_formula (bead kn8s): Sigma In(...) FUNCTION form must NOT be flagged (was the bug) =='
+errs, _ = lint_formula('In([Region], "East", "West")')
+ok(errs.empty?, 'In(...) at the very start of the formula is legitimate Sigma syntax, not an error')
+errs, _ = lint_formula('If(In([Region], "East", "West"), 1, 0)')
+ok(errs.empty?, 'In(...) right after ( is legitimate, not an error')
+errs, _ = lint_formula('In([Region], "East") and In([Status], "Active")')
+ok(errs.empty?, 'In(...) right after `and` is legitimate, not an error')
+errs, _ = lint_formula('Not(In([Region], "East"))')
+ok(errs.empty?, 'In(...) nested right after ( inside Not( is legitimate, not an error')
+errs, _ = lint_formula('If([x] > 0, In([Region], "East"), In([Region], "West"))')
+ok(errs.empty?, 'In(...) right after a , (function argument position) is legitimate, not an error')
+
+puts '== lint_formula (bead kn8s): extra edge cases beyond the bead minimum =='
+# Infix NOT IN must still flag (the old rule caught this too — a naive `not`
+# exemption could regress it if it treated `not` itself as a free pass;
+# instead we look through `not` to what precedes IT).
+errs, _ = lint_formula('[Status] NOT IN (1, 2, 3)')
+ok(errs.any? { |e| e.include?('infix') }, 'genuine infix NOT IN (a value before `not`) still flags')
+errs, _ = lint_formula('If([Status] not in (1,2), 1, 0)')
+ok(errs.any? { |e| e.include?('infix') }, 'lowercase infix "not in" after a value still flags')
+# Bare infix `not` directly negating a real In(...) call (no wrapping parens)
+# must NOT flag — `not` here traces back to a function-name position.
+errs, _ = lint_formula('not In([Region], "East")')
+ok(errs.empty?, 'bare `not In(...)` (infix negation of a function call) is not an error')
+errs, _ = lint_formula('If([x]>0, not In([Region],"East"), 0)')
+ok(errs.empty?, '`not In(...)` right after a , is not an error')
+# No-space and mixed-case variants of the same two shapes.
+errs, _ = lint_formula('[Status]IN(1,2,3)')
+ok(errs.any? { |e| e.include?('infix') }, 'infix with no space before IN( still flags')
+errs, _ = lint_formula('if(in([col], "a","b"), 1, 0)')
+ok(errs.empty?, 'lowercase in(...) function-call form after ( is not an error')
+# A formula that legitimately mixes a real Contains(...) call (e.g. from a
+# translated LIKE clause) with an UNRELATED genuine infix IN elsewhere must
+# still flag — this used to be masked by the old formula-wide `f !~
+# /\bContains\s*\(/i` guard, which is why that guard was removed (see
+# convert-beast-modes.rb for the full rationale).
+errs, _ = lint_formula('If([Region] IN ("A","B") or Contains([Notes], "foo"), 1, 0)')
+ok(errs.any? { |e| e.include?('infix') },
+   'a genuine infix IN elsewhere in the formula still flags even when the formula also contains an unrelated Contains(...) call')
+
 puts "== lint_formula: And()/Or()/Not() function-call warnings =="
 _, w = lint_formula('If(And([a]>1, [b]<2), 1, 0)')
 ok(w.any? { |x| x.include?('infix') }, 'And() function-call warned (use infix)')
