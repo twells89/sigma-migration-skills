@@ -172,7 +172,7 @@ n, w = normalize_bm('WEEKDAY(order_date)')
 ok(n.include?('WEEKDAY'), 'WEEKDAY name preserved unchanged')
 ok(!n.include?('DAYOFWEEK'), 'no DAYOFWEEK rewrite (bare identifier, no backticks)')
 ok(!w.empty?, 'WEEKDAY override warning present')
-ok(!w.any? { |x| x =~ /\bWEEKDAY\b.*unsupported/i }, 'WEEKDAY not double-flagged via the generic UNSUPPORTED loop')
+ok(!w.any? { |x| x.include?('Unsupported function WEEKDAY') }, 'WEEKDAY not double-flagged via the generic UNSUPPORTED loop')
 _, w2 = normalize_bm('SQRT(x)')
 ok(w2.join.match?(/SQRT/i), 'SQRT flagged unsupported')
 

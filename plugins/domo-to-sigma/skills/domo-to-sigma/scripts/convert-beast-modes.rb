@@ -183,11 +183,7 @@ def normalize_bm(sql, klass = nil)
   # from Sigma's Weekday() output (verified for all 7 days in
   # test/test-convert-beast-modes.rb).
   if s =~ /\bWEEKDAY\s*\(/i
-    warnings << "WEEKDAY() converts to Sigma Weekday() by NAME, but the two use " \
-      "DIFFERENT day numbering (MySQL WEEKDAY: 0=Monday..6=Sunday; Sigma Weekday: " \
-      "1=Sunday..7=Saturday) — override to Mod(Weekday([col])+5,7) to preserve " \
-      "Beast Mode's exact day numbers, or verify downstream logic does not depend " \
-      "on the raw numeric value."
+    warnings << 'WEEKDAY() converts to Sigma Weekday() by NAME, but the two use DIFFERENT day numbering (MySQL WEEKDAY: 0=Monday..6=Sunday; Sigma Weekday: 1=Sunday..7=Saturday) — override to Mod(Weekday([col])+5,7) to preserve the original MySQL day numbers, or verify downstream logic does not depend on the raw numeric value.'
   end
 
   # 3. Unsupported functions.
@@ -380,7 +376,7 @@ def resolve_entry(entry, overrides)
       "double-bracketed ALL-CAPS refs are fixed (sigma-data-model-mcp PR #115, " \
       "#116) so this is NOT that historical 74%-fail case — check " \
       "refs/live-validation-2026-07-30.md and this script's still-open gaps " \
-      "(WEEKDAY day-numbering mismatch — override to Mod(Weekday([col])+5,7) — " \
+      "(WEEKDAY day-numbering mismatch [override: Mod(Weekday([col])+5,7)], " \
       "CEILING/FLOOR aggregates, untranslatable infix LIKE) for what actually " \
       "still needs a hand-authored formula."
   elsif entry['converted'] == false
