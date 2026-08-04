@@ -69,11 +69,18 @@ Apply these to the raw Beast Mode string first:
 
 1. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
    `` `Sales` `` and `` `Operating Budget` `` → `[Sales]`, `[Operating Budget]`.
-2. **`WEEKDAY` → `DAYOFWEEK`.** Beast Mode silently does this substitution itself;
-   replicate it so behavior matches. (`WEEKDAY` is in the unsupported list.)
+2. **`WEEKDAY` day-numbering mismatch.** Do NOT rewrite the SQL — `WEEKDAY(...)`
+   converts cleanly on its own to Sigma's `Weekday(...)` by name. But MySQL
+   `WEEKDAY()` (0=Monday..6=Sunday) and Sigma `Weekday()` (1=Sunday..7=Saturday)
+   use genuinely different numbering, so a name-clean translation can still be
+   a silent VALUE mismatch. Flag with a warning naming the override:
+   `Mod(Weekday([col])+5,7)` reproduces MySQL's exact numbering from Sigma's
+   `Weekday()` output.
 3. **Reject / flag unsupported functions** (no longer supported in Beast Mode, so
-   they shouldn't appear, but guard anyway): `SQRT`, `CONVERT_TZ`, `MICROSECOND`,
-   `WEEKDAY`. If present, warn — likely a legacy formula.
+   they shouldn't appear, but guard anyway): `SQRT`, `CONVERT_TZ`, `MICROSECOND`.
+   If present, warn — likely a legacy formula. (`WEEKDAY` is excluded from this
+   generic loop — it gets its own targeted day-numbering warning above instead,
+   since it DOES have a real Sigma equivalent and isn't actually unsupported.)
 4. **Flag the aggregate `CEILING` / `FLOOR` trap** — see below. These are NOT math
    rounding in Beast Mode.
 5. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
@@ -90,7 +97,7 @@ Apply these to the raw Beast Mode string first:
 | `CEILING(Budget)` | math ceiling | **aggregate**: rounded `MAX` | `Round(Max([Budget]))` |
 | `FLOOR(Budget)` | math floor | **aggregate**: rounded `MIN` | `Round(Min([Budget]))` |
 | `POWER(Values,2)` | per-row power | per-row power, but **sums per series** if multi-series | `Power([Values],2)` (handle series via grouping) |
-| `WEEKDAY(d)` | MySQL WEEKDAY (0=Mon) | replaced with `DAYOFWEEK` (1=Sun) | `Weekday([d])` — mind the 1=Sunday base |
+| `WEEKDAY(d)` | MySQL WEEKDAY (0=Mon..6=Sun) | converts by NAME to `Weekday([d])`, but Sigma's numbering is DIFFERENT (1=Sun..7=Sat) — a silent VALUE mismatch, not just an off-by-one | `Weekday([d])`; override to `Mod(Weekday([d])+5,7)` to preserve MySQL's exact day numbers |
 | `SQRT(x)` | square root | **unsupported** in Beast Mode | use `Power([x], 0.5)` if it appears |
 | Summary Number Beast Mode | a column | must be aggregated to be a summary | maps to a Sigma **KPI** element — see `refs/card-to-element.md` Rule 0 (KPI, never a table) |
 | `SUM(SUM([x]) FIXED (BY [Region]))` | a nested aggregate | **level-of-detail** (LOD) | Sigma **level-of-detail** — do NOT flatten to a plain aggregate; flag for review (see `lod_conditional_inner`) |

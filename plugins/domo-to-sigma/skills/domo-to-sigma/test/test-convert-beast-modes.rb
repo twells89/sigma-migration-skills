@@ -25,10 +25,13 @@ ok(n == "CONCAT([StringColumnCity], ', ', [StringColumnState])", 'backticks → 
 n, _ = normalize_bm("SUM(`Operating Budget`)")
 ok(n == 'SUM([Operating Budget])', 'spaced identifier preserved in brackets')
 
-puts "== normalize_bm: WEEKDAY → DAYOFWEEK =="
+puts "== normalize_bm: WEEKDAY passes through unchanged, flagged for override =="
 n, w = normalize_bm('WEEKDAY(`d`)')
-ok(n == 'DAYOFWEEK([d])', 'WEEKDAY rewritten to DAYOFWEEK')
-ok(w.any? { |x| x.include?('WEEKDAY') }, 'WEEKDAY warning emitted')
+ok(n == 'WEEKDAY([d])', 'WEEKDAY left untouched (no DAYOFWEEK rewrite)')
+ok(!n.include?('DAYOFWEEK'), 'DAYOFWEEK never appears in normalized output')
+ok(w.any? { |x| x.include?('WEEKDAY') && x.include?('Weekday') }, 'WEEKDAY warning emitted, names Sigma Weekday()')
+ok(w.any? { |x| x.include?('Mod(Weekday([col])+5,7)') }, 'WEEKDAY warning names the exact override formula')
+ok(w.any? { |x| x.include?('0=Monday') && x.include?('1=Sunday') }, 'WEEKDAY warning documents both numbering conventions')
 
 puts "== normalize_bm: unsupported functions flagged =="
 _, w = normalize_bm('SQRT(`x`)')
@@ -164,12 +167,22 @@ puts "== lint_formula: valid multi-condition If passes =="
 errs, w = lint_formula('If([Status]="Active","Active",[Status]="Pending","Pending","Other")')
 ok(errs.empty?, 'native multi-condition If is clean (no nesting needed)')
 
-puts '== normalize_bm: unsupported + WEEKDAY rewrite =='
+puts '== normalize_bm: unsupported + WEEKDAY override warning =='
 n, w = normalize_bm('WEEKDAY(order_date)')
-ok(n.include?('DAYOFWEEK'), 'WEEKDAY → DAYOFWEEK')
-ok(!w.empty?, 'WEEKDAY rewrite warns')
+ok(n.include?('WEEKDAY'), 'WEEKDAY name preserved unchanged')
+ok(!n.include?('DAYOFWEEK'), 'no DAYOFWEEK rewrite (bare identifier, no backticks)')
+ok(!w.empty?, 'WEEKDAY override warning present')
+ok(!w.any? { |x| x =~ /\bWEEKDAY\b.*unsupported/i }, 'WEEKDAY not double-flagged via the generic UNSUPPORTED loop')
 _, w2 = normalize_bm('SQRT(x)')
 ok(w2.join.match?(/SQRT/i), 'SQRT flagged unsupported')
+
+puts '== normalize_bm: WEEKDAY() day-numbering arithmetic sanity check =='
+# Sanity check the exact override formula this file's warning names —
+# Mod(Weekday([col])+5,7) — reproduces MySQL's WEEKDAY() numbering (0=Monday)
+# from Sigma's Weekday() numbering (1=Sunday), for all 7 days.
+sigma_to_mysql = { 1 => 6, 2 => 0, 3 => 1, 4 => 2, 5 => 3, 6 => 4, 7 => 5 } # Sun..Sat
+all_match = sigma_to_mysql.all? { |sigma_val, mysql_val| (sigma_val + 5) % 7 == mysql_val }
+ok(all_match, 'Mod(Weekday([col])+5,7) matches MySQL WEEKDAY() for all 7 days (Sun..Sat)')
 
 puts '== lint_formula: raw IN + And()/Or() function-call =='
 errs, _ = lint_formula('If([x] IN (1,2), "a", "b")')

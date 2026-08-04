@@ -14,9 +14,11 @@
 # This script does NOT reimplement translation itself. It adds the two layers
 # the generic SQL converter can't know about:
 #
-#   PRE  — Domo-specific normalization (backtick identifiers → [Col], WEEKDAY →
-#          DAYOFWEEK, flag unsupported fns, flag the CEILING/FLOOR-are-aggregates
-#          trap, flag window/LOD Beast Modes) — see refs/beast-mode-to-sigma.md.
+#   PRE  — Domo-specific normalization (backtick identifiers → [Col], flag
+#          unsupported fns, flag the WEEKDAY day-numbering mismatch (MySQL vs.
+#          Sigma disagree on which int means which weekday) and the
+#          CEILING/FLOOR-are-aggregates trap, flag window/LOD Beast Modes) —
+#          see refs/beast-mode-to-sigma.md.
 #   POST — Sigma-specific lint of the returned formula (leftover IN(, And()/Or()/
 #          Not() function-call forms that silently null, window-fn workbook-master
 #          limits) — see refs/beast-mode-to-sigma.md + feedback_sigma_window_functions.
@@ -152,23 +154,40 @@ def normalize_bm(sql, klass = nil)
   # 1. Backtick / bracket MySQL identifier quoting → Sigma [Column Name].
   s = s.gsub(/`([^`]+)`/) { "[#{$1}]" }
 
-  # 2. WEEKDAY → DAYOFWEEK (Beast Mode does this itself; replicate for parity).
+  # 2. WEEKDAY name-matches Sigma's Weekday() but the two use DIFFERENT day
+  #    numbering — not just an off-by-one. Do NOT rewrite the SQL text.
   #
-  # ⚠️ MEASURED 2026-07-30 (bead, not fixed here — see progress ledger for
-  # 2026-07-30-track-a-sql-formula-converter, "LIKELY REAL PRODUCTION BUG"):
-  # this rewrite makes the formula WORSE, not better. `WEEKDAY(...)` passed to
-  # the shared converter comes back clean (`Weekday(...)` — Sigma has it), but
-  # this step rewrites it to `DAYOFWEEK(...)` FIRST, and `Dayofweek(...)` is
-  # NOT a real Sigma function — the converter now warns on it
-  # (lookUnknownFunctions) where the untouched WEEKDAY form would not have
-  # warned at all. Do not "fix" this by just deleting the rewrite without
-  # checking Sigma's WEEKDAY offset (1=Sunday) actually matches Beast Mode's —
-  # that offset question is exactly why this was added "for parity" in the
-  # first place, and is unverified either way. Tracked as its own bead; needs
-  # its own investigation, not a silent revert.
+  # HISTORY (bead beads-sigma-nrml): a prior version of this step rewrote
+  # `WEEKDAY(...)` to `DAYOFWEEK(...)` "for parity" with a substitution Beast
+  # Mode was believed to do itself. That rewrite was itself the bug:
+  # `WEEKDAY(...)` handed to the shared converter comes back clean
+  # (`Weekday(...)` — Sigma has it by that exact name), but the old rewrite
+  # renamed it to `DAYOFWEEK(...)` FIRST, and `Dayofweek(...)` is NOT a real
+  # Sigma function — the converter then warned on it (lookUnknownFunctions)
+  # where the untouched WEEKDAY form would not have warned at all. Fixed:
+  # let `WEEKDAY(...)` pass through unchanged; it converts to `Weekday(...)`
+  # by name with no help needed here.
+  #
+  # But name-matching isn't the whole story. VERIFIED 2026-08-03 against both
+  # vendors' official docs — these are genuinely DIFFERENT numbering
+  # conventions, not just an off-by-one:
+  #   MySQL  WEEKDAY(date):  0=Monday .. 6=Sunday
+  #   Sigma  Weekday(date):  1=Sunday .. 7=Saturday
+  # So a Beast Mode formula that compares the raw WEEKDAY() result to a
+  # literal (e.g. `WEEKDAY(x) = 0` meaning "is Monday") translates to a NAME
+  # match with SILENTLY WRONG values (Sigma's Weekday(x) returns 2 for
+  # Monday, not 0). Same class of trap as the CEILING/FLOOR aggregate trap
+  # below (generic converter succeeds syntactically but gets the SEMANTICS
+  # wrong) — flag for a hand override rather than auto-rewriting the formula.
+  # `Mod(Weekday([col])+5,7)` reproduces MySQL's exact WEEKDAY() numbering
+  # from Sigma's Weekday() output (verified for all 7 days in
+  # test/test-convert-beast-modes.rb).
   if s =~ /\bWEEKDAY\s*\(/i
-    s = s.gsub(/\bWEEKDAY\s*\(/i, 'DAYOFWEEK(')
-    warnings << 'WEEKDAY → DAYOFWEEK (1=Sunday base; verify offset).'
+    warnings << "WEEKDAY() converts to Sigma Weekday() by NAME, but the two use " \
+      "DIFFERENT day numbering (MySQL WEEKDAY: 0=Monday..6=Sunday; Sigma Weekday: " \
+      "1=Sunday..7=Saturday) — override to Mod(Weekday([col])+5,7) to preserve " \
+      "Beast Mode's exact day numbers, or verify downstream logic does not depend " \
+      "on the raw numeric value."
   end
 
   # 3. Unsupported functions.
@@ -361,8 +380,9 @@ def resolve_entry(entry, overrides)
       "double-bracketed ALL-CAPS refs are fixed (sigma-data-model-mcp PR #115, " \
       "#116) so this is NOT that historical 74%-fail case — check " \
       "refs/live-validation-2026-07-30.md and this script's still-open gaps " \
-      "(WEEKDAY→DAYOFWEEK, CEILING/FLOOR aggregates, untranslatable infix LIKE) " \
-      "for what actually still needs a hand-authored formula."
+      "(WEEKDAY day-numbering mismatch — override to Mod(Weekday([col])+5,7) — " \
+      "CEILING/FLOOR aggregates, untranslatable infix LIKE) for what actually " \
+      "still needs a hand-authored formula."
   elsif entry['converted'] == false
     # Track E: --convert already computed a REAL converted flag (via the
     # vendored hasResidualCaseKeyword/hasResidualInfixOperator) — surface it

@@ -91,12 +91,19 @@ like Power BI's DAX.
 > untranslatable construct still needs the `formula-overrides.json` sidecar —
 > that mechanism is unchanged and still the right escape hatch, it is just no
 > longer load-bearing for CASE WHEN or COUNT(DISTINCT). One more thing to
-> budget for: `convert-beast-modes.rb`'s own `WEEKDAY` → `DAYOFWEEK`
-> normalization step is *counterproductive* — `WEEKDAY(...)` converts cleanly
-> on its own, but this step rewrites it to `DAYOFWEEK(...)` first, which is
-> **not** a real Sigma function (still open; see the note in
-> `scripts/convert-beast-modes.rb`). Full evidence and the exact
-> before/after outputs: `refs/live-validation-2026-07-30.md`.
+> budget for, now FIXED (2026-08-03, bead beads-sigma-nrml):
+> `convert-beast-modes.rb` used to rewrite `WEEKDAY(...)` to `DAYOFWEEK(...)`
+> "for parity," which was *counterproductive* — `WEEKDAY(...)` converts
+> cleanly on its own (Sigma has `Weekday()` by that exact name), but
+> `Dayofweek(...)` is **not** a real Sigma function. That rewrite is gone;
+> `WEEKDAY(...)` now passes through unchanged. But a second, more serious
+> issue surfaced during that fix and is verified against both vendors'
+> docs: MySQL `WEEKDAY()` (0=Monday..6=Sunday) and Sigma `Weekday()`
+> (1=Sunday..7=Saturday) use genuinely different numbering, so a name-clean
+> translation can still be a silent VALUE mismatch. `normalize_bm` now flags
+> this with a warning naming the exact override — `Mod(Weekday([col])+5,7)`
+> — rather than auto-rewriting; see the note in `scripts/convert-beast-modes.rb`.
+> Full evidence and the exact before/after outputs: `refs/live-validation-2026-07-30.md`.
 
 The other work is *extraction* (card defs + Beast Mode text + layout out of Domo)
 and *layout/binding* (cards → Sigma elements on a 24-col grid; note Domo's own card
@@ -334,8 +341,10 @@ ruby scripts/convert-beast-modes.rb --lint     # validate → discovery/formulas
 `--mcp-dir`/`DOMO_MCP_DIR` (explicit dev opt-in only), or — last resort, bundle
 or `node` absent — exit 10 with the manual `convert_sql_to_sigma_formula`
 + `--converter-out` fallback instructions. Applies the normalizations in
-`refs/beast-mode-to-sigma.md` FIRST (strip backticks, `WEEKDAY`→`DAYOFWEEK`,
-flag aggregate `CEILING`/`FLOOR`, reject unsupported `SQRT`/`CONVERT_TZ`).
+`refs/beast-mode-to-sigma.md` FIRST (strip backticks, flag the `WEEKDAY`
+day-numbering mismatch (MySQL vs. Sigma disagree — override to
+`Mod(Weekday([col])+5,7)`), flag aggregate `CEILING`/`FLOOR`, reject
+unsupported `SQRT`/`CONVERT_TZ`).
 Outputs `discovery/formulas.json` (Beast Mode id → Sigma formula).
 
 ---
