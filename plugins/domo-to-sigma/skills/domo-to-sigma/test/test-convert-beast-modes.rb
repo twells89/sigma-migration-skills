@@ -115,6 +115,37 @@ errs, _ = lint_formula('If([Region] IN ("A","B") or Contains([Notes], "foo"), 1,
 ok(errs.any? { |e| e.include?('infix') },
    'a genuine infix IN elsewhere in the formula still flags even when the formula also contains an unrelated Contains(...) call')
 
+# ---------------------------------------------------------------------------
+# review finding: In(...) used as a comparison OPERAND (e.g. `[a] = In(...)`)
+# is ALSO a legitimate function-name position — `=`/`<>`/`!=`/`>`/`<`/`>=`/`<=`
+# are the full comparison-operator set the vendored SQL-formula converter
+# itself recognizes (converter/sql.mjs). Reproduced by the reviewer as
+# wrongly-flagged before this fix; confirmed here as real assertions.
+# ---------------------------------------------------------------------------
+puts '== lint_formula (bead kn8s): In(...) as a comparison operand must NOT flag (review finding) =='
+errs, _ = lint_formula('[IsEast] = In([Region], "East")')
+ok(errs.empty?, 'In(...) right after = is legitimate, not an error')
+errs, _ = lint_formula('[a] <> In([Region], "East")')
+ok(errs.empty?, 'In(...) right after <> is legitimate, not an error')
+errs, _ = lint_formula('If([a] = In([Region],"East"), 1, 0)')
+ok(errs.empty?, 'In(...) right after = inside an If condition is legitimate, not an error')
+errs, _ = lint_formula('[a] != In([Region], "East")')
+ok(errs.empty?, 'In(...) right after != is legitimate, not an error')
+errs, _ = lint_formula('[a] >= In([Region], "East")')
+ok(errs.empty?, 'In(...) right after >= is legitimate, not an error')
+errs, _ = lint_formula('[a] <= In([Region], "East")')
+ok(errs.empty?, 'In(...) right after <= is legitimate, not an error')
+errs, _ = lint_formula('[a] > In([Region], "East")')
+ok(errs.empty?, 'In(...) right after > is legitimate, not an error')
+errs, _ = lint_formula('[a] < In([Region], "East")')
+ok(errs.empty?, 'In(...) right after < is legitimate, not an error')
+# Sanity check: a genuine infix elsewhere in the same formula still flags
+# even when a comparison operator appears nearby — adding these markers
+# must not blanket-suppress real infix detection.
+errs, _ = lint_formula('If([a] = 1 and [Status] IN (1,2), 1, 0)')
+ok(errs.any? { |e| e.include?('infix') },
+   'a genuine infix IN still flags alongside an unrelated comparison operator')
+
 puts "== lint_formula: And()/Or()/Not() function-call warnings =="
 _, w = lint_formula('If(And([a]>1, [b]<2), 1, 0)')
 ok(w.any? { |x| x.include?('infix') }, 'And() function-call warned (use infix)')

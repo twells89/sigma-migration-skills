@@ -208,7 +208,10 @@ NEEDS_REVIEW = %w[window lod].freeze
 # directly before the `IN` token (only whitespace between) — a `]`, a
 # closing `)`, a quoted string, or a bare identifier/number. Sigma's
 # function-call form instead sits in a function-NAME position: the very
-# start of the formula, or immediately after `(`, `,`, `and`, or `or` —
+# start of the formula, immediately after `(`, `,`, `and`, or `or`, or right
+# after a comparison operator (`=`, `<>`, `!=`, `>`, `<`, `>=`, `<=` — the
+# full set the vendored SQL-formula converter itself recognizes, converter/
+# sql.mjs) used as In(...)'s left-hand operand, e.g. `[a] = In([b], "x")` —
 # wherever a function name is syntactically expected.
 #
 # `not` is deliberately NOT treated as its own function-name-position marker
@@ -218,14 +221,15 @@ NEEDS_REVIEW = %w[window lod].freeze
 # `[c] not in (1, 2)` (a genuine, still-unsupported infix `NOT IN`) are
 # lexically identical right at the `in(` token, and only resolvable by
 # looking through the `not` to what's underneath it. So trailing `not`s are
-# stripped and the position underneath is re-checked (recursively, so
-# `not not In(...)` still resolves correctly) rather than treating `not`
+# stripped and the position underneath is re-checked (iteratively — the
+# `loop do` below walks back through as many chained `not`s as are present,
+# so `not not In(...)` still resolves correctly) rather than treating `not`
 # itself as a free pass.
 def raw_infix_in_position?(prefix)
   s = prefix.rstrip
   loop do
     return false if s.empty? # formula start → function-name position
-    return false if s =~ /(\(|,|\b(?:and|or)\b)\z/i # function-name position
+    return false if s =~ /(?:\(|,|>=|<=|!=|<>|[=<>]|\b(?:and|or)\b)\z/i # function-name position
 
     stripped = s.sub(/\bnot\z/i, '')
     return true if stripped == s # a real value sits directly before IN/In → infix
