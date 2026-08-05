@@ -16,8 +16,11 @@
 - **Branch + PR for every change.** Do not push to `main`.
 - **One PR touches either one plugin or `shared/`, never both** (shared-file governance).
 - **Any change under `plugins/<x>/` requires a semver bump** in that plugin's `.claude-plugin/plugin.json`, or a `Skip-Version-Bump:` trailer.
-- **A shared-file edit must be mirrored to every plugin copy** via `tools/sync-shared.rb`; the pre-commit hook fails otherwise.
+- **A shared-file edit must be mirrored to every plugin copy** via `tools/sync-shared.rb`; the pre-commit hook fails otherwise. Check whether a script is shared **before** planning an edit to it — several phase-6 gate scripts exist in `shared/scripts/` and are vendored, so the plugin copy is not the place to change them.
 - **Every gate must be proven to FAIL on a planted defect before it counts.** A gate that has never been seen red is not a gate.
+- **A gate change that turns a `[SKIP]` into an `[OK]` is a defect until proven otherwise.** The output reads better than an honest abstention, so nothing prompts a second look.
+- **`parity-final.json`'s `tile_census` key is reserved** for Tableau's dashboard-zone census (`zones_total`, `charts_built`, `zones_unmatched`, `unmatched_zone_names`). Any other shape under that key makes shared gate 5 report a vacuous `[OK]` over data it never measured. Before adding **any** field to `parity-final.json`, grep the shared gate for that key name — it reads far more of that document than the gate-1 contract.
+- **A fix for one converter must not change behavior for the other twelve.** Most converters have no dashboard zone tree; their gate-5 `[SKIP]` is correct.
 - **No real customer or test-org identifiers** in code, tests, fixtures, commit messages, or PR bodies. The pre-commit hygiene sweep enforces this and will reject tenant slugs and warehouse paths.
 - Ruby is the system Ruby — **no endless-method syntax** (`def f(x) = …`); it fails to parse.
 
@@ -530,62 +533,102 @@ git commit -m "fix(tableau): allow-list the page-id slug so punctuation cannot l
 
 ---
 
-## Task 5: K6 — make the tile-census gate fail closed
+## Task 5: K6 — cap the phase-6 verdict when Tableau emits no tile census
 
-`assert-phase6-ran.rb` documents the tile census as "Skipped (with a note) when the converter doesn't emit a census." A gate that passes when its input is absent cannot catch the escape it exists for — and K6 is exactly that escape: two dashboard tiles silently dropped, which "only the finalize tile census would have caught."
+K6 is the escape where two dashboard tiles were silently dropped and parity still reported PASS — every chart the plan knew about passed, it just didn't know about the dropped ones. Gate 5 exists to catch exactly that, and it currently `[SKIP]`s whenever `tile_census` is absent.
 
-This is the same silent-bypass class already fixed once for the gate-3 column audit in PR #595 (`a SKIPped gate-3 column audit is recorded and caps at YELLOW`). Follow that precedent rather than inventing a new convention.
+> **⚠️ READ THIS BEFORE TOUCHING THE GATE — two constraints that were wrong in the first draft of this plan.**
+>
+> **1. The gate is a SHARED file, not a plugin file.** The canonical copy is `shared/scripts/assert-phase6-ran.rb` (~254KB), vendored into all 13 plugins. Editing the plugin copy directly fails the shared-lib drift gate. Edit canonical → run `tools/sync-shared.rb` → **this PR touches `shared/` ONLY**, never `shared/` and a plugin together.
+>
+> **2. The SKIP is CORRECT for every converter except Tableau. Do not make it fail closed globally.** Gate 5 reads a Tableau *dashboard-zone* census. Domo, Looker, Power BI, Qlik and the rest have no zone tree, so their `[SKIP]` is an honest abstention — capping them would break 12 converters to fix one. The cap must be scoped to runs that genuinely can produce a zone census.
+>
+> **3. The `tile_census` key is RESERVED and its shape is load-bearing.** Gate 5 does `census = summary['tile_census']` and, whenever the key is present, reads `zones_total`, `charts_built`, `zones_unmatched`, `unmatched_zone_names`. Publish any other shape there and every field comes back `nil.to_i` → `0`, `unmatched(0) > allow_missing_tiles(0)` is false, and the gate prints `[OK] gate 5/7: tile census — 0 zones, 0 charts built, 0 unmatched` — a gate that was correctly abstaining now reports success it never measured. This exact mistake was made and caught in review on the Domo parity census (PR #631); the fix there was to publish under a separate key (`parity_tile_census`). **Do not widen, rename, or alias this shape.**
+>
+> **4. If your change turns a `[SKIP]` into an `[OK]`, treat it as a defect until proven otherwise.** The output reads *better* than the honest skip, so nothing prompts you to look.
+
+Precedent to mirror: the gate-3 column audit in PR #595 (`a SKIPped gate-3 column audit is recorded and caps at YELLOW`). Follow it rather than inventing a parallel mechanism.
 
 **Files:**
-- Read first: `plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/assert-phase6-ran.rb` (the gate-3 skip/degradation-ledger handling added by PR #595)
-- Modify: the tile-census branch of the same file
-- Modify: `plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-assert-phase6-gates.rb`
+- Read first: `shared/scripts/assert-phase6-ran.rb:1627-1670` (gate 5) and the gate-3 skip/degradation-ledger handling from PR #595
+- Modify: `shared/scripts/assert-phase6-ran.rb` — the gate-5 branch and its header comment at `:21-26`
+- Modify: `shared/scripts/test-assert-phase6-gates.rb` (or the canonical test alongside it)
+- Then: `ruby tools/sync-shared.rb` to fan out to all 13 plugin copies
 
 **Interfaces:**
-- Consumes: `parity-final.json`'s `tile_census` field.
-- Produces: a verdict that is capped (never GREEN) when the census is absent, recorded in the degradation ledger.
+- Consumes: `parity-final.json`'s `tile_census`, whose reserved shape is
+  `{zones_total:, charts_built:, zones_unmatched:, unmatched_zone_names:}` — unchanged by this task.
+- Produces: for a Tableau run that could have emitted a census but didn't, a **capped** (never GREEN) verdict recorded in the degradation ledger. For every other converter, the existing honest `[SKIP]` is **unchanged**.
 
-- [ ] **Step 1: Read the gate-3 precedent**
-
-```bash
-git show 1f9d8b77 -- plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/assert-phase6-ran.rb
-```
-
-Mirror its skip-recording and verdict-capping mechanism exactly. Do not invent a parallel one.
-
-- [ ] **Step 2: Write the failing test**
-
-Add to `test-assert-phase6-gates.rb` a case that runs the gate against a `parity-final.json` with **no** `tile_census` key and asserts the verdict is capped (not GREEN) and the skip is recorded in the degradation ledger. Follow the file's existing fixture style — build the fixture inline, call the gate, assert on its output.
-
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 1: Read both precedents**
 
 ```bash
-ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-assert-phase6-gates.rb
+sed -n '1627,1670p' shared/scripts/assert-phase6-ran.rb
+git show 1f9d8b77 -- shared/scripts/assert-phase6-ran.rb
+git show --stat 631 2>/dev/null || gh pr view 631
 ```
 
-Expected: FAIL — the absent census currently yields a clean pass. **This is the planted-defect proof for this gate; record the red output before fixing.**
+- [ ] **Step 2: Decide the Tableau-scoped predicate**
 
-- [ ] **Step 4: Apply the fix**
+You need a signal for "this run could have produced a zone census." Do **not** invent a new sidecar. The gate already computes an equivalent signal near `:2440`/`:2501` — `dashboard-layout.json` present, or a `tile_census` landed. Reuse that, or the presence of the Tableau workdir markers the gate already reads. Whatever you pick, it must be false for a Domo/Looker/PBI run.
 
-Change the tile-census branch so an absent census records a skip in the degradation ledger and caps the verdict, exactly as gate 3 does. Update the header comment at `:21-26` to state the new behavior — the current text ("Skipped (with a note)") becomes wrong the moment this lands.
+Write the predicate down in the PR body before coding it — if you can't state it in one sentence, it's wrong.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 3: Write the failing test — BOTH directions**
+
+Add two cases to the gate test. Both are required; the first alone would let a global cap through.
+
+1. **Tableau-shaped run, no `tile_census`** → verdict is capped (not GREEN) and the skip is recorded in the degradation ledger.
+2. **Non-Tableau run, no `tile_census`** → still prints the honest `[SKIP] gate 5/7` and the verdict is **not** capped.
+
+Add a third guard case that pins the reservation:
+
+3. **A foreign shape published under `tile_census`** (e.g. `{"cards_total": 36}`) → the gate must **not** print `[OK] … 0 zones, 0 charts built, 0 unmatched`. This is the PR #631 regression; without it, the vacuous-OK path stays open.
+
+Follow the file's existing fixture style — build the fixture inline, call the gate, assert on its output.
+
+- [ ] **Step 4: Run tests to verify they fail**
 
 ```bash
-ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-assert-phase6-gates.rb
-ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-anchors-waiver-gates.rb
+ruby shared/scripts/test-assert-phase6-gates.rb
 ```
 
-Expected: both `ALL PASS`.
+Expected: cases 1 and 3 FAIL; case 2 PASSES (it already behaves correctly — it is there to stop you from over-fixing). **Record the red output; this is the planted-defect proof for this gate.**
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Apply the fix**
+
+Change only the `census.nil?` branch: when the Tableau-scoped predicate is true, record a skip in the degradation ledger and cap the verdict as gate 3 does; otherwise keep the existing `[SKIP]` line verbatim. Leave the `else` branch — the field reads at `:1636-1640` — untouched.
+
+Update the header comment at `:21-26`: the current "Skipped (with a note) when the converter doesn't emit a census" becomes wrong for Tableau the moment this lands, and must state the reserved shape and the converter scoping.
+
+- [ ] **Step 6: Run tests to verify they pass, then sync**
 
 ```bash
-git add plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/assert-phase6-ran.rb \
-        plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-assert-phase6-gates.rb \
-        plugins/tableau-to-sigma/.claude-plugin/plugin.json
-git commit -m "fix(tableau): a missing tile census caps the phase-6 verdict instead of passing (K6)"
+ruby shared/scripts/test-assert-phase6-gates.rb
+ruby tools/sync-shared.rb
+git status --short   # expect: shared/ + all 13 vendored copies, no plugin-only edits
 ```
+
+Expected: `ALL PASS`, and the drift gate clean.
+
+- [ ] **Step 7: Re-run the other converters' gate tests**
+
+A shared-gate change is a 13-plugin change. Spot-check at least Domo and one other that legitimately has no zone tree, to confirm their `[SKIP]` is intact.
+
+- [ ] **Step 8: Commit — shared only, all 13 copies, every plugin bumped**
+
+Stage the canonical file, its test, and the synced copies. Per the version-bump gate, a change reaching all 13 plugins bumps **all 13** `plugin.json` versions.
+
+```bash
+git add shared/scripts/assert-phase6-ran.rb \
+        shared/scripts/test-assert-phase6-gates.rb \
+        plugins/*/skills/*/scripts/assert-phase6-ran.rb \
+        plugins/*/skills/*/scripts/test-assert-phase6-gates.rb \
+        plugins/*/.claude-plugin/plugin.json
+git commit -m "fix(shared): a missing Tableau tile census caps the phase-6 verdict; other converters still SKIP honestly (K6)"
+```
+
+Do **not** fold any other task's plugin-only change into this commit — mixing `shared/` with a plugin fix breaks the one-PR-one-surface rule.
 
 ---
 
@@ -888,3 +931,11 @@ Open the `sigma-skills` PR. **Only after it merges**, re-vendor into `plugins/si
 **Type consistency.** The `namespace_ids` lambda in Task 2 takes one argument (`list`) and closes over `seen_el_ids`, `d_slug`, `dash_name`, and `$chart_provenance` — matching the existing block it is extracted from. `page_slug` in Task 4's test mirrors the shipped op and both are asserted against each other in Part C. The image shape `{id, kind, source: {kind, url}}` is used identically in Task 3's fix, its test, and Task 10's doc text.
 
 **Known risk.** Task 3 Step 6 leaves `page['backgroundImage']` unchanged pending a live check. That is deliberate — changing it on inference is how the original register got its image diagnosis backwards.
+
+**Correction applied 2026-08-05 (post-merge).** Task 5 originally said "make the tile-census gate fail closed" and pointed at the plugin copy of `assert-phase6-ran.rb`. Both were wrong:
+
+- the gate's canonical home is `shared/scripts/`, vendored to 13 plugins — editing the plugin copy fails the drift gate;
+- a blanket fail-closed would have broken the 12 converters with no dashboard zone tree, whose `[SKIP]` is an honest abstention, not a bypass;
+- and `tile_census` is a **reserved key** whose shape gate 5 reads field-by-field, so widening or aliasing it produces a vacuous `[OK]` over unmeasured data (the PR #631 regression).
+
+Task 5 is now scoped to Tableau, pinned to the reserved shape, and requires a test in **both** directions plus a foreign-shape guard. This is worth noting as a pattern: the first draft optimised for closing one converter's hole and would have silently degraded the rest.
