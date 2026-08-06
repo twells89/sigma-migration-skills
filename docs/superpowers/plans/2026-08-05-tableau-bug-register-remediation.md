@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Execution status (2026-08-06):** Tasks 1-4 are DONE and shipped in
+> `sigma-migration-skills` PR #637 (bead `beads-sigma-pu5e`, plugin 1.6.11). Each
+> shipped with a deterministic offline regression test proven RED on a planted
+> defect first. Full tableau suite 232/233 — the one failure,
+> `test-calc-discovery.rb`, needs `TABLEAU_AUTH_TOKEN` plus a `.twb` fixture and
+> fails on `main` too. Task 10 Step 1 (C1) shipped separately as `sigma-skills`
+> PR #33. Tasks 5-10 remain.
+
 **Goal:** Fix the `tableau-to-sigma` skill defects that survived validation against v1.6.10, and correct the authoring docs that describe API behavior which no longer exists.
 
 **Architecture:** Each task is an independent fix to one script, guarded by a deterministic offline `test-*.rb` regression test following the repo's existing convention (`ruby scripts/test-<name>.rb`, PASS/FAIL lines, non-zero exit on failure). Tasks are ordered cheapest-and-most-certain first. Two tasks (9, 10) are scoped as spec-first because they are behavioral and cannot be closed by static reasoning.
@@ -45,7 +53,7 @@ The Phase-5b visual-QA render calls `String#strip` and `each_line` on raw `Open3
 - Consumes: nothing.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test-phase5b-encoding-scrub.rb`:
 
@@ -100,7 +108,7 @@ puts(fails.empty? ? "\nALL PASS" : "\n#{fails.size} FAILURE(S)")
 exit(fails.empty? ? 0 : 1)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-phase5b-encoding-scrub.rb
@@ -108,7 +116,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-phase5b-encod
 
 Expected: FAIL on "Phase-5b block force_encodings subprocess output" and "Phase-5b block scrubs subprocess output". This is the planted-defect proof for this gate — record the red output.
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 In `migrate-tableau.rb`, replace lines 5283-5285:
 
@@ -126,7 +134,7 @@ with:
         o.each_line { |l| puts "   #{l.rstrip}" } unless o.strip.empty?
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-phase5b-encoding-scrub.rb
@@ -134,7 +142,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-phase5b-encod
 
 Expected: `ALL PASS`.
 
-- [ ] **Step 5: Bump version and commit**
+- [x] **Step 5: Bump version and commit**
 
 Bump `plugins/tableau-to-sigma/.claude-plugin/plugin.json` to `1.6.11`.
 
@@ -159,7 +167,7 @@ git commit -m "fix(tableau): scrub non-UTF-8 subprocess output in Phase-5b rende
 - Consumes: nothing.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test-page-extras-id-namespacing.rb`:
 
@@ -216,7 +224,7 @@ puts(fails.empty? ? "\nALL PASS" : "\n#{fails.size} FAILURE(S)")
 exit(fails.empty? ? 0 : 1)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-extras-id-namespacing.rb
@@ -224,7 +232,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-extras-i
 
 Expected: FAIL on both Part A checks (Part B passes — it tests the helper's logic, which is correct; the bug is that `page_extras` never reaches it). Record the red output.
 
-- [ ] **Step 3: Extract the namespacing into a reusable lambda**
+- [x] **Step 3: Extract the namespacing into a reusable lambda**
 
 In `build-charts-from-signals.rb`, the existing block at `:8382` is `els.map! do |el| … end`. Replace that block's opening line and the page assembly so both lists share one helper. Immediately before `els.map! do |el|`, insert:
 
@@ -252,7 +260,7 @@ In `build-charts-from-signals.rb`, the existing block at `:8382` is `els.map! do
     end
 ```
 
-- [ ] **Step 4: Route page_extras through it**
+- [x] **Step 4: Route page_extras through it**
 
 Replace line 8415:
 
@@ -268,7 +276,7 @@ with:
 
 `els` keeps its existing `els.map!` block — that block already handles the `source.elementId` restoration that top-N helpers need, which `page_extras` elements never have.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-extras-id-namespacing.rb
@@ -277,7 +285,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-element-id-na
 
 Expected: both `ALL PASS`. The second is the pre-existing test — it must not regress.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/build-charts-from-signals.rb \
@@ -309,7 +317,7 @@ Live evidence:
 - Consumes: nothing.
 - Produces: image elements shaped `{id, kind: "image", source: {kind: "url", url: <string>}}`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test-image-element-shape.rb`:
 
@@ -349,7 +357,7 @@ puts(fails.empty? ? "\nALL PASS" : "\n#{fails.size} FAILURE(S)")
 exit(fails.empty? ? 0 : 1)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-image-element-shape.rb
@@ -357,7 +365,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-image-element
 
 Expected: FAIL on Part A (one flat site at `:6684`), Part B, and Part C. Record the red output.
 
-- [ ] **Step 3: Fix the emission site**
+- [x] **Step 3: Fix the emission site**
 
 Replace line 6684:
 
@@ -373,7 +381,7 @@ with:
           '_dashboard' => dash['dashboard'] }
 ```
 
-- [ ] **Step 4: Correct the stale comment**
+- [x] **Step 4: Correct the stale comment**
 
 Replace the comment at `:6602-6603`:
 
@@ -391,7 +399,7 @@ with:
 # the nested `source` wrapper is mandatory. Zones with a hosted `image_file_url` use the
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-image-element-shape.rb
@@ -399,11 +407,11 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-image-element
 
 Expected: `ALL PASS`.
 
-- [ ] **Step 6: Check the page-level backgroundImage sibling**
+- [x] **Step 6: Check the page-level backgroundImage sibling**
 
 `page['backgroundImage']` at `:8423` uses `{ 'url' => …, 'style' => … }`. Per prior live findings, `backgroundImage` must be a **sibling of** `style`, not nested — and its own shape may have moved to `source.kind=url` alongside the image element. Verify against a live GET-back before changing it. If a live check is not available in this session, leave it and record the open question in the PR body. **Do not change it on inference.**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/build-charts-from-signals.rb \
@@ -426,7 +434,7 @@ The `controlId` paths are clean — every one uses `.downcase.gsub(/\W+/, '-')`,
 - Consumes: nothing.
 - Produces: page ids matching `/\Apage-[a-z0-9-]*\z/`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test-page-id-slug.rb`:
 
@@ -486,7 +494,7 @@ puts(fails.empty? ? "\nALL PASS" : "\n#{fails.size} FAILURE(S)")
 exit(fails.empty? ? 0 : 1)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-id-slug.rb
@@ -494,7 +502,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-id-slug.
 
 Expected: Part C FAILs. Part D must PASS — it proves the test discriminates. Record the red output.
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 Replace lines 171-173:
 
@@ -514,7 +522,7 @@ with:
                     .sub(/\A-/, '').sub(/-\z/, '')[0..40].to_s
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-id-slug.rb
@@ -522,7 +530,7 @@ ruby plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-page-id-slug.
 
 Expected: `ALL PASS`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/build-workbook-spec.rb \
