@@ -2188,13 +2188,24 @@ Task 5 is now scoped to Tableau, pinned to the reserved shape, and requires a te
     "S8 unsettled". I have left S8 as **unsettled with no round-2 evidence** rather than keep
     an untraceable measurement. If that repro was actually run, it needs its run artifact
     cited before it goes back in.
-13. **Whether any other converter emits a `top-n` filter keyed on a dimension (S13).** Tableau
-    is clean — both emission sites bind an aggregate, the risky path fails closed to
-    STAYS-MANUAL, and the existing `test-native-topn-quickfilter.rb` already locks both the
-    aggregate binding and the accompanying sort (which is why I dropped the proposed
-    standalone top-n regression-lock task as redundant). The other 10 converters are
-    unaudited; that is a real, untriaged cross-converter exposure with a measured silent
-    failure mode behind it.
+13. ~~**Whether any other converter emits a `top-n` filter keyed on a dimension (S13).**~~
+    **CLOSED 2026-08-06 by a full static audit — no exposure.** Six converters emit
+    `kind:"top-n"` (not eleven): tableau, domo, looker, powerbi, sisense, thoughtspot.
+    Every one binds `columnId` to a measure, and two of them fail closed rather than
+    guess:
+    - `domo-to-sigma/.../build-workbook.rb:691` — `mcols.first['id']`, guarded by
+      `mcols.any?`; the comment states "No measure column -> nothing to rank by -> no
+      filter emitted (never a columnId: nil filter)".
+    - `looker-to-sigma/.../build_workbook.py:1400-1416` — `rank_cid` is resolved only
+      through `is_measure()`, twice (first the sorted measure, then the first measure
+      column), and the filter is skipped entirely if neither yields one.
+    - `powerbi-to-sigma/.../build-workbook-from-pbir.rb:428-431` — additionally
+      scope-aware ("a shared-master top-n caps everything") and handles bottom-N.
+    - `sisense-to-sigma/.../convert.py:686` — `meas_ids[0]`, with the rule stated in
+      the comment.
+    - `thoughtspot-to-sigma/.../ts_common.py:784-788` — resolves `spec["measures"][0]`
+      to a real column and emits only on a match.
+    No follow-up task needed. Strike the cross-converter audit from the Disposition.
 14. **K20's reclassification is an interpretation, not a measurement.** What was *measured* is
     that the two emission families use different value types and that value type must match
     column type. That the `IsNotNull(...)` columns are boolean-typed and the
