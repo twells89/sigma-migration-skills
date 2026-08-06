@@ -6600,8 +6600,12 @@ end
 # ---- v5.0: image (bitmap) zones → Sigma image elements ---------------------
 # Tableau image zones ship their bitmap INSIDE the .twbx (`image_path` is the
 # exact zip path, e.g. 'Image/title art.png'). Extract each to <tab>/assets/
-# and emit {kind:"image", url:"data:image/…;base64,…"} (data URIs live-verified
-# — refs/workbook-layout.md). Zones with a web-hosted `image_file_url` use the
+# and emit {kind:"image", source:{kind:"url", url:"data:image/…;base64,…"}}.
+# The URL may be a data: URI or a hosted URL — BOTH validate. What the API
+# rejects is the FLAT `url:` shape, for every image (live-probed 2026-08-06:
+# flat -> 400 Invalid kind: "image"; nested source -> valid:true). The original
+# register blamed data: URIs; the shape was the actual defect.
+# Zones with a web-hosted `image_file_url` use the
 # URL directly. Full-canvas backgrounds (is_background) are page-level design,
 # not grid tiles: extracted + recorded in <tab>/image-assets.json for the
 # background/composite step, never emitted as elements (the layout builder
@@ -6681,7 +6685,9 @@ unless opts[:pages_mode] == :worksheet
         next
       end
       styled_text_by_dash[dash['dashboard']] <<
-        { 'id' => "img-#{z['id']}", 'kind' => 'image', 'url' => url, '_dashboard' => dash['dashboard'] }
+        { 'id' => "img-#{z['id']}", 'kind' => 'image',
+          'source' => { 'kind' => 'url', 'url' => url },
+          '_dashboard' => dash['dashboard'] }
     end
   end
   if image_asset_records.any?
@@ -8373,6 +8379,31 @@ elsif opts[:pages_mode] == :dashboard
         col['formula'] = f
       end
     end
+    # K3: page_extras (styled text, title text, images) carry Tableau ZONE ids,
+    # which are unique per dashboard but NOT globally — "text-550" recurs on the
+    # next dashboard. They were concatenated in after this pass, so they never
+    # got namespaced and the POST hard-failed on "Duplicate id". Same op as the
+    # els pass below, minus the top-N source-restore (page_extras have no
+    # source.elementId).
+    namespace_ids = lambda do |list|
+      list.map do |el|
+        stem = el['id']
+        next el unless stem
+
+        if seen_el_ids[stem]
+          ns = "#{stem}-#{d_slug[0..20]}"
+          ($hidden_title_ns_ids ||= []) << ns if ($hidden_title_ids || []).include?(stem)
+          if (pv = $chart_provenance[stem])
+            $chart_provenance[ns] = pv.merge('dashboard' => dash_name)
+          end
+          JSON.parse(el.to_json.gsub(stem, ns))
+        else
+          seen_el_ids[stem] = true
+          el
+        end
+      end
+    end
+
     # Namespace element ids that already appeared on a prior page (a worksheet
     # placed on multiple dashboards). The element id is the stem of its column
     # ids (x-<id>/y-<id>/g-<id>) and grouping refs, so gsub the stem across the
@@ -8412,7 +8443,7 @@ elsif opts[:pages_mode] == :dashboard
         el
       end
     end
-    page = { 'name' => dash_name, 'elements' => page_extras + els }
+    page = { 'name' => dash_name, 'elements' => namespace_ids.call(page_extras) + els }
     # v5.0: full-canvas designed background (the Figma/PPT card-art pattern) →
     # page-level backgroundImage (data URI live-verified rendering behind the
     # page's elements). image_asset_records carries the extracted asset.
