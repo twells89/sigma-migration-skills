@@ -5279,6 +5279,12 @@ Array.new([3, content_pages.size].min.clamp(1, 3)) do
       o, st = Open3.capture2e({ 'SIGMA_API_TOKEN' => vqa_tok },
                               *PyResolve.argv, PyResolve.winpath(File.join(HERE, 'sigma-export-png.py')),
                               '--workbook', wb_id, '--page', pg['id'], '--out', PyResolve.winpath(out), '--w', '1800', '--h', '1000')
+      # K11: the PNG-export subprocess emits console-codepage bytes on Windows.
+      # Ruby tags Open3 output UTF-8 regardless, so `o.strip` on invalid bytes
+      # raises Encoding::CompatibilityError and kills this render thread. Scrub
+      # before ANY use of `o` — same idiom as :1191 and :2105.
+      o = o.force_encoding(Encoding::UTF_8)
+      o = o.scrub('?') unless o.valid_encoding?
       vqa_mx.synchronize do
         o.each_line { |l| puts "   #{l.rstrip}" } unless o.strip.empty?
         st.success? ? (rendered += 1) : line("WARN: visual-QA render failed for page #{pg['id']}")
