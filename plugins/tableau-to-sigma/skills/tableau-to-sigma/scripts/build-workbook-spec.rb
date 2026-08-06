@@ -168,9 +168,11 @@ warn "  Data page: + #{helper_elements.size} hidden helper element(s) [#{helper_
 visible_pages = []
 if specs.is_a?(Hash) && specs['pages']
   specs['pages'].each do |p|
-    slug = p['name'].to_s.downcase
-    %w[ / ( ) %].each { |ch| slug = slug.tr(ch, '-') }
-    slug = slug.tr(' ', '-').gsub(/-+/, '-').sub(/^-/, '').sub(/-$/, '')[0..40]
+    # K2: allow-list, not deny-list. The old hand-listed set (/ ( ) %) plus space
+    # left ? ! # & and every other punctuation mark in the id — a Tableau page
+    # "How many weeks?" became `page-how-many-weeks?`, which Sigma rejects.
+    slug = p['name'].to_s.downcase.gsub(/[^a-z0-9]+/, '-')
+                    .sub(/\A-/, '').sub(/-\z/, '')[0..40].to_s
     page = {
       'id'       => "page-#{slug}",
       'name'     => p['name'],
