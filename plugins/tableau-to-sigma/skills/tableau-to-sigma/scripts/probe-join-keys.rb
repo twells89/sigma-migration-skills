@@ -65,6 +65,13 @@ require 'json'
 require 'csv'
 require 'optparse'
 require 'securerandom'
+
+# K12(a): how long to wait for a probe's CSV export before giving up. Bounded by
+# wall-clock, not iteration count. The previous ~30s ceiling was routinely
+# exceeded by a cold warehouse, which made the probe report a failure for a query
+# that would have succeeded. Raise it for a very cold warehouse:
+#   PROBE_EXPORT_TIMEOUT_S=600 ruby scripts/probe-join-keys.rb ...
+PROBE_EXPORT_TIMEOUT_S = Integer(ENV.fetch('PROBE_EXPORT_TIMEOUT_S', '180'))
 require_relative 'lib/sql_ident_check' # single identifier-legality oracle (W2.9)
 
 opts = { dialect: 'snowflake' }
@@ -211,8 +218,15 @@ def sigma_sql_rows(conn_id, folder_id, sql, columns, workdir: nil)
     qid = exp && exp['queryId']
     raise "export POST returned no queryId: #{exp.inspect[0, 160]}" unless qid
     csv = nil
-    30.times do |i|
+    # K12(a): bound by WALL-CLOCK, not iteration count. The old `30.times` loop
+    # gave a ~30s ceiling; a cold warehouse routinely exceeds it, so the probe
+    # reported failure for a query that would have succeeded. Operators were
+    # hand-patching this to 180s every run.
+    started = Time.now
+    i = 0
+    while Time.now - started < PROBE_EXPORT_TIMEOUT_S
       sleep(i.zero? ? 0.5 : 1)
+      i += 1
       begin
         b = Sigma.request(:get, "/v2/query/#{qid}/download", accept: 'text/csv', binary: true)
         (csv = b) && break if b && !b.to_s.empty?
@@ -220,7 +234,11 @@ def sigma_sql_rows(conn_id, folder_id, sql, columns, workdir: nil)
         raise unless e.message.lines.first.to_s =~ /\b404\b/
       end
     end
-    raise 'export did not complete in 30s' unless csv
+    unless csv
+      raise "export did not complete in #{PROBE_EXPORT_TIMEOUT_S}s " \
+            "(PROBE_EXPORT_TIMEOUT_S env var raises this; a cold warehouse can " \
+            'legitimately need longer — this is not necessarily a probe failure)'
+    end
     CSV.parse(csv, headers: true)
   ensure
     begin
