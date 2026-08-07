@@ -765,6 +765,22 @@ xml.elements.each('//worksheet') do |ws|
     }
   end
 
+  # K21: <alphabetic-sort> — "sort this dimension alphabetically". The vendored
+  # XSD (schemas/twb_2026.2.0.xsd, Sort-Alphabetic-G) declares it as an EMPTY
+  # element with no attributes, so there is no `column` to resolve. That matters:
+  # sort_target_column_id falls back to the MEASURE on an empty column token, so
+  # wiring this through without an explicit marker silently sorts the wrong axis.
+  # Hence `alphabetic: true`, which the resolver checks before that fallback.
+  # `direction`/`column` are read defensively in case a real export carries them
+  # (the XSD says it does not; not verified against a live .twb).
+  if sort_info.nil? && (as = ws.elements['.//alphabetic-sort'])
+    sort_info = {
+      direction:  (as.attributes['direction'].to_s =~ /desc/i ? 'descending' : 'ascending'),
+      column:     as.attributes['column'],
+      alphabetic: true
+    }
+  end
+
   # Per-worksheet view-level filters. Each filter is normalized via
   # normalize_filter (resolves GUID → caption + datatype, extracts member values
   # for categorical, period spec for relative-date, min/max for quantitative,

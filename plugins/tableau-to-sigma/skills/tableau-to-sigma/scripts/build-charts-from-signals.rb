@@ -969,6 +969,12 @@ end
 # (field sort on the measure, unresolvable) sorts by the measure, which was
 # the previous hardcoded behaviour.
 def sort_target_column_id(sort_info, dim, dim_hdr, dim_col_id, meas_col_id)
+  # K21: an <alphabetic-sort> is by definition a sort on the dimension itself.
+  # This MUST precede the empty-token fallback below — that fallback returns the
+  # measure, and an alphabetic-sort carries no `column` attribute (the XSD
+  # declares it as an empty element), so without this the axis is silently wrong.
+  return dim_col_id if sort_info['alphabetic']
+
   raw   = sort_info['column'].to_s
   inner = raw[/\[([^\[\]]+)\]\z/, 1].to_s
   token = (inner.split(':')[1] || inner).downcase.gsub(/\W+/, '')
