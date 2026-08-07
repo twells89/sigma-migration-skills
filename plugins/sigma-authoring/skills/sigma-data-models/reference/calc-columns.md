@@ -17,10 +17,49 @@ A calc column has no warehouse-column ID prefix — its `id` is a generated shor
 ## Formula references
 
 - **Within the same element** — bare `[Column Name]` (case-sensitive, must match a column's `name` field on the same element).
-- **Cross-element** — `[Element Name/Column Name]`. The element name is the source element's `name`.
+- **Cross-element** — **use `Lookup()`. Do not use the bare `[Element Name/Column Name]` form.**
+  See the warning immediately below: the bare form is accepted at PUT, reports a
+  clean type, and then returns NULL for every row.
 - **From a warehouse-table source** — `[TABLE_NAME/Column Display Name]` where `TABLE_NAME` is the last segment of the source's `path` (uppercase, as it appears in the warehouse).
 
 A calc column **cannot reference itself**, even transitively — the server rejects circular references.
+
+### ⚠️ Cross-element refs: `Lookup()` only — the bare form silently returns NULL
+
+A bare cross-element reference in a DM calc column — `[Other Element/Column]` —
+**compiles clean and then evaluates to NULL for every row.** It is accepted at
+PUT, `/columns` reports a normal type with `error: null`, and nothing surfaces a
+problem at any layer you can inspect. The dashboard just quietly shows nothing.
+
+Measured 2026-08-06 on a two-element model with a defined relationship, 906 fact
+rows, two calc columns identical in intent:
+
+| Formula | Non-null rows |
+|---|---|
+| `[Customer Dim/Region]` (bare) | **0 / 906** |
+| `Lookup([Customer Dim/Region], [Customer Key], [Customer Dim/Customer Key])` | **872 / 906** |
+
+Both reported `type: text`, `error: null`. Always write:
+
+```
+Lookup(<value from the other element>, <local key>, <other element's key>)
+```
+
+The local key column must already exist on this element.
+
+Two caveats that matter at scale:
+
+1. **Orphan rows return NULL.** The 34-row gap above is genuine — fact rows whose
+   key is absent from the dimension. If you are porting logic from a tool whose
+   `ELSE` branch swallowed NULLs (Tableau does: `NULL >= 5000` falls through),
+   wrap it: `Coalesce(Lookup(...), "Bronze")`. Otherwise you get a NULL bucket
+   where the source had a default.
+2. **`Lookup()` returns ONE ARBITRARY match per key.** On a non-unique join key
+   the pick is nondeterministic and silent. Confirm the target key is unique
+   before relying on it.
+
+There is no supported bare-reference form to fall back to. If `Lookup()` cannot
+express what you need, push the join into a `sql` source instead.
 
 ## The `*Over` window functions don't work — but the native family does
 
