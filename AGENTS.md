@@ -1,10 +1,10 @@
 # AGENTS.md — sigma-migration-skills
 
 Migration skills for moving BI tools (**Tableau, Power BI, Qlik, ThoughtSpot,
-QuickSight, Looker, Cognos, MicroStrategy, Sisense, GoodData, Domo, Hex**) to
-**Sigma**: per-tool *converters* (source → Sigma data model + workbook, with
-warehouse parity verification) and read-only *assessments* (tenant inventory →
-migration-readiness readout + shortlist).
+QuickSight, Looker, Cognos, MicroStrategy, Sisense, GoodData, Domo, Hex, Mode,
+Excel**) to **Sigma**: per-tool *converters* (source → Sigma data model +
+workbook, with warehouse parity verification) and read-only *assessments*
+(tenant inventory → migration-readiness readout + shortlist).
 
 This repo is packaged as a Claude Code plugin marketplace, but the skills are
 agent-neutral: each is a `SKILL.md` (instructions) plus `scripts/` (Ruby/Python/
@@ -61,6 +61,7 @@ Maturity labels (`gold` / `live` / `foundation` / `scaffold`) are defined in
 | Convert a Hex project (SQL/METRIC cells, EXPLORE charts, app layout) → Sigma | `hex-to-sigma` | live | `plugins/hex-to-sigma/skills/hex-to-sigma/` |
 | Scope/assess a Hex instance | `hex-assessment` | scaffold | `plugins/hex-to-sigma/skills/hex-assessment/` |
 | Convert a Mode Report (SQL Queries + Charts) → Sigma | `mode-to-sigma` | foundation | `plugins/mode-to-sigma/skills/mode-to-sigma/` |
+| Convert an Excel (.xlsx) planning / data-entry model → Sigma (input tables) | `excel-to-sigma` | foundation | `plugins/excel-to-sigma/skills/excel-to-sigma/` |
 | Author / repair Sigma workbooks (canonical spec) | `sigma-workbooks` | live | `plugins/sigma-authoring/skills/sigma-workbooks/` |
 | Author / repair Sigma data models (canonical spec) | `sigma-data-models` | live | `plugins/sigma-authoring/skills/sigma-data-models/` |
 

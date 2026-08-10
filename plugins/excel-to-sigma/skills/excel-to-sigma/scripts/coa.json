@@ -1,0 +1,52 @@
+{
+  "_comment": "Canonical chart-of-accounts for a broker equity-research template (FactSet-style house model). Maps a file's line-item labels to stable canonical accounts so a fleet of ~850 'similar but not identical' files can be reconciled. Curated from a reference model; grow `aliases` from batch-convert.py's 'top unmapped labels' rollup. such desks are often bilingual, so aliases carry EN + FR. `shape` is the expected canonical formula (advisory: a per-file formula that disagrees is a flag, not an auto-reject). Segments/geographies are a DYNAMIC dimension (not in the COA) - carried as data.",
+  "template": {
+    "name": "broker-factset-equity-research",
+    "sheets_expected": ["FY results", "Quarterly"],
+    "sections_expected": ["PROFIT AND LOSS", "PER SHARE DATA", "EVALUATION", "BALANCE SHEET", "CHANGE IN NET DEBT", "COMPUTED ASSUMPTIONS"],
+    "fdscache_marker": "__FDSCACHE__",
+    "fingerprint_weights": {"sections": 0.4, "sheets": 0.15, "label_jaccard": 0.25, "formula_shapes": 0.2},
+    "thresholds": {"same": 0.75, "variant": 0.45}
+  },
+  "accounts": [
+    {"id": "revenue",        "section": "PROFIT AND LOSS", "aliases": ["turnover", "revenue", "sales", "chiffre d'affaires", "chiffre d affaires", "ca"], "shape": "input"},
+    {"id": "cogs",           "section": "PROFIT AND LOSS", "aliases": ["cost of purchased materials & services", "cost of goods sold", "cogs", "cost of sales", "coût des ventes", "cout des ventes"], "shape": "[gross_profit] - [revenue]"},
+    {"id": "gross_profit",   "section": "PROFIT AND LOSS", "aliases": ["gross profit", "marge brute", "gross margin"], "shape": "[revenue] + [cogs]"},
+    {"id": "opex",           "section": "PROFIT AND LOSS", "aliases": ["operating expenses", "opex", "charges d'exploitation", "frais operationnels"], "shape": "input"},
+    {"id": "ebitda",         "section": "PROFIT AND LOSS", "aliases": ["ebitda", "excédent brut d'exploitation", "ebe"], "shape": "[ebita] - [d_and_a]"},
+    {"id": "ebita",          "section": "PROFIT AND LOSS", "aliases": ["ebita", "adj. ebita", "adjusted ebita"], "shape": "derived"},
+    {"id": "d_and_a",        "section": "PROFIT AND LOSS", "aliases": ["depreciation expense", "d&a", "depreciation", "amortization", "dotations aux amortissements", "ow depreciation expense"], "shape": "input"},
+    {"id": "ebit",           "section": "PROFIT AND LOSS", "aliases": ["ebit", "operating income", "résultat d'exploitation", "resultat operationnel"], "shape": "[ebita] + [net_other] + [amortization_intangibles] + [impairment]"},
+    {"id": "net_financial",  "section": "PROFIT AND LOSS", "aliases": ["cost of net financial debt", "net financial", "net financial expenses", "résultat financier", "resultat financier"], "shape": "input"},
+    {"id": "pbt",            "section": "PROFIT AND LOSS", "aliases": ["net income before tax", "pbt", "profit before tax", "résultat avant impôt", "resultat avant impot"], "shape": "[ebit] + [net_financial]"},
+    {"id": "tax",            "section": "PROFIT AND LOSS", "aliases": ["tax", "income tax", "impôt", "impot", "- tax"], "shape": "input"},
+    {"id": "net_income",     "section": "PROFIT AND LOSS", "aliases": ["net income", "résultat net", "resultat net"], "shape": "[pbt] + [tax]"},
+    {"id": "other_income",   "section": "PROFIT AND LOSS", "aliases": ["other income", "+ other income", "autres produits"], "shape": "input"},
+    {"id": "other_expenses", "section": "PROFIT AND LOSS", "aliases": ["other expenses", "- other expenses", "autres charges"], "shape": "input"},
+    {"id": "net_other",      "section": "PROFIT AND LOSS", "aliases": ["net other expenses", "= net other expenses", "net other expenses (impairt.)", "autres produits et charges"], "shape": "[other_income] + [other_expenses]"},
+    {"id": "amortization_intangibles", "section": "PROFIT AND LOSS", "aliases": ["amortization of intangible assets", "- amortization of intangible assets", "amortisation of intangibles", "amortissement des incorporels"], "shape": "input"},
+    {"id": "impairment",     "section": "PROFIT AND LOSS", "aliases": ["impairment of goodwill", "- impairment of goodwill", "impairment", "dépréciation du goodwill"], "shape": "input"},
+    {"id": "non_recurring",  "section": "PROFIT AND LOSS", "aliases": ["non recurring effect", "non recurring effect related to copper", "- non recurring effect", "éléments non récurrents"], "shape": "derived"},
+    {"id": "associates",     "section": "PROFIT AND LOSS", "aliases": ["affiliates / associates", "+ affiliates / associates", "affiliates", "associates", "sociétés mises en équivalence"], "shape": "input"},
+    {"id": "fx",             "section": "PROFIT AND LOSS", "aliases": ["foreign currency exchange", "+ foreign currency exchange", "forex", "change"], "shape": "input"},
+    {"id": "discontinued",   "section": "PROFIT AND LOSS", "aliases": ["discontinued operations", "+ discontinued operations", "activités abandonnées"], "shape": "input"},
+    {"id": "minorities",     "section": "PROFIT AND LOSS", "aliases": ["minorities share", "minorities", "intérêts minoritaires", "interets minoritaires"], "shape": "input"},
+    {"id": "net_attributable","section": "PROFIT AND LOSS","aliases": ["net attributable", "net attributable income", "résultat net part du groupe", "rnpg"], "shape": "[net_income] + [minorities]"},
+
+    {"id": "shares",         "section": "PER SHARE DATA", "aliases": ["number of shares", "average number of shares", "published average number of shares", "nombre d'actions", "nombre d actions"], "shape": "input"},
+    {"id": "eps",            "section": "PER SHARE DATA", "aliases": ["eps", "eps reported", "earnings per share", "bpa", "bénéfice par action"], "shape": "[net_income] / [shares]"},
+    {"id": "eps_adjusted",   "section": "PER SHARE DATA", "aliases": ["eps adjusted", "adjusted eps", "bpa ajusté"], "shape": "derived"},
+    {"id": "dps",            "section": "PER SHARE DATA", "aliases": ["net dividend / share", "dps", "dividend per share", "dividende par action"], "shape": "input"},
+    {"id": "payout",         "section": "PER SHARE DATA", "aliases": ["pay-out", "payout", "payout ratio", "taux de distribution"], "shape": "[dps] / [eps]"},
+
+    {"id": "net_debt",       "section": "BALANCE SHEET", "aliases": ["net financial debt", "net debt", "dette nette", "endettement net"], "shape": "input"},
+    {"id": "equity",         "section": "BALANCE SHEET", "aliases": ["group equity", "equity", "shareholders equity", "capitaux propres", "fonds propres"], "shape": "input"},
+    {"id": "total_assets",   "section": "BALANCE SHEET", "aliases": ["total assets", "total actif", "= total assets"], "shape": "derived"},
+    {"id": "wcr",            "section": "BALANCE SHEET", "aliases": ["wcr", "working capital", "bfr", "besoin en fonds de roulement", "+ wcr"], "shape": "derived"},
+
+    {"id": "free_cash_flow", "section": "CHANGE IN NET DEBT", "aliases": ["free cash flow", "fcf", "= free cash flow", "flux de trésorerie disponible"], "shape": "derived"},
+    {"id": "operating_cf",   "section": "CHANGE IN NET DEBT", "aliases": ["operating cash flow", "= operating cash flow before wc change", "flux de trésorerie opérationnel"], "shape": "derived"},
+    {"id": "capex",          "section": "CHANGE IN NET DEBT", "aliases": ["net capex", "- net capex", "capex", "investissements"], "shape": "input"},
+    {"id": "dividends_paid", "section": "CHANGE IN NET DEBT", "aliases": ["dividends", "- dividends", "dividendes versés", "dividendes verses"], "shape": "input"}
+  ]
+}

@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+# generated fixtures / scratch (regenerate via the make-sample-*.py scripts)
+skills/excel-to-sigma/scripts/Sample Forecast.xlsx
+skills/excel-to-sigma/scripts/Sample Research Model.xlsx
+*.tmp
+.DS_Store

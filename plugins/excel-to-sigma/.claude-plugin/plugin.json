@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "excel-to-sigma",
+  "displayName": "Excel \u2192 Sigma",
+  "version": "0.2.0",
+  "description": "Migrate Excel (.xlsx) planning / data-entry models to Sigma \u2014 formal-Table discovery, Excel-formula translation, and the validated input-table \u2192 warehouse-view \u2192 data-model source-swap so forecasters keep entering numbers in Sigma. Workbook POSTs use the released document code_rep wrapper. Graduated from twells89/excel-to-sigma.",
+  "author": {
+    "name": "Thomas Wells"
+  },
+  "license": "MIT",
+  "keywords": [
+    "excel",
+    "xlsx",
+    "input-tables",
+    "forecast",
+    "planning",
+    "sigma",
+    "migration",
+    "bi",
+    "converter"
+  ],
+  "skills": "./skills/"
+}

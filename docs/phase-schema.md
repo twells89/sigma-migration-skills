@@ -170,3 +170,20 @@ local mapping:
 | C8 Parity hard gate | Phase 5 — Parity (`verify-parity.rb`, hard-gated by `assert-phase6-ran.rb`); the separate visual-render sub-gate (gate 8) is honestly waived in v1 (`--skip-visual-gate` — no Mode UI render capability), but the parity comparison itself is never skipped |
 | C9 Security/RLS | "Security: RLS/CLS" section — Mode has no row/column-level security on query results; access control is Space/Report visibility only |
 | C10 Enhance | — |
+
+### excel-to-sigma
+
+Excel uses "Phase" numbering from its staging repo. Its local mapping:
+
+| Canonical | excel-to-sigma |
+|---|---|
+| C1 Assess | — (no assessment skill yet; pick the `.xlsx` / fleet dir directly) |
+| C2 Discover | Phase 0 — Discover (`xlsx-discover.py`; Phase 0b macros, 0c model map, 0d template fingerprint) |
+| C3 Reuse-check | Phase 2 — reuse / extend an existing DM at the same grain before POSTing a new one |
+| C4 Convert | Phase 1–2 — seed extract + read/output DM; Phase 3–4 input-table + warehouse-view source-swap |
+| C5 Post-DM gate | Phase 2 — POST DM + read back server-assigned ids (`map_dm*`) before workbook build |
+| C6 Build workbook | Phase 5 — workbook builders (`build-input-table-wb.py` / `build-forecast-model.py` / `build-research-model.py`) |
+| C7 Layout | within Phase 5 — stacked notebook-flow `layout` assembled as the last write inside `workbook_wire.wire_workbook` before POST (released `code_rep` document wrapper) |
+| C8 Parity hard gate | Phase 0c/0d simulate-and-freeze + Phase 2/4 section rollups + research `batch-convert.py` AUTO_PARITY; never skipped |
+| C9 Security/RLS | "Security: RLS / CLS" — Excel has no native RLS/CLS to port; detect workbook/sheet protection only |
+| C10 Enhance | — |

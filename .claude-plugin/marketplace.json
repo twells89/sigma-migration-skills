@@ -169,6 +169,13 @@
       "description": "Mode Analytics Reports (SQL Queries + Charts) -> Sigma, with parity verification. No formula translation needed -- Mode's SQL already runs in the target warehouse dialect.",
       "category": "migration",
       "keywords": ["mode", "migration", "bi"]
+    },
+    {
+      "name": "excel-to-sigma",
+      "source": "./plugins/excel-to-sigma",
+      "description": "Excel (.xlsx) planning / data-entry models → Sigma — formal-Table discovery, input-table → warehouse-view → data-model source-swap so forecasters keep entering numbers, plus equity-research / forecast builders. Workbook POSTs use the released document code_rep wrapper.",
+      "category": "migration",
+      "keywords": ["excel", "xlsx", "input-tables", "forecast", "planning", "migration", "bi"]
     }
   ]
 }

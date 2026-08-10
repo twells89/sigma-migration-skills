@@ -1,0 +1,1602 @@
+{
+ "name": "FP&A Monthly P&L (built)",
+ "intent": "what-if",
+ "connectionId": "cb2f5180-641f-47bd-8efa-da9d590d855a",
+ "folderId": "57e59735-86b9-40b0-b029-217205406f57",
+ "currencyFormat": "$,.0f",
+ "pctFormat": ".1%",
+ "actualMonths": [
+  {
+   "month": "Jan-26",
+   "num": 1,
+   "end": "2026-01-31"
+  },
+  {
+   "month": "Feb-26",
+   "num": 2,
+   "end": "2026-02-28"
+  },
+  {
+   "month": "Mar-26",
+   "num": 3,
+   "end": "2026-03-31"
+  },
+  {
+   "month": "Apr-26",
+   "num": 4,
+   "end": "2026-04-30"
+  },
+  {
+   "month": "May-26",
+   "num": 5,
+   "end": "2026-05-31"
+  },
+  {
+   "month": "Jun-26",
+   "num": 6,
+   "end": "2026-06-30"
+  }
+ ],
+ "forecastMonths": [
+  {
+   "month": "Jul-26",
+   "num": 7,
+   "end": "2026-07-31"
+  },
+  {
+   "month": "Aug-26",
+   "num": 8,
+   "end": "2026-08-31"
+  },
+  {
+   "month": "Sep-26",
+   "num": 9,
+   "end": "2026-09-30"
+  },
+  {
+   "month": "Oct-26",
+   "num": 10,
+   "end": "2026-10-31"
+  },
+  {
+   "month": "Nov-26",
+   "num": 11,
+   "end": "2026-11-30"
+  },
+  {
+   "month": "Dec-26",
+   "num": 12,
+   "end": "2026-12-31"
+  }
+ ],
+ "lines": [
+  {
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "kind": "growth",
+   "rate": 0.03,
+   "juneBase": 503000.0
+  },
+  {
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "kind": "manual",
+   "manual": [
+    70000.0,
+    64000.0,
+    78000.0,
+    66000.0,
+    74000.0,
+    95000.0
+   ]
+  },
+  {
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "kind": "growth",
+   "rate": 0.015,
+   "juneBase": 55500.0
+  },
+  {
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "kind": "growth",
+   "rate": 0.01,
+   "juneBase": 35000.0
+  },
+  {
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "kind": "manual",
+   "manual": [
+    41000.0,
+    37000.0,
+    45000.0,
+    39000.0,
+    43000.0,
+    52000.0
+   ]
+  },
+  {
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "kind": "manual",
+   "manual": [
+    165000.0,
+    170000.0,
+    168000.0,
+    178000.0,
+    182000.0,
+    175000.0
+   ]
+  },
+  {
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "kind": "growth",
+   "rate": 0.01,
+   "juneBase": 188000.0
+  },
+  {
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "kind": "growth",
+   "rate": 0.005,
+   "juneBase": 93000.0
+  },
+  {
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "kind": "flat",
+   "juneBase": 12000.0
+  },
+  {
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "kind": "manual",
+   "manual": [
+    4500.0,
+    4500.0,
+    4500.0,
+    4400.0,
+    4400.0,
+    4400.0
+   ]
+  }
+ ],
+ "assumptions": [
+  [
+   "Subscription Revenue growth",
+   0.03,
+   "MoM, prior month x (1+rate)"
+  ],
+  [
+   "Hosting & Infrastructure growth",
+   0.015,
+   "Scales with usage"
+  ],
+  [
+   "Customer Support growth",
+   0.01,
+   "Headcount creep"
+  ],
+  [
+   "R&D growth",
+   0.01,
+   "Headcount creep"
+  ],
+  [
+   "G&A growth",
+   0.005,
+   "Inflationary"
+  ]
+ ],
+ "actuals": [
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - Enterprise",
+   "amt": 252000.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - SMB",
+   "amt": 88685.0
+  },
+  {
+   "date": "2026-01-17",
+   "month": "Jan-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "Annual prepay",
+   "amt": 79315.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - Enterprise",
+   "amt": 261000.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - SMB",
+   "amt": 70470.0
+  },
+  {
+   "date": "2026-02-18",
+   "month": "Feb-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "Annual prepay",
+   "amt": 103530.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - Enterprise",
+   "amt": 271200.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - SMB",
+   "amt": 82265.0
+  },
+  {
+   "date": "2026-03-19",
+   "month": "Mar-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "Annual prepay",
+   "amt": 98535.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - Enterprise",
+   "amt": 280800.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - SMB",
+   "amt": 83237.0
+  },
+  {
+   "date": "2026-04-17",
+   "month": "Apr-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "Annual prepay",
+   "amt": 103963.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - Enterprise",
+   "amt": 291000.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - SMB",
+   "amt": 106175.0
+  },
+  {
+   "date": "2026-05-18",
+   "month": "May-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "Annual prepay",
+   "amt": 87825.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - Enterprise",
+   "amt": 301800.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "MRR - SMB",
+   "amt": 107710.0
+  },
+  {
+   "date": "2026-06-19",
+   "month": "Jun-26",
+   "line": "Subscription Revenue",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 1,
+   "dept": "Revenue",
+   "vendor": "Annual prepay",
+   "amt": 93490.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Implementation",
+   "amt": 39000.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Training",
+   "amt": 26000.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Implementation",
+   "amt": 34800.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Training",
+   "amt": 23200.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Implementation",
+   "amt": 43200.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Training",
+   "amt": 28800.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Implementation",
+   "amt": 36600.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Training",
+   "amt": 24400.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Implementation",
+   "amt": 41400.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Training",
+   "amt": 27600.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Implementation",
+   "amt": 45000.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Professional Services Rev",
+   "section": "Revenue",
+   "secOrder": 1,
+   "lineOrder": 2,
+   "dept": "Services",
+   "vendor": "Training",
+   "amt": 30000.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "AWS",
+   "amt": 28800.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "Datadog / monitoring",
+   "amt": 19200.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "AWS",
+   "amt": 29700.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "Datadog / monitoring",
+   "amt": 19800.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "AWS",
+   "amt": 30600.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "Datadog / monitoring",
+   "amt": 20400.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "AWS",
+   "amt": 31500.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "Datadog / monitoring",
+   "amt": 21000.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "AWS",
+   "amt": 32400.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "Datadog / monitoring",
+   "amt": 21600.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "AWS",
+   "amt": 33300.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Hosting & Infrastructure",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 3,
+   "dept": "Engineering",
+   "vendor": "Datadog / monitoring",
+   "amt": 22200.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Support payroll",
+   "amt": 19200.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Zendesk / tooling",
+   "amt": 12800.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Support payroll",
+   "amt": 19500.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Zendesk / tooling",
+   "amt": 13000.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Support payroll",
+   "amt": 19800.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Zendesk / tooling",
+   "amt": 13200.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Support payroll",
+   "amt": 20400.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Zendesk / tooling",
+   "amt": 13600.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Support payroll",
+   "amt": 20700.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Zendesk / tooling",
+   "amt": 13800.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Support payroll",
+   "amt": 21000.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Customer Support",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 4,
+   "dept": "Support",
+   "vendor": "Zendesk / tooling",
+   "amt": 14000.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Delivery payroll",
+   "amt": 22800.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Contractor",
+   "amt": 15200.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Delivery payroll",
+   "amt": 21000.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Contractor",
+   "amt": 14000.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Delivery payroll",
+   "amt": 25200.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Contractor",
+   "amt": 16800.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Delivery payroll",
+   "amt": 22200.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Contractor",
+   "amt": 14800.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Delivery payroll",
+   "amt": 24000.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Contractor",
+   "amt": 16000.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Delivery payroll",
+   "amt": 26400.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Prof. Services Delivery",
+   "section": "Cost of Revenue",
+   "secOrder": 2,
+   "lineOrder": 5,
+   "dept": "Services",
+   "vendor": "Contractor",
+   "amt": 17600.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Payroll",
+   "amt": 87000.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Paid media",
+   "amt": 33549.0
+  },
+  {
+   "date": "2026-01-17",
+   "month": "Jan-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Events",
+   "amt": 24451.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Payroll",
+   "amt": 90000.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Paid media",
+   "amt": 25043.0
+  },
+  {
+   "date": "2026-02-18",
+   "month": "Feb-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Events",
+   "amt": 34957.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Payroll",
+   "amt": 88800.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Paid media",
+   "amt": 28676.0
+  },
+  {
+   "date": "2026-03-19",
+   "month": "Mar-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Events",
+   "amt": 30524.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Payroll",
+   "amt": 96000.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Paid media",
+   "amt": 25981.0
+  },
+  {
+   "date": "2026-04-17",
+   "month": "Apr-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Events",
+   "amt": 38019.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Payroll",
+   "amt": 93000.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Paid media",
+   "amt": 27511.0
+  },
+  {
+   "date": "2026-05-18",
+   "month": "May-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Events",
+   "amt": 34489.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Payroll",
+   "amt": 97200.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Paid media",
+   "amt": 32469.0
+  },
+  {
+   "date": "2026-06-19",
+   "month": "Jun-26",
+   "line": "Sales & Marketing",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 6,
+   "dept": "Sales",
+   "vendor": "Events",
+   "amt": 32331.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Eng payroll",
+   "amt": 105000.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Cloud dev / tooling",
+   "amt": 70000.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Eng payroll",
+   "amt": 106800.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Cloud dev / tooling",
+   "amt": 71200.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Eng payroll",
+   "amt": 108000.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Cloud dev / tooling",
+   "amt": 72000.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Eng payroll",
+   "amt": 109800.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Cloud dev / tooling",
+   "amt": 73200.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Eng payroll",
+   "amt": 111000.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Cloud dev / tooling",
+   "amt": 74000.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Eng payroll",
+   "amt": 112800.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "Research & Development",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 7,
+   "dept": "Engineering",
+   "vendor": "Cloud dev / tooling",
+   "amt": 75200.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Payroll",
+   "amt": 52800.0
+  },
+  {
+   "date": "2026-01-10",
+   "month": "Jan-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Rent & facilities",
+   "amt": 14267.0
+  },
+  {
+   "date": "2026-01-17",
+   "month": "Jan-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "SaaS / software",
+   "amt": 20933.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Payroll",
+   "amt": 53400.0
+  },
+  {
+   "date": "2026-02-11",
+   "month": "Feb-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Rent & facilities",
+   "amt": 15656.0
+  },
+  {
+   "date": "2026-02-18",
+   "month": "Feb-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "SaaS / software",
+   "amt": 19944.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Payroll",
+   "amt": 54000.0
+  },
+  {
+   "date": "2026-03-12",
+   "month": "Mar-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Rent & facilities",
+   "amt": 19079.0
+  },
+  {
+   "date": "2026-03-19",
+   "month": "Mar-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "SaaS / software",
+   "amt": 16921.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Payroll",
+   "amt": 54600.0
+  },
+  {
+   "date": "2026-04-10",
+   "month": "Apr-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Rent & facilities",
+   "amt": 18527.0
+  },
+  {
+   "date": "2026-04-17",
+   "month": "Apr-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "SaaS / software",
+   "amt": 17873.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Payroll",
+   "amt": 55200.0
+  },
+  {
+   "date": "2026-05-11",
+   "month": "May-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Rent & facilities",
+   "amt": 16342.0
+  },
+  {
+   "date": "2026-05-18",
+   "month": "May-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "SaaS / software",
+   "amt": 20458.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Payroll",
+   "amt": 55800.0
+  },
+  {
+   "date": "2026-06-12",
+   "month": "Jun-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "Rent & facilities",
+   "amt": 19264.0
+  },
+  {
+   "date": "2026-06-19",
+   "month": "Jun-26",
+   "line": "General & Administrative",
+   "section": "Operating Expenses",
+   "secOrder": 3,
+   "lineOrder": 8,
+   "dept": "Corporate",
+   "vendor": "SaaS / software",
+   "amt": 17936.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "dept": "Corporate",
+   "vendor": "Monthly depreciation",
+   "amt": 12000.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "dept": "Corporate",
+   "vendor": "Monthly depreciation",
+   "amt": 12000.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "dept": "Corporate",
+   "vendor": "Monthly depreciation",
+   "amt": 12000.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "dept": "Corporate",
+   "vendor": "Monthly depreciation",
+   "amt": 12000.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "dept": "Corporate",
+   "vendor": "Monthly depreciation",
+   "amt": 12000.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Depreciation & Amort.",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 9,
+   "dept": "Corporate",
+   "vendor": "Monthly depreciation",
+   "amt": 12000.0
+  },
+  {
+   "date": "2026-01-03",
+   "month": "Jan-26",
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "dept": "Finance",
+   "vendor": "Term loan interest",
+   "amt": 4500.0
+  },
+  {
+   "date": "2026-02-04",
+   "month": "Feb-26",
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "dept": "Finance",
+   "vendor": "Term loan interest",
+   "amt": 4500.0
+  },
+  {
+   "date": "2026-03-05",
+   "month": "Mar-26",
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "dept": "Finance",
+   "vendor": "Term loan interest",
+   "amt": 4500.0
+  },
+  {
+   "date": "2026-04-03",
+   "month": "Apr-26",
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "dept": "Finance",
+   "vendor": "Term loan interest",
+   "amt": 4500.0
+  },
+  {
+   "date": "2026-05-04",
+   "month": "May-26",
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "dept": "Finance",
+   "vendor": "Term loan interest",
+   "amt": 4500.0
+  },
+  {
+   "date": "2026-06-05",
+   "month": "Jun-26",
+   "line": "Interest Expense",
+   "section": "Below the Line",
+   "secOrder": 4,
+   "lineOrder": 10,
+   "dept": "Finance",
+   "vendor": "Term loan interest",
+   "amt": 4500.0
+  }
+ ]
+}
