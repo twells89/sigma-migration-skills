@@ -63,6 +63,7 @@ Maturity labels (`gold` / `live` / `foundation` / `scaffold`) are defined in
 | Convert a Mode Report (SQL Queries + Charts) → Sigma | `mode-to-sigma` | foundation | `plugins/mode-to-sigma/skills/mode-to-sigma/` |
 | Author / repair Sigma workbooks (canonical spec) | `sigma-workbooks` | live | `plugins/sigma-authoring/skills/sigma-workbooks/` |
 | Author / repair Sigma data models (canonical spec) | `sigma-data-models` | live | `plugins/sigma-authoring/skills/sigma-data-models/` |
+| Copy a Sigma workbook into another Sigma org that already has the same data | `sigma-cross-org-port` | live | `plugins/sigma-authoring/skills/sigma-cross-org-port/` |
 
 Assessments are read-only (never write to the source or post to Sigma); run one
 to pick what to convert, then hand off to the matching converter.

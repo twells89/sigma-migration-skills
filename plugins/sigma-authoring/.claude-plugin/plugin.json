@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sigma-authoring",
   "displayName": "Sigma Authoring (Workbooks + Data Models)",
-  "version": "1.12.3",
-  "description": "The canonical Sigma authoring skills every migration converter defers to for the current spec surface: sigma-api (authentication), sigma-workbooks (workbook spec \u2014 element kinds, source kinds, controls, formulas, formatting, layout), sigma-data-models (data model authoring), and custom-sql-to-data-model. Install this alongside any converter \u2014 the converters assume it is present.",
+  "version": "1.13.0",
+  "description": "The canonical Sigma authoring skills every migration converter defers to for the current spec surface: sigma-api (authentication), sigma-workbooks (workbook spec \u2014 element kinds, source kinds, controls, formulas, formatting, layout), sigma-data-models (data model authoring), custom-sql-to-data-model, and sigma-cross-org-port (copy a workbook between Sigma orgs that already share the underlying data). Install this alongside any converter \u2014 the converters assume it is present.",
   "author": {
     "name": "Thomas Wells"
   },
@@ -16,7 +16,9 @@
     "data-models",
     "authoring",
     "spec",
-    "migration"
+    "migration",
+    "cross-org",
+    "port"
   ],
   "skills": "./skills/"
 }

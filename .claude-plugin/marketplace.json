@@ -13,7 +13,7 @@
     {
       "name": "sigma-authoring",
       "source": "./plugins/sigma-authoring",
-      "description": "Canonical Sigma authoring skills every converter defers to: sigma-workbooks (workbook spec \u2014 element kinds, source kinds, controls, formulas, formatting, layout), sigma-data-models, and custom-sql-to-data-model. Install this ALONGSIDE any converter \u2014 they assume it is present for the current Sigma spec surface.",
+      "description": "Canonical Sigma authoring skills every converter defers to: sigma-workbooks (workbook spec \u2014 element kinds, source kinds, controls, formulas, formatting, layout), sigma-data-models, custom-sql-to-data-model, and sigma-cross-org-port (Sigma org \u2192 Sigma org workbook copies). Install this ALONGSIDE any converter \u2014 they assume it is present for the current Sigma spec surface.",
       "category": "authoring",
       "keywords": [
         "sigma",
