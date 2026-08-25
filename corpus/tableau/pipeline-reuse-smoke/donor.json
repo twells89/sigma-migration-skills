@@ -1,0 +1,36 @@
+{
+  "name": "Pipeline Donor",
+  "document": {
+    "schemaVersion": 1,
+    "kind": "workbook",
+    "pages": [
+      {
+        "id": "pipeline-data",
+        "name": "Pipeline Data",
+        "visibility": "hidden"
+      }
+    ],
+    "elements": [
+      {
+        "id": "actuals",
+        "kind": "table",
+        "name": "Actuals",
+        "visibleAsSource": false,
+        "source": {
+          "kind": "data-model",
+          "dataModelId": "__DM__",
+          "elementId": "__ACTUALS__"
+        },
+        "columns": [
+          {
+            "id": "actual-amount",
+            "name": "Amount",
+            "formula": "[Custom SQL/Amount]"
+          }
+        ],
+        "order": ["actual-amount"]
+      }
+    ],
+    "layout": "<?xml version=\"1.0\"?><Page id=\"pipeline-data\"><Element elementId=\"actuals\"/></Page>"
+  }
+}

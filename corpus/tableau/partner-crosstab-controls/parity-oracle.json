@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "source": "recorded-live-validation",
+  "recorded_at": "2026-06-25",
+  "numeric": {
+    "status": "recorded",
+    "assertions": [
+      {
+        "interaction": "switch from Net Revenue to Quantity",
+        "before": 119038,
+        "after": 1593,
+        "invariant": "static Net Revenue column remains unchanged"
+      }
+    ]
+  },
+  "visual": {
+    "status": "recorded-and-structurally-replayed",
+    "chart_family": "pivot-table",
+    "control_rail": "left",
+    "grand_totals": true,
+    "parameter_labels": [
+      "TCV",
+      "Product TCV",
+      "ACV"
+    ]
+  }
+}

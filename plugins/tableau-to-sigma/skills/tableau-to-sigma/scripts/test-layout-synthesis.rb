@@ -526,5 +526,63 @@ Dir.mktmpdir do |d|
      !xml2.nil? && xml2.include?('-hdrtext"') && !log2.include?('auto-suppressed'))
 end
 
+# 6. A reused workbook-local data pipeline lives on hidden pages that have no
+# Tableau dashboard zones. Preserve those pages/elements while rebuilding the
+# visible dashboard layout.
+puts '-- synthetic worksheet page matching'
+Dir.mktmpdir do |d|
+  synthetic = JSON.parse(JSON.generate(DL_TITLE))
+  synthetic[0]['dashboard'] = '[synthetic] Profitability Watch'
+  xml, _census, _log, = build(synthetic, WB_TITLE, d)
+  ok('synthetic parser page matches worksheet-named Sigma page',
+     !xml.nil? && xml.include?('id="page-pw"'))
+end
+
+puts '-- hidden pipeline page preservation'
+dl_pipeline = [{
+  'dashboard' => 'Overview',
+  'zones' => [{
+    'id' => 'z-chart', 'kind' => 'chart', 'caption' => 'Revenue',
+    'chart_kind' => 'bar', 'measures' => ['Amount'],
+    'x_pct' => 0, 'y_pct' => 0, 'w_pct' => 100, 'h_pct' => 100
+  }],
+  'zone_tree' => []
+}]
+wb_pipeline = {
+  'pages' => [
+    {
+      'id' => 'page-data', 'name' => 'Data', 'visibility' => 'hidden',
+      'elements' => [{
+        'id' => 'pipeline-source', 'kind' => 'table', 'name' => 'Source',
+        'visibleAsSource' => false, 'columns' => []
+      }]
+    },
+    {
+      'id' => 'page-derived', 'name' => 'Derived Data', 'visibility' => 'hidden',
+      'elements' => [{
+        'id' => 'pipeline-union', 'kind' => 'table', 'name' => 'Combined',
+        'visibleAsSource' => false, 'source' => { 'kind' => 'table', 'elementId' => 'pipeline-source' },
+        'columns' => []
+      }]
+    },
+    {
+      'id' => 'page-overview', 'name' => 'Overview',
+      'elements' => [{
+        'id' => 'chart-revenue', 'kind' => 'bar-chart', 'name' => 'Revenue',
+        'source' => { 'kind' => 'table', 'elementId' => 'pipeline-union' },
+        'columns' => []
+      }]
+    }
+  ]
+}
+Dir.mktmpdir do |d|
+  xml, _census, log, = build(dl_pipeline, wb_pipeline, d)
+  ok('hidden pipeline page remains in rebuilt layout',
+     !xml.nil? && xml.include?('id="page-derived"') && xml.include?('elementId="pipeline-union"'))
+  ok('visible dashboard remains laid out once',
+     !xml.nil? && xml.scan(/elementId="chart-revenue"/).length == 1)
+  ok('builder reports preserved pipeline page', log.include?('non-dashboard pipeline page'))
+end
+
 puts($fail.zero? ? "\nALL PASS — layout synthesis (bands, rail, KPI containers, min rows, determinism)" : "\n#{$fail} FAILED")
 exit($fail.zero? ? 0 : 1)

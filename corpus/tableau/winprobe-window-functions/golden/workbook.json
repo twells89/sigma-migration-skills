@@ -1,0 +1,834 @@
+{
+  "name": "WINPROBE Window Functions",
+  "description": "Generated mechanically from Tableau via tableau-to-sigma (convert_tableau_to_sigma + build-charts-from-signals).",
+  "folderId": "offline-folder",
+  "document": {
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "page-data",
+        "name": "Data"
+      },
+      {
+        "id": "page-dash-1",
+        "name": "WIN Running Revenue"
+      },
+      {
+        "id": "page-dash-2",
+        "name": "WIN Moving Avg"
+      },
+      {
+        "id": "page-dash-3",
+        "name": "WIN Pct Of Total Region"
+      },
+      {
+        "id": "page-dash-4",
+        "name": "WIN Rank Category"
+      },
+      {
+        "id": "page-dash-5",
+        "name": "WIN Window MaxMin"
+      },
+      {
+        "id": "page-dash-6",
+        "name": "WIN WoW Delta"
+      },
+      {
+        "id": "page-dash-7",
+        "name": "WIN Weekly Funnel"
+      },
+      {
+        "id": "page-dash-8",
+        "name": "WIN Pareto Category"
+      }
+    ],
+    "settings": {
+      "theme": {
+        "name": "Light",
+        "overrides": {
+          "categoricalScheme": [
+            "#4e79a7",
+            "#59a14f",
+            "#76b7b2",
+            "#e15759",
+            "#f28e2b"
+          ]
+        }
+      }
+    },
+    "kind": "workbook",
+    "elements": [
+      {
+        "id": "master",
+        "kind": "table",
+        "name": "Master",
+        "visibleAsSource": false,
+        "source": {
+          "kind": "data-model",
+          "dataModelId": "offline-data-model",
+          "elementId": "offline-fact"
+        },
+        "columns": [
+          {
+            "id": "m-order-id",
+            "name": "Order Id",
+            "formula": "[Offline Fact/Order Id]"
+          },
+          {
+            "id": "m-order-date",
+            "name": "Order Date",
+            "formula": "[Offline Fact/Order Date]"
+          },
+          {
+            "id": "m-net-revenue",
+            "name": "Net Revenue",
+            "formula": "[Offline Fact/Net Revenue]"
+          },
+          {
+            "id": "m-is-returned",
+            "name": "Is Returned",
+            "formula": "[Offline Fact/Is Returned]"
+          },
+          {
+            "id": "m-region",
+            "name": "Region",
+            "formula": "[Offline Fact/Region]"
+          },
+          {
+            "id": "m-category",
+            "name": "Category",
+            "formula": "[Offline Fact/Category]"
+          }
+        ],
+        "order": [
+          "m-order-id",
+          "m-order-date",
+          "m-net-revenue",
+          "m-is-returned",
+          "m-region",
+          "m-category"
+        ]
+      },
+      {
+        "id": "el-win-window-maxmin-win-src",
+        "kind": "table",
+        "name": "Net Revenue Window Source (win-window-maxmin)",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "el-win-window-maxmin-win-src-p0",
+            "name": "Region",
+            "formula": "[Master/Region]"
+          },
+          {
+            "id": "el-win-window-maxmin-win-src-a0",
+            "name": "Order Date",
+            "formula": "DateTrunc(\"quarter\", [Master/Order Date])"
+          },
+          {
+            "id": "el-win-window-maxmin-win-src-v",
+            "name": "Net Revenue Window Base",
+            "formula": "Sum([Master/Net Revenue])"
+          },
+          {
+            "id": "el-win-window-maxmin-win-src-s0",
+            "name": "Window Max Revenue",
+            "formula": "Max([Net Revenue Window Base])"
+          },
+          {
+            "id": "el-win-window-maxmin-win-src-s1",
+            "name": "Window Min Revenue",
+            "formula": "Min([Net Revenue Window Base])"
+          }
+        ],
+        "groupings": [
+          {
+            "id": "el-win-window-maxmin-win-src-g1",
+            "groupBy": [
+              "el-win-window-maxmin-win-src-p0"
+            ],
+            "calculations": [
+              "el-win-window-maxmin-win-src-s0",
+              "el-win-window-maxmin-win-src-s1"
+            ]
+          },
+          {
+            "id": "el-win-window-maxmin-win-src-g2",
+            "groupBy": [
+              "el-win-window-maxmin-win-src-a0"
+            ],
+            "calculations": [
+              "el-win-window-maxmin-win-src-v"
+            ]
+          }
+        ],
+        "visibleAsSource": false
+      },
+      {
+        "id": "title-text-win-running-revenue",
+        "kind": "text",
+        "body": "## WIN Running Revenue"
+      },
+      {
+        "id": "el-param-year-filter-win-running-revenue",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-running-revenue",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-running-revenue",
+        "kind": "line-chart",
+        "name": "WIN Running Revenue",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-running-revenue",
+            "name": "Order Date",
+            "formula": "DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))",
+            "format": {
+              "kind": "datetime",
+              "formatString": "%b %d, %Y"
+            }
+          },
+          {
+            "id": "y-el-win-running-revenue",
+            "name": "Running Revenue",
+            "formula": "CumulativeSum(Sum([Master/Net Revenue]))",
+            "format": {
+              "kind": "number",
+              "formatString": "$,.0f",
+              "currencySymbol": "$"
+            }
+          },
+          {
+            "id": "nn-x-el-win-running-revenue",
+            "name": "Order Date Not Null",
+            "formula": "Text(IsNotNull(DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))))"
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-running-revenue"
+        },
+        "yAxis": {
+          "columnIds": [
+            "y-el-win-running-revenue"
+          ]
+        },
+        "filters": [
+          {
+            "columnId": "nn-x-el-win-running-revenue",
+            "kind": "list",
+            "mode": "include",
+            "selectionMode": "multiple",
+            "values": [
+              "true"
+            ],
+            "id": "flt-el-win-running-revenue-0"
+          }
+        ]
+      },
+      {
+        "id": "title-text-win-moving-avg",
+        "kind": "text",
+        "body": "## WIN Moving Avg"
+      },
+      {
+        "id": "el-param-year-filter-win-moving-avg",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-moving-avg",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-moving-avg",
+        "kind": "line-chart",
+        "name": "WIN Moving Avg",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-moving-avg",
+            "name": "Order Date",
+            "formula": "DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))",
+            "format": {
+              "kind": "datetime",
+              "formatString": "%b %d, %Y"
+            }
+          },
+          {
+            "id": "y-el-win-moving-avg",
+            "name": "Moving Avg 4wk",
+            "formula": "MovingAvg(Sum([Master/Net Revenue]), 3)",
+            "format": {
+              "kind": "number",
+              "formatString": "$,.0f",
+              "currencySymbol": "$"
+            }
+          },
+          {
+            "id": "nn-x-el-win-moving-avg",
+            "name": "Order Date Not Null",
+            "formula": "Text(IsNotNull(DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))))"
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-moving-avg"
+        },
+        "yAxis": {
+          "columnIds": [
+            "y-el-win-moving-avg"
+          ]
+        },
+        "filters": [
+          {
+            "columnId": "nn-x-el-win-moving-avg",
+            "kind": "list",
+            "mode": "include",
+            "selectionMode": "multiple",
+            "values": [
+              "true"
+            ],
+            "id": "flt-el-win-moving-avg-0"
+          }
+        ]
+      },
+      {
+        "id": "title-text-win-pct-of-total-region",
+        "kind": "text",
+        "body": "## WIN Pct Of Total Region"
+      },
+      {
+        "id": "el-param-year-filter-win-pct-of-total-regi",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-pct-of-total-regi",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-pct-of-total-region",
+        "kind": "bar-chart",
+        "name": "WIN Pct Of Total Region",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-pct-of-total-region",
+            "name": "Region",
+            "formula": "[Master/Region]"
+          },
+          {
+            "id": "y-el-win-pct-of-total-region",
+            "name": "Pct Of Total Revenue",
+            "formula": "PercentOfTotal(Sum([Master/Net Revenue]), \"grand_total\")",
+            "format": {
+              "kind": "number",
+              "formatString": ",.2%"
+            }
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-pct-of-total-region"
+        },
+        "yAxis": {
+          "columnIds": [
+            "y-el-win-pct-of-total-region"
+          ]
+        },
+        "dataLabel": {
+          "labels": "shown"
+        }
+      },
+      {
+        "id": "title-text-win-rank-category",
+        "kind": "text",
+        "body": "## WIN Rank Category"
+      },
+      {
+        "id": "el-param-year-filter-win-rank-category",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-rank-category",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-rank-category",
+        "kind": "bar-chart",
+        "name": "WIN Rank Category",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-rank-category",
+            "name": "Category",
+            "formula": "[Master/Category]"
+          },
+          {
+            "id": "y-el-win-rank-category",
+            "name": "Revenue Rank",
+            "formula": "Rank(Sum([Master/Net Revenue]), \"desc\")",
+            "format": {
+              "kind": "number",
+              "formatString": ",.0f"
+            }
+          },
+          {
+            "id": "nn-x-el-win-rank-category",
+            "name": "Category Not Null",
+            "formula": "Text(IsNotNull([Master/Category]))"
+          },
+          {
+            "id": "srt-el-win-rank-category",
+            "name": "Net Revenue",
+            "formula": "Sum([Master/Net Revenue])"
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-rank-category",
+          "sort": {
+            "by": "srt-el-win-rank-category",
+            "direction": "descending"
+          }
+        },
+        "yAxis": {
+          "columnIds": [
+            "y-el-win-rank-category"
+          ]
+        },
+        "dataLabel": {
+          "labels": "shown"
+        },
+        "filters": [
+          {
+            "columnId": "nn-x-el-win-rank-category",
+            "kind": "list",
+            "mode": "include",
+            "selectionMode": "multiple",
+            "values": [
+              "true"
+            ],
+            "id": "flt-el-win-rank-category-0"
+          }
+        ]
+      },
+      {
+        "id": "title-text-win-window-maxmin",
+        "kind": "text",
+        "body": "## WIN Window MaxMin"
+      },
+      {
+        "id": "el-param-year-filter-win-window-maxmin",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-window-maxmin",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-window-maxmin",
+        "kind": "pivot-table",
+        "name": "WIN Window MaxMin",
+        "source": {
+          "kind": "table",
+          "elementId": "el-win-window-maxmin-win-src"
+        },
+        "columns": [
+          {
+            "id": "p-el-win-window-maxmin-row-region",
+            "name": "Region",
+            "formula": "[Net Revenue Window Source (win-window-maxmin)/Region]"
+          },
+          {
+            "id": "p-el-win-window-maxmin-col-order-date",
+            "name": "Order Date",
+            "formula": "[Net Revenue Window Source (win-window-maxmin)/Order Date]",
+            "format": {
+              "kind": "datetime",
+              "formatString": "%b %Y"
+            }
+          },
+          {
+            "id": "p-el-win-window-maxmin-value-window-max-revenue",
+            "name": "Window Max Revenue",
+            "formula": "Max([Net Revenue Window Source (win-window-maxmin)/Window Max Revenue])",
+            "format": {
+              "kind": "number",
+              "formatString": "$,.0f",
+              "currencySymbol": "$"
+            }
+          },
+          {
+            "id": "p-el-win-window-maxmin-value-window-min-revenue",
+            "name": "Window Min Revenue",
+            "formula": "Min([Net Revenue Window Source (win-window-maxmin)/Window Min Revenue])",
+            "format": {
+              "kind": "number",
+              "formatString": "$,.0f",
+              "currencySymbol": "$"
+            }
+          }
+        ],
+        "values": [
+          "p-el-win-window-maxmin-value-window-max-revenue",
+          "p-el-win-window-maxmin-value-window-min-revenue"
+        ],
+        "rowsBy": [
+          {
+            "id": "p-el-win-window-maxmin-row-region"
+          }
+        ],
+        "columnsBy": [
+          {
+            "id": "p-el-win-window-maxmin-col-order-date"
+          }
+        ],
+        "totals": {
+          "showGrandTotals": "hidden",
+          "showSubtotals": "when-collapsed"
+        }
+      },
+      {
+        "id": "title-text-win-wow-delta",
+        "kind": "text",
+        "body": "## WIN WoW Delta"
+      },
+      {
+        "id": "el-param-year-filter-win-wow-delta",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-wow-delta",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-wow-delta",
+        "kind": "line-chart",
+        "name": "WIN WoW Delta",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-wow-delta",
+            "name": "Order Date",
+            "formula": "DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))",
+            "format": {
+              "kind": "datetime",
+              "formatString": "%b %d, %Y"
+            }
+          },
+          {
+            "id": "y-el-win-wow-delta",
+            "name": "WoW Revenue Delta",
+            "formula": "Coalesce(Sum([Master/Net Revenue]) - Lag(Sum([Master/Net Revenue]), 1), 0)",
+            "format": {
+              "kind": "number",
+              "formatString": "$,.0f",
+              "currencySymbol": "$"
+            }
+          },
+          {
+            "id": "nn-x-el-win-wow-delta",
+            "name": "Order Date Not Null",
+            "formula": "Text(IsNotNull(DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))))"
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-wow-delta"
+        },
+        "yAxis": {
+          "columnIds": [
+            "y-el-win-wow-delta"
+          ]
+        },
+        "filters": [
+          {
+            "columnId": "nn-x-el-win-wow-delta",
+            "kind": "list",
+            "mode": "include",
+            "selectionMode": "multiple",
+            "values": [
+              "true"
+            ],
+            "id": "flt-el-win-wow-delta-0"
+          }
+        ]
+      },
+      {
+        "id": "title-text-win-weekly-funnel",
+        "kind": "text",
+        "body": "## WIN Weekly Funnel"
+      },
+      {
+        "id": "el-param-year-filter-win-weekly-funnel",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-weekly-funnel",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-weekly-funnel",
+        "kind": "line-chart",
+        "name": "WIN Weekly Funnel",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-weekly-funnel",
+            "name": "Order Date",
+            "formula": "DateAdd(\"day\", 1 - Weekday([Master/Order Date]), DateTrunc(\"day\", [Master/Order Date]))",
+            "format": {
+              "kind": "datetime",
+              "formatString": "%b %d, %Y"
+            }
+          },
+          {
+            "id": "y0-el-win-weekly-funnel",
+            "name": "Distinct count of Order Id",
+            "formula": "CountDistinct([Master/Order Id])",
+            "format": {
+              "kind": "number",
+              "formatString": ",.0f"
+            }
+          },
+          {
+            "id": "y1-el-win-weekly-funnel",
+            "name": "Is Returned",
+            "formula": "Sum([Master/Is Returned])",
+            "format": {
+              "kind": "number",
+              "formatString": ",.0f"
+            }
+          },
+          {
+            "id": "y2-el-win-weekly-funnel",
+            "name": "Return Rate",
+            "formula": "Sum([Master/Is Returned]) / CountIf(IsNotNull([Master/Order Id]))",
+            "format": {
+              "kind": "number",
+              "formatString": ",.1%"
+            }
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-weekly-funnel"
+        },
+        "yAxis": {
+          "columnIds": [
+            "y0-el-win-weekly-funnel",
+            "y1-el-win-weekly-funnel",
+            "y2-el-win-weekly-funnel"
+          ]
+        }
+      },
+      {
+        "id": "title-text-win-pareto-category",
+        "kind": "text",
+        "body": "## WIN Pareto Category"
+      },
+      {
+        "id": "el-param-year-filter-win-pareto-category",
+        "kind": "control",
+        "controlId": "ctl-param-year-filter-win-pareto-category",
+        "name": "Year Filter",
+        "controlType": "number-range",
+        "min": 2020,
+        "max": 2026,
+        "includeNulls": "when-no-value-is-selected"
+      },
+      {
+        "id": "el-win-pareto-category",
+        "kind": "bar-chart",
+        "name": "WIN Pareto Category",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "x-el-win-pareto-category",
+            "name": "Category",
+            "formula": "[Master/Category]"
+          },
+          {
+            "id": "y-el-win-pareto-category",
+            "name": "Pareto Pct",
+            "formula": "CumulativeSum(PercentOfTotal(Sum([Master/Net Revenue]), \"grand_total\"))",
+            "format": {
+              "kind": "number",
+              "formatString": ",.2%"
+            }
+          },
+          {
+            "id": "nn-x-el-win-pareto-category",
+            "name": "Category Not Null",
+            "formula": "Text(IsNotNull([Master/Category]))"
+          },
+          {
+            "id": "srt-el-win-pareto-category",
+            "name": "Net Revenue",
+            "formula": "Sum([Master/Net Revenue])"
+          }
+        ],
+        "xAxis": {
+          "columnId": "x-el-win-pareto-category",
+          "sort": {
+            "by": "srt-el-win-pareto-category",
+            "direction": "descending"
+          }
+        },
+        "yAxis": {
+          "columnIds": [
+            "y-el-win-pareto-category"
+          ]
+        },
+        "dataLabel": {
+          "labels": "shown"
+        },
+        "filters": [
+          {
+            "columnId": "nn-x-el-win-pareto-category",
+            "kind": "list",
+            "mode": "include",
+            "selectionMode": "multiple",
+            "values": [
+              "true"
+            ],
+            "id": "flt-el-win-pareto-category-0"
+          }
+        ]
+      },
+      {
+        "id": "band-page-dash-1-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-1-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-1-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-2-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-2-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-2-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-3-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-3-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-3-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-4-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-4-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-4-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-5-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-5-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-5-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-6-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-6-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-6-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-7-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-7-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-7-1",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-8-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-8-ctl",
+        "kind": "container"
+      },
+      {
+        "id": "band-page-dash-8-1",
+        "kind": "container"
+      }
+    ],
+    "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-data\">\n  <Element elementId=\"master\" gridColumn=\"1 / 25\" gridRow=\"1 / 11\"/>\n  <Element elementId=\"el-win-window-maxmin-win-src\" gridColumn=\"1 / 25\" gridRow=\"11 / 21\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-1\">\n<Container elementId=\"band-page-dash-1-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-running-revenue\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-1-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-running-revenue\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-1-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-running-revenue\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-2\">\n<Container elementId=\"band-page-dash-2-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-moving-avg\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-2-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-moving-avg\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-2-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-moving-avg\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-3\">\n<Container elementId=\"band-page-dash-3-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-pct-of-total-region\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-3-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-pct-of-total-regi\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-3-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-pct-of-total-region\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-4\">\n<Container elementId=\"band-page-dash-4-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-rank-category\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-4-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-rank-category\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-4-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-rank-category\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-5\">\n<Container elementId=\"band-page-dash-5-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-window-maxmin\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-5-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-window-maxmin\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-5-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-window-maxmin\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-6\">\n<Container elementId=\"band-page-dash-6-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-wow-delta\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-6-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-wow-delta\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-6-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-wow-delta\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-7\">\n<Container elementId=\"band-page-dash-7-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-weekly-funnel\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-7-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-weekly-funnel\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-7-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-weekly-funnel\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-8\">\n<Container elementId=\"band-page-dash-8-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-win-pareto-category\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-8-ctl\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 7\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-param-year-filter-win-pareto-category\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"band-page-dash-8-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"7 / 50\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-win-pareto-category\" gridColumn=\"1 / 25\" gridRow=\"1 / 44\"/>\n</Container>\n</Page>\n"
+  }
+}

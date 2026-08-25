@@ -174,6 +174,19 @@ ruby scripts/migrate-tableau.rb --workbook "<name>" \
 > Mechanics + spec re-entry placeholders: `refs/orchestration.md` §Converter
 > backend.
 
+> **Deterministic workbook compiler — default `auto`.** After the `.twb` layout
+> parse, the orchestrator writes `workbook-ir.json` and
+> `workbook-compile-plan.json`. Zero blockers activates the plan for the chart
+> builder; blockers stay on the existing gated path. Use
+> `--deterministic-compiler required` to stop before any Sigma write, or `off`
+> only for bisecting. Creds-free regression/shadow command:
+> `ruby scripts/migrate-tableau.rb --shadow-compile --from-corpus <case-dir>
+> --out <workdir>` — compiles and compares to `golden/workbook.json`, writes
+> `shadow-compile.json`, and hard-disables all Tableau/Sigma writes.
+> **Already-landed workbook pipeline:** after reviewing a matching Sigma
+> workbook, use `--reuse-dm ID --pipeline-template-workbook ID --pipeline-map
+> PATH`; map contract and exit-4 CLI: `refs/script-map.md`.
+
 > **Parity is EXACT for warehouse-backed migrations — never blame "drift."**
 > Sigma queries the **same warehouse** Tableau reads; a value gap is a real bug
 > (missing view filter / NULL bucket / ungrouped table / wrong aggregate), not

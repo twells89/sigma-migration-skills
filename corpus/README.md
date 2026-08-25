@@ -28,6 +28,12 @@ corpus/
 | tableau/preagg-kpi | synthetic field-twin .twb ({FIXED day: COUNTD} LODs consumed additively + dual-axis combo) | lod-audit pin + gate-17/dual-axis checks.sh (no golden DM) |
 | tableau/structural-workarounds | synthetic .twb (story + blend + nested LOD/ISOYEAR/FINDNTH/bins) | skill-script pins: story-plan / blend-plan / lod-chains (no golden DM) |
 | tableau/objectmodel-noodle | synthetic field-twin .twbs (2020.2+ relationship graph: adverse endpoint orientation + entitlement table + keyless edges) | 2 DM goldens (fact election, orientation, controlId dedupe, rls-entitlement-table security) + gap-scan ✅/❌ checks.sh |
+| tableau/partner-crosstab-controls | synthetic crosstab + parameter/quick-filter workbook | full deterministic workbook golden + IR/plan/reconciliation checks |
+| tableau/winprobe-window-functions | synthetic window/table-calc workbook | chart-spec golden + compiler determinism |
+| tableau/compiler-blocked-viz | unsupported bound visual IR | strict pre-write blocker contract |
+| tableau/pipeline-reuse-smoke | generated + donor workbook specs and semantic map | deterministic workbook-pipeline graft checks |
+| tableau/orders-executive-compiler | sanitized recorded-live compiler evidence | 9/9 strict parity + anchors + visual floor |
+| tableau/fpa-pipeline-compiler | sanitized recorded-live pipeline-reuse evidence | WIP negative promotion control (no-data/semantic gaps remain explicit) |
 | powerbi/model-fixtures | 8 TMSL .bim (plugin fixtures) | DM for fixture_01 |
 | powerbi/report-classic-employee-dashboard | legacy single report.json | artifact-pin only |
 | powerbi/report-pbir-retail-performance | exploded PBIR + bookmarks | artifact-pin only |

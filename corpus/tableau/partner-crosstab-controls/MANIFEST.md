@@ -47,6 +47,10 @@ guards first per the pattern-first rule.
 | `workbook-content.twb` | Synthetic workbook: 1 Automatic-mark crosstab worksheet `Metric Partner Closed Won` (Partner Name rows × Created FYQQ + Measure Names cols), 1 Automatic-mark `Bookings by Quarter Bar` worksheet that is the OVER-FIRE GUARD (Measure Names on cols but the measure VALUES on rows as `[Multiple Values]` → a bar, must NOT be a crosstab), 1 dashboard, a `<shared-view>` with 3 quick filters exercising all the failure modes — caption-less multi-word (`Customer Geo`), a Tableau GROUP (`Partner Level (group)`), and a slash name (`Mkt Sourced/Influenced`) — plus an integer measure-swap parameter (`Summary $ Choose`, 1→TCV / 2→Product TCV / 3→ACV) with value aliases |
 | `get-workbook.json`, `master-columns.json` | Minimal discovery fixtures so `build-charts-from-signals.rb` runs offline |
 | `chart-specs.json` | PINNED `build-charts-from-signals.rb` output — captures all three fixes in one deterministic artifact (see assertions) |
+| `compiler-case.json` | Offline compiler options, including the source's grand-total intent |
+| `golden/workbook.json` | Canonical full workbook code after parse → IR → lowering plan → chart build → workbook assembly → layout merge |
+| `parity-oracle.json` | Recorded live numeric interaction plus visual/layout assertions; no warehouse rows |
+| `checks.sh`, `check_workbook.py` | Recompile twice, byte-compare IR/plan/workbook, and enforce structural, visual-layout, and recorded numeric gates |
 
 ## Converter
 
@@ -59,11 +63,20 @@ ruby $S/build-charts-from-signals.rb --tableau-dir . --layout dashboard-layout.j
   --meta dashboard-layout-meta.json --master-map master-columns.json \
   --master-element-id master --auto-controls --page-per-worksheet \
   --title "Partner Bookings Crosstab" --out chart-specs.json
+
+# Full deterministic workbook compiler (no credentials and no live writes):
+ruby $S/compile-tableau-offline.rb --case-dir . --workdir /tmp/partner-compiler \
+  --out /tmp/partner-workbook.json --compare golden/workbook.json
 ```
 
 `dashboard-layout*.json` / `control-scope.json` are regenerable intermediates
 and are not pinned; diff the regenerated `chart-specs.json` against the pinned
 copy (deterministic — element ids are name-derived, no randomness).
+
+`checks.sh` is the stronger release gate: it independently compiles twice,
+requires byte-identical `workbook-ir.json`, `workbook-compile-plan.json`, and
+canonical workbook output, validates every source zone has a lowering
+disposition, and verifies every workbook element is placed exactly once.
 
 ## Assertions encoded by the pins (`chart-specs.json`)
 
@@ -108,7 +121,17 @@ parameter switches the calculation. Throwaway workbook + DM were deleted after.
     {"path": "workbook-content.twb", "format": "xml"},
     {"path": "get-workbook.json", "format": "json"},
     {"path": "master-columns.json", "format": "json"},
-    {"path": "chart-specs.json", "format": "json"}
-  ]
+    {"path": "chart-specs.json", "format": "json"},
+    {"path": "compiler-case.json", "format": "json"},
+    {"path": "parity-oracle.json", "format": "json"},
+    {"path": "checks.sh", "format": "text"},
+    {"path": "check_workbook.py", "format": "text"}
+  ],
+  "goldens": {
+    "workbook.json": {
+      "pages": 2,
+      "elements": 9
+    }
+  }
 }
 ```

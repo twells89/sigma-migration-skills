@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "tableau-workbook-ir",
+  "source": {
+    "type": "tableau",
+    "twb": "synthetic-blocked.twb",
+    "sha256": "synthetic"
+  },
+  "artifacts": {},
+  "workbook": {
+    "pages": [
+      {
+        "name": "Blocked Dashboard",
+        "layout_index": 0,
+        "emit_page": true,
+        "is_story": false,
+        "zones": [
+          {
+            "id": "blocked-1",
+            "kind": "chart",
+            "caption": "Unsupported Radial Tree",
+            "chart_kind": "radial-tree",
+            "measures": [
+              {
+                "column": "Revenue",
+                "derivation": "sum"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "worksheets": {},
+    "parameters": [],
+    "shared_filters": [],
+    "datasource_filters": [],
+    "column_aliases": {},
+    "column_formats": {},
+    "stories": []
+  },
+  "bindings": [],
+  "unsupported": [],
+  "phases": {
+    "parse": true,
+    "charts": false,
+    "assemble": false,
+    "layout": false
+  }
+}

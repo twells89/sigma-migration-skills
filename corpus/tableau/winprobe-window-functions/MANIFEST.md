@@ -98,6 +98,7 @@ Tableau wb `<workbook-luid>`, Sigma DM `<dm-id>`.
     {"path": "workbook-content.twb", "format": "xml"},
     {"path": "get-workbook.json", "format": "json"},
     {"path": "master-columns.json", "format": "json"},
+    {"path": "compiler-case.json", "format": "json"},
     {"path": "checks.sh", "format": "text"},
     {"path": "views/939579b7-3a5e-4eef-8d4e-7be678adefeb.csv", "format": "text"},
     {"path": "views/446cd366-7aba-4c64-8dd0-75633d0c4b92.csv", "format": "text"},
@@ -120,6 +121,11 @@ Tableau wb `<workbook-luid>`, Sigma DM `<dm-id>`.
         "title--synthetic-win-weekly-funnel", "WIN Weekly Funnel",
         "title--synthetic-win-pareto-category", "WIN Pareto Category"
       ]
+    },
+    "workbook.json": {
+      "pages": 9,
+      "elements": 50,
+      "columns": 38
     }
   }
 }

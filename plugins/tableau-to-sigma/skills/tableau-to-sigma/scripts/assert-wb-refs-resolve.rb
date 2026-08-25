@@ -220,6 +220,18 @@ wb_elements.each_with_index do |el, i|
 
   # source-level dependency: the element the formulas' prefixes lean on
   src = el['source'] || {}
+  own_names = Set.new(((el['columns'] || []) + (el['metrics'] || [])).filter_map do |column|
+    norm(column['name']) if column['name']
+  end)
+  operator_prefixes = Set.new
+  if src['kind'] == 'join'
+    operator_prefixes << src['name'].to_s unless src['name'].to_s.empty?
+    Array(src['joins']).each { |join| operator_prefixes << join['name'].to_s unless join['name'].to_s.empty? }
+  elsif src['kind'] == 'union'
+    operator_prefixes << src['name'].to_s unless src['name'].to_s.empty?
+    count = Array(src['sources']).length
+    operator_prefixes << "Union of #{count} Sources" if count.positive?
+  end
   if src['kind'] == 'table' && src['elementId']
     tgt = wb_order_by_id[src['elementId']]
     if tgt.nil?
@@ -278,6 +290,19 @@ wb_elements.each_with_index do |el, i|
     k = norm(col)
     rec = (refs[k] ||= { display: col.strip, elements: Set.new })
     rec[:elements] << prefix.strip
+
+    # Join and union sources expose local operator namespaces which are not DM
+    # element names (ForecastJoin / Rates / Manual / Union of N Sources). A
+    # matching output column is resolved by this element's own source operator,
+    # not by the global DM column census.
+    if operator_prefixes.include?(prefix.strip)
+      if own_names.include?(k)
+        next
+      end
+      extra_fails << "element #{el_desc}: [#{prefix.strip}/#{col.strip}] names a workbook-local " \
+                     'join/union operator column that this element does not emit'
+      next
+    end
 
     if (internal = wb_internal[prefix.strip])
       # The prefix names an element of THIS spec — Sigma binds the ref to it.

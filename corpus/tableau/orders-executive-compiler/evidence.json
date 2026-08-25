@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "source": "sanitized-recorded-live",
+  "compiler": {
+    "blocking": 0,
+    "reconcile": "PASS"
+  },
+  "coverage": {
+    "source_visuals": 9,
+    "built_visuals": 9,
+    "dropped": 0
+  },
+  "parity": {
+    "charts_total": 9,
+    "charts_pass": 9,
+    "value_parity_score": 1.0,
+    "tiles_all_nonempty": true
+  },
+  "anchors": {
+    "checked": 9,
+    "matched": 9
+  },
+  "visual": {
+    "score_overall": 0.7349,
+    "threshold": 0.45,
+    "pass": true
+  }
+}

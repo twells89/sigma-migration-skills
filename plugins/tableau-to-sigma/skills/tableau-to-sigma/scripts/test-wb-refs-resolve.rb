@@ -133,6 +133,40 @@ rc, = run_gate({ 'pages' => [{ 'elements' => [
 ] }] }, DM)
 check(rc == 0, 'internal master-calc ref (column not in the DM) resolves against the spec element')
 
+# Workbook-local relational operators are namespaces owned by the element's
+# source, not data-model elements. Live readback uses these exact prefixes.
+relational_spec = { 'pages' => [{ 'elements' => [
+  { 'id' => 'left', 'name' => 'Left', 'kind' => 'table', 'columns' => [] },
+  { 'id' => 'right', 'name' => 'Right', 'kind' => 'table', 'columns' => [] },
+  { 'id' => 'joined', 'name' => 'Forecast', 'kind' => 'table',
+    'source' => {
+      'kind' => 'join', 'name' => 'ForecastJoin',
+      'primarySource' => { 'kind' => 'table', 'elementId' => 'left' },
+      'joins' => [{
+        'name' => 'Rates', 'joinType' => 'left-outer',
+        'left' => { 'kind' => 'table', 'elementId' => 'left' },
+        'right' => { 'kind' => 'table', 'elementId' => 'right' },
+        'columns' => [{ 'left' => '[Val]', 'right' => '[Val]' }]
+      }]
+    },
+    'columns' => [
+      { 'name' => 'Val', 'formula' => '[ForecastJoin/Val]' },
+      { 'name' => 'Rate', 'formula' => '[Rates/Rate]' }
+    ] },
+  { 'id' => 'unioned', 'name' => 'Combined', 'kind' => 'table',
+    'source' => {
+      'kind' => 'union',
+      'sources' => [
+        { 'kind' => 'table', 'elementId' => 'left' },
+        { 'kind' => 'table', 'elementId' => 'right' }
+      ],
+      'matches' => [{ 'outputColumnName' => 'Val', 'sourceColumns' => ['[Val]', '[Val]'] }]
+    },
+    'columns' => [{ 'name' => 'Val', 'formula' => '[Union of 2 Sources/Val]' }] }
+] }] }
+rc, = run_gate(relational_spec, DM)
+check(rc == 0, 'workbook-local join aliases and union namespaces pass the ref gate')
+
 # internal prefix without the column falls back to the GLOBAL DM check
 # (renamed-element tolerance — upstream semantics keep the final say).
 rc, = run_gate({ 'pages' => [{ 'elements' => [

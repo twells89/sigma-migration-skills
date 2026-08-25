@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tableau compiler benchmark results",
+  "type": "object",
+  "required": ["schema_version", "summary", "cases"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "summary": {
+      "type": "object",
+      "required": ["total", "evaluated", "equal_or_better_rate", "green_rate", "numeric_regressions", "promotion_pass"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 1},
+        "evaluated": {"type": "integer", "minimum": 0},
+        "equal_or_better_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "green_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "numeric_regressions": {"type": "integer", "minimum": 0},
+        "promotion_pass": {"type": "boolean"}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"enum": ["evaluated", "missing", "offline"]},
+          "candidate_green": {"type": ["boolean", "null"]},
+          "candidate_parity_score": {"type": ["number", "null"]},
+          "baseline_parity_score": {"type": ["number", "null"]},
+          "equal_or_better": {"type": ["boolean", "null"]}
+        }
+      }
+    }
+  }
+}

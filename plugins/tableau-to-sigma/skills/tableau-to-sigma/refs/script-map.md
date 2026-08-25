@@ -14,6 +14,9 @@ you to.
 | Script | One line |
 |---|---|
 | `migrate-tableau.rb` | The one command — chains the whole gated spine; stops with exact instructions |
+| `emit-workbook-ir.rb` / `compile-workbook-ir.rb` / `compile-tableau-offline.rb` | Canonical TWB workbook IR, fail-loud deterministic lowering plan, and creds-free full-workbook shadow compiler |
+| `apply-workbook-pipeline.rb` | Merge a reviewed existing Sigma workbook-local join/union/input pipeline into the generated workbook using an agent-authored semantic map |
+| `discover-migration-pairs.rb` / `capture-migration-pair.rb` | GET-only Tableau/Sigma target pairing and sanitized local regression capture |
 | `verify-complete.rb` | The single offline "are we done?" check — ✅ DONE only on gate-green; re-derives the verdict ledger (exit 6 on contradiction) |
 | `lib/offramp.rb` + `offramps.jsonl` | Observability trail of every golden-path exit |
 | `setup.rb` / `setup-tableau.rb` | One-time Sigma / Tableau credential setup (`--from-env` = non-interactive; bootstrap runs them) |
@@ -72,6 +75,10 @@ you to.
 | Script | Purpose |
 |---|---|
 | `scripts/migrate-tableau.rb` | **The one command** — chains the whole scripted spine (gap gate → DM-reuse scan → DM → workbook → layout → two-pass parity → cleanup + census gate) and stops with exact instructions where agent judgment is required. See "One command" above. |
+| `scripts/emit-workbook-ir.rb` / `scripts/compile-workbook-ir.rb` | Build the canonical `workbook-ir.json` from `.twb` parser sidecars, then lower every page, zone, control, formula, and action through named deterministic rules into `workbook-compile-plan.json`. `--strict` exits 2 before any live write when unsupported constructs remain. |
+| `scripts/compile-tableau-offline.rb` / `scripts/apply-layout-local.rb` | Creds-free full-workbook compiler and local layout merge. Used by `migrate-tableau.rb --shadow-compile`; reports zero Tableau/Sigma writes and byte-compares against a reviewed corpus golden. |
+| `scripts/apply-workbook-pipeline.rb` | Apply a reviewed `pipeline-map.json` to a generated workbook: copy specified donor pipeline pages/elements, patch per-page master sources/field formulas, and rewrite formulas deterministically. Live orchestrator equivalent: `--reuse-dm <id> --pipeline-template-workbook <id> --pipeline-map <path>`. |
+| `scripts/discover-migration-pairs.rb` / `scripts/capture-migration-pair.rb` | Read-only cross-system inventory matcher and sanitized artifact capture. Raw captures remain local and `hygiene_ready:false` until reviewed; extracts and row CSVs are excluded by default. |
 | `scripts/verify-complete.rb` | **The single offline "are we done?" check** — exit 0 / ✅ DONE only when `phase6-success.json` is present (stamped by `assert-phase6-ran.rb` exit 0) and no `parity-pending.json` remains. A clean PASS 1 (exit 12) reports NOT DONE. PR-14: re-derives the degradation ledger, prints the verdict (GREEN/YELLOW/PARTIAL) with the ledger inline, and **exits 6 when the report's claims (verdict / waiver census) contradict the derivation** — the anti-"GREEN, 0 waivers" cross-check. Also prints the run's off-ramp trail. Run before claiming success. |
 | `scripts/lib/offramp.rb` + `offramps.jsonl` | **Observability trail** — every point a run leaves the golden path (cred/doctor waiver, PASS-1 stop, converter-stop, workbook-handoff, degraded fast path, manual-spec) appends a structured record to `<WORK>/offramps.jsonl`. Read it (or `verify-complete.rb`) to pinpoint *where* a run defected. |
 | `scripts/setup.rb` | One-time Sigma credential setup |

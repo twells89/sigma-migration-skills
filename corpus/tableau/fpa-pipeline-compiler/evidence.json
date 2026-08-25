@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "source": "sanitized-recorded-live",
+  "pipeline_reuse": {
+    "pipeline_elements_copied": 6,
+    "page_masters_patched": 3,
+    "hidden_pages_preserved": true
+  },
+  "coverage": {
+    "pages": 3,
+    "source_visuals": 13,
+    "built_visuals": 13,
+    "charts_compiling": 11,
+    "clean_columns": 139,
+    "dropped": 0
+  },
+  "release": {
+    "parity_complete": false,
+    "contains_no_data_tiles": true,
+    "promotion_ready": false,
+    "blocking_classes": [
+      "generic-kpi-aggregation",
+      "missing-element-filter-semantics",
+      "table-vs-pivot-shape",
+      "no-data-displayed-tile"
+    ]
+  }
+}

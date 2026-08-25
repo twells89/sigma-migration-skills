@@ -161,6 +161,7 @@ require 'yaml'
 require 'optparse'
 require 'fileutils'
 require 'open3'
+require 'tmpdir'
 require_relative 'lib/py_resolve' # real-Python resolver (Windows Store-stub safe)
 begin; require_relative 'lib/modeling_advisory'; rescue LoadError; end # shared, vendor-neutral CDW join-cost advisory (optional; synced from shared/)
 require 'date'
@@ -208,7 +209,7 @@ ENV['SIGMA_ORCHESTRATED_RUN'] = '1'
 # rescue). :recommended reuse comes from auto-pick, never a CLI arg, so the
 # snapshot carries no --reuse-dm to strip.
 ORIGINAL_ARGV = ARGV.dup.freeze
-opts = { per_page_masters: true }
+opts = { per_page_masters: true, deterministic_compiler: 'auto' }
 OptionParser.new do |o|
   o.banner = <<~BANNER
     Usage: ruby scripts/migrate-tableau.rb --workbook <name>|--workbook-id <luid> \\
@@ -227,6 +228,15 @@ OptionParser.new do |o|
 
     Options:
   BANNER
+  o.on('--shadow-compile', 'compile a corpus/source fixture twice with zero live writes; no credentials required') { opts[:shadow_compile] = true }
+  o.on('--from-corpus DIR', 'fixture directory for --shadow-compile') { |v| opts[:from_corpus] = File.expand_path(v) }
+  o.on('--baseline PATH', 'normalized workbook golden for --shadow-compile') { |v| opts[:baseline] = File.expand_path(v) }
+  o.on('--write-candidate PATH', 'candidate workbook output for --shadow-compile') { |v| opts[:write_candidate] = File.expand_path(v) }
+  o.on('--record-baseline REASON', 'replace --baseline from a reviewed shadow result (non-empty reason required)') { |v| opts[:record_baseline] = v }
+  o.on('--deterministic-compiler MODE', %w[auto required off],
+       'workbook IR/lowering gate: auto (default) activates on zero blockers; required stops on any blocker; off disables') do |v|
+    opts[:deterministic_compiler] = v
+  end
   o.on('--workbook NAME')    { |v| opts[:wb_name] = v }
   o.on('--workbook-id LUID') { |v| opts[:wb_id]   = v }
   o.on('--connection ID')    { |v| opts[:conn]    = v }
@@ -292,6 +302,13 @@ OptionParser.new do |o|
   o.on('--force')            {     opts[:force]   = true }
   o.on('--reuse-dm [ID]', 'opt IN to DM reuse (default: build new; bare flag = use find-or-pick-dm\'s ' \
                           'recommendation). An EXPLICIT id combined with --wb-spec takes the FAST PATH.') { |v| opts[:reuse_dm] = v || :recommended }
+  o.on('--pipeline-template-workbook ID', 'reuse a proven workbook-local data pipeline (joins/unions/input tables) ' \
+                                           'from this Sigma workbook; requires --pipeline-map and explicit --reuse-dm') do |v|
+    opts[:pipeline_template_workbook] = v
+  end
+  o.on('--pipeline-map PATH', 'agent-authored semantic mapping plan for --pipeline-template-workbook') do |v|
+    opts[:pipeline_map] = File.expand_path(v)
+  end
   o.on('--skip-reuse-scan')  {     opts[:skip_reuse] = true }
   o.on('--fact-table NAME', 'override the object-model fact election: NAME (case-insensitive warehouse table / ' \
                             'logical-table name) becomes the fact/base element every LOD/Top-N/window helper and ' \
@@ -405,6 +422,59 @@ OptionParser.new do |o|
                               '--reuse-dm. Iterating a fix? Re-run with --reuse-dm <id> --reuse-workbook <id> to edit the ' \
                               'SAME dashboard rather than orphaning it.') { |v| opts[:reuse_workbook] = v }
 end.parse!
+
+if !!opts[:pipeline_template_workbook] != !!opts[:pipeline_map]
+  abort 'FATAL: --pipeline-template-workbook and --pipeline-map must be passed together'
+end
+if opts[:pipeline_template_workbook] && !opts[:reuse_dm].is_a?(String)
+  abort 'FATAL: --pipeline-template-workbook requires an explicit --reuse-dm <id>; the pipeline must bind to a proven live model'
+end
+
+if opts[:shadow_compile]
+  abort 'FATAL: --shadow-compile requires --from-corpus DIR' unless opts[:from_corpus]
+  live_conflicts = {
+    '--finalize' => opts[:finalize],
+    '--connection' => opts[:conn],
+    '--reuse-dm' => opts[:reuse_dm],
+    '--reuse-workbook' => opts[:reuse_workbook],
+    '--workbook-target' => opts[:wb_target],
+    '--enhance' => opts[:enhance]
+  }.select { |_flag, value| value }
+  abort "FATAL: --shadow-compile cannot be combined with live flags: #{live_conflicts.keys.join(', ')}" unless live_conflicts.empty?
+  if opts[:record_baseline] && opts[:record_baseline].to_s.strip.empty?
+    abort 'FATAL: --record-baseline requires a non-empty review reason'
+  end
+
+  shadow_work = File.expand_path(opts[:out] || Dir.mktmpdir('tableau-shadow-compile'))
+  FileUtils.mkdir_p(shadow_work)
+  candidate = File.expand_path(opts[:write_candidate] || File.join(shadow_work, 'candidate-workbook.json'))
+  baseline = opts[:baseline] || File.join(opts[:from_corpus], 'golden', 'workbook.json')
+  command = [
+    RbConfig.ruby, File.join(HERE, 'compile-tableau-offline.rb'),
+    '--case-dir', opts[:from_corpus],
+    '--workdir', shadow_work,
+    '--out', candidate
+  ]
+  if opts[:record_baseline]
+    command.concat(['--record', baseline])
+  elsif File.exist?(baseline)
+    command.concat(['--compare', baseline])
+  else
+    abort "FATAL: shadow baseline not found: #{baseline} (pass --baseline or --record-baseline REASON)"
+  end
+
+  warn 'SHADOW COMPILE: offline deterministic path; Sigma/Tableau writes are hard-disabled.'
+  success = system({ 'SIGMA_SHADOW_COMPILE' => '1' }, *command)
+  status = $?.exitstatus || 1
+  report = File.join(shadow_work, 'offline-compile.json')
+  FileUtils.cp(report, File.join(shadow_work, 'shadow-compile.json')) if File.exist?(report)
+  if opts[:record_baseline] && success
+    warn "SHADOW BASELINE RECORDED: #{baseline} (reason: #{opts[:record_baseline]})"
+  end
+  exit status
+end
+
+deterministic_plan_path = nil
 
 # --db/--schema travel together: a lone half used to be silently completed by a
 # fabricated default, which 404s in every real org (E2E-caught). Fail loudly.
@@ -1591,12 +1661,22 @@ if opts[:finalize]
   report_verdict = report_doc['verdict'] || 'unavailable'
   line "migration report: #{report_verdict}#{report_st.success? ? '' : " (exit #{report_st.exitstatus})"}"
 
+  compiler_gate_out = ''
+  compiler_gate_ok = true
+  if File.exist?(File.join(WORK, 'workbook-compile-plan.json'))
+    compiler_gate_out, compiler_gate_st = run!(
+      ['ruby', File.join(HERE, 'assert-compiler-runtime.rb'), '--workdir', WORK],
+      allow_fail: true
+    )
+    compiler_gate_ok = compiler_gate_st.success?
+  end
+
   # With an explicit --min-pass-rate (honest NAMED divergences), the census-
   # aware gate is the parity authority — phase6's own exit stays strict-100%.
   parity_ok = p6st.success? || (opts[:min_pass_rate] && gst.success?)
   accounting_ok = census_st.success? && report_st.success? && report_verdict != 'RED'
   all_green = parity_ok && clst.success? && gst.success? && dsfst.success? &&
-              agst.success? && accounting_ok
+              agst.success? && accounting_ok && compiler_gate_ok
 
   # ---------------------------------------------------------------------------
   # Phase E (OPT-IN) — Enhance. Runs ONLY when --enhance was passed (here or on
@@ -1732,7 +1812,7 @@ if opts[:finalize]
   else
     puts "PARITY      : #{pf['status'] || '?'} (#{pf['charts_pass']}/#{pf['charts_total']} charts#{state['extract_mode'] ? ', extract-mode' : ''})"
   end
-  puts "GATES       : phase6=#{p6st.success? ? 'PASS' : 'FAIL'} cleanup=#{clst.success? ? 'PASS' : 'FAIL'} assert-phase6-ran=#{gst.success? ? 'PASS' : "FAIL(#{gst.exitstatus})"} ds-filters=#{dsfst.success? ? 'PASS' : "FAIL(#{dsfst.exitstatus})"} action-gates=#{agst.success? ? 'PASS' : "FAIL(#{agst.exitstatus})"} source-census=#{census_st.success? ? 'PASS' : "FAIL(#{census_st.exitstatus})"} report=#{report_verdict}#{report_st.success? ? '' : "(#{report_st.exitstatus})"}"
+  puts "GATES       : phase6=#{p6st.success? ? 'PASS' : 'FAIL'} cleanup=#{clst.success? ? 'PASS' : 'FAIL'} assert-phase6-ran=#{gst.success? ? 'PASS' : "FAIL(#{gst.exitstatus})"} ds-filters=#{dsfst.success? ? 'PASS' : "FAIL(#{dsfst.exitstatus})"} action-gates=#{agst.success? ? 'PASS' : "FAIL(#{agst.exitstatus})"} compiler=#{compiler_gate_ok ? 'PASS' : 'FAIL'} source-census=#{census_st.success? ? 'PASS' : "FAIL(#{census_st.exitstatus})"} report=#{report_verdict}#{report_st.success? ? '' : "(#{report_st.exitstatus})"}"
   puts "ENHANCE     : #{enhance_line}" if enhance_line
   puts "PUNCH LIST  : #{_pl_note}" if _pl_note
   puts "STATUS      : #{all_green ? 'GREEN' : 'NOT GREEN'}"
@@ -1774,6 +1854,7 @@ if opts[:finalize]
                 elsif !parity_ok then p6out # p6 failure NOT excused by --min-pass-rate
                 elsif !dsfst.success? then dsfout
                 elsif !agst.success? then agout
+                elsif !compiler_gate_ok then compiler_gate_out
                 elsif !census_st.success? then census_out
                 elsif !report_st.success? then report_out
                 else clout
@@ -1784,6 +1865,7 @@ if opts[:finalize]
                                                    cleanup: clst.exitstatus,
                                                    dsfilters: dsfst.exitstatus,
                                                    actiongates: agst.exitstatus,
+                                                   compiler: compiler_gate_ok ? 0 : 3,
                                                    census: census_st.exitstatus,
                                                    report: report_st.exitstatus,
                                                    report_verdict: report_verdict },
@@ -2088,7 +2170,7 @@ else
   # so the frozen extract bytes are never consumed on this route — skip
   # discovery's heavy includeExtract=true re-download instead of paying for an
   # unused multi-GB payload.
-  disc << '--no-extract-refetch' if opts[:skip_extract_landing]
+  disc << '--no-extract-refetch' if opts[:skip_extract_landing] || opts[:pipeline_template_workbook]
   # W2.20 (lane F): thread the dashboard scope into discovery (member-sheet CSVs
   # only; discovery FAILS OPEN to all views, stated, when membership is unresolvable).
   (opts[:dashboards] || []).each { |d| disc += ['--dashboard', d] }
@@ -2213,6 +2295,29 @@ if have_twb
     run!(['ruby', File.join(HERE, 'parse-twb-layout.rb'), twb, layout_json] + DASH_SCOPE)
   end
   line 'parse-twb-layout REUSED (.twb sha + scope unchanged) — delete dashboard-layout.json to force a re-parse' if parse_st == :reused
+  unless opts[:deterministic_compiler] == 'off'
+    ir_path = File.join(WORK, 'workbook-ir.json')
+    plan_path = File.join(WORK, 'workbook-compile-plan.json')
+    run!(['ruby', File.join(HERE, 'emit-workbook-ir.rb'), '--workdir', WORK, '--out', ir_path])
+    run!(['ruby', File.join(HERE, 'compile-workbook-ir.rb'), '--ir', ir_path, '--out', plan_path])
+    compiler_plan = JSON.parse(File.read(plan_path, encoding: 'UTF-8'))
+    compiler_blockers = Array(compiler_plan['blocking'])
+    if compiler_blockers.empty?
+      deterministic_plan_path = plan_path
+      line "deterministic compiler: PROVEN for this workbook " \
+           "(#{compiler_plan.dig('summary', 'source_zones')} zones, " \
+           "#{compiler_plan.dig('summary', 'controls_lowered')} controls, 0 blockers)"
+    elsif opts[:deterministic_compiler] == 'required'
+      warn "DETERMINISTIC COMPILER STOP: #{compiler_blockers.length} unsupported construct(s); no Sigma writes made."
+      compiler_blockers.first(20).each do |blocker|
+        warn "  - #{blocker['rule']}: #{blocker['reason'] || blocker.dig('source', 'detail') || blocker.dig('source', 'visual')}"
+      end
+      exit 11
+    else
+      warn "deterministic compiler: #{compiler_blockers.length} blocker(s) — auto mode keeps the existing gated path; " \
+           'use --deterministic-compiler required to fail here.'
+    end
+  end
   line "per-dashboard scope: #{(opts[:dashboards] || []) + (opts[:pages] || [])} (single-tab build)" if scoped?
   dash = JSON.parse(File.read(layout_json))
   # E9.6 — a scoped name that matches NOTHING is a named STOP listing the
@@ -2594,7 +2699,7 @@ if mechanical
       # the loop stalled 30s on runs that were headed to the manual gate
       # anyway), and stop as soon as the discovery lane has exited — no
       # further .twbx replacement is possible after that.
-      if landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] &&
+      if landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] && !opts[:pipeline_template_workbook] &&
          opts[:conn] && sf_ok && land_db && land_sch && File.exist?(twbx_payload)
         6.times do
           break if (File.binread(twbx_payload).include?('.hyper') rescue false)
@@ -2603,13 +2708,13 @@ if mechanical
           sleep 5
         end
       end
-      if landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] &&
+      if landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] && !opts[:pipeline_template_workbook] &&
          File.exist?(twbx_payload) && opts[:conn] && sf_ok && !(land_db && land_sch)
         line 'auto-land: SKIPPED — landing target unknown, and there is NO default db/schema. ' \
              'Pass --db/--schema (or set SNOWFLAKE_DATABASE/SNOWFLAKE_SCHEMA in the env / ' \
              '~/.sigma-migration/env); the manual landing gate (exit 17) follows.'
       end
-      if landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] &&
+      if landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] && !opts[:pipeline_template_workbook] &&
          File.exist?(twbx_payload) && opts[:conn] && sf_ok && land_db && land_sch
         # Prefix carries a LUID fragment so two workbooks whose names share the
         # slug can never clobber each other's landed tables (write_pandas
@@ -2643,7 +2748,7 @@ if mechanical
           File.delete(mani_p) if mani_body.is_a?(Array) && mani_body.empty?
           line 'WARN: auto-landing landed nothing (failure or payload-less .twbx) — manual landing gate (exit 17)'
         end
-      elsif landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] &&
+      elsif landing_manifest.nil? && !opts[:no_auto_land] && !opts[:skip_extract_landing] && !opts[:pipeline_template_workbook] &&
             File.exist?(twbx_payload) && opts[:conn] && !sf_ok
         line 'NOTE: auto-landing available but SNOWFLAKE_ACCOUNT/SNOWFLAKE_USER are not in env or ' \
              '~/.sigma-migration/env — add them once to skip this manual gate on future runs.'
@@ -2651,6 +2756,17 @@ if mechanical
       if landing_manifest
         line "embedded-extract sources (#{conn_classes.join(', ')}) — landing manifest found " \
              "(#{File.basename(landing_manifest)}); parity mode is EXACT (frozen extract landed byte-identical)"
+      elsif opts[:pipeline_template_workbook]
+        line "embedded-extract source is already represented by reusable workbook pipeline " \
+             "#{opts[:pipeline_template_workbook]} over explicit DM #{opts[:reuse_dm]} — " \
+             "landing gate satisfied by the reviewed #{File.basename(opts[:pipeline_map])} semantic map"
+        Offramp.decision(
+          WORK,
+          kind: 'pipeline-reuse',
+          question: 'extract landing or existing governed workbook pipeline?',
+          answer: "reuse workbook #{opts[:pipeline_template_workbook]} with map #{opts[:pipeline_map]}",
+          decided_by: 'relayed'
+        )
       elsif opts[:skip_extract_landing]
         line "WARN: embedded-extract sources with NO landing manifest — proceeding on --skip-extract-landing " \
              "(#{opts[:skip_extract_landing]}); the DM's table paths are on you (--db/--schema)"
@@ -4815,8 +4931,13 @@ if mechanical
                '--coverage-out', File.join(WORK, 'coverage.json')]
   build_cmd += ['--meta', layout_json.sub(/\.json$/, '-meta.json')] if File.exist?(layout_json.sub(/\.json$/, '-meta.json'))
   build_cmd += ['--auto-controls'] if File.exist?(layout_json.sub(/\.json$/, '-meta.json'))
+  build_cmd += ['--skip-dashboard-read', opts[:skip_dashboard_read]] if opts[:skip_dashboard_read]
   build_cmd += ['--detected-actions', detected_actions_path] if File.exist?(detected_actions_path)
   build_cmd += ['--grain-plan', grain_plan_path] if grain_plan && File.exist?(grain_plan_path)
+  if deterministic_plan_path && File.exist?(deterministic_plan_path)
+    build_cmd += ['--ir', File.join(WORK, 'workbook-ir.json'),
+                  '--compile-plan', deterministic_plan_path]
+  end
   # Per-dashboard scope (defensive — the layout is already pre-scoped, so a single
   # dashboard yields exactly one page; passing the flags keeps a standalone build
   # honest if it's ever handed a full layout).
@@ -5120,6 +5241,41 @@ if opts[:per_page_masters]
     line 'per-page-masters (PR-17): no split needed (<=1 page draws on the master) — shared master kept'
   end
 end
+
+# A reusable data model may expose only normalized base elements while the
+# source workbook depends on a proven workbook-local pipeline (joins, unions,
+# input tables, and derived masters). The agent/LLM selects an existing Sigma
+# workbook and authors a small semantic map; this deterministic merge applies
+# it before validation/POST. No pipeline is guessed from names alone.
+if opts[:pipeline_template_workbook]
+  require File.join(HERE, 'lib', 'workbook_pipeline_reuse')
+  require 'sigma_rest'
+  donor = Sigma.request(
+    :get,
+    "/v2/workbooks/#{opts[:pipeline_template_workbook]}/spec",
+    accept: 'application/json'
+  )
+  pipeline_plan = JSON.parse(File.read(opts[:pipeline_map], encoding: 'UTF-8'))
+  pipeline_plan['template_workbook_id'] ||= opts[:pipeline_template_workbook]
+  File.write(
+    File.join(WORK, 'pipeline-pre-spec.json'),
+    JSON.pretty_generate(WorkbookCode.canonicalize(spec)) + "\n"
+  )
+  pipeline_result = WorkbookPipelineReuse.apply!(
+    spec,
+    donor_spec: donor,
+    plan: pipeline_plan
+  )
+  spec = pipeline_result['spec']
+  File.write(
+    File.join(WORK, 'pipeline-reuse.json'),
+    JSON.pretty_generate(pipeline_result['report']) + "\n"
+  )
+  line "pipeline reuse: copied #{pipeline_result['report']['pipeline_elements_copied']} proven element(s) " \
+       "from workbook #{opts[:pipeline_template_workbook]}; patched " \
+       "#{pipeline_result['report']['masters_patched'].length} page master(s)"
+end
+
 # ---- PUT-APPEND: incremental one-tab-at-a-time into an EXISTING workbook ----
 # When --workbook-target <id> is set with a single-dashboard build, append the
 # newly-built page(s) to the existing workbook's spec instead of POSTing a brand

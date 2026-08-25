@@ -207,6 +207,51 @@ check(out.include?('Today()'), 'CurrentDate error names the Sigma Today() fix', 
 out, _ = validate({ 'pages' => [{ 'elements' => [el('t1', 'T', formula: 'Substring([Val], 1, 2)') ] }] })
 check(!out.include?('→ Sigma Text'), 'Substring (contains "str") is NOT flagged as an STR leak', fails)
 
+puts
+puts 'Part I — workbook-local join/union operator prefixes are valid'
+relational = {
+  'pages' => [{
+    'name' => 'Data',
+    'elements' => [
+      { 'id' => 'left', 'kind' => 'table', 'name' => 'Left', 'columns' => [] },
+      { 'id' => 'right', 'kind' => 'table', 'name' => 'Right', 'columns' => [] },
+      {
+        'id' => 'joined', 'kind' => 'table', 'name' => 'Joined',
+        'source' => {
+          'kind' => 'join', 'name' => 'ForecastJoin',
+          'primarySource' => { 'kind' => 'table', 'elementId' => 'left' },
+          'joins' => [{
+            'name' => 'Rates', 'joinType' => 'left-outer',
+            'left' => { 'kind' => 'table', 'elementId' => 'left' },
+            'right' => { 'kind' => 'table', 'elementId' => 'right' },
+            'columns' => [{ 'left' => '[Val]', 'right' => '[Val]' }]
+          }]
+        },
+        'columns' => [
+          { 'id' => 'j1', 'name' => 'Primary Val', 'formula' => '[ForecastJoin/Val]' },
+          { 'id' => 'j2', 'name' => 'Rate', 'formula' => '[Rates/Val]' }
+        ]
+      },
+      {
+        'id' => 'unioned', 'kind' => 'table', 'name' => 'Unioned',
+        'source' => {
+          'kind' => 'union',
+          'sources' => [
+            { 'kind' => 'table', 'elementId' => 'left' },
+            { 'kind' => 'table', 'elementId' => 'right' }
+          ],
+          'matches' => [{ 'outputColumnName' => 'Val', 'sourceColumns' => ['[Val]', '[Val]'] }]
+        },
+        'columns' => [
+          { 'id' => 'u1', 'name' => 'Val', 'formula' => '[Union of 2 Sources/Val]' }
+        ]
+      }
+    ]
+  }]
+}
+out, code = validate(relational)
+check(code == 0, "join aliases + union namespace validate (got #{code}: #{out.lines.grep(/ERROR/).join.strip})", fails)
+
 if fails.empty?
   puts 'OK — validate-spec ID-uniqueness + function-tier + tableau-leak + envelope + null-name guards all pass'
   exit 0

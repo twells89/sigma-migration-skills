@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "name": "Generated Dashboard",
+  "folderId": "__FOLDER__",
+  "pages": [
+    {
+      "id": "data",
+      "name": "Data",
+      "elements": [
+        {
+          "id": "master-overview",
+          "kind": "table",
+          "name": "Master",
+          "visibleAsSource": false,
+          "source": {
+            "kind": "data-model",
+            "dataModelId": "__DM__",
+            "elementId": "__WRONG__"
+          },
+          "columns": [
+            {
+              "id": "master-record-type",
+              "name": "Record Type",
+              "formula": "[Custom SQL/Record Type]"
+            },
+            {
+              "id": "master-amount",
+              "name": "Amount",
+              "formula": "[Custom SQL/Amount]"
+            }
+          ],
+          "order": ["master-record-type", "master-amount"]
+        }
+      ]
+    },
+    {
+      "id": "overview",
+      "name": "Overview",
+      "elements": [
+        {
+          "id": "revenue-kpi",
+          "kind": "kpi-chart",
+          "name": {
+            "text": "Revenue"
+          },
+          "source": {
+            "kind": "table",
+            "elementId": "master-overview"
+          },
+          "columns": [
+            {
+              "id": "revenue",
+              "name": "Revenue",
+              "formula": "[Metrics/Total Amount]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

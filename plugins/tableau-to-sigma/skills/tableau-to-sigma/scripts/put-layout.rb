@@ -28,6 +28,8 @@ require 'date'
 require 'optparse'
 require 'cgi'
 
+abort 'FATAL: SIGMA_SHADOW_COMPILE=1 forbids live layout GET/PUT operations' if ENV['SIGMA_SHADOW_COMPILE'] == '1'
+
 opts = {}
 OptionParser.new do |p|
   p.on('--workbook ID') { |v| opts[:wb] = v }

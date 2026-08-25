@@ -37,6 +37,8 @@ require 'date'
 require 'time'
 require 'optparse'
 
+abort 'FATAL: SIGMA_SHADOW_COMPILE=1 forbids POST/PUT/readback operations' if ENV['SIGMA_SHADOW_COMPILE'] == '1'
+
 opts = {}
 OptionParser.new do |p|
   p.on('--type T', %w[datamodel workbook]) { |v| opts[:type] = v }

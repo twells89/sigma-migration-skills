@@ -1,0 +1,270 @@
+{
+  "name": "Partner Bookings Crosstab",
+  "description": "Generated mechanically from Tableau via tableau-to-sigma (convert_tableau_to_sigma + build-charts-from-signals).",
+  "folderId": "offline-folder",
+  "document": {
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "page-data",
+        "name": "Data"
+      },
+      {
+        "id": "page-dash-1",
+        "name": "Metric Partner Closed Won"
+      }
+    ],
+    "kind": "workbook",
+    "elements": [
+      {
+        "id": "master",
+        "kind": "table",
+        "name": "Master",
+        "visibleAsSource": false,
+        "source": {
+          "kind": "data-model",
+          "dataModelId": "offline-data-model",
+          "elementId": "offline-fact"
+        },
+        "columns": [
+          {
+            "id": "m-partner",
+            "name": "Partner Name",
+            "formula": "[Offline Fact/Partner Name]"
+          },
+          {
+            "id": "m-fyqq",
+            "name": "Created FYQQ",
+            "formula": "[Offline Fact/Created FYQQ]"
+          },
+          {
+            "id": "m-geo",
+            "name": "Customer Geo",
+            "formula": "[Offline Fact/Customer Geo]"
+          },
+          {
+            "id": "m-plevel",
+            "name": "Partner Level",
+            "formula": "[Offline Fact/Partner Level]"
+          },
+          {
+            "id": "m-mkt",
+            "name": "Mkt Sourced Influenced",
+            "formula": "[Offline Fact/Mkt Sourced Influenced]"
+          },
+          {
+            "id": "m-ptcv",
+            "name": "Product TCV",
+            "formula": "[Offline Fact/Product TCV]"
+          },
+          {
+            "id": "m-tcv",
+            "name": "TCV",
+            "formula": "[Offline Fact/TCV]"
+          },
+          {
+            "id": "m-acv",
+            "name": "ACV",
+            "formula": "[Offline Fact/ACV]"
+          }
+        ],
+        "order": [
+          "m-partner",
+          "m-fyqq",
+          "m-geo",
+          "m-plevel",
+          "m-mkt",
+          "m-ptcv",
+          "m-tcv",
+          "m-acv"
+        ]
+      },
+      {
+        "id": "title-text-metric-partner-closed-won",
+        "kind": "text",
+        "body": "## Metric Partner Closed Won"
+      },
+      {
+        "id": "el-param-summary-choose-metric-partner-closed",
+        "kind": "control",
+        "controlId": "ctl-param-summary-choose-metric-partner-closed",
+        "name": "Summary $ Choose",
+        "controlType": "segmented",
+        "source": {
+          "kind": "manual",
+          "valueType": "text",
+          "values": [
+            "1",
+            "2",
+            "3"
+          ],
+          "labels": [
+            "TCV",
+            "Product TCV",
+            "ACV"
+          ]
+        },
+        "value": "1"
+      },
+      {
+        "id": "el-ctl-customer-geo-metric-partner-closed",
+        "kind": "control",
+        "controlId": "ctl-customer-geo-metric-partner-closed",
+        "name": "Customer Geo",
+        "controlType": "list",
+        "mode": "include",
+        "selectionMode": "multiple",
+        "values": [
+
+        ],
+        "source": {
+          "kind": "source",
+          "source": {
+            "kind": "table",
+            "elementId": "master"
+          },
+          "columnId": "m-geo"
+        },
+        "filters": [
+          {
+            "source": {
+              "kind": "table",
+              "elementId": "master"
+            },
+            "columnId": "m-geo"
+          }
+        ]
+      },
+      {
+        "id": "el-ctl-partner-level-g-metric-partner-closed",
+        "kind": "control",
+        "controlId": "ctl-partner-level-g-metric-partner-closed",
+        "name": "Partner Level (g)",
+        "controlType": "list",
+        "mode": "include",
+        "selectionMode": "multiple",
+        "values": [
+
+        ],
+        "source": {
+          "kind": "source",
+          "source": {
+            "kind": "table",
+            "elementId": "master"
+          },
+          "columnId": "m-plevel"
+        },
+        "filters": [
+          {
+            "source": {
+              "kind": "table",
+              "elementId": "master"
+            },
+            "columnId": "m-plevel"
+          }
+        ]
+      },
+      {
+        "id": "el-ctl-mkt-sourced-influenced-metric-partner-closed",
+        "kind": "control",
+        "controlId": "ctl-mkt-sourced-influenced-metric-partner-closed",
+        "name": "Mkt Sourced/Influenced",
+        "controlType": "list",
+        "mode": "include",
+        "selectionMode": "multiple",
+        "values": [
+
+        ],
+        "source": {
+          "kind": "source",
+          "source": {
+            "kind": "table",
+            "elementId": "master"
+          },
+          "columnId": "m-mkt"
+        },
+        "filters": [
+          {
+            "source": {
+              "kind": "table",
+              "elementId": "master"
+            },
+            "columnId": "m-mkt"
+          }
+        ]
+      },
+      {
+        "id": "el-metric-partner-closed-won",
+        "kind": "pivot-table",
+        "name": "Summary $ Choose",
+        "source": {
+          "kind": "table",
+          "elementId": "master"
+        },
+        "columns": [
+          {
+            "id": "p-el-metric-partner-closed-won-row-partner-name",
+            "name": "Partner Name",
+            "formula": "[Master/Partner Name]"
+          },
+          {
+            "id": "p-el-metric-partner-closed-won-col-created-fyqq",
+            "name": "Created FYQQ",
+            "formula": "[Master/Created FYQQ]"
+          },
+          {
+            "id": "p-el-metric-partner-closed-won-value-summary-",
+            "name": "Summary $",
+            "formula": "Switch([ctl-param-summary-choose-metric-partner-closed], \"1\", Sum([TCV]), \"2\", Sum([Product TCV]), \"3\", Sum([ACV]))",
+            "format": {
+              "kind": "number",
+              "formatString": ",.0f"
+            }
+          },
+          {
+            "id": "p-el-metric-partner-closed-won-value-acv",
+            "name": "ACV",
+            "formula": "Sum([Master/ACV])",
+            "format": {
+              "kind": "number",
+              "formatString": ",.0f"
+            }
+          },
+          {
+            "id": "pvsw-tcv",
+            "name": "TCV",
+            "formula": "[Master/TCV]"
+          },
+          {
+            "id": "pvsw-product-tcv",
+            "name": "Product TCV",
+            "formula": "[Master/Product TCV]"
+          }
+        ],
+        "values": [
+          "p-el-metric-partner-closed-won-value-summary-",
+          "p-el-metric-partner-closed-won-value-acv"
+        ],
+        "rowsBy": [
+          {
+            "id": "p-el-metric-partner-closed-won-row-partner-name"
+          }
+        ],
+        "columnsBy": [
+          {
+            "id": "p-el-metric-partner-closed-won-col-created-fyqq"
+          }
+        ]
+      },
+      {
+        "id": "tc-page-dash-1-hdr",
+        "kind": "container"
+      },
+      {
+        "id": "tc-page-dash-1-1",
+        "kind": "container"
+      }
+    ],
+    "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-data\">\n  <Element elementId=\"master\" gridColumn=\"1 / 25\" gridRow=\"1 / 11\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash-1\">\n<Container elementId=\"tc-page-dash-1-hdr\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"title-text-metric-partner-closed-won\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n</Container>\n<Container elementId=\"tc-page-dash-1-1\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 49\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-metric-partner-closed-won\" gridColumn=\"6 / 25\" gridRow=\"1 / 37\"/>\n  <Element elementId=\"el-param-summary-choose-metric-partner-closed\" gridColumn=\"1 / 6\" gridRow=\"1 / 10\"/>\n  <Element elementId=\"el-ctl-customer-geo-metric-partner-closed\" gridColumn=\"1 / 6\" gridRow=\"10 / 19\"/>\n  <Element elementId=\"el-ctl-partner-level-g-metric-partner-closed\" gridColumn=\"1 / 6\" gridRow=\"19 / 28\"/>\n  <Element elementId=\"el-ctl-mkt-sourced-influenced-metric-partner-closed\" gridColumn=\"1 / 6\" gridRow=\"28 / 37\"/>\n</Container>\n</Page>\n"
+  }
+}

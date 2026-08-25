@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "promotion": {
+    "minimum_equal_or_better_rate": 0.8,
+    "minimum_green_rate": 0.6,
+    "maximum_numeric_regressions": 0,
+    "consecutive_passing_runs": 2
+  },
+  "cases": [
+    {
+      "id": "orders-executive-overview",
+      "label": "Executive Orders Anchor",
+      "role": "live-anchor",
+      "source_env": "TABLEAU_BENCH_ORDERS_EXEC_URL",
+      "minimum_charts": 9,
+      "minimum_parity_score": 1.0,
+      "minimum_visual_score": 0.735
+    },
+    {
+      "id": "fpa-monthly-pl",
+      "label": "FP&A Monthly P&L",
+      "role": "live-pipeline-reuse",
+      "source_env": "TABLEAU_BENCH_FPA_URL",
+      "minimum_charts": 11,
+      "minimum_parity_score": 1.0,
+      "minimum_visual_score": 0.45
+    },
+    {
+      "id": "orders-analytics",
+      "label": "Orders Analytics",
+      "role": "live-multi-chart",
+      "source_env": "TABLEAU_BENCH_ORDERS_ANALYTICS_URL",
+      "minimum_charts": 3,
+      "minimum_parity_score": 1.0,
+      "minimum_visual_score": 0.45
+    },
+    {
+      "id": "partner-crosstab-controls",
+      "label": "Partner Crosstab Controls",
+      "role": "offline-golden",
+      "corpus_case": "corpus/tableau/partner-crosstab-controls"
+    },
+    {
+      "id": "winprobe-window-functions",
+      "label": "WINPROBE Window Functions",
+      "role": "offline-window-calcs",
+      "corpus_case": "corpus/tableau/winprobe-window-functions"
+    },
+    {
+      "id": "compiler-blocked-viz",
+      "label": "Unsupported Viz Negative Control",
+      "role": "offline-negative",
+      "corpus_case": "corpus/tableau/compiler-blocked-viz",
+      "expected_stop": true
+    }
+  ]
+}

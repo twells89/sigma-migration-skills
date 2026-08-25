@@ -55,6 +55,7 @@ require_relative 'lib/layout'
 require_relative 'lib/zone_census'
 require_relative 'lib/arrangement_lint'
 require_relative 'lib/workbook_code'
+require_relative 'lib/workbook_ir'
 include SigmaLayout
 
 # ---- Source-derived header chrome -----------------------------------------
@@ -108,6 +109,7 @@ end
 opts = { page_cols: 24, page_rows: 32, row_scale: 1.5, chart_y0: 29.7,
          chart_y1: 100.0, chart_row0: 6, renames: {}, pruned_elements: [] }
 OptionParser.new do |p|
+  p.on('--ir PATH', 'canonical workbook-ir.json; resolves layout/wb-ids/out') { |v| opts[:ir] = v }
   p.on('--layout PATH')        { |v| opts[:layout] = v }
   p.on('--wb-ids PATH')        { |v| opts[:wb_ids] = v }
   p.on('--out PATH')           { |v| opts[:out] = v }
@@ -128,6 +130,12 @@ OptionParser.new do |p|
   p.on('--no-containers', 'force the geometry-banded layout even when the dashboard nests a filter/parameter rail') { opts[:no_containers] = true }
   p.on('--no-synthetic-title', 'never fabricate the page-name header band (synthetic title banner)') { opts[:no_synthetic_title] = true }
 end.parse!
+if opts[:ir]
+  ir_root = File.dirname(File.expand_path(opts[:ir]))
+  opts[:layout] ||= WorkbookIR.artifact_path(opts[:ir], 'layout')
+  opts[:wb_ids] ||= WorkbookIR.artifact_path(opts[:ir], 'workbook_ids')
+  opts[:out] ||= WorkbookIR.artifact_path(opts[:ir], 'layout_xml') || File.join(ir_root, 'layout.xml')
+end
 %i[layout wb_ids out].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
 
 # ---- Rename persistence (#422 re-entry repeat-tax) --------------------------
@@ -265,8 +273,16 @@ content_pages = [wb_ids['pages'][1]].compact if content_pages.empty?
 abort('no overview page (non-Data) in wb-ids') if content_pages.empty?
 
 page_for_dash = {}
+normalize_page_name = lambda do |value|
+  value.to_s.sub(/\A\[synthetic\]\s*/i, '').downcase.gsub(/[^a-z0-9]+/, ' ').strip
+end
 dash_layout.each do |d|
   pg = content_pages.find { |p| p['name'] == d['dashboard'] }
+  if pg.nil?
+    wanted = normalize_page_name.call(d['dashboard'])
+    candidates = content_pages.select { |page| normalize_page_name.call(page['name']) == wanted }
+    pg = candidates.first if candidates.one?
+  end
   pg ||= content_pages.first if dash_layout.length == 1
   if pg.nil?
     warn "WARN: no Sigma page matched dashboard #{d['dashboard'].inspect} — dashboard skipped from layout"
@@ -1819,6 +1835,27 @@ dash_layout.each do |d|
 end
 
 layout_out = assemble(*page_xmls) + "\n"
+
+# Preserve workbook-local pipeline pages that have no Tableau dashboard zone
+# counterpart (hidden inputs/data/derived pages, joins, unions, sub-masters).
+# Previously the builder validated against ALL declared elements but generated
+# layout only for source dashboards, so a valid reused pipeline failed as
+# "missing elements" and the orchestrator fell back to a stacked layout.
+laid_out_page_ids = layout_out.scan(/<Page\b[^>]*\bid="([^"]+)"/).flatten
+preserved_pages = []
+WorkbookCode.pages(wb_ids_raw).each do |page|
+  page_id = page['id'].to_s
+  next if page_id.empty? || laid_out_page_ids.include?(page_id)
+  page_elements = WorkbookCode.elements_for_page(wb_ids_raw, page)
+  next if page_elements.empty?
+  layout_out << "#{WorkbookCode.page_xml(page_id, page_elements)}\n"
+  preserved_pages << { 'id' => page_id, 'name' => page['name'], 'elements' => page_elements.length }
+end
+unless preserved_pages.empty?
+  warn "preserved #{preserved_pages.length} non-dashboard pipeline page(s): " +
+       preserved_pages.map { |page| "#{page['name'] || page['id']} (#{page['elements']})" }.join(', ')
+end
+
 # Documented output-shape guard: an empty elementId is always a builder bug
 # and makes Sigma reject the whole layout PUT.
 abort 'FATAL: empty elementId in generated layout XML — builder bug' if layout_out.include?('elementId=""')
@@ -1901,3 +1938,17 @@ puts "wrote #{census_out} (#{census_pages.size} page census record(s): " \
      "#{census_pages.map { |c| "#{c['page']} #{c['placed']}/#{c['zones']} tiles, fill #{(c['grid_fill_pct'] * 100).round}%" }.join('; ')})"
 puts "wrote #{arr_out} (#{arrangement_pages.size} page arrangement record(s), " \
      "#{arr_total} violation(s)#{arr_total.positive? ? ' — see ARRANGEMENT WARN lines above' : ''})"
+
+if opts[:ir]
+  WorkbookIR.emit(
+    File.dirname(opts[:layout]),
+    out: opts[:ir],
+    overrides: {
+      'layout_xml' => opts[:out],
+      'layout_elements' => "#{opts[:out]}.elements.json",
+      'layout_census' => census_out,
+      'layout_arrangement' => arr_out
+    }
+  )
+  puts "refreshed workbook IR #{opts[:ir]}"
+end

@@ -58,4 +58,17 @@ assert {(r["type"], r["id"], r["status"]) for r in census["objects"]} == {
 }
 PY
 
+ruby "$S/compile-tableau-offline.rb" \
+  --case-dir "$CASE_DIR" \
+  --workdir "$TMP/compiler" \
+  --out "$TMP/compiler-workbook.json" \
+  --compare "$CASE_DIR/golden/workbook.json"
+python3 - "$TMP/compiler/compile-plan-reconcile.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result["status"] == "PASS"
+assert len(result["matched_chart_keys"]) == 8
+assert not result["missing_controls"]
+PY
+
 echo "     OK converter formula audit + complete source-object migration report"

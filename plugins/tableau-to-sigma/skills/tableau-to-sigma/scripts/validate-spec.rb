@@ -224,8 +224,10 @@ id_occurrences = Hash.new { |h, k| h[k] = [] }
 spec.fetch('pages', []).each_with_index do |page, pi|
   page_label = page['name'] || page['id'] || "pages[#{pi}]"
   page.fetch('elements', []).each do |el|
-    all_element_names << el['name'] if el['name']
-    el_label = "element \"#{el['name'] || el['id'] || '?'}\" (kind=#{el['kind'] || '?'})"
+    element_name = el['name']
+    element_name = element_name['text'] || element_name['value'] if element_name.is_a?(Hash)
+    all_element_names << element_name if element_name
+    el_label = "element \"#{element_name || el['id'] || '?'}\" (kind=#{el['kind'] || '?'})"
     id_occurrences[el['id']] << "page \"#{page_label}\" #{el_label} [id]" if el['id']
     if el['kind'] == 'control' && el['controlId']
       control_ids.respond_to?(:add) ? control_ids.add(el['controlId']) : (control_ids << el['controlId'])
@@ -305,7 +307,9 @@ end
 spec.fetch('pages', []).each do |page|
   page.fetch('elements', []).each do |el|
     kind = el['kind'] || ''
-    name = el['name'] || el['id'] || '?'
+    name = el['name']
+    name = name['text'] || name['value'] if name.is_a?(Hash)
+    name ||= el['id'] || '?'
     cols = (el['columns'] || []) + (el['metrics'] || [])
     sibling_names = Set.new(cols.map { |c| c['name'] }.compact)
 
@@ -325,6 +329,20 @@ spec.fetch('pages', []).each do |page|
       cols.each do |c|
         (c['formula'] || '').to_s.scan(/\[([^\]\/]+)\//).flatten.each { |p| own_prefixes << p }
       end
+    end
+    # Workbook-local relational sources expose operator namespaces that are
+    # not element names. Live readback formulas use these exact prefixes:
+    #   join source name + each join alias (e.g. ForecastJoin / Rates / Manual)
+    #   union's server namespace (e.g. "Union of 2 Sources")
+    # Treat them as this element's own prefixes rather than false "unknown"
+    # cross-element refs.
+    if src['kind'] == 'join'
+      own_prefixes << src['name'] if src['name']
+      Array(src['joins']).each { |join| own_prefixes << join['name'] if join['name'] }
+    elsif src['kind'] == 'union'
+      own_prefixes << src['name'] if src['name']
+      count = Array(src['sources']).length
+      own_prefixes << "Union of #{count} Sources" if count.positive?
     end
 
     cols.each do |col|

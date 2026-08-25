@@ -73,10 +73,18 @@ require_relative 'lib/kpi_card'       # shared KPI-chart emitter (comparative-KP
 require_relative 'lib/kpi_comparison_detect' # Task 5: prior/target comparison-measure detector
 require_relative 'lib/action_ledger' # workbook-wide action id registry + validate/manifest
 require_relative 'lib/action_column_resolver' # Task 5: raw Tableau source-field ref -> emitted Sigma column name
+require_relative 'lib/workbook_ir'
+require_relative 'lib/tableau_workbook_compiler'
+require_relative 'lib/workbook_rule_registry'
+require_relative 'lib/compile_plan_apply'
+require_relative 'lib/compile_plan_reconcile'
 require 'erb'
 
 opts = { master_id: 'master' }
 OptionParser.new do |p|
+  p.on('--ir PATH', 'canonical workbook-ir.json; resolves tableau-dir/layout/meta/master-map/out') { |v| opts[:ir] = v }
+  p.on('--compile-plan PATH', 'deterministic workbook compile plan; blocks unsupported constructs') { |v| opts[:compile_plan] = v }
+  p.on('--allow-unsupported-plan REASON', 'continue despite compile-plan blockers (recorded reason required)') { |v| opts[:allow_unsupported_plan] = v }
   p.on('--tableau-dir DIR')         { |v| opts[:tab] = v }
   p.on('--layout PATH')             { |v| opts[:layout] = v }
   p.on('--meta PATH', 'parse-twb-layout sister meta file (worksheets+shared_filters)') { |v| opts[:meta] = v }
@@ -122,7 +130,32 @@ OptionParser.new do |p|
     opts[:detected_actions_file] = v
   end
 end.parse!
+if opts[:ir]
+  ir_root = File.dirname(File.expand_path(opts[:ir]))
+  opts[:tab] ||= ir_root
+  opts[:layout] ||= WorkbookIR.artifact_path(opts[:ir], 'layout')
+  opts[:meta] ||= WorkbookIR.artifact_path(opts[:ir], 'meta')
+  opts[:mmap] ||= WorkbookIR.artifact_path(opts[:ir], 'master_map')
+  opts[:grain_plan] ||= WorkbookIR.artifact_path(opts[:ir], 'grain_plan')
+  opts[:compile_plan] ||= WorkbookIR.artifact_path(opts[:ir], 'compile_plan')
+  opts[:out] ||= WorkbookIR.artifact_path(opts[:ir], 'chart_specs') || File.join(ir_root, 'chart-specs.json')
+end
 %i[tab layout mmap out].each { |k| abort("missing --#{k.to_s.tr('_','-')}") unless opts[k] }
+compile_plan = nil
+compile_plan_index = CompilePlanApply.index(nil)
+if opts[:compile_plan]
+  compile_plan = JSON.parse(File.read(opts[:compile_plan], encoding: 'UTF-8'))
+  compile_errors = TableauWorkbookCompiler.validate(compile_plan)
+  abort("invalid --compile-plan: #{compile_errors.join('; ')}") unless compile_errors.empty?
+  if TableauWorkbookCompiler.blocking?(compile_plan)
+    if opts[:allow_unsupported_plan].to_s.strip.empty?
+      abort("compile plan has #{compile_plan['blocking'].length} unsupported construct(s); " \
+            'fix them or pass --allow-unsupported-plan "<attributable reason>"')
+    end
+    warn "[WAIVER] compile plan has #{compile_plan['blocking'].length} blocker(s): #{opts[:allow_unsupported_plan]}"
+  end
+  compile_plan_index = CompilePlanApply.index(compile_plan)
+end
 
 # Load the referenceable DM metrics once; every measure-emission site prefers a
 # governed [Metrics/<name>] ref over its inline aggregate when they match by formula
@@ -278,23 +311,7 @@ rescue StandardError
 end
 
 # ---- chart_kind → Sigma element kind ----
-SIGMA_KIND = {
-  'bar'           => 'bar-chart',
-  'line'          => 'line-chart',
-  'area'          => 'area-chart',
-  'pie'           => 'pie-chart',
-  'scatter'       => 'scatter-chart',
-  'combo'         => 'combo-chart',
-  'waterfall'     => 'waterfall-chart',
-  'map-region'    => 'region-map',
-  'map-point'     => 'point-map',
-  'pivot-table'   => 'pivot-table',
-  'table'         => 'table',
-  'kpi'           => 'kpi-chart',
-  'table-or-text' => 'table',         # legacy parser output — kept for back-compat
-  'automatic'     => 'bar-chart',     # fallback; agent verifies against PNG
-  'other'         => 'bar-chart'
-}.freeze
+SIGMA_KIND = WorkbookRuleRegistry.sigma_kind_map
 
 # The human display name for a built tile: the source-displayed worksheet title
 # (parse-twb-layout's `display_title`, from the worksheet <title> run — e.g.
@@ -2906,8 +2923,12 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
                   "[#{plan['control_id']}] (#{psw['cases'].size} option(s))#{drp}: #{plan['sibling_form'].gsub(/\s+/, ' ')[0..100]}"
       next
     end
+    uv_calc_names = [uv['name'], uv['col']['name'], uv['raw']].compact.map do |name|
+      name.to_s.gsub(/^\[|\]$/, '').sub(/\A.*\.\[([^\]]+)\]\z/, '\1').strip
+    end
     ws_calc = (z['calculations'] || []).find do |c|
-      c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(uv['name'])
+      calc_names = [c['name'], c['caption']].compact.map { |name| name.to_s.gsub(/^\[|\]$/, '').strip }
+      calc_names.any? { |calc_name| uv_calc_names.any? { |candidate| calc_name.casecmp?(candidate) } }
     end
     next unless ws_calc
     plan = translate_window_calc(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
@@ -4415,6 +4436,15 @@ layout.each do |dash|
     next unless z['kind'] == 'chart'
     cap = z['caption']
     next if cap.nil? || cap.empty?
+
+    if compile_plan
+      begin
+        planned = CompilePlanApply.apply_zone!(z, dash['dashboard'], compile_plan_index)
+        warn "[compile-plan] '#{cap}' -> #{planned['target_kind']} (#{planned['rule']})" if planned
+      rescue ArgumentError => e
+        abort "compile-plan dispatch failed for #{dash['dashboard'].inspect}/#{cap.inspect}: #{e.message}"
+      end
+    end
 
     # PR-10 kind propagation: the Phase 1d read VERIFIED this tile's kind
     # against the source image — it beats every shelf inference below, for ALL
@@ -8694,10 +8724,16 @@ $chart_provenance = {}
 elements.each do |e|
   ws = e['_worksheet'].to_s
   next if ws.empty? || e['id'].to_s.empty?
+  plan_entry = compile_plan && CompilePlanApply.find(
+    compile_plan_index,
+    e['_dashboard'],
+    { 'caption' => ws }
+  )
   $chart_provenance[e['id'].to_s] ||= {
     'worksheet' => ws,
     'dashboard' => e['_dashboard'],
-    'name'      => (e['name'].is_a?(String) ? e['name'] : nil)
+    'name'      => (e['name'].is_a?(String) ? e['name'] : nil),
+    'compile_plan_key' => plan_entry && plan_entry['key']
   }.compact
 end
 
@@ -9728,6 +9764,25 @@ warn "wrote #{coverage_path} (#{built_n} element(s) built; " \
      "#{by_sev['dropped'] || 0} dropped, #{by_sev['degraded'] || 0} degraded, " \
      "#{by_sev['approximated'] || 0} approximated)"
 
+if compile_plan
+  provenance_path = File.join(opts[:tab], 'chart-provenance.json')
+  provenance_doc = File.exist?(provenance_path) ? JSON.parse(File.read(provenance_path, encoding: 'UTF-8')) : {}
+  coverage_doc = JSON.parse(File.read(coverage_path, encoding: 'UTF-8'))
+  chart_doc = JSON.parse(File.read(opts[:out], encoding: 'UTF-8'))
+  reconcile = CompilePlanReconcile.reconcile(
+    plan: compile_plan,
+    chart_specs: chart_doc,
+    provenance: provenance_doc,
+    coverage: coverage_doc
+  )
+  reconcile_path = File.join(opts[:tab], 'compile-plan-reconcile.json')
+  File.write(reconcile_path, JSON.pretty_generate(reconcile) + "\n")
+  warn "compile-plan reconcile: #{reconcile['status']} " \
+       "(#{reconcile['matched_chart_keys'].length}/#{reconcile['planned_chart_keys'].length} charts, " \
+       "#{reconcile['built_control_names'].length}/#{reconcile['planned_control_names'].length} controls)"
+  abort "compile-plan reconcile failed — see #{reconcile_path}" unless reconcile['status'] == 'PASS'
+end
+
 # ---- manual-residues.json — the G6 build-it ledger ---------------------------
 # Phase 1e (extract-calc-fields.rb WINPROBE split) routes the STAYS-MANUAL
 # window/table-calc residues (requires_custom_sql) to the Custom SQL path
@@ -9836,4 +9891,19 @@ begin
   end
 rescue StandardError => e
   warn "WARN: manual-residues ledger skipped (#{e.class}: #{e.message})"
+end
+
+# Keep the canonical IR synchronized for single-entry compiler consumers.
+if opts[:ir]
+  WorkbookIR.emit(
+    opts[:tab],
+    out: opts[:ir],
+    overrides: {
+      'chart_specs' => opts[:out],
+      'chart_provenance' => File.join(opts[:tab], 'chart-provenance.json'),
+      'control_scope' => File.join(opts[:tab], 'control-scope.json'),
+      'coverage' => coverage_path
+    }
+  )
+  warn "refreshed workbook IR #{opts[:ir]}"
 end
