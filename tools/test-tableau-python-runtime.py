@@ -269,6 +269,57 @@ def main() -> int:
         )
         assert read_json(conversion / "dm-raw.json")["pages"]
 
+        builder_layout = workdir / "builder-layout.json"
+        builder_meta = workdir / "builder-meta.json"
+        write_json(
+            builder_layout,
+            [
+                {
+                    "dashboard": "Cold Runtime",
+                    "emit_page": True,
+                    "zones": [
+                        {
+                            "id": "sales",
+                            "kind": "chart",
+                            "chart_kind": "bar",
+                            "caption": "Sales by Region",
+                            "x_pct": 0,
+                            "y_pct": 0,
+                            "w_pct": 100,
+                            "h_pct": 100,
+                            "rows_shelf": {
+                                "fields": [
+                                    {
+                                        "guid": "SALES",
+                                        "role": "measure",
+                                        "derivation": "sum",
+                                    }
+                                ]
+                            },
+                            "cols_shelf": {
+                                "fields": [
+                                    {
+                                        "guid": "REGION",
+                                        "role": "dim",
+                                        "derivation": "none",
+                                    }
+                                ]
+                            },
+                            "filters": [],
+                        }
+                    ],
+                }
+            ],
+        )
+        write_json(
+            builder_meta,
+            {
+                "columns_by_guid": {
+                    "SALES": {"caption": "Sales", "datatype": "real"},
+                    "REGION": {"caption": "Region", "datatype": "string"},
+                }
+            },
+        )
         workbook = workdir / "wb-spec.json"
         run(
             "Sigma workbook build",
@@ -276,9 +327,9 @@ def main() -> int:
                 sys.executable,
                 SCRIPTS / "build-workbook-from-signals.py",
                 "--layout",
-                layout,
+                builder_layout,
                 "--meta",
-                workdir / "dashboard-layout-meta.json",
+                builder_meta,
                 "--formula-audit",
                 workdir / "formula-audit.json",
                 "--data-model-id",
