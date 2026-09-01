@@ -81,7 +81,10 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
         {
             "id": "overview-title",
             "kind": "text",
-            "body": "### Orders — Executive Overview",
+            "body": (
+                "<div style=\"text-align:center;font-size:18px;font-weight:600;\">"
+                "Orders — Executive Overview</div>"
+            ),
         },
         kpi(
             "kpi-net-revenue",
@@ -123,7 +126,7 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
                     "trend-month",
                     "Month",
                     'DateTrunc("month", [Orders Data/Order Date])',
-                    {"kind": "datetime", "formatString": "%b %Y"},
+                    {"kind": "datetime", "formatString": "%B %Y"},
                 ),
                 column(
                     "trend-revenue",
@@ -139,6 +142,15 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
             "yAxis": {"columnIds": ["trend-revenue"]},
             "color": {"by": "single", "value": "#4E79A7"},
             "legend": {"visibility": "hidden"},
+            "refMarks": [
+                {
+                    "type": "line",
+                    "axis": "series",
+                    "value": {"type": "formula", "formula": "5000"},
+                    "line": {"color": "#9CA3AF", "width": 1},
+                    "label": {"visibility": "shown", "text": ""},
+                }
+            ],
         },
         {
             "id": "chart-revenue-region",
@@ -188,7 +200,7 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
                 "format": {
                     "labels": {
                         "labelAngle": 0,
-                        "fontSize": 8,
+                        "fontSize": 7,
                         "allowLongerLabels": True,
                     }
                 },
@@ -237,16 +249,16 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
   <Element elementId="orders-master" gridColumn="1 / 25" gridRow="1 / 20"/>
 </Page>
 <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overview-page">
-  <Element elementId="overview-title" gridColumn="1 / 25" gridRow="1 / 4"/>
-  <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="4 / 9"/>
-  <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="4 / 9"/>
-  <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="4 / 9"/>
-  <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="4 / 9"/>
-  <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="4 / 9"/>
-  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="9 / 23"/>
-  <Element elementId="chart-revenue-region" gridColumn="1 / 9" gridRow="23 / 35"/>
-  <Element elementId="chart-gross-ship" gridColumn="9 / 17" gridRow="23 / 35"/>
-  <Element elementId="chart-margin-tier" gridColumn="17 / 25" gridRow="23 / 35"/>
+  <Element elementId="overview-title" gridColumn="1 / 25" gridRow="1 / 3"/>
+  <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="3 / 7"/>
+  <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="3 / 7"/>
+  <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="3 / 7"/>
+  <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="3 / 7"/>
+  <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="3 / 7"/>
+  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="7 / 18"/>
+  <Element elementId="chart-revenue-region" gridColumn="1 / 8" gridRow="18 / 27"/>
+  <Element elementId="chart-gross-ship" gridColumn="8 / 18" gridRow="18 / 27"/>
+  <Element elementId="chart-margin-tier" gridColumn="18 / 25" gridRow="18 / 27"/>
 </Page>
 """
     spec = {
