@@ -232,9 +232,11 @@ else {
 }
 
 # --- python (real interpreter, not the Store stub) --------------------------
-if (-not $script:PyExe -and (Test-RealPython 'py' '-3'))      { $script:PyExe = 'py'; $script:PyPre = '-3' }
-elseif (Test-RealPython 'python' $null)  { $script:PyExe = 'python' }
-elseif (Test-RealPython 'python3' $null) { $script:PyExe = 'python3' }
+if (-not $script:PyExe) {
+  if (Test-RealPython 'py' '-3')           { $script:PyExe = 'py'; $script:PyPre = '-3' }
+  elseif (Test-RealPython 'python' $null)  { $script:PyExe = 'python'; $script:PyPre = $null }
+  elseif (Test-RealPython 'python3' $null) { $script:PyExe = 'python3'; $script:PyPre = $null }
+}
 if ($script:PyExe) {
   $pyArgs = @(); if ($script:PyPre) { $pyArgs += $script:PyPre }
   Okay "python $((& $script:PyExe @pyArgs --version 2>&1 | Out-String).Trim() -replace 'Python ','') [$script:PyExe $script:PyPre]"
