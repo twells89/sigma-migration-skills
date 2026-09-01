@@ -272,11 +272,7 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
                 "theme": {
                     "name": "Light",
                     "overrides": {"categoricalScheme": ["#4E79A7"]},
-                },
-                "navigation": {
-                    "position": "top",
-                    "pageHeader": {"visibility": "hidden"},
-                },
+                }
             },
         },
     }
