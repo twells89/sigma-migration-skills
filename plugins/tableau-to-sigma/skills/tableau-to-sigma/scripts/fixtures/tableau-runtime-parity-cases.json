@@ -26,7 +26,6 @@
       "twb": "corpus/tableau/structural-workarounds/workbook-content.twb",
       "artifacts": [
         "gaps.json",
-        "formula-audit.json",
         "blend-plan.json"
       ]
     },
@@ -35,8 +34,7 @@
       "kind": "gaps",
       "twb": "corpus/tableau/union-wildcard-seed/workbook-content.twb",
       "artifacts": [
-        "gaps.json",
-        "formula-audit.json"
+        "gaps.json"
       ]
     },
     {

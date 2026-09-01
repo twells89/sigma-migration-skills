@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "tableau-to-sigma",
   "displayName": "Tableau \u2192 Sigma",
-  "version": "1.9.35",
+  "version": "1.9.36",
   "description": "Migrate Tableau workbooks and datasources to Sigma \u2014 discovery, calc/LOD translation, data model + workbook build, and parity verification against the source warehouse. Includes a tenant assessment skill and a VDS\u2192warehouse data-landing skill (Snowflake or Databricks).",
   "author": {
     "name": "Thomas Wells"

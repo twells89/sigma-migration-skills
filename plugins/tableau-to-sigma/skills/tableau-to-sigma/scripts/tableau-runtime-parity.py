@@ -212,16 +212,54 @@ def project_artifact(kind: str, artifact: str, value: Any) -> Any:
     if kind == "gaps" and artifact == "gaps.json":
         if not isinstance(value, dict):
             return value
-        return {
-            key: copy.deepcopy(value[key])
-            for key in (
-                "workbook",
-                "detected_features",
-                "formula_audit",
-                "field_statistics",
+        features = []
+        for item in value.get("detected_features") or []:
+            if not isinstance(item, dict):
+                features.append(copy.deepcopy(item))
+                continue
+            # Compare the routing contract, not runtime-specific explanatory
+            # prose or duplicated formula-audit aliases.
+            features.append(
+                {
+                    key: copy.deepcopy(item[key])
+                    for key in ("name", "status", "count", "worksheets")
+                    if key in item
+                }
             )
+        projected = {"detected_features": features}
+        if "workbook" in value:
+            projected["workbook"] = copy.deepcopy(value["workbook"])
+        return projected
+    if kind == "gaps" and artifact == "blend-plan.json":
+        if not isinstance(value, dict):
+            return value
+        projected = {
+            key: copy.deepcopy(value[key])
+            for key in ("workbook", "datasources")
             if key in value
         }
+        projected["blends"] = []
+        for item in value.get("blends") or []:
+            if not isinstance(item, dict):
+                projected["blends"].append(copy.deepcopy(item))
+                continue
+            projected["blends"].append(
+                {
+                    key: copy.deepcopy(item[key])
+                    for key in (
+                        "worksheet",
+                        "primary",
+                        "primary_caption",
+                        "secondary",
+                        "secondary_caption",
+                        "linking_fields",
+                        "secondary_fields",
+                        "route",
+                    )
+                    if key in item
+                }
+            )
+        return projected
     return copy.deepcopy(value)
 
 

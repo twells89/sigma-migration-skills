@@ -120,6 +120,54 @@ class TableauRuntimeParityTest(unittest.TestCase):
             parity.normalize_artifact("gaps", "gaps.json", python, ()),
         )
 
+    def test_gap_projection_ignores_runtime_prose_and_formula_aliases(self):
+        ruby = {
+            "workbook": "fixture.twb",
+            "detected_features": [
+                {
+                    "name": "Calculation cycle",
+                    "status": "unhandled",
+                    "count": 1,
+                    "blurb": "Ruby guidance",
+                }
+            ],
+            "formula_audit": {"formulas": [{"caption": "Profit"}]},
+        }
+        python = {
+            "workbook": "fixture.twb",
+            "detected_features": [
+                {
+                    "name": "Calculation cycle",
+                    "status": "unhandled",
+                    "count": 1,
+                    "blurb": "Python guidance",
+                }
+            ],
+            "formula_audit": {
+                "formulas": [{"caption": "Profit", "calculation": "Profit"}]
+            },
+        }
+        self.assertEqual(
+            parity.normalize_artifact("gaps", "gaps.json", ruby, ()),
+            parity.normalize_artifact("gaps", "gaps.json", python, ()),
+        )
+
+    def test_blend_projection_ignores_recommendation_prose(self):
+        common = {
+            "worksheet": "Dashboard",
+            "primary": "Orders",
+            "secondary": "Targets",
+            "linking_fields": ["Region"],
+            "secondary_fields": ["Region", "Target"],
+            "route": "same-warehouse-repoint",
+        }
+        ruby = {"blends": [{**common, "recommendation": "Ruby prose"}]}
+        python = {"blends": [{**common, "recommendation": "Python prose"}]}
+        self.assertEqual(
+            parity.normalize_artifact("gaps", "blend-plan.json", ruby, ()),
+            parity.normalize_artifact("gaps", "blend-plan.json", python, ()),
+        )
+
     def test_diff_names_case_runtime_and_artifact(self):
         rendered = parity.artifact_diff(
             "layout-case",

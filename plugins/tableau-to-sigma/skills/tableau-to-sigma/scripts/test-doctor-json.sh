@@ -97,7 +97,8 @@ rc_d=$?
 [ "$rc_d" -ne 0 ]; check $? "doctor exits non-zero when no Sigma creds resolve (got $rc_d)"
 grep -q 'no Sigma credentials found (REQUIRED' "$TMP/w3.out"
 check $? "cred failure names the REQUIRED promotion"
-grep -q 'setup.rb' "$TMP/w3.out"; check $? "cred failure prints the setup.rb remediation"
+grep -Eq 'setup\.(rb|py)|Export SIGMA_CLIENT_ID' "$TMP/w3.out"
+check $? "cred failure prints profile-appropriate credential remediation"
 python3 - "$TMP/w3/doctor.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
