@@ -31,6 +31,12 @@ def field(guid, role, derivation):
 
 
 class BuildWorkbookFromSignalsTest(unittest.TestCase):
+    def test_percentage_formats_use_number_kind(self):
+        self.assertEqual(
+            {"kind": "number", "formatString": ",.1%"},
+            builder_module.sigma_format("p0.0%"),
+        )
+
     def signals(self):
         meta = {
             "columns_by_guid": {

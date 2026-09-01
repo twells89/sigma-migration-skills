@@ -106,7 +106,7 @@ def sigma_format(tableau_format: object) -> dict[str, str] | None:
         return None
     if "%" in value or value.lower().startswith("p"):
         decimals = len((re.search(r"\.([0#]+)", value) or [None, ""])[1])
-        return {"kind": "percent", "formatString": f",.{decimals}%"}
+        return {"kind": "number", "formatString": f",.{decimals}%"}
     if "$" in value:
         decimals = len((re.search(r"\.([0#]+)", value) or [None, ""])[1])
         return {"kind": "number", "formatString": f"$,.{decimals}f"}
