@@ -25,9 +25,9 @@ def kpi(element_id, name, formula, format_):
         "name": name,
         "source": {"kind": "table", "elementId": "orders-master"},
         "columns": [column(value_id, name, formula, format_)],
-        "value": {"columnId": value_id, "fontSize": 28, "color": "#1F2937"},
+        "value": {"columnId": value_id, "fontSize": 24, "color": "#1F2937"},
         "layout": {"anchor": "middle", "titleOrient": "top"},
-        "style": {"backgroundColor": "#FFFFFF"},
+        "style": {"backgroundColor": "#F3F4F6"},
     }
 
 
@@ -87,6 +87,13 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
                 "Orders — Executive Overview</span>"
             ),
         },
+        {
+            "id": "kpi-band",
+            "kind": "container",
+            "style": {"backgroundColor": "#F3F4F6"},
+            "elementGap": "hidden",
+            "spacing": "small",
+        },
         kpi(
             "kpi-net-revenue",
             "Net Revenue",
@@ -139,6 +146,15 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
             "xAxis": {
                 "columnId": "trend-month",
                 "sort": {"by": "trend-month", "direction": "ascending"},
+                "format": {
+                    "labels": {"fontSize": 8},
+                    "scale": {
+                        "domain": {
+                            "min": "Date(\"2023-12-01\")",
+                            "max": "Date(\"2026-09-01\")",
+                        }
+                    },
+                },
             },
             "yAxis": {"columnIds": ["trend-revenue"]},
             "color": {"by": "single", "value": "#4E79A7"},
@@ -258,12 +274,14 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
 </Page>
 <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overview-page">
   <Element elementId="overview-title" gridColumn="10 / 18" gridRow="1 / 2"/>
-  <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="2 / 7"/>
-  <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="2 / 7"/>
-  <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="2 / 7"/>
-  <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="2 / 7"/>
-  <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="2 / 7"/>
-  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="7 / 20"/>
+  <Container elementId="kpi-band" type="grid" gridColumn="1 / 25" gridRow="2 / 6" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">
+    <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="1 / 5"/>
+    <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="1 / 5"/>
+    <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="1 / 5"/>
+    <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="1 / 5"/>
+    <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="1 / 5"/>
+  </Container>
+  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="6 / 20"/>
   <Element elementId="chart-revenue-region" gridColumn="1 / 7" gridRow="20 / 29"/>
   <Element elementId="chart-gross-ship" gridColumn="7 / 17" gridRow="20 / 29"/>
   <Element elementId="chart-margin-tier" gridColumn="17 / 25" gridRow="20 / 29"/>

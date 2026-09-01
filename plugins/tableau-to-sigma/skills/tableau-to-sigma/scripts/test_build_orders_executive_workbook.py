@@ -18,7 +18,7 @@ class BuildOrdersExecutiveWorkbookTest(unittest.TestCase):
         }
 
     def test_builds_source_dashboard_inventory(self):
-        self.assertEqual(11, len(self.elements))
+        self.assertEqual(12, len(self.elements))
         self.assertEqual(
             {
                 "kpi-chart": 5,
@@ -26,6 +26,7 @@ class BuildOrdersExecutiveWorkbookTest(unittest.TestCase):
                 "bar-chart": 3,
                 "table": 1,
                 "text": 1,
+                "container": 1,
             },
             {
                 kind: sum(1 for item in self.elements.values() if item["kind"] == kind)
