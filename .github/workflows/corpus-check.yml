@@ -60,6 +60,38 @@ jobs:
         # vendored bundle and only uses a local build via an explicit env/flag.
         run: ./corpus/converter-default-test.sh
 
+  ruby-free-runtime:
+    name: Tableau Python runtime (Ruby absent)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    container:
+      image: node:22-bookworm
+    env:
+      SIGMA_CLIENT_ID: ci-offline-placeholder
+      SIGMA_CLIENT_SECRET: ci-offline-placeholder
+      SIGMA_BASE_URL: https://aws-api.[REDACTED].com
+      SIGMA_SKIP_CRED_SMOKE: "1"
+      SIGMA_SKIP_VERSION_CHECK: "1"
+    steps:
+      - name: Install Python-only runtime prerequisites
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3 git curl ca-certificates
+          if command -v ruby >/dev/null 2>&1; then
+            echo "::error::Ruby must be absent from the ruby-free-runtime job"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Verify profile, doctor, discovery, and converter paths without Ruby
+        run: |
+          python3 shared/scripts/test_runtime_profile.py
+          bash plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-doctor-json.sh
+          python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_assert_doctor_ran.py
+          python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_tableau_rest.py
+          python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_tableau_discover.py
+          python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_convert_tableau.py
+          python3 tools/check-shared.py
+
   windows-smoke:
     name: windows PowerShell path (doctor.ps1 + offline corpus)
     # Proves the Windows/PowerShell path works BEFORE an event does (P0.4):
@@ -505,6 +537,10 @@ jobs:
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_sigma_rest.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_tableau_rest.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_pick_destination.py
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_assert_doctor_ran.py
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_convert_tableau.py
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_tableau_discover.py
+            shared/scripts/test_runtime_profile.py
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test_scout_ledger_integrity.py
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test_warehouse_column_refs.py
             plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/test_scout_ledger_integrity.py
