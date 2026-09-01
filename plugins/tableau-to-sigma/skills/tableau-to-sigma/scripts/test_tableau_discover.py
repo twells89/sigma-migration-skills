@@ -31,7 +31,7 @@ class TableauDiscoverTest(unittest.TestCase):
         self.assertEqual(
             "OrdersExecutiveOverview",
             tableau_discover.content_url_from_share_url(
-                "https://10ay.online.tableau.com/#/site/dataflow/views/"
+                "https://tableau.example.com/#/site/example/views/"
                 "OrdersExecutiveOverview/ExecutiveOverview"
             ),
         )
