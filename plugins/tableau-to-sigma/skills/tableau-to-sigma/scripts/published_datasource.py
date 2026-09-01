@@ -13,6 +13,7 @@ import io
 import json
 import re
 import sys
+import time
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -130,23 +131,24 @@ def _safe_tds_from_content(payload: bytes) -> tuple[str, str | None]:
                 raise PublishedDatasourceError(
                     f"TDSX contains an unsafe member path: {member.filename!r}"
                 )
-            if member.flag_bits & 0x1:
-                raise PublishedDatasourceError(
-                    f"TDSX contains an encrypted member: {member.filename!r}"
-                )
-            if member.file_size > MAX_TDS_BYTES:
-                raise PublishedDatasourceError(
-                    f"TDSX member exceeds the {MAX_TDS_BYTES}-byte safety limit"
-                )
-            if (
-                member.file_size
-                and member.compress_size
-                and member.file_size / member.compress_size > MAX_COMPRESSION_RATIO
-            ):
-                raise PublishedDatasourceError(
-                    f"TDSX member has a suspicious compression ratio: {member.filename!r}"
-                )
             if not member.is_dir() and normalized.lower().endswith(".tds"):
+                if member.flag_bits & 0x1:
+                    raise PublishedDatasourceError(
+                        f"TDSX contains an encrypted .tds member: {member.filename!r}"
+                    )
+                if member.file_size > MAX_TDS_BYTES:
+                    raise PublishedDatasourceError(
+                        f"TDSX .tds member exceeds the {MAX_TDS_BYTES}-byte safety limit"
+                    )
+                if (
+                    member.file_size
+                    and member.compress_size
+                    and member.file_size / member.compress_size
+                    > MAX_COMPRESSION_RATIO
+                ):
+                    raise PublishedDatasourceError(
+                        f"TDSX .tds member has a suspicious compression ratio: {member.filename!r}"
+                    )
                 tds_members.append(member)
         if len(tds_members) != 1:
             raise PublishedDatasourceError(
@@ -269,9 +271,9 @@ def _output_name(item: str) -> str | None:
 def parse_sql_columns(sql: str) -> list[str]:
     words = _scan_top_level_words(sql)
     select_positions = [row for row in words if row[0] == "SELECT"]
-    if not select_positions:
+    if len(select_positions) != 1:
         return []
-    select = select_positions[-1]
+    select = select_positions[0]
     from_word = next(
         (row for row in words if row[0] == "FROM" and row[1] > select[2]),
         None,
@@ -575,6 +577,24 @@ def _write_json(path: Path, value: Any) -> None:
     )
 
 
+def _rest_call(api, operation: str, function):
+    """Match discovery's outer retry when a 401 escapes the client retry."""
+    for attempt in range(1, 4):
+        try:
+            return function()
+        except tableau_rest.TableauError as exc:
+            if "401" not in str(exc) or attempt == 3:
+                raise PublishedDatasourceError(
+                    f"{operation} failed: {str(exc).strip()[:800]}"
+                ) from exc
+            try:
+                api.refresh_token()
+            except Exception:
+                pass
+            time.sleep(attempt)
+    raise AssertionError("unreachable")
+
+
 def resolve_and_hydrate(
     twb_path: str | Path,
     output_path: str | Path,
@@ -590,6 +610,8 @@ def resolve_and_hydrate(
     descriptors_file = Path(descriptors_path)
     lineage_file = Path(lineage_path)
     evidence_file = Path(evidence_path)
+    if source.resolve() == output.resolve():
+        raise PublishedDatasourceError("hydration output must be a copy, not the source .twb")
     source_bytes = source.read_bytes()
     try:
         root = ET.fromstring(source_bytes)
@@ -603,6 +625,7 @@ def resolve_and_hydrate(
         "hydrated": str(output),
         "datasources": [],
     }
+    output.unlink(missing_ok=True)
     if not targets:
         result = {**base, "status": "not-required", "resolved": 0}
         _write_json(descriptors_file, [])
@@ -629,7 +652,11 @@ def resolve_and_hydrate(
                 )
             descriptor = by_url.get(content_url.casefold())
             if descriptor is None:
-                matches = api.find_datasources_by_content_url(content_url)
+                matches = _rest_call(
+                    api,
+                    f"published datasource lookup for contentUrl={content_url!r}",
+                    lambda: api.find_datasources_by_content_url(content_url),
+                )
                 exact = [
                     item
                     for item in matches
@@ -645,7 +672,11 @@ def resolve_and_hydrate(
                     raise PublishedDatasourceError(
                         f"contentUrl={content_url!r} REST result has no datasource id"
                     )
-                payload = api.download_datasource_content(datasource_id)
+                payload = _rest_call(
+                    api,
+                    f"published datasource content download for {datasource_id!r}",
+                    lambda: api.download_datasource_content(datasource_id),
+                )
                 tds, member = _safe_tds_from_content(payload)
                 descriptor = descriptor_from_tds(tds)
                 descriptor.update(
