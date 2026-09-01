@@ -66,6 +66,7 @@ def repair(
     *,
     source_element: str,
     source_key: str,
+    source_key_formula: str | None,
     template_element: str,
     replace_element: str,
     role_name: str,
@@ -81,7 +82,18 @@ def repair(
     source = find_one(rows, source_element, "source element")
     template = find_one(rows, template_element, "date template")
     replaced = find_one(rows, replace_element, "element to replace")
-    source_column = find_column(source, source_key)
+    try:
+        source_column = find_column(source, source_key)
+    except ValueError:
+        if not source_key_formula:
+            raise
+        source_column = {
+            "id": "PyDateKey1",
+            "name": source_key,
+            "formula": source_key_formula,
+        }
+        source.setdefault("columns", []).append(source_column)
+        source.setdefault("order", []).append(source_column["id"])
 
     replacement_id = replaced["id"]
     replacement = copy.deepcopy(template)
@@ -180,6 +192,7 @@ def repair(
         "kind": "date-role-repair",
         "source_element": source_element,
         "source_key": source_key,
+        "source_key_formula": source_key_formula,
         "replaced_element": replace_element,
         "replacement_role": role_name,
         "template_element": template_element,
@@ -199,6 +212,10 @@ def main() -> int:
     parser.add_argument("--report", required=True)
     parser.add_argument("--source-element", required=True)
     parser.add_argument("--source-key", required=True)
+    parser.add_argument(
+        "--source-key-formula",
+        help="explicit discovered warehouse formula when the converter omitted the key column",
+    )
     parser.add_argument("--template-element", required=True)
     parser.add_argument("--replace-element", required=True)
     parser.add_argument("--role-name", required=True)
@@ -210,6 +227,7 @@ def main() -> int:
             load_object(args.proof),
             source_element=args.source_element,
             source_key=args.source_key,
+            source_key_formula=args.source_key_formula,
             template_element=args.template_element,
             replace_element=args.replace_element,
             role_name=args.role_name,

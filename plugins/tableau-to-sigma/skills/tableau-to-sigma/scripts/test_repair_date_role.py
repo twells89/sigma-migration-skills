@@ -83,6 +83,7 @@ class RepairDateRoleTest(unittest.TestCase):
                 {"match": False, "checks": {"rows": "mismatch"}},
                 source_element="ORDER_FACT",
                 source_key="Order Date Key",
+                source_key_formula=None,
                 template_element="DATE_DIM (Return Date)",
                 replace_element="DIM_TIME",
                 role_name="DATE_DIM (Order Date)",
@@ -96,6 +97,7 @@ class RepairDateRoleTest(unittest.TestCase):
             {"match": True, "checks": {"row_count": [1030, 1030]}},
             source_element="ORDER_FACT",
             source_key="Order Date Key",
+            source_key_formula=None,
             template_element="DATE_DIM (Return Date)",
             replace_element="DIM_TIME",
             role_name="DATE_DIM (Order Date)",
@@ -110,6 +112,30 @@ class RepairDateRoleTest(unittest.TestCase):
         self.assertEqual("equivalence-proof", relationship["derivedVia"])
         self.assertFalse(repaired_meta["workbookPatterns"])
         self.assertTrue(report["match"])
+
+    def test_repair_can_restore_an_explicit_discovered_source_key(self):
+        model, metadata = fixture()
+        model["pages"][0]["elements"][0]["columns"] = []
+        repaired, _, _ = repair_date_role.repair(
+            model,
+            metadata,
+            {"match": True, "checks": {"row_count": [1030, 1030]}},
+            source_element="ORDER_FACT",
+            source_key="Order Date Key",
+            source_key_formula="[ORDER_FACT/Order Date Key]",
+            template_element="DATE_DIM (Return Date)",
+            replace_element="DIM_TIME",
+            role_name="DATE_DIM (Order Date)",
+        )
+        fact = next(
+            row for row in repair_date_role.elements(repaired)
+            if row.get("name") == "ORDER_FACT"
+        )
+        restored = next(
+            column for column in fact["columns"]
+            if column["name"] == "Order Date Key"
+        )
+        self.assertEqual("[ORDER_FACT/Order Date Key]", restored["formula"])
 
 
 if __name__ == "__main__":
