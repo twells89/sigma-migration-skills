@@ -14,13 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "plugins" / "tableau-to-sigma" / "skills" / "tableau-to-sigma"
 SCRIPTS = SKILL / "scripts"
-TWB = (
-    ROOT
-    / "corpus"
-    / "tableau"
-    / "logical-model-objectgraph"
-    / "workbook-content.twb"
-)
+TWB = ROOT / "corpus" / "tableau" / "orders-overview" / "workbook-content.twb"
 ORIGINAL_PATH = os.environ.get("PATH", "")
 SECRET_KEYS = {
     "SIGMA_API_TOKEN",
@@ -164,7 +158,6 @@ def main() -> int:
                     SKILL / "runtime-capabilities.json",
                     "--requested",
                     "python",
-                    "--allow-preview",
                     "--runtime",
                     "ruby=false",
                     "--runtime",
@@ -190,7 +183,6 @@ def main() -> int:
                 SCRIPTS / "doctor.sh",
                 "--runtime-profile",
                 "python",
-                "--allow-preview-runtime",
                 "--workdir",
                 workdir,
             ],
@@ -337,7 +329,7 @@ def main() -> int:
                 "--element-id",
                 "offline-fact",
                 "--data-model-element-name",
-                "LMOG_FACT_WIDE",
+                "ORDER_FACT",
                 "--folder-id",
                 "offline-folder",
                 "--out",
@@ -353,7 +345,7 @@ def main() -> int:
         expected = workdir / "expected.json"
         write_json(
             plan,
-            {"charts": [{"chart": "LMOG Customer Revenue", "expected": [["A", 1]]}]},
+            {"charts": [{"chart": "Orders Overview", "expected": [["A", 1]]}]},
         )
         run(
             "parity plan transform",
@@ -367,7 +359,7 @@ def main() -> int:
             ],
             environment,
         )
-        assert read_json(expected) == {"LMOG Customer Revenue": [["A", 1]]}
+        assert read_json(expected) == {"Orders Overview": [["A", 1]]}
 
         run(
             "completion result gate",
