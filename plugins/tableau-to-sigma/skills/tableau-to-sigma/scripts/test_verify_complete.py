@@ -35,6 +35,7 @@ class VerifyCompleteTest(unittest.TestCase):
             "datamodel-readback-verdict.json": {"pass": True},
             "workbook-readback-verdict.json": {"pass": True},
             "parity-final.json": {"match": True},
+            "anchors-verdict.json": {"pass": True},
             "visual-similarity-final.json": {
                 "pass": True,
                 "source_health": {"path": str(self.source_png)},

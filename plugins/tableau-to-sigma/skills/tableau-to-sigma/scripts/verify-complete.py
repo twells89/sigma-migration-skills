@@ -33,6 +33,7 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         "data_model_readback": workdir / "datamodel-readback-verdict.json",
         "workbook_readback": workdir / "workbook-readback-verdict.json",
         "parity": workdir / "parity-final.json",
+        "anchors": workdir / "anchors-verdict.json",
         "visual_similarity": workdir / "visual-similarity-final.json",
         "semantic_edits": workdir / "semantic-edits.json",
         "data_model_ids": workdir / "dm-ids.json",
@@ -63,6 +64,8 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
             failures.append(f"{key}: readback verdict is not pass")
     if documents.get("parity", {}).get("match") is not True:
         failures.append("parity: numeric source/target comparison failed")
+    if documents.get("anchors", {}).get("pass") is not True:
+        failures.append("anchors: source values or displayed-tile health failed")
     visual = documents.get("visual_similarity") or {}
     visual_pass = visual.get("pass") is True or visual.get("status") == "PASS"
     if not visual_pass:
@@ -107,6 +110,7 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
             "data_model_readback": documents.get("data_model_readback", {}).get("pass") is True,
             "workbook_readback": documents.get("workbook_readback", {}).get("pass") is True,
             "numeric_parity": documents.get("parity", {}).get("match") is True,
+            "source_anchors": documents.get("anchors", {}).get("pass") is True,
             "visual_floor": visual_pass,
             "blind_visual_grade": blind.get("verdict") == "pass" and not failed_dimensions,
             "semantic_edit_proof": documents.get("semantic_edits", {}).get("match") is True,

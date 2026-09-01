@@ -112,6 +112,7 @@ def main() -> int:
     parser.add_argument("--sigma-workbook-id")
     parser.add_argument("--expected")
     parser.add_argument("--actuals")
+    parser.add_argument("--source-anchors")
     parser.add_argument("--source-png")
     parser.add_argument("--page-id")
     parser.add_argument("--blind-grade")
@@ -395,6 +396,27 @@ def main() -> int:
             args.actuals,
             "--out",
             str(workdir / "parity-final.json"),
+        ],
+    )
+    if not args.source_anchors:
+        return stop(
+            16,
+            "SOURCE ANCHORS REQUIRED",
+            [
+                "Transcribe source-render values into source-anchors.json.",
+                "Re-run with --source-anchors <source-anchors.json>.",
+            ],
+        )
+    run(
+        "Phase 6 source anchors",
+        "verify-anchors.py",
+        [
+            "--workdir",
+            str(workdir),
+            "--anchors",
+            args.source_anchors,
+            "--actuals",
+            args.actuals,
         ],
     )
 
