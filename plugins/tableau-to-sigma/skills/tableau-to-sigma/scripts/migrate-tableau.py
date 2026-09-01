@@ -3,20 +3,36 @@
 
 The orchestrator is fail-closed and re-entrant. It never substitutes a reduced
 fidelity path: unsupported conversion gaps stop at exit 4, parity input stops
-at exit 12, and incomplete visual evidence stops at exit 16.
+at exit 12, incomplete visual evidence stops at exit 16, and unattributed
+embedded extracts stop at exit 17. Reuse discovery is GET-only and automatic
+reuse requires one unique, fully compatible candidate.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / "lib"))
+import sigma_rest  # noqa: E402
+import tableau_source  # noqa: E402
+
+
+class ExtractLandingRequired(RuntimeError):
+    pass
+
+
+class ReuseRequired(RuntimeError):
+    pass
 
 
 def load(path: Path, default=None):
@@ -65,11 +81,38 @@ def source_arguments(source: str) -> list[str]:
     return ["--workbook-name", source]
 
 
-def find_element_id(readback: dict, element_name: str) -> str | None:
+def find_element_id(
+    readback: dict,
+    element_name: str,
+    required_columns: list[str] | None = None,
+) -> str | None:
+    elements = []
     for page in readback.get("pages") or []:
         for element in page.get("elements") or []:
+            elements.append(element)
             if element.get("name") == element_name:
                 return element.get("id")
+    required = {
+        re.sub(r"[^A-Za-z0-9]", "", str(value)).upper()
+        for value in required_columns or []
+        if value
+    }
+    if required:
+        compatible = []
+        for element in elements:
+            present = {
+                re.sub(
+                    r"[^A-Za-z0-9]",
+                    "",
+                    str(column.get("name") or column.get("label") or ""),
+                ).upper()
+                for column in element.get("columns") or []
+                if isinstance(column, dict)
+            }
+            if required <= present and element.get("id"):
+                compatible.append(element["id"])
+        if len(compatible) == 1:
+            return compatible[0]
     return None
 
 
@@ -101,6 +144,214 @@ def unresolved_gaps(gaps: dict, resolutions: dict | None) -> list[dict]:
     ]
 
 
+def neutral_environment(path: Path | None = None) -> dict[str, str]:
+    path = path or Path("~/.sigma-migration/env").expanduser()
+    if not path.is_file():
+        return {}
+    result = {}
+    pattern = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = pattern.match(line)
+        if not match:
+            continue
+        value = match.group(2).strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        result[match.group(1)] = value
+    return result
+
+
+def twbx_has_hyper(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(name.lower().endswith(".hyper") for name in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def read_manifest(path: Path) -> list[dict]:
+    value = load(path, None)
+    return (
+        [item for item in value if isinstance(item, dict)]
+        if isinstance(value, list)
+        else []
+    )
+
+
+def extract_landing_gate(
+    args,
+    workdir: Path,
+    classification: dict,
+    *,
+    runner=subprocess.run,
+    environment: dict[str, str] | None = None,
+    neutral_path: Path | None = None,
+) -> dict:
+    """Require, or deterministically create, attributed extract landing evidence."""
+    embedded = tableau_source.embedded_datasources(classification)
+    if not embedded:
+        result = {
+            "status": "not-required",
+            "exact_parity_eligible": True,
+            "embedded_datasources": [],
+        }
+        write(workdir / "extract-landing-status.json", result)
+        return result
+
+    names = [item["name"] for item in embedded]
+    manifest_path = workdir / "landing-manifest.json"
+    manifest = read_manifest(manifest_path)
+    coverage = tableau_source.validate_manifest_coverage(classification, manifest)
+    if coverage["valid"]:
+        result = {
+            "status": "landed",
+            "exact_parity_eligible": True,
+            "manifest_path": str(manifest_path),
+            "coverage": coverage,
+            "embedded_datasources": names,
+        }
+        write(workdir / "extract-landing-status.json", result)
+        return result
+
+    if args.skip_extract_landing:
+        result = {
+            "status": "skipped",
+            "kind": "extract-landing-offramp",
+            "reason": args.skip_extract_landing,
+            "exact_parity_eligible": False,
+            "exact_parity_claim": "prohibited",
+            "impact": (
+                "Frozen Tableau extract bytes were not attributed to landed tables; "
+                "source-data parity is unverified."
+            ),
+            "embedded_datasources": names,
+            "manifest_coverage": coverage,
+        }
+        write(workdir / "extract-landing-offramp.json", result)
+        write(workdir / "extract-landing-status.json", result)
+        return result
+
+    twbx = workdir / "workbook-content.twbx"
+    process_env = dict(os.environ if environment is None else environment)
+    neutral = neutral_environment(neutral_path)
+
+    def resolved(key: str) -> str | None:
+        return process_env.get(key) or neutral.get(key)
+
+    identity_ok = all(resolved(key) for key in ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER"))
+    auto_ready = (
+        not args.no_auto_land
+        and twbx_has_hyper(twbx)
+        and bool(args.db)
+        and bool(args.schema)
+        and bool(args.connection)
+        and identity_ok
+    )
+    landing_returncode = None
+    if auto_ready:
+        prefix = re.sub(r"[^A-Za-z0-9]+", "_", args.name or workdir.name)
+        prefix = prefix.strip("_").upper()[:24] or "TABLEAU"
+        completed = runner(
+            [
+                sys.executable,
+                str(HERE / "land-extracts.py"),
+                "--twbx",
+                str(twbx),
+                "--twb",
+                str(workdir / "workbook-content.twb"),
+                "--db",
+                args.db,
+                "--schema",
+                args.schema,
+                "--prefix",
+                prefix,
+                "--sigma-connection-id",
+                args.connection,
+                "--manifest-out",
+                str(manifest_path),
+            ],
+            check=False,
+        )
+        landing_returncode = completed.returncode
+        # The landing can finish tables+manifest and fail during catalog sync.
+        # Always trust the populated artifact independently of process status.
+        manifest = read_manifest(manifest_path)
+        coverage = tableau_source.validate_manifest_coverage(classification, manifest)
+        if coverage["valid"]:
+            result = {
+                "status": "landed",
+                "exact_parity_eligible": True,
+                "manifest_path": str(manifest_path),
+                "coverage": coverage,
+                "embedded_datasources": names,
+                "auto_landed": True,
+                "landing_returncode": landing_returncode,
+                "catalog_sync_warning": landing_returncode != 0,
+            }
+            write(workdir / "extract-landing-status.json", result)
+            return result
+
+    blockers = []
+    if args.no_auto_land:
+        blockers.append("--no-auto-land disabled automatic landing")
+    if not twbx_has_hyper(twbx):
+        blockers.append(f"{twbx} is missing or contains no .hyper payload")
+    if not args.db or not args.schema:
+        blockers.append("explicit --db and --schema landing target required")
+    if not args.connection:
+        blockers.append("explicit --connection required for Sigma catalog sync")
+    if not identity_ok:
+        blockers.append(
+            "SNOWFLAKE_ACCOUNT and SNOWFLAKE_USER are unresolved in process/"
+            "~/.sigma-migration/env"
+        )
+    if manifest:
+        blockers.append(
+            "landing-manifest.json is populated but does not cover: "
+            + ", ".join(coverage["missing_datasources"])
+        )
+    if landing_returncode is not None:
+        blockers.append(
+            f"land-extracts.py exited {landing_returncode} without complete manifest coverage"
+        )
+    raise ExtractLandingRequired(
+        "; ".join(blockers)
+        + ". Land the frozen extract with scripts/land-extracts.py and place an "
+        "attributed, non-empty landing-manifest.json in the workdir, or explicitly "
+        "use --skip-extract-landing REASON (source-data exact parity will be prohibited)."
+    )
+
+
+def reuse_decision(
+    result: dict,
+    mode: str,
+    *,
+    explicit_data_model: bool = False,
+    explicit_workbook: bool = False,
+) -> tuple[str | None, str | None]:
+    dm = (result.get("data_model") or {}).get("selected_id")
+    workbook = (result.get("workbook") or {}).get("selected_id")
+    if explicit_data_model and not dm:
+        raise ReuseRequired("explicit data model ID failed compatibility verification")
+    if explicit_workbook and not workbook:
+        raise ReuseRequired("explicit workbook ID failed compatibility verification")
+    if mode == "require":
+        missing = [
+            label
+            for label, value in (("data model", dm), ("workbook", workbook))
+            if not value
+        ]
+        if missing:
+            raise ReuseRequired(
+                "strict reuse required but no unique compatible "
+                + " / ".join(missing)
+                + " was selected"
+            )
+    return dm, workbook
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbook", required=True, help="name or Tableau share URL")
@@ -119,6 +370,22 @@ def main() -> int:
     parser.add_argument("--data-model-element-id")
     parser.add_argument("--workbook-template")
     parser.add_argument("--sigma-workbook-id")
+    parser.add_argument(
+        "--reuse-mode",
+        choices=("auto", "new", "require"),
+        default="auto",
+        help="strict discovery policy; auto reuses unique compatible matches",
+    )
+    parser.add_argument(
+        "--no-auto-land",
+        action="store_true",
+        help="require manual extract landing even when all automatic inputs exist",
+    )
+    parser.add_argument(
+        "--skip-extract-landing",
+        metavar="REASON",
+        help="explicitly proceed without frozen-extract attribution; prohibits exact-parity claims",
+    )
     parser.add_argument("--expected")
     parser.add_argument("--actuals")
     parser.add_argument("--source-anchors")
@@ -218,7 +485,26 @@ def main() -> int:
             ],
         )
 
-    if not (workdir / "dm-raw.json").is_file():
+    classification = tableau_source.classify_workbook(
+        workdir / "workbook-content.twb"
+    )
+    write(workdir / "source-classification.json", classification)
+    try:
+        landing = extract_landing_gate(args, workdir, classification)
+    except ExtractLandingRequired as exc:
+        return stop(
+            17,
+            "EXTRACT LANDING REQUIRED",
+            [
+                str(exc),
+                f"Classifier evidence: {workdir / 'source-classification.json'}",
+            ],
+        )
+    state["extract_landing_status"] = landing["status"]
+    state["exact_parity_eligible"] = landing["exact_parity_eligible"]
+    write(state_path, state)
+
+    if not (workdir / "dm-raw.json").is_file() and not args.dm_spec:
         run(
             "Phase 2",
             "convert-tableau.py",
@@ -236,7 +522,63 @@ def main() -> int:
             ],
         )
 
-    raw_model = load(workdir / "dm-raw.json", {}) or {}
+    source_model_path = (
+        Path(args.dm_spec).expanduser().resolve()
+        if args.dm_spec
+        else workdir / "dm-raw.json"
+    )
+    raw_model = load(source_model_path, {}) or {}
+    effective_dm_spec = source_model_path
+    fact_element_name = args.fact_element
+    manifest = (
+        read_manifest(Path(landing["manifest_path"]))
+        if landing.get("manifest_path")
+        else []
+    )
+    if manifest:
+        remap = tableau_source.remap_from_manifest(raw_model, manifest)
+        used_manifest = remap.get("used_manifest_entries") or []
+        remapped_coverage = tableau_source.validate_manifest_coverage(
+            classification, used_manifest
+        )
+        remap["coverage"] = remapped_coverage
+        write(workdir / "extract-manifest-remap.json", remap)
+        if not remap["elements"] or not remapped_coverage["valid"]:
+            return stop(
+                17,
+                "EXTRACT MANIFEST REMAP INCOMPLETE",
+                [
+                    "The manifest exists, but converted DM elements could not be "
+                    "attributed to every embedded datasource.",
+                    f"See {workdir / 'extract-manifest-remap.json'}.",
+                    "Repair datasource/table/column attribution before any Sigma POST.",
+                ],
+            )
+        matching_fact = [
+            mapping
+            for mapping in remap["mappings"]
+            if re.sub(r"[^A-Za-z0-9]", "", mapping.get("old_name") or "").upper()
+            == re.sub(r"[^A-Za-z0-9]", "", args.fact_element).upper()
+            or re.sub(r"[^A-Za-z0-9]", "", mapping.get("old_table") or "").upper()
+            == re.sub(r"[^A-Za-z0-9]", "", args.fact_element).upper()
+        ]
+        if len(matching_fact) == 1:
+            fact_element_name = matching_fact[0]["new_name"]
+        elif len(remap["mappings"]) == 1:
+            fact_element_name = remap["mappings"][0]["new_name"]
+        effective_dm_spec = workdir / "dm-remapped.json"
+        write(effective_dm_spec, raw_model)
+    elif landing["status"] == "skipped":
+        write(
+            workdir / "extract-manifest-remap.json",
+            {
+                "status": "skipped",
+                "reason": args.skip_extract_landing,
+                "exact_parity_eligible": False,
+                "elements": 0,
+            },
+        )
+
     for path in warehouse_paths(raw_model):
         table_path = ".".join(path)
         slug = re.sub(r"[^A-Za-z0-9_-]+", "-", path[-1]).strip("-")
@@ -302,7 +644,7 @@ def main() -> int:
         for pattern in metadata.get("workbookPatterns") or []
         if pattern.get("kind") == "unsupported"
     ]
-    dm_spec = Path(args.dm_spec).resolve() if args.dm_spec else workdir / "dm-raw.json"
+    dm_spec = effective_dm_spec
     if unsupported and not args.dm_spec:
         write(workdir / "unsupported-patterns.json", unsupported)
         return stop(
@@ -321,7 +663,83 @@ def main() -> int:
             {"kind": "semantic-edits", "edits": [], "match": True},
         )
 
-    data_model_id = args.data_model_id or state.get("data_model_id")
+    if args.reuse_mode == "new" and (
+        args.data_model_id or args.sigma_workbook_id
+    ):
+        return stop(
+            3,
+            "INVALID REUSE POLICY",
+            [
+                "--reuse-mode new conflicts with an explicit existing object ID.",
+                "Use --reuse-mode auto/require, or remove the explicit ID.",
+            ],
+        )
+
+    existing_dm = args.data_model_id or state.get("data_model_id")
+    existing_workbook = args.sigma_workbook_id or state.get("workbook_id")
+    reuse_result_path = workdir / "reuse-discovery.json"
+    should_discover = args.reuse_mode != "new" or bool(
+        existing_dm or existing_workbook
+    )
+    if should_discover:
+        reuse_args = [
+            "--workdir",
+            str(workdir),
+            "--dm-spec",
+            str(dm_spec),
+            "--out",
+            str(reuse_result_path),
+            "--mode",
+            "both",
+        ]
+        if existing_dm:
+            reuse_args += ["--data-model-id", existing_dm]
+        if existing_workbook:
+            reuse_args += ["--workbook-id", existing_workbook]
+        print("── Reuse discovery: discover-tableau-reuse.py")
+        reuse_completed = subprocess.run(
+            [sys.executable, str(HERE / "discover-tableau-reuse.py"), *reuse_args],
+            check=False,
+        )
+        reuse_result = load(reuse_result_path, {}) or {}
+        if reuse_completed.returncode not in (0, 3):
+            raise RuntimeError(
+                "reuse discovery failed before posting; see "
+                f"{reuse_result_path}"
+            )
+        try:
+            discovered_dm, discovered_workbook = reuse_decision(
+                reuse_result,
+                args.reuse_mode,
+                explicit_data_model=bool(existing_dm),
+                explicit_workbook=bool(existing_workbook),
+            )
+        except ReuseRequired as exc:
+            return stop(
+                3,
+                "STRICT REUSE NOT RESOLVED",
+                [str(exc), f"Review candidates in {reuse_result_path}."],
+            )
+    else:
+        discovered_dm = discovered_workbook = None
+        write(
+            reuse_result_path,
+            {
+                "contract_version": 1,
+                "read_only": True,
+                "status": "skipped",
+                "rationale": "--reuse-mode new",
+            },
+        )
+
+    data_model_id = discovered_dm
+    workbook_id = discovered_workbook
+    if data_model_id:
+        state["data_model_id"] = data_model_id
+    if workbook_id:
+        state["workbook_id"] = workbook_id
+    write(state_path, state)
+
     if not data_model_id:
         run(
             "Phases 3–4",
@@ -346,17 +764,35 @@ def main() -> int:
         write(state_path, state)
     else:
         write(workdir / "dm-ids.json", {"dataModelId": data_model_id})
+        try:
+            dm_readback = sigma_rest.request(
+                "get", f"/v2/dataModels/{data_model_id}/spec"
+            )
+        except sigma_rest.SigmaError as exc:
+            raise RuntimeError(
+                f"selected data model {data_model_id} readback failed: {exc}"
+            ) from exc
+        if not isinstance(dm_readback, dict):
+            raise RuntimeError(
+                f"selected data model {data_model_id} returned no JSON spec"
+            )
+        write(workdir / "datamodel-readback.json", dm_readback)
 
     element_id = args.data_model_element_id or state.get("data_model_element_id")
     if not element_id:
         readback = load(workdir / "datamodel-readback.json", {}) or {}
-        element_id = find_element_id(readback, args.fact_element)
+        signature = load(workdir / "workbook-signature-python.json", {}) or {}
+        element_id = find_element_id(
+            readback,
+            fact_element_name,
+            signature.get("referenced_columns") or [],
+        )
     if not element_id:
         return stop(
             4,
             "DATA MODEL ELEMENT REQUIRED",
             [
-                f"Could not resolve fact element {args.fact_element!r} from readback.",
+                f"Could not resolve fact element {fact_element_name!r} from readback.",
                 "Re-run with --data-model-element-id <server element id>.",
             ],
         )
@@ -395,7 +831,7 @@ def main() -> int:
                 "--element-id",
                 element_id,
                 "--data-model-element-name",
-                args.fact_element,
+                fact_element_name,
                 "--folder-id",
                 args.folder,
                 "--title",
@@ -427,7 +863,6 @@ def main() -> int:
                 f"automatic workbook builder exited {automatic.returncode}"
             )
 
-    workbook_id = args.sigma_workbook_id or state.get("workbook_id")
     post_args = [
         "--type",
         "workbook",
@@ -586,6 +1021,12 @@ def main() -> int:
         ],
         check=False,
     )
+    if not state.get("exact_parity_eligible", True):
+        print(
+            "OFF-RAMP: extract landing was explicitly skipped; this run does NOT "
+            "claim exact parity with the frozen Tableau extract. See "
+            f"{workdir / 'extract-landing-offramp.json'}."
+        )
     return hard_gate.returncode or completed.returncode
 
 
