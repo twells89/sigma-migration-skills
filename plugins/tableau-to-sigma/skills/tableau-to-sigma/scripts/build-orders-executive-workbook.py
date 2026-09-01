@@ -257,8 +257,8 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
   <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="3 / 7"/>
   <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="7 / 18"/>
   <Element elementId="chart-revenue-region" gridColumn="1 / 7" gridRow="18 / 27"/>
-  <Element elementId="chart-gross-ship" gridColumn="7 / 16" gridRow="18 / 27"/>
-  <Element elementId="chart-margin-tier" gridColumn="16 / 25" gridRow="18 / 27"/>
+  <Element elementId="chart-gross-ship" gridColumn="7 / 17" gridRow="18 / 27"/>
+  <Element elementId="chart-margin-tier" gridColumn="17 / 25" gridRow="18 / 27"/>
 </Page>
 """
     spec = {
