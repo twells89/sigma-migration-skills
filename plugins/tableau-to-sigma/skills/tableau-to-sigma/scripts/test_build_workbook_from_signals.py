@@ -242,6 +242,243 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         self.assertEqual("unbound-chart-field", residue["reasonCode"])
         self.assertEqual(["MISSING_DATE"], residue["signals"]["fields"])
 
+    def test_user_aggregated_kpi_prefers_matching_data_model_metric(self):
+        layout, meta = self.signals()
+        meta["columns_by_guid"].update(
+            {
+                "PROFIT": {"caption": "Profit", "datatype": "real"},
+                "MARGIN_CALC": {
+                    "caption": "Margin Ratio",
+                    "datatype": "real",
+                    "formula": "SUM([PROFIT]) / SUM([SALES])",
+                },
+            }
+        )
+        layout[0]["zones"].append(
+            {
+                "id": "margin-kpi",
+                "kind": "chart",
+                "chart_kind": "kpi",
+                "caption": "Margin Ratio",
+                "x_pct": 0,
+                "y_pct": 56,
+                "w_pct": 25,
+                "h_pct": 20,
+                "rows_shelf": shelf(
+                    field("MARGIN_CALC", "measure", "usr")
+                ),
+                "cols_shelf": shelf(),
+                "filters": [],
+            }
+        )
+        formula_audit = {
+            "formulas": [
+                {
+                    "id": "calc-margin",
+                    "internal_name": "[MARGIN_CALC]",
+                    "caption": "Margin Ratio",
+                    "status": "spec",
+                    "sigma_formula": "Sum([Profit]) / Sum([Sales])",
+                }
+            ]
+        }
+        dm_spec = {
+            "pages": [
+                {
+                    "elements": [
+                        {
+                            "id": "local-fact",
+                            "kind": "table",
+                            "name": "FACT",
+                            "metrics": [
+                                {
+                                    "id": "metric-margin",
+                                    "name": "Margin Ratio",
+                                    "formula": "Sum([Profit]) / Sum([Sales])",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="posted-fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+            formula_audit=formula_audit,
+            dm_spec=dm_spec,
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        kpi = next(
+            element
+            for element in spec["document"]["elements"]
+            if element.get("name") == "Margin Ratio"
+            and element.get("kind") == "kpi-chart"
+        )
+        self.assertEqual("[Master/Margin Ratio]", kpi["columns"][0]["formula"])
+        master = spec["document"]["elements"][0]
+        metric_column = next(
+            column for column in master["columns"] if column["name"] == "Margin Ratio"
+        )
+        self.assertEqual("[Metrics/Margin Ratio]", metric_column["formula"])
+
+    def test_user_aggregated_kpi_without_metric_uses_qualified_translation(self):
+        layout, meta = self.signals()
+        meta["columns_by_guid"]["PROFIT"] = {
+            "caption": "Profit",
+            "datatype": "real",
+        }
+        meta["columns_by_guid"]["PROFIT_CALC"] = {
+            "caption": "Total Profit",
+            "datatype": "real",
+            "formula": "SUM([PROFIT])",
+        }
+        kpi = next(
+            zone for zone in layout[0]["zones"] if zone.get("id") == "sales-kpi"
+        )
+        kpi["caption"] = "Total Profit"
+        kpi["rows_shelf"] = shelf(field("PROFIT_CALC", "measure", "user"))
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+            formula_audit={
+                "formulas": [
+                    {
+                        "id": "calc-profit",
+                        "internal_name": "[PROFIT_CALC]",
+                        "caption": "Total Profit",
+                        "status": "spec",
+                        "sigma_formula": "Sum([Profit])",
+                    }
+                ]
+            },
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        emitted = next(
+            element
+            for element in spec["document"]["elements"]
+            if element.get("name") == "Total Profit"
+        )
+        self.assertEqual(
+            "Sum([Master/Profit])", emitted["columns"][0]["formula"]
+        )
+
+    def test_user_calculated_bar_dimension_qualifies_all_source_references(self):
+        layout, meta = self.signals()
+        meta["columns_by_guid"].update(
+            {
+                "SHIP_DAYS": {"caption": "Ship Days", "datatype": "integer"},
+                "DELIVERY_BAND": {
+                    "caption": "Delivery Band",
+                    "datatype": "string",
+                    "formula": (
+                        'IF [SHIP_DAYS] <= 2 THEN "Fast" ELSE "Standard" END'
+                    ),
+                },
+            }
+        )
+        bar = next(
+            zone for zone in layout[0]["zones"] if zone.get("id") == "sales-bar"
+        )
+        bar["caption"] = "Sales by Delivery Band"
+        bar["cols_shelf"] = shelf(field("DELIVERY_BAND", "dim", "none"))
+        formula_audit = {
+            "formulas": [
+                {
+                    "id": "calc-band",
+                    "internal_name": "[DELIVERY_BAND]",
+                    "caption": "Delivery Band",
+                    "status": "spec",
+                    "sigma_formula": (
+                        'If([Ship Days] <= 2, "Fast", "Standard")'
+                    ),
+                }
+            ]
+        }
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+            formula_audit=formula_audit,
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        emitted = next(
+            element
+            for element in spec["document"]["elements"]
+            if element.get("name") == "Sales by Delivery Band"
+        )
+        dimension = emitted["columns"][0]
+        self.assertEqual(
+            'If([Master/Ship Days] <= 2, "Fast", "Standard")',
+            dimension["formula"],
+        )
+        master = spec["document"]["elements"][0]
+        self.assertIn(
+            "[FACT/Ship Days]",
+            {column["formula"] for column in master["columns"]},
+        )
+        self.assertNotIn(
+            "[FACT/Delivery Band]",
+            {column["formula"] for column in master["columns"]},
+        )
+
+    def test_user_calculation_with_unmapped_reference_remains_a_residue(self):
+        layout, meta = self.signals()
+        meta["columns_by_guid"]["SEGMENT_CALC"] = {
+            "caption": "Segment Band",
+            "datatype": "string",
+            "formula": "IF [MISSING] > 0 THEN \"A\" ELSE \"B\" END",
+        }
+        bar = next(
+            zone for zone in layout[0]["zones"] if zone.get("id") == "sales-bar"
+        )
+        bar["cols_shelf"] = shelf(field("SEGMENT_CALC", "dim", "none"))
+        formula_audit = {
+            "formulas": [
+                {
+                    "id": "calc-segment",
+                    "internal_name": "[SEGMENT_CALC]",
+                    "caption": "Segment Band",
+                    "status": "spec",
+                    "sigma_formula": 'If([Unknown Input] > 0, "A", "B")',
+                }
+            ]
+        }
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+            formula_audit=formula_audit,
+        )
+        _spec, report = instance.build()
+        residue = next(
+            item for item in report["residues"] if item["zoneId"] == "sales-bar"
+        )
+        self.assertEqual("blocked", report["status"])
+        self.assertEqual(
+            "unmapped-user-calculation-reference", residue["reasonCode"]
+        )
+        self.assertEqual(
+            ["Unknown Input"], residue["signals"]["references"]
+        )
+
     def test_cli_writes_structured_residues_and_no_spec_for_unsupported_zone(self):
         layout, meta = self.signals()
         layout[0]["zones"].append(

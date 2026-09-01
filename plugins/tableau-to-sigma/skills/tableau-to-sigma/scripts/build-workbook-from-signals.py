@@ -59,6 +59,8 @@ AGGREGATIONS = {
     "ctd": "CountDistinct",
     "median": "Median",
 }
+USER_DERIVATIONS = {"user", "usr"}
+TRANSLATED_FORMULA_STATUSES = {"spec", "verify", "chart_only"}
 
 
 def read_json(path: Path) -> Any:
@@ -116,6 +118,7 @@ class Field:
     key: str
     caption: str
     datatype: str
+    tableau_formula: str | None = None
 
 
 class WorkbookBuilder:
@@ -129,6 +132,8 @@ class WorkbookBuilder:
         folder_id: str,
         data_model_element_name: str,
         title: str | None = None,
+        formula_audit: dict[str, Any] | None = None,
+        dm_spec: dict[str, Any] | None = None,
     ) -> None:
         if not isinstance(layout, list):
             raise ValueError("dashboard-layout.json must contain an array")
@@ -145,10 +150,19 @@ class WorkbookBuilder:
                 "data model id, element id/name, and folder id must be non-empty"
             )
         self.title = title or self._default_title()
+        if formula_audit is not None and not isinstance(formula_audit, dict):
+            raise ValueError("formula-audit input must contain an object")
+        if dm_spec is not None and not isinstance(dm_spec, dict):
+            raise ValueError("dm-spec input must contain an object")
+        self.formula_audit = formula_audit or {}
+        self.dm_spec = dm_spec or {}
         self.residues: list[dict[str, Any]] = []
         self.dispositions: list[dict[str, Any]] = []
         self.master_fields: dict[str, Field] = {}
         self.master_ids: dict[str, str] = {}
+        self.master_formulas: dict[str, str] = {}
+        self.formula_rows = self._formula_audit_rows()
+        self.data_model_metrics = self._data_model_metrics()
 
     def _default_title(self) -> str:
         visible = [
@@ -214,11 +228,19 @@ class WorkbookBuilder:
             or any(token in self.source_name for token in "[]")
         ):
             return None
-        return Field(key=str(key), caption=caption, datatype=str(info.get("datatype") or ""))
+        tableau_formula = str(info.get("formula") or "").strip() or None
+        return Field(
+            key=str(key),
+            caption=caption,
+            datatype=str(info.get("datatype") or ""),
+            tableau_formula=tableau_formula,
+        )
 
-    def master_column(self, field: Field) -> str | None:
+    def master_column(self, field: Field, formula: str | None = None) -> str | None:
         existing = self.master_fields.get(field.key)
         if existing:
+            if formula and self.master_formulas[field.key] != formula:
+                return None
             return self.master_ids[field.key]
         if any(
             current.caption.casefold() == field.caption.casefold() and current.key != field.key
@@ -228,7 +250,203 @@ class WorkbookBuilder:
         column_id = stable_id("master-col", field.key)
         self.master_fields[field.key] = field
         self.master_ids[field.key] = column_id
+        self.master_formulas[field.key] = formula or f"[{self.source_name}/{field.caption}]"
         return column_id
+
+    def _formula_audit_rows(self) -> list[dict[str, Any]]:
+        rows = self.formula_audit.get("formulas")
+        if not isinstance(rows, list):
+            rows = [
+                row
+                for datasource in self.formula_audit.get("datasources") or []
+                if isinstance(datasource, dict)
+                for row in datasource.get("formulas") or []
+            ]
+        return [row for row in rows if isinstance(row, dict)]
+
+    @staticmethod
+    def _data_model_elements(spec: dict[str, Any]) -> list[dict[str, Any]]:
+        root = spec.get("document") if isinstance(spec.get("document"), dict) else spec
+        elements = [
+            element
+            for page in root.get("pages") or []
+            if isinstance(page, dict)
+            for element in page.get("elements") or []
+            if isinstance(element, dict)
+        ]
+        elements.extend(
+            element
+            for element in root.get("elements") or []
+            if isinstance(element, dict)
+        )
+        return elements
+
+    def _data_model_metrics(self) -> list[dict[str, Any]]:
+        elements = self._data_model_elements(self.dm_spec)
+        candidates = [
+            element
+            for element in elements
+            if str(element.get("id") or "") == self.element_id
+            or str(element.get("name") or "").strip().casefold()
+            == self.source_name.casefold()
+        ]
+        if len(candidates) != 1:
+            return []
+        return [
+            metric
+            for metric in candidates[0].get("metrics") or []
+            if isinstance(metric, dict)
+        ]
+
+    @staticmethod
+    def _audit_names(row: dict[str, Any]) -> set[str]:
+        return {
+            strip_brackets(row.get(key)).strip().casefold()
+            for key in ("internal_name", "caption", "calculation", "name")
+            if str(row.get(key) or "").strip()
+        }
+
+    def translated_formula(self, field: Field) -> tuple[str | None, dict[str, Any]]:
+        key = field.key.strip().casefold()
+        caption = field.caption.strip().casefold()
+        key_matches = [
+            row for row in self.formula_rows if key in self._audit_names(row)
+        ]
+        matches = key_matches or [
+            row for row in self.formula_rows if caption in self._audit_names(row)
+        ]
+        if len(matches) != 1:
+            return None, {
+                "formulaAuditMatches": len(matches),
+                "field": field.caption,
+            }
+        row = matches[0]
+        formula = str(row.get("sigma_formula") or "").strip()
+        status = str(row.get("status") or "")
+        if (
+            not formula
+            or status not in TRANSLATED_FORMULA_STATUSES
+            or formula.startswith("/*")
+        ):
+            return None, {
+                "field": field.caption,
+                "formulaStatus": status or None,
+                "hasSigmaFormula": bool(formula),
+            }
+        return formula, {
+            "field": field.caption,
+            "formulaStatus": status,
+            "formulaAuditId": row.get("id"),
+        }
+
+    @staticmethod
+    def _formula_reference_spans(formula: str) -> list[tuple[int, int, str]] | None:
+        spans: list[tuple[int, int, str]] = []
+        quote = None
+        index = 0
+        while index < len(formula):
+            char = formula[index]
+            if quote:
+                if char == "\\":
+                    index += 2
+                    continue
+                if char == quote:
+                    if index + 1 < len(formula) and formula[index + 1] == quote:
+                        index += 2
+                        continue
+                    quote = None
+                index += 1
+                continue
+            if char in {'"', "'"}:
+                quote = char
+                index += 1
+                continue
+            if char != "[":
+                index += 1
+                continue
+            end = formula.find("]", index + 1)
+            if end < 0:
+                return None
+            spans.append((index, end + 1, formula[index + 1 : end]))
+            index = end + 1
+        return spans if quote is None else None
+
+    def map_formula_references(
+        self, formula: str, current_field: Field, *, qualify: bool
+    ) -> tuple[str | None, list[str]]:
+        spans = self._formula_reference_spans(formula)
+        if spans is None:
+            return None, ["malformed-formula"]
+        missing = []
+        replacements: list[tuple[int, int, str]] = []
+        for start, end, reference in spans:
+            mapped = self.resolve_field(reference)
+            if (
+                mapped is None
+                or mapped.key == current_field.key
+                or mapped.tableau_formula is not None
+                or (
+                    mapped.caption.casefold() == current_field.caption.casefold()
+                    and mapped.key != current_field.key
+                )
+            ):
+                missing.append(reference)
+                continue
+            if qualify and not self.master_column(mapped):
+                missing.append(reference)
+                continue
+            replacement = (
+                f"[Master/{mapped.caption}]" if qualify else f"[{mapped.caption}]"
+            )
+            replacements.append((start, end, replacement))
+        if missing:
+            return None, sorted(set(missing))
+        output = formula
+        for start, end, replacement in reversed(replacements):
+            output = output[:start] + replacement + output[end:]
+        return output, []
+
+    def formula_signature(self, formula: str, current_field: Field) -> str | None:
+        mapped, missing = self.map_formula_references(
+            formula, current_field, qualify=False
+        )
+        if missing or mapped is None:
+            return None
+        return re.sub(r"\s+", "", mapped).casefold()
+
+    def matching_metric(
+        self, field: Field, translated_formula: str
+    ) -> dict[str, Any] | None:
+        translated_signature = self.formula_signature(translated_formula, field)
+        if translated_signature is None:
+            return None
+        matches = []
+        for metric in self.data_model_metrics:
+            name = str(metric.get("name") or "").strip()
+            formula = str(metric.get("formula") or "").strip()
+            if not name or any(token in name for token in "[]") or not formula:
+                continue
+            metric_signature = self.formula_signature(formula, field)
+            if metric_signature != translated_signature:
+                continue
+            matches.append(metric)
+        named = [
+            metric
+            for metric in matches
+            if str(metric.get("name") or "").strip().casefold()
+            == field.caption.casefold()
+        ]
+        selected = named if named else matches
+        return selected[0] if len(selected) == 1 else None
+
+    def metric_master_column(self, field: Field, metric: dict[str, Any]) -> str | None:
+        metric_name = str(metric.get("name") or "").strip()
+        metric_field = Field(
+            key=f"metric:{metric_name}",
+            caption=field.caption,
+            datatype=field.datatype,
+        )
+        return self.master_column(metric_field, f"[Metrics/{metric_name}]")
 
     def _shelf_fields(self, zone: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         fields = [
@@ -268,6 +486,50 @@ class WorkbookBuilder:
             if field_key_from_reference(reference) == field.key:
                 return sigma_format(value)
         return sigma_format((self.meta.get("column_formats") or {}).get(field.caption))
+
+    def require_translated_calculation(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        field: Field,
+    ) -> tuple[str | None, dict[str, Any]]:
+        translated, evidence = self.translated_formula(field)
+        if translated is None:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-user-calculation",
+                "user calculation has no unique usable translated Sigma formula",
+                **evidence,
+            )
+            return None, evidence
+        return translated, evidence
+
+    def qualify_user_calculation(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        field: Field,
+    ) -> tuple[str | None, str | None, dict[str, Any]]:
+        translated, evidence = self.require_translated_calculation(
+            dashboard, zone, field
+        )
+        if translated is None:
+            return None, None, evidence
+        qualified, missing = self.map_formula_references(
+            translated, field, qualify=True
+        )
+        if qualified is None:
+            self.residue(
+                dashboard,
+                zone,
+                "unmapped-user-calculation-reference",
+                "translated Sigma formula contains a reference that cannot be mapped through dashboard metadata",
+                references=missing,
+                **evidence,
+            )
+            return None, None, evidence
+        return translated, qualified, evidence
 
     def build_chart(self, dashboard: str, zone: dict[str, Any]) -> dict[str, Any] | None:
         chart_kind = str(zone.get("chart_kind") or "")
@@ -330,7 +592,13 @@ class WorkbookBuilder:
         ]
         derivations = [self._derivation(zone, item) for item in measures]
         unsupported_aggs = sorted(
-            {value for value in derivations if value not in AGGREGATIONS}
+            {
+                value
+                for value, field in zip(derivations, resolved_measures)
+                if value not in AGGREGATIONS
+                and value not in USER_DERIVATIONS
+                and not (field and field.tableau_formula)
+            }
         )
         if missing or unsupported_aggs:
             self.residue(
@@ -348,18 +616,28 @@ class WorkbookBuilder:
         dimension_column_id = None
         if resolved_dimensions:
             field = resolved_dimensions[0]
-            master_id = self.master_column(field)
-            if not master_id:
-                self.residue(
-                    dashboard,
-                    zone,
-                    "ambiguous-master-column",
-                    "two source fields resolve to the same display caption",
-                    caption=field.caption,
-                )
-                return None
             dimension_column_id = f"{element_id}-dimension"
-            formula = f"[Master/{field.caption}]"
+            dimension_derivation = str(
+                dimensions[0].get("derivation") or ""
+            ).lower()
+            if field.tableau_formula or dimension_derivation in USER_DERIVATIONS:
+                _translated, formula, _evidence = self.qualify_user_calculation(
+                    dashboard, zone, field
+                )
+                if formula is None:
+                    return None
+            else:
+                master_id = self.master_column(field)
+                if not master_id:
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "ambiguous-master-column",
+                        "two source fields resolve to the same display caption",
+                        caption=field.caption,
+                    )
+                    return None
+                formula = f"[Master/{field.caption}]"
             grain = DATE_DERIVATIONS.get(str(dimensions[0].get("derivation") or "").lower())
             if grain:
                 formula = f'DateTrunc("{grain}", {formula})'
@@ -375,21 +653,72 @@ class WorkbookBuilder:
 
         measure_ids = []
         for index, (field, derivation) in enumerate(zip(resolved_measures, derivations), 1):
-            if not self.master_column(field):
-                self.residue(
-                    dashboard,
-                    zone,
-                    "ambiguous-master-column",
-                    "two source fields resolve to the same display caption",
-                    caption=field.caption,
+            formula = None
+            if field.tableau_formula or derivation in USER_DERIVATIONS:
+                translated, evidence = self.require_translated_calculation(
+                    dashboard, zone, field
                 )
-                return None
+                if translated is None:
+                    return None
+                if derivation in USER_DERIVATIONS:
+                    metric = self.matching_metric(field, translated)
+                    if metric is not None:
+                        if not self.metric_master_column(field, metric):
+                            self.residue(
+                                dashboard,
+                                zone,
+                                "ambiguous-data-model-metric",
+                                "matching data-model metric could not be exposed through the Master source",
+                                metric=metric.get("name"),
+                                **evidence,
+                            )
+                            return None
+                        formula = f"[Master/{field.caption}]"
+                if formula is None:
+                    qualified, missing = self.map_formula_references(
+                        translated, field, qualify=True
+                    )
+                    if qualified is None:
+                        self.residue(
+                            dashboard,
+                            zone,
+                            "unmapped-user-calculation-reference",
+                            "translated Sigma formula contains a reference that cannot be mapped through dashboard metadata",
+                            references=missing,
+                            **evidence,
+                        )
+                        return None
+                    if derivation in USER_DERIVATIONS:
+                        formula = qualified
+                    elif derivation in AGGREGATIONS:
+                        formula = f"{AGGREGATIONS[derivation]}({qualified})"
+                    else:
+                        self.residue(
+                            dashboard,
+                            zone,
+                            "unsupported-user-aggregation",
+                            "translated row calculation still has an unsupported shelf aggregation",
+                            aggregation=derivation,
+                            **evidence,
+                        )
+                        return None
+            else:
+                if not self.master_column(field):
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "ambiguous-master-column",
+                        "two source fields resolve to the same display caption",
+                        caption=field.caption,
+                    )
+                    return None
+                formula = f"{AGGREGATIONS[derivation]}([Master/{field.caption}])"
             column_id = f"{element_id}-measure-{index}"
             measure_ids.append(column_id)
             item = {
                 "id": column_id,
                 "name": field.caption,
-                "formula": f"{AGGREGATIONS[derivation]}([Master/{field.caption}])",
+                "formula": formula,
             }
             field_format = self._field_format(zone, field)
             if field_format:
@@ -636,7 +965,7 @@ class WorkbookBuilder:
             {
                 "id": self.master_ids[key],
                 "name": field.caption,
-                "formula": f"[{self.source_name}/{field.caption}]",
+                "formula": self.master_formulas[key],
             }
             for key, field in self.master_fields.items()
         ]
@@ -754,6 +1083,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-model-element-name", required=True)
     parser.add_argument("--folder-id", required=True)
     parser.add_argument("--title")
+    parser.add_argument("--formula-audit")
+    parser.add_argument("--dm-spec")
     parser.add_argument("--out", required=True)
     parser.add_argument("--residues-out")
     args = parser.parse_args(argv)
@@ -767,6 +1098,14 @@ def main(argv: list[str] | None = None) -> int:
         else output_path.with_name("workbook-residues.json")
     )
     try:
+        formula_audit_path = (
+            Path(args.formula_audit).expanduser().resolve()
+            if args.formula_audit
+            else None
+        )
+        dm_spec_path = (
+            Path(args.dm_spec).expanduser().resolve() if args.dm_spec else None
+        )
         builder = WorkbookBuilder(
             read_json(layout_path),
             read_json(meta_path),
@@ -775,6 +1114,10 @@ def main(argv: list[str] | None = None) -> int:
             folder_id=args.folder_id,
             data_model_element_name=args.data_model_element_name,
             title=args.title,
+            formula_audit=(
+                read_json(formula_audit_path) if formula_audit_path else None
+            ),
+            dm_spec=read_json(dm_spec_path) if dm_spec_path else None,
         )
         spec, report = builder.build()
         report["inputs"] = {
@@ -783,6 +1126,8 @@ def main(argv: list[str] | None = None) -> int:
             "dataModelId": args.data_model_id,
             "elementId": args.element_id,
             "dataModelElementName": args.data_model_element_name,
+            "formulaAudit": str(formula_audit_path) if formula_audit_path else None,
+            "dmSpec": str(dm_spec_path) if dm_spec_path else None,
         }
         report["outputWritten"] = not bool(report["residues"])
         write_json(residues_path, report)
