@@ -59,19 +59,6 @@ ALLOWED = {
       'why they hand-roll the loop instead. A Python port must not be a blind ' \
       'translation; port the endpoint-correct loop. Only live ruby caller: ' \
       'fidelity-loop.rb.'
-  },
-  'tableau_rest' => {
-    'datasource_connections'       => 'Tableau REST read surface not yet needed by any Python caller.',
-    'workbook_connections'         => 'Tableau REST read surface not yet needed by any Python caller.',
-    'virtual_connections'          => 'Tableau REST read surface not yet needed by any Python caller.',
-    'virtual_connection_connections' => 'Tableau REST read surface not yet needed by any Python caller.',
-    'graphql_workbook_dashboards'  => 'Metadata-API (GraphQL) surface; no Python caller yet.',
-    'find_workbook_by_content_url' => 'Discovery helper; no Python caller yet.',
-    'query_datasource'             => 'VizQL data-fetch spine. Porting it needs live-Tableau validation ' \
-                                      '(pagination + filter semantics), so it is deliberately out of scope ' \
-                                      'here rather than translated untested.',
-    'view_data_filtered'           => 'CSV data-fetch spine. Same reason as query_datasource: needs live ' \
-                                      'validation, not a blind port.'
   }
 }.freeze
 

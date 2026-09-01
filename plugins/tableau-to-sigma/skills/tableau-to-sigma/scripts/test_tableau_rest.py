@@ -214,6 +214,41 @@ class Collections(Base):
         self.enqueue(200, {"workbooks": {}})
         self.assertIsNone(tr.find_workbook_by_name("x"))
 
+    def test_workbook_content_url_paged_fallback(self):
+        self.ready()
+        self.enqueue(200, {"workbooks": {}})
+        self.enqueue(200, {"workbooks": {"workbook": [{"contentUrl": "other"}]},
+                           "pagination": {"totalAvailable": "150"}})
+        self.enqueue(200, {"workbooks": {"workbook": [{"contentUrl": "wanted", "id": "wb9"}]},
+                           "pagination": {"totalAvailable": "150"}})
+        hit = tr.find_workbook_by_content_url("wanted")
+        self.assertEqual(hit["id"], "wb9")
+
+    def test_connection_collections_are_normalised(self):
+        self.ready()
+        self.enqueue(200, {"connections": {"connection": {"id": "c1"}}})
+        self.assertEqual([{"id": "c1"}], tr.workbook_connections("wb1"))
+        self.enqueue(200, {"connections": {"connection": [{"id": "c2"}]}})
+        self.assertEqual([{"id": "c2"}], tr.datasource_connections("ds1"))
+
+    def test_filtered_view_data_encodes_fields_and_values(self):
+        self.ready()
+        self.enqueue(200, "a,b\n1,2")
+        tr.view_data_filtered("view1", {"Sales Region": "West Coast"})
+        self.assertIn("vf_Sales%20Region=West%20Coast", self._sends[0]["url"])
+
+    def test_graphql_workbook_dashboards_unwraps_membership(self):
+        self.ready()
+        self.enqueue(200, {
+            "data": {
+                "workbooks": [
+                    {"dashboards": [{"name": "Executive", "sheets": [{"name": "Sales"}]}]}
+                ]
+            }
+        })
+        dashboards = tr.graphql_workbook_dashboards("wb1")
+        self.assertEqual("Executive", dashboards[0]["name"])
+
     def test_datasource_content_url_paged_fallback(self):
         self.ready()
         # filter hit empty -> fall back to paged scan; match on page 2

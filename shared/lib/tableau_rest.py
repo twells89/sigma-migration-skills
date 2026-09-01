@@ -8,17 +8,9 @@ parity harness" — the phrase existed only in this docstring and sigma_rest.py'
 and test_tableau_rest.py does not invoke ruby. API-surface parity is checked by
 tools/lint-twin-parity.rb; behavioural equivalence is not machine-checked.
 
-DELIBERATE NON-PORTS (recorded in ALLOWED in tools/lint-twin-parity.rb). The Ruby
-twin exports eight functions with no counterpart here — the largest twin
-divergence in shared/lib:
-  query_datasource, view_data_filtered   — the VizQL/CSV data-fetch spine.
-      Porting needs live-Tableau validation of pagination + filter semantics; a
-      blind translation would be worse than the gap.
-  datasource_connections, workbook_connections, virtual_connections,
-  virtual_connection_connections, graphql_workbook_dashboards,
-  find_workbook_by_content_url           — read/discovery surface, no Python
-      caller yet.
-If you are porting the Tableau skill to Python, these are the real work.
+The Tableau-first no-Ruby path now exercises the complete public discovery
+surface: contentUrl workbook resolution, workbook/datasource/virtual
+connections, filtered view data, VDS queries, and dashboard membership.
 
 Requires TABLEAU_SERVER_URL, TABLEAU_SITE_ID, TABLEAU_AUTH_TOKEN,
 TABLEAU_API_VERSION in env (set by scripts/get-tableau-token.sh). PAT refresh
@@ -278,8 +270,68 @@ def scan_workbooks_for_name(name):
             return ci_hit
         page += 1
 
+def find_workbook_by_content_url(content_url):
+    encoded = urllib.parse.quote_plus(f"contentUrl:eq:{content_url}")
+    j = request("get", f"{base_path()}/workbooks?filter={encoded}")
+    workbooks = _as_list(_dig(j, "workbooks", "workbook"))
+    if workbooks:
+        return workbooks[0]
+    page = 1
+    while True:
+        j = request("get", f"{base_path()}/workbooks?pageSize=100&pageNumber={page}")
+        workbooks = _as_list(_dig(j, "workbooks", "workbook"))
+        hit = next(
+            (
+                workbook
+                for workbook in workbooks
+                if str(workbook.get("contentUrl")) == str(content_url)
+            ),
+            None,
+        )
+        if hit:
+            return hit
+        total = int(_dig(j, "pagination", "totalAvailable") or 0)
+        if not workbooks or page * 100 >= total:
+            return None
+        page += 1
+
+
 def get_workbook(workbook_id):
     return request("get", f"{base_path()}/workbooks/{workbook_id}")["workbook"]
+
+
+def workbook_connections(workbook_id):
+    j = request("get", f"{base_path()}/workbooks/{workbook_id}/connections")
+    return _as_list(_dig(j, "connections", "connection"))
+
+
+def datasource_connections(datasource_id):
+    j = request("get", f"{base_path()}/datasources/{datasource_id}/connections")
+    return _as_list(_dig(j, "connections", "connection"))
+
+
+def virtual_connections(page_size=100):
+    entries = []
+    page = 1
+    while True:
+        j = request(
+            "get",
+            f"{base_path()}/virtualConnections?pageSize={page_size}&pageNumber={page}",
+        )
+        batch = _as_list(_dig(j, "virtualConnections", "virtualConnection"))
+        entries.extend(batch)
+        total = int(_dig(j, "pagination", "totalAvailable") or 0)
+        if not batch or page * page_size >= total:
+            return entries
+        page += 1
+
+
+def virtual_connection_connections(virtual_connection_id):
+    j = request(
+        "get",
+        f"{base_path()}/virtualConnections/{virtual_connection_id}/connections",
+    )
+    return _as_list(_dig(j, "virtualConnectionConnections", "connection"))
 
 
 def download_workbook_content(workbook_id, include_extract=False):
@@ -292,6 +344,16 @@ def download_workbook_content(workbook_id, include_extract=False):
 
 def view_data(view_id):
     return request("get", f"{base_path()}/views/{view_id}/data", accept="*/*")
+
+
+def view_data_filtered(view_id, filters=None):
+    qs = "?maxAge=1"
+    for field, value in (filters or {}).items():
+        qs += (
+            f"&vf_{urllib.parse.quote(str(field))}="
+            f"{urllib.parse.quote(str(value))}"
+        )
+    return request("get", f"{base_path()}/views/{view_id}/data{qs}", accept="*/*")
 
 
 def view_image(view_id, resolution="high", filters=None):
@@ -390,6 +452,17 @@ def read_metadata(datasource_luid):
     return request("post", "/api/v1/vizql-data-service/read-metadata", body=body)
 
 
+def query_datasource(datasource_luid, query):
+    body = json.dumps(
+        {"datasource": {"datasourceLuid": datasource_luid}, "query": query}
+    )
+    return request(
+        "post",
+        "/api/v1/vizql-data-service/query-datasource",
+        body=body,
+    )
+
+
 # ---- metadata GraphQL -----------------------------------------------------
 
 def graphql_datasource_fields(datasource_luid):
@@ -413,6 +486,23 @@ def graphql(query, variables=None):
     if variables:
         payload["variables"] = variables
     return request("post", "/api/metadata/graphql", body=json.dumps(payload))
+
+
+def graphql_workbook_dashboards(workbook_luid):
+    query = (
+        "{\n"
+        f'  workbooks(filter:{{luid:"{workbook_luid}"}}) {{\n'
+        "    dashboards { name sheets { name luid } }\n"
+        "  }\n"
+        "}\n"
+    )
+    result = graphql(query)
+    if not result or result.get("errors"):
+        return None
+    workbooks = _dig(result, "data", "workbooks")
+    if not workbooks:
+        return None
+    return workbooks[0].get("dashboards")
 
 
 bootstrap_credentials()
