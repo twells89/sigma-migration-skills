@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sisense-to-sigma",
   "displayName": "Sisense \u2192 Sigma",
-  "version": "1.1.21",
+  "version": "1.1.22",
   "description": "Migrate Sisense (ElastiCube / Live data model + dashboards) to Sigma \u2014 data model + workbook (indicator\u2192KPI, chart/*\u2192chart, pivot2\u2192pivot, table; JAQL\u2192Sigma formulas; filters\u2192controls; columnar layout\u219224-col grid), with data + layout parity gates and opt-in RLS. Bundles sisense-to-sigma + sisense-assessment.",
   "author": {
     "name": "Thomas Wells"
