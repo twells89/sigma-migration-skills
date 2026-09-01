@@ -25,7 +25,7 @@ def kpi(element_id, name, formula, format_):
         "name": name,
         "source": {"kind": "table", "elementId": "orders-master"},
         "columns": [column(value_id, name, formula, format_)],
-        "value": {"columnId": value_id, "fontSize": 22, "color": "#1F2937"},
+        "value": {"columnId": value_id, "fontSize": 18, "color": "#1F2937"},
         "layout": {"anchor": "middle", "titleOrient": "top"},
         "style": {"backgroundColor": "#F3F4F6"},
     }
@@ -274,17 +274,17 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
 </Page>
 <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overview-page">
   <Element elementId="overview-title" gridColumn="10 / 18" gridRow="1 / 2"/>
-  <Container elementId="kpi-band" type="grid" gridColumn="1 / 25" gridRow="2 / 5" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">
-    <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="1 / 5"/>
-    <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="1 / 5"/>
-    <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="1 / 5"/>
-    <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="1 / 5"/>
-    <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="1 / 5"/>
+  <Container elementId="kpi-band" type="grid" gridColumn="1 / 25" gridRow="2 / 4" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">
+    <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="1 / 3"/>
+    <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="1 / 3"/>
+    <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="1 / 3"/>
+    <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="1 / 3"/>
+    <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="1 / 3"/>
   </Container>
-  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="5 / 19"/>
-  <Element elementId="chart-revenue-region" gridColumn="1 / 7" gridRow="19 / 28"/>
-  <Element elementId="chart-gross-ship" gridColumn="7 / 17" gridRow="19 / 28"/>
-  <Element elementId="chart-margin-tier" gridColumn="17 / 25" gridRow="19 / 28"/>
+  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="4 / 18"/>
+  <Element elementId="chart-revenue-region" gridColumn="1 / 7" gridRow="18 / 27"/>
+  <Element elementId="chart-gross-ship" gridColumn="7 / 17" gridRow="18 / 27"/>
+  <Element elementId="chart-margin-tier" gridColumn="17 / 25" gridRow="18 / 27"/>
 </Page>
 """
     spec = {
