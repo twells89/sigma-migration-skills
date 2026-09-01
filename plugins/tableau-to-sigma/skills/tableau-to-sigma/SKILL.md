@@ -78,13 +78,9 @@ user-invocable: true
 >   (`refs/environment.md` §Credentials).
 
 > ## Runtime selection
-> `auto` prefers the supported Ruby profile when Ruby is available and falls
-> back to the supported Python profile when Ruby cannot be installed or
-> resolved. To require the no-Ruby path, pass `--runtime-profile python`
-> (`-RuntimeProfile python` in PowerShell). The Python profile requires Python
-> and Node; it does not require Ruby. Bash launches bootstrap on macOS/Linux,
-> while PowerShell launches it on Windows. Full Python invocation, artifacts,
-> and fail-closed behavior: **`PYTHON_RUNTIME.md`**.
+> `auto` prefers Ruby and falls back to Python + Node when Ruby is unavailable.
+> Explicit `--runtime-profile python` skips Ruby. Full contract and command:
+> **`PYTHON_RUNTIME.md`**.
 
 > **Model fit & vision — `refs/model-fit.md`** (read before Phase 0 on any
 > multi-dashboard workbook): pixel-fidelity claims require image input;
@@ -162,13 +158,6 @@ multiple compatible objects.
 > transition, else ≥90s. Bare 2-min Bash kills runs (exit 143); check `$?`.
 
 ```bash
-# Supported no-Ruby path — auto reuse, extract routing, workbook build, and
-# REST parity collection are fail-closed:
-python3 scripts/migrate-tableau.py \
-  --workbook "<name-or-share-URL>" \
-  --connection <SIGMA_CONNECTION_ID> --folder <SIGMA_FOLDER_ID> \
-  --db <DB> --schema <SCHEMA> --landing <DB.SCHEMA-or-n/a> --out <WORK>
-
 # PASS 1 — discover → gap gate → DM-reuse scan → DM → workbook → layout → parity plan
 ruby scripts/migrate-tableau.rb \
   --workbook "<name>" --connection <SIGMA_CONNECTION_ID> --folder <SIGMA_FOLDER_ID> \
