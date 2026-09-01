@@ -6,6 +6,11 @@ Sigma REST API, layout generation, and **hard-gated parity verification**. The a
 judgment (which model shape, which calc translation, which layout); the `scripts/*` do the
 mechanical work.
 
+`tableau-to-sigma` has two supported runtime profiles. `auto` uses Ruby when
+available and falls back to the Python + Node path when Ruby cannot be
+installed. Explicit `--runtime-profile python` never installs or invokes Ruby;
+see `skills/tableau-to-sigma/PYTHON_RUNTIME.md`.
+
 This plugin ships two skills:
 
 | Skill | Role |
@@ -117,8 +122,9 @@ flowchart TB
 ## Quickstart
 
 ```bash
-ruby scripts/setup.rb            # one-time Sigma credentials  → SIGMA_CLIENT_ID / SECRET
-ruby scripts/setup-tableau.rb    # one-time Tableau PAT (PAT mode)
+# Python profile (Ruby equivalents remain supported):
+python3 scripts/setup.py                 # one-time Sigma credentials
+python3 scripts/setup-tableau.py         # one-time Tableau PAT
 ```
 
 Then invoke the **`tableau-to-sigma`** skill with a Tableau workbook/datasource (or its URL) and it

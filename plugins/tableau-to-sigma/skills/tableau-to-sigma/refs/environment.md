@@ -2,8 +2,8 @@
 
 **Run the bootstrap first — it is the ONLY sanctioned way to fix a missing
 runtime.** One idempotent, non-interactive command takes a fresh machine to
-doctor-green (verify/activate/install ruby + python3 + pip deps + node, persist
-creds from env vars, run the doctor, write the bootstrap sentinel):
+doctor-green (resolve a supported runtime profile, install only its
+dependencies, persist creds, run doctor, and write the bootstrap sentinel):
 
 - macOS / Linux / **Git Bash**: `bash scripts/bootstrap.sh`
 - **Windows PowerShell**: `powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1`
@@ -15,8 +15,14 @@ version-manager activation elsewhere; `pip --user` for Python deps), never
 prompts (no-TTY-safe), and never echoes credential values. Node is pinned to
 22 LTS; the PATH it activates persists to `~/.sigma-migration/path.sh` (bash)
 / the USER PATH (Windows), so later shells inherit it. `intake.rb` and
-`migrate-tableau.rb` refuse to start until the bootstrap sentinel + a passing
-`doctor.json` exist — run it once per machine, before anything else.
+`migrate-tableau.rb` and `migrate-tableau.py` refuse to start until the
+bootstrap sentinel + a passing `doctor.json` exist.
+
+To require the supported no-Ruby path, add `--runtime-profile python` on
+macOS/Linux or `-RuntimeProfile python` in PowerShell. `auto` prefers Ruby when
+available and falls back to Python when Ruby cannot be installed. The Python
+profile requires Python 3 and Node, not Ruby or bash; PowerShell is the Windows
+launcher. See `../PYTHON_RUNTIME.md`.
 
 **Agents: NEVER hand-install a runtime.** Do not `brew install` / `apt-get` /
 `winget install` / download binaries or edit PATH yourself — run the bootstrap
@@ -31,7 +37,7 @@ Exit 0 = good to go; every ✗/[X] line's remediation is the bootstrap one-liner
 ## Required runtimes
 | Tool | Used by | Notes |
 |---|---|---|
-| **ruby** | the `*-to-sigma` orchestrators (tableau, qlik, powerbi, quicksight, cognos) | not preinstalled on Windows |
+| **ruby** | the supported Tableau Ruby profile and other Ruby-based skills | not required by the Tableau Python profile |
 | **python 3** | looker / thoughtspot / microstrategy / sisense entrypoints + all discovery scripts | **Windows: the Store-alias stub bites — see below** |
 | **node 18+** | the vendored converters (`converter/*.mjs`) and `*.mjs` build steps | often installed-but-not-on-PATH (version managers) — bootstrap activates it |
 | **bash** | hand-driven `get-token.sh` / `*-auth.sh` only — the orchestrator mints tokens in-process | **Windows: use the Python twins instead (see below)** |

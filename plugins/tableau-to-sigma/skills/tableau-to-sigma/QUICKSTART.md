@@ -33,7 +33,12 @@ Duration: 5
 
 This QuickStart **QS** walks through migrating a single Tableau dashboard to a Sigma workbook using **your coding agent** (Claude Code, Cursor, Cortex Code, …) and the **tableau-to-sigma skill**. You'll point your agent at a Tableau dashboard URL and watch it discover the workbook structure, build (or reuse) a Sigma data model, generate the workbook spec, position the layout to mirror the source dashboard, and verify chart-level data parity against Tableau before declaring done.
 
-The skill is a structured set of Ruby scripts and an `SKILL.md` runbook that your agent follows phase-by-phase. It's been hardened against the four most common conversion regressions — silent Phase 6 skip, orphan workbooks left in the customer's My Documents, runtime errors past the gate, and the auto-stack single-column layout fallback. A final hard-gate script (`assert-phase6-ran.rb`) refuses to declare success unless every check passes.
+The skill is a structured set of Ruby and Python scripts plus an `SKILL.md`
+runbook that your agent follows phase-by-phase. Both runtime profiles are
+supported. `auto` prefers Ruby when available and falls back to Python + Node
+when Ruby cannot be installed; explicit `--runtime-profile python` skips Ruby.
+The Python path is documented in `PYTHON_RUNTIME.md`. Final hard-gate scripts
+refuse to declare success unless every check passes.
 
 ![tts_arch](assets/tts_arch.png)
 
@@ -50,8 +55,8 @@ Sigma SEs, technical CSMs, and migration partners running 1:1 Tableau-to-Sigma c
 
 <ul>
   <li><strong>A coding agent that runs skills</strong> — Claude Code (CLI or desktop), Cursor, Cortex Code, etc. These skills are <strong>agent-neutral</strong>: each is a <code>SKILL.md</code> plus <code>scripts/</code>, indexed by <code>AGENTS.md</code> at the repo root. For Claude Code, the skill ships as a directory under <code>~/.claude/skills/tableau-to-sigma/</code>; other agents read the skill folder directly. Where this guide says "Claude," substitute your agent.</li>
-  <li><strong>Sigma API credentials</strong> — client ID + secret. Run <code>ruby scripts/setup.rb</code> once; it writes them to both <code>~/.claude/settings.json</code> (Claude Code auto-loads it) and a neutral <code>~/.sigma-migration/env</code> that the scripts auto-source under any agent.</li>
-  <li><strong>Tableau access</strong> — either the Tableau MCP tools loaded in your agent session (preferred) or a Tableau Personal Access Token via <code>ruby scripts/setup-tableau.rb</code> (PAT mode fallback). PAT mode is required when you need the workbook's <code>.twb</code> XML (most conversions).</li>
+  <li><strong>Sigma API credentials</strong> — client ID + secret. Run <code>python3 scripts/setup.py</code> (Python profile) or <code>ruby scripts/setup.rb</code> once; both persist the same agent-neutral environment.</li>
+  <li><strong>Tableau access</strong> — either the Tableau MCP tools loaded in your agent session or a Tableau Personal Access Token via <code>python3 scripts/setup-tableau.py</code> / <code>ruby scripts/setup-tableau.rb</code>. PAT mode is required when you need the workbook's <code>.twb</code> XML (most conversions).</li>
   <li><strong>The data-model converter backend</strong> — the Tableau→Sigma converter (<code>convert_tableau_to_sigma</code>). <strong>This works out of the box — no setup, no data egress.</strong> Note the local converter is <em>not</em> a server: it's a pure function (<code>.twb</code> XML → Sigma JSON) the orchestrator runs via <code>node</code>; no HTTP, no daemon, nothing leaves your machine. In precedence order:
     <ul>
       <li><strong>VENDORED local build (default — zero config, no data leaves your machine).</strong> A prebuilt converter ships inside the skill at <code>converter/tableau.mjs</code> and is auto-discovered as the guaranteed fallback. No clone, no <code>npm install</code>, no network. This is what runs unless you point at a fresher build below. Refresh it after the converter changes with <code>scripts/dev/vendor-converter.sh</code> (see <code>converter/PROVENANCE.json</code> for the pinned source commit). Requires only <code>node</code> on PATH.</li>
@@ -74,8 +79,8 @@ Sigma SEs, technical CSMs, and migration partners running 1:1 Tableau-to-Sigma c
   <li>How to invoke the <code>tableau-to-sigma</code> skill from Claude Code with a single dashboard URL.</li>
   <li>What each conversion phase does — discovery, gap scan, DM reuse check, spec build, parity verification.</li>
   <li>How to read the gap report and accept / override the proposed Sigma translations.</li>
-  <li>How the finalize hard gate (<code>assert-phase6-ran.rb</code> — a stack of ~15 independent checks: parity ran, no orphans, no runtime errors, layout applied + filled, controls wired, visual verdict recorded, fidelity ledger clean, …) prevents silent regressions, and why a clean PASS 1 is <em>not</em> "done".</li>
-  <li>Why you drive the whole conversion through the <strong>one orchestrator command</strong> (<code>migrate-tableau.rb</code>) rather than running the per-phase scripts by hand.</li>
+  <li>How the selected runtime's final hard gate prevents silent regressions.</li>
+  <li>Why you drive the conversion through <code>migrate-tableau.rb</code> or <code>migrate-tableau.py</code>, as recorded by doctor, rather than running phase scripts by hand.</li>
 </ul>
 
 ### What You'll Build
@@ -146,15 +151,20 @@ git clone https://github.com/twells89/sigma-migration-skills
 #   plugins/tableau-to-sigma/skills/tableau-to-sigma/
 ```
 
-First run the environment bootstrap (macOS/Linux/Git-Bash — on Windows PowerShell run `scripts\bootstrap.ps1` instead), then the two setup scripts. The bootstrap is idempotent, non-interactive, and never needs admin: it verifies/activates/installs the runtimes, ends with a doctor run (**fail-closed on credentials** — missing or broken Sigma creds are a ✗, and it live-smokes the token mint), and writes the sentinel the orchestrator gates on:
+First run the environment bootstrap (macOS/Linux — on Windows use
+`scripts\bootstrap.ps1`), then the two setup scripts. To require the supported
+no-Ruby lane, select the Python profile:
 
 ```console
-bash scripts/bootstrap.sh       # Windows PowerShell: powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1
-ruby scripts/setup.rb           # THE USER runs these two ONCE per machine
-ruby scripts/setup-tableau.rb   # (then re-run the bootstrap to confirm doctor-green)
+bash scripts/bootstrap.sh --runtime-profile python
+python3 scripts/setup.py
+python3 scripts/setup-tableau.py
+# Windows: scripts\bootstrap.ps1 -RuntimeProfile python
 ```
 
-`setup.rb` writes `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, and `SIGMA_CLIENT_SECRET`; `setup-tableau.rb` writes your Tableau site URL + PAT name + token. Both write to **`~/.claude/settings.json`** (Claude Code auto-loads it) **and** a neutral **`~/.sigma-migration/env`** that the scripts auto-source under any agent — so credentials work the same everywhere. Both prompt interactively and only need to run once — **by the user, in a real terminal**. In a harness with no TTY, `setup.rb` never hangs: it prints the exact flag invocation (`--client-id … --client-secret …`) and exits.
+The Ruby profile's `setup.rb` / `setup-tableau.rb` remain supported. Both
+profiles write the same Sigma and Tableau variables to
+**`~/.claude/settings.json`** and **`~/.sigma-migration/env`**.
 
 <aside class="negative">
 <strong>NOTE:</strong><br> Tokens are 1-hour bearer tokens fetched on demand via <code>scripts/get-token.sh</code>. Never hard-code tokens in scripts — every long-running script in the skill re-fetches on cold start.
@@ -176,12 +186,15 @@ Your agent should respond with the skill's preamble — a short summary of phase
 ## **The one command (read this before the phases)**
 Duration: 2
 
-In practice you do **not** run the phase scripts by hand. The skill has a single
-entry point — the orchestrator — that chains every phase below in one process and
-self-gates:
+In practice you do **not** run phase scripts by hand. Run the orchestrator
+selected in `doctor.json`; both profiles chain and gate the full migration:
 
 ```console
 ruby scripts/migrate-tableau.rb --workbook "Orders Overview" --connection <sigma-connection-id>
+# or, for selectedProfile=python:
+python3 scripts/migrate-tableau.py --workbook "Orders Overview" \
+  --connection <sigma-connection-id> --folder <sigma-folder-id> \
+  --db <database> --schema <schema> --landing <db.schema-or-n/a> --out <workdir>
 ```
 
 It runs discovery → gap gate → DM (build or reuse) → workbook → layout → two-pass

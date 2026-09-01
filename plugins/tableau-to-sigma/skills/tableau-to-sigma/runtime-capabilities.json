@@ -17,17 +17,16 @@
       ]
     },
     "python": {
-      "status": "preview",
+      "status": "supported",
       "requiredRuntimes": [
         "python",
-        "node",
-        "bash"
+        "node"
       ],
       "entrypoint": [
         "python",
         "scripts/migrate-tableau.py"
       ],
-      "notes": "Explicit opt-in only. The Python orchestrator is fail-closed and requires agent-authored workbook/parity/visual artifacts; automatic source-to-workbook building remains under migration."
+      "notes": "Supported no-Ruby path. Auto selects it when Ruby is unavailable; explicit selection skips Ruby installation. Ambiguous source shapes and incomplete parity or visual evidence fail closed."
     }
   }
 }

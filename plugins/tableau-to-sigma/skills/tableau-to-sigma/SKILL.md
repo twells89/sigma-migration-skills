@@ -5,7 +5,7 @@ description: >-
   dashboard. Use when the user has a Tableau datasource, TDS file, or Tableau
   workbook and wants to recreate it in Sigma. Discovery, calc-field translation,
   data model + workbook creation via REST API, layout generation, and parity
-  verification — driven by `scripts/*.rb`.
+  verification — driven by the selected Ruby or Python runtime profile.
 user-invocable: true
 ---
 
@@ -17,11 +17,12 @@ user-invocable: true
 > - macOS / Linux / Git Bash: `bash scripts/bootstrap.sh --workdir <WORK>`
 > - Windows PowerShell: `powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -WorkDir <WORK>`
 >
-> It verifies/installs ruby + python3 (+ Pillow/numpy/requests) + node 22 LTS
-> (user-scoped, never admin; PATH persisted), persists creds from env vars
-> (`setup.rb --from-env`), ends in a doctor run (`doctor.json`), and writes
+> It resolves a supported runtime profile from `runtime-capabilities.json`,
+> installs only that profile's missing dependencies (user-scoped, never admin),
+> persists credentials with the matching setup script, ends in a doctor run
+> (`doctor.json`), and writes
 > the **bootstrap sentinel** (`bootstrap.json`).
-> `intake.rb` and `migrate-tableau.rb` REFUSE to start without sentinel +
+> Both orchestrators REFUSE to start without sentinel +
 > doctor-green. **NEVER hand-install a runtime or edit PATH yourself** — if
 > bootstrap reports no admin-free route, surface its message to the user and
 > stop. Dry run: `--check` / `-Check`. Details: `refs/environment.md`.
@@ -30,15 +31,19 @@ user-invocable: true
 > After the bootstrap, **always run the orchestrator** — it chains every phase
 > in one process and self-gates:
 > ```
+> # Use the entrypoint selected in doctor.json:
 > ruby scripts/migrate-tableau.rb --workbook "<name>" --connection <id>
+> # or, when selectedProfile=python:
+> python3 scripts/migrate-tableau.py --workbook "<name>" --connection <id> …
 > ```
 > - **Pass the Tableau `/#/views/…` share URL straight to `--workbook` (quote it).**
 >   The orchestrator resolves the workbook LUID from the URL's `contentUrl` slug
 >   in process. Display names diverge from slugs, so **never** hand-roll
 >   `name:eq:` filters or page the workbook list — that field-cost a
 >   500-workbook scan. Give it the URL.
-> - **Flag cheatsheet — use the EXACT flags (do not guess or grep `opts.on`):**
+> - **Flag cheatsheet — use the EXACT flags for the selected entrypoint:**
 >   `migrate-tableau.rb --out DIR` (the workdir flag is **`--out`**, not `--workdir`);
+>   `migrate-tableau.py --out DIR` uses the same workdir flag;
 >   `validate-spec.rb <spec.json> --type dm|workbook` (spec is a **positional** arg, no `--spec`);
 >   `put-layout.rb --workbook ID` (**not** `--workbook-id`), reading `SIGMA_API_TOKEN` from the env.
 > - **Do NOT hand-drive the per-phase scripts or hand-author DM/workbook JSON
@@ -46,8 +51,9 @@ user-invocable: true
 >   STOP", the exit-4 handoff). The script map is **not a menu** — à-la-carte
 >   scripts are the #1 way runs go inconsistent.
 > - **"Done" is not something you decide — it is a file on disk.** The migration
->   is complete **only** when `ruby scripts/verify-complete.rb --workdir <WORK>`
->   exits 0 / prints ✅ DONE. A clean **PASS 1 (exit 12) is NOT done** — it means
+>   is complete **only** when the selected runtime's completion gate
+>   (`verify-complete.rb` or `verify-complete.py`) exits 0 / prints ✅ DONE.
+>   A clean **PASS 1 (exit 12) is NOT done** — it means
 >   "run `--finalize`". Never report success or write a completion summary before.
 >   Completion also requires complete accounting: every formula in
 >   `formula-audit.json` and every object in `source-object-census.json` has one
@@ -66,9 +72,19 @@ user-invocable: true
 >   control-lint wholesale — the #1 way this handoff spirals; prefer
 >   `--master-col` for master-level calcs). Full handoff discipline:
 >   `refs/gates.md` §Exit-4.
-> - **Credentials:** the orchestrator stops at step 0 telling you to run
->   `ruby scripts/setup.rb` once — do that rather than working around auth
+> - **Credentials:** the orchestrator stops at step 0 telling you to run the
+>   selected runtime's `scripts/setup.rb` or `scripts/setup.py` once — do that
+>   rather than working around auth
 >   (`refs/environment.md` §Credentials).
+
+> ## Runtime selection
+> `auto` prefers the supported Ruby profile when Ruby is available and falls
+> back to the supported Python profile when Ruby cannot be installed or
+> resolved. To require the no-Ruby path, pass `--runtime-profile python`
+> (`-RuntimeProfile python` in PowerShell). The Python profile requires Python
+> and Node; it does not require Ruby. Bash launches bootstrap on macOS/Linux,
+> while PowerShell launches it on Windows. Full Python invocation, artifacts,
+> and fail-closed behavior: **`PYTHON_RUNTIME.md`**.
 
 > **Model fit & vision — `refs/model-fit.md`** (read before Phase 0 on any
 > multi-dashboard workbook): pixel-fidelity claims require image input;
@@ -110,15 +126,16 @@ or a single-view `/#/views/` URL in `scope.value`) — it threads onto
 ## Step 0 — Bootstrap + doctor (MANDATORY — the orchestrator gates on it)
 
 Run the bootstrap FIRST (STEP 0 banner above). It ends with the doctor
-(`doctor.json` + the `bootstrap.json` sentinel); `migrate-tableau.rb` refuses
-to start until both pass. Re-verify: `bash scripts/doctor.sh --workdir <WORK>`
+(`doctor.json` + the `bootstrap.json` sentinel); both orchestrators refuse to
+start until both pass. Re-verify: `bash scripts/doctor.sh --workdir <WORK>`
 (PowerShell: `scripts\doctor.ps1 -WorkDir <WORK>`). Gate impossible in your
 environment (e.g. a sandbox) → waive explicitly and name it in your report:
 `migrate-tableau.rb … --skip-doctor-gate "<reason>"`.
 
 ## Step 0.1 — Front door: resolve the connection once (`scripts/intake.rb`)
 
-`ruby scripts/intake.rb --workdir <WORK> --tool tableau-to-sigma --mode live
+The Ruby profile can use `ruby scripts/intake.rb --workdir <WORK>
+--tool tableau-to-sigma --mode live
 --source "<workbook>"` resolves the Sigma warehouse connection a SINGLE time
 (caches `<WORK>/connection.json`, read by the orchestrator when `--connection`
 is omitted — point `--out` at the same `<WORK>`). With multiple connections it
@@ -132,6 +149,10 @@ never a block. Full flags, precedence, ranking, triage:
 `refs/phase-0-scope.md` §Step 0.1. Credentials: `refs/environment.md`
 §Credentials.
 
+The Python profile requires `--connection` explicitly and performs strict
+GET-only reuse discovery inside `migrate-tableau.py`; it never guesses among
+multiple compatible objects.
+
 ## One command (orchestrated path)
 
 > **⏱ Invocation (G2/W2.5):** full pass = 5–20+ min. Default: `--wait` (ONE
@@ -141,6 +162,13 @@ never a block. Full flags, precedence, ranking, triage:
 > transition, else ≥90s. Bare 2-min Bash kills runs (exit 143); check `$?`.
 
 ```bash
+# Supported no-Ruby path — auto reuse, extract routing, workbook build, and
+# REST parity collection are fail-closed:
+python3 scripts/migrate-tableau.py \
+  --workbook "<name-or-share-URL>" \
+  --connection <SIGMA_CONNECTION_ID> --folder <SIGMA_FOLDER_ID> \
+  --db <DB> --schema <SCHEMA> --landing <DB.SCHEMA-or-n/a> --out <WORK>
+
 # PASS 1 — discover → gap gate → DM-reuse scan → DM → workbook → layout → parity plan
 ruby scripts/migrate-tableau.rb \
   --workbook "<name>" --connection <SIGMA_CONNECTION_ID> --folder <SIGMA_FOLDER_ID> \
@@ -193,12 +221,13 @@ done-done — run `--finalize`**.
 
 ## Scripts
 
-**`migrate-tableau.rb` composes everything** (STEP 1) — the only entry point
-you run cold. Invoke another script directly **only when an orchestrator STOP
+**`migrate-tableau.rb` and `migrate-tableau.py` compose the selected profile**
+(STEP 1) — run exactly the entrypoint recorded in `doctor.json`. Invoke another
+script directly **only when an orchestrator STOP
 tells you to**. *(Redirect — E9 diet: the one-line index AND full per-script
 contracts live in **`refs/script-map.md`**.)*
 
-### The final gate (`assert-phase6-ran.rb`)
+### The final gate (`assert-phase6-ran.rb` / `assert-phase6-ran.py`)
 
 The conversion hard gate. *(Redirect — E9 diet: the full exit-code table moved
 verbatim to **`refs/gates.md`**.)* Subagent flows MUST call this gate as their

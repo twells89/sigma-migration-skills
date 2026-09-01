@@ -14,9 +14,12 @@ you to.
 | Script | One line |
 |---|---|
 | `migrate-tableau.rb` | The one command — chains the whole gated spine; stops with exact instructions |
+| `migrate-tableau.py` | Supported no-Ruby command — strict reuse/extract routing, automatic workbook build, REST parity collection, and Python gates |
 | `verify-complete.rb` | The single offline "are we done?" check — ✅ DONE only on gate-green; re-derives the verdict ledger (exit 6 on contradiction) |
+| `verify-complete.py` | Python completion gate — hash-binds blind visual evidence and refuses incomplete accounting |
 | `lib/offramp.rb` + `offramps.jsonl` | Observability trail of every golden-path exit |
 | `setup.rb` / `setup-tableau.rb` | One-time Sigma / Tableau credential setup (`--from-env` = non-interactive; bootstrap runs them) |
+| `setup.py` / `setup-tableau.py` | No-Ruby Sigma / Tableau credential setup with the same neutral environment contract |
 | `get-token.sh` / `get_token.py` | Sigma token mint (bash / shell-neutral twin → `<WORK>/auth.json`) |
 | `get-tableau-token.sh` / `get-tableau-token.py` | Tableau PAT signin (bash / shell-neutral twin) |
 | `bootstrap.sh` / `bootstrap.ps1` | Step-0 environment bootstrap → doctor-green + sentinel (`--check` dry run) |
@@ -72,6 +75,7 @@ you to.
 | Script | Purpose |
 |---|---|
 | `scripts/migrate-tableau.rb` | **The one command** — chains the whole scripted spine (gap gate → DM-reuse scan → DM → workbook → layout → two-pass parity → cleanup + census gate) and stops with exact instructions where agent judgment is required. See "One command" above. |
+| `scripts/migrate-tableau.py` | **Supported no-Ruby command** — chains doctor, Tableau discovery, per-datasource source classification, published-datasource hydration, extract landing/remap, strict Sigma reuse, conversion, automatic workbook construction, readback, source accounting, REST parity collection, rendering, and Python completion gates. Ambiguity and unsupported source shapes are typed stops, never silent substitutions. See `../PYTHON_RUNTIME.md`. |
 | `scripts/verify-complete.rb` | **The single offline "are we done?" check** — exit 0 / ✅ DONE only when `phase6-success.json` is present (stamped by `assert-phase6-ran.rb` exit 0) and no `parity-pending.json` remains. A clean PASS 1 (exit 12) reports NOT DONE. PR-14: re-derives the degradation ledger, prints the verdict (GREEN/YELLOW/PARTIAL) with the ledger inline, and **exits 6 when the report's claims (verdict / waiver census) contradict the derivation** — the anti-"GREEN, 0 waivers" cross-check. Also prints the run's off-ramp trail. Run before claiming success. |
 | `scripts/lib/offramp.rb` + `offramps.jsonl` | **Observability trail** — every point a run leaves the golden path (cred/doctor waiver, PASS-1 stop, converter-stop, workbook-handoff, degraded fast path, manual-spec) appends a structured record to `<WORK>/offramps.jsonl`. Read it (or `verify-complete.rb`) to pinpoint *where* a run defected. |
 | `scripts/setup.rb` | One-time Sigma credential setup |
