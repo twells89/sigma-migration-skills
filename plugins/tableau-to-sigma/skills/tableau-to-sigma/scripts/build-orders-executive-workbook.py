@@ -82,8 +82,8 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
             "id": "overview-title",
             "kind": "text",
             "body": (
-                "<div style=\"text-align:center;font-size:18px;font-weight:600;\">"
-                "Orders — Executive Overview</div>"
+                "<span style=\"display:block;text-align:center;font-size:18px;"
+                "font-weight:600;\">Orders — Executive Overview</span>"
             ),
         },
         kpi(
