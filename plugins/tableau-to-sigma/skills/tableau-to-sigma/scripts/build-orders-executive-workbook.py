@@ -205,7 +205,7 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
                 "sort": {"by": "ship-revenue", "direction": "descending"},
                 "format": {
                     "labels": {
-                        "labelAngle": 15,
+                        "labelAngle": 0,
                         "fontSize": 7,
                         "allowLongerLabels": True,
                     }
