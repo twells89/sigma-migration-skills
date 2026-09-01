@@ -278,7 +278,7 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         self.assertEqual("unbound-chart-field", residue["reasonCode"])
         self.assertEqual(["MISSING_DATE"], residue["signals"]["fields"])
 
-    def test_user_aggregated_kpi_prefers_matching_data_model_metric(self):
+    def test_user_aggregated_kpi_stays_in_chart_grouping_context(self):
         layout, meta = self.signals()
         meta["columns_by_guid"].update(
             {
@@ -330,6 +330,7 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
                                 {"id": "dm-order-date", "name": "Order Date"},
                                 {"id": "dm-region", "name": "Region"},
                                 {"id": "dm-sales", "name": "Sales"},
+                                {"id": "dm-profit", "name": "Profit"},
                             ],
                             "metrics": [
                                 {
@@ -361,7 +362,10 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             if element.get("name") == "Margin Ratio"
             and element.get("kind") == "kpi-chart"
         )
-        self.assertEqual("[Master/Margin Ratio]", kpi["columns"][0]["formula"])
+        self.assertEqual(
+            "Sum([Master/Profit]) / Sum([Master/Sales])",
+            kpi["columns"][0]["formula"],
+        )
         master = spec["document"]["elements"][0]
         metric_column = next(
             column for column in master["columns"] if column["name"] == "Margin Ratio"

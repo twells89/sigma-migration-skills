@@ -924,48 +924,36 @@ class WorkbookBuilder:
                 )
                 if translated is None:
                     return None
-                if derivation in USER_DERIVATIONS:
-                    metric = self.matching_metric(field, translated)
-                    if metric is not None:
-                        if not self.metric_master_column(field, metric):
-                            self.residue(
-                                dashboard,
-                                zone,
-                                "ambiguous-data-model-metric",
-                                "matching data-model metric could not be exposed through the Master source",
-                                metric=metric.get("name"),
-                                **evidence,
-                            )
-                            return None
-                        formula = f"[Master/{field.caption}]"
-                if formula is None:
-                    qualified, missing = self.map_formula_references(
-                        translated, field, qualify=True
+                qualified, missing = self.map_formula_references(
+                    translated, field, qualify=True
+                )
+                if qualified is None:
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "unmapped-user-calculation-reference",
+                        "translated Sigma formula contains a reference that cannot be mapped through dashboard metadata",
+                        references=missing,
+                        **evidence,
                     )
-                    if qualified is None:
-                        self.residue(
-                            dashboard,
-                            zone,
-                            "unmapped-user-calculation-reference",
-                            "translated Sigma formula contains a reference that cannot be mapped through dashboard metadata",
-                            references=missing,
-                            **evidence,
-                        )
-                        return None
-                    if derivation in USER_DERIVATIONS:
-                        formula = qualified
-                    elif derivation in AGGREGATIONS:
-                        formula = f"{AGGREGATIONS[derivation]}({qualified})"
-                    else:
-                        self.residue(
-                            dashboard,
-                            zone,
-                            "unsupported-user-aggregation",
-                            "translated row calculation still has an unsupported shelf aggregation",
-                            aggregation=derivation,
-                            **evidence,
-                        )
-                        return None
+                    return None
+                if derivation in USER_DERIVATIONS:
+                    # Aggregate DM metrics evaluate to NULL when first exposed
+                    # as columns on an ungrouped Master table. Keep the
+                    # translated aggregate in the chart's grouping context.
+                    formula = qualified
+                elif derivation in AGGREGATIONS:
+                    formula = f"{AGGREGATIONS[derivation]}({qualified})"
+                else:
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "unsupported-user-aggregation",
+                        "translated row calculation still has an unsupported shelf aggregation",
+                        aggregation=derivation,
+                        **evidence,
+                    )
+                    return None
             else:
                 if not self.master_column(field):
                     self.add_master_resolution_residue(dashboard, zone, field)
