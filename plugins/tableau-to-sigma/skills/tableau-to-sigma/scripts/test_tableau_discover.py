@@ -27,6 +27,15 @@ XML = """<?xml version='1.0' encoding='utf-8'?>
 
 
 class TableauDiscoverTest(unittest.TestCase):
+    def test_share_url_resolves_workbook_content_url(self):
+        self.assertEqual(
+            "OrdersExecutiveOverview",
+            tableau_discover.content_url_from_share_url(
+                "https://10ay.online.tableau.com/#/site/dataflow/views/"
+                "OrdersExecutiveOverview/ExecutiveOverview"
+            ),
+        )
+
     def test_twb_names_extracts_dashboard_membership(self):
         worksheets, dashboards = tableau_discover.twb_names(XML)
         self.assertEqual(["Sales Sheet"], worksheets)
@@ -93,6 +102,7 @@ class TableauDiscoverTest(unittest.TestCase):
             args = argparse.Namespace(
                 workbook_name="Fixture",
                 workbook_id=None,
+                workbook_url=None,
                 dashboard=["Executive Dashboard"],
                 datasource_name=None,
                 datasource_luid=None,

@@ -17,6 +17,7 @@ import re
 import sys
 import threading
 import time
+import urllib.parse
 import zipfile
 from pathlib import Path
 
@@ -46,6 +47,15 @@ def atomic_write(path: Path, content: bytes | str) -> None:
 def safe_name(value: str) -> str:
     name = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-")
     return name[:120] or "dashboard"
+
+
+def content_url_from_share_url(url: str) -> str:
+    match = re.search(r"/views/([^/?#]+)", url)
+    if not match:
+        raise ValueError(
+            "unrecognized Tableau share URL; expected /views/<workbook>/<view>"
+        )
+    return urllib.parse.unquote(match.group(1))
 
 
 def workbook_xml(payload: bytes, out: Path) -> tuple[str, bool]:
@@ -188,6 +198,14 @@ def discover(args: argparse.Namespace) -> dict:
     def resolve_workbook():
         if args.workbook_id:
             return tableau.get_workbook(args.workbook_id)
+        if args.workbook_url:
+            content_url = content_url_from_share_url(args.workbook_url)
+            hit = tableau.find_workbook_by_content_url(content_url)
+            if not hit:
+                raise ValueError(
+                    f"no workbook visible with contentUrl={content_url!r}"
+                )
+            return tableau.get_workbook(hit["id"])
         hit = tableau.find_workbook_by_name(args.workbook_name)
         if not hit:
             raise ValueError(f"no workbook found with name={args.workbook_name!r}")
@@ -325,6 +343,7 @@ def main() -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--workbook-name")
     source.add_argument("--workbook-id")
+    source.add_argument("--workbook-url")
     parser.add_argument("--dashboard", action="append", default=[])
     parser.add_argument("--datasource-name")
     parser.add_argument("--datasource-luid")
