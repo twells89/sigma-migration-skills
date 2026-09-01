@@ -97,6 +97,7 @@ jobs:
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_verify_parity.py
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_verify_complete.py
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_migrate_tableau.py
+          python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_build_migration_report.py
           python3 tools/check-shared.py
 
   windows-smoke:
@@ -553,6 +554,7 @@ jobs:
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_verify_parity.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_verify_complete.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_migrate_tableau.py
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_build_migration_report.py
             shared/scripts/test_runtime_profile.py
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test_scout_ledger_integrity.py
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test_warehouse_column_refs.py

@@ -361,17 +361,24 @@ def main() -> int:
                 "Re-run with --blind-grade <blind-grade.json>.",
             ],
         )
-    run(
-        "Final gate",
-        "verify-complete.py",
+    print("── Final gate: verify-complete.py")
+    completed = subprocess.run(
         [
+            sys.executable,
+            str(HERE / "verify-complete.py"),
             "--workdir",
             str(workdir),
             "--blind-grade",
             args.blind_grade,
         ],
+        check=False,
     )
-    return 0
+    run(
+        "Final report",
+        "build-migration-report.py",
+        ["--workdir", str(workdir)],
+    )
+    return completed.returncode
 
 
 if __name__ == "__main__":
