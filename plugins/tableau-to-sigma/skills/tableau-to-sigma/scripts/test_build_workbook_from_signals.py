@@ -131,7 +131,10 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             if element["kind"] == "text"
         ]
         self.assertEqual(1, len(texts))
-        self.assertEqual("# Executive Overview", texts[0]["body"])
+        self.assertEqual(
+            '# <span style="font-size: 20px">Executive Overview</span>',
+            texts[0]["body"],
+        )
         managed = next(
             row
             for row in report["dispositions"]
@@ -1280,6 +1283,341 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             "unverified-point-map", blocked["residues"][0]["reasonCode"]
         )
 
+    def test_filter_controls_use_master_target_and_canonical_value_sources(self):
+        layout, meta = self.signals()
+        meta["columns_by_guid"]["AMOUNT"] = {
+            "caption": "Amount",
+            "datatype": "real",
+        }
+        layout[0]["zones"].append(
+            {
+                "id": "amount-filter",
+                "kind": "filter",
+                "view_ref": "AMOUNT",
+                "filter_column_caption": "Amount",
+                "filter_column_datatype": "real",
+                "x_pct": 60,
+                "y_pct": 8,
+                "w_pct": 20,
+                "h_pct": 8,
+            }
+        )
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        controls = {
+            element["name"]: element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "control"
+        }
+        region = controls["Region"]
+        self.assertEqual("list", region["controlType"])
+        self.assertEqual(
+            {"kind": "table", "elementId": "master"},
+            region["filters"][0]["source"],
+        )
+        self.assertEqual(
+            region["filters"][0]["columnId"], region["source"]["columnId"]
+        )
+        self.assertEqual(
+            {"kind": "table", "elementId": "master"},
+            region["source"]["source"],
+        )
+        self.assertEqual("date-range", controls["Order Date"]["controlType"])
+        self.assertEqual("between", controls["Order Date"]["mode"])
+        self.assertEqual("number-range", controls["Amount"]["controlType"])
+
+    def test_parameter_control_and_dynamic_text_share_the_control_handle(self):
+        spec, report = self.build_zone(
+            {
+                "id": "parameter",
+                "kind": "parameter",
+                "view_ref": "SCENARIO",
+                "filter_column_caption": "Scenario",
+            },
+            {"SCENARIO": {"caption": "Scenario", "datatype": "string"}},
+        )
+        self.assertEqual("complete", report["status"])
+        control = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "control"
+        )
+        self.assertEqual("text", control["controlType"])
+        self.assertEqual("equals", control["mode"])
+        self.assertFalse(control["showOperators"])
+
+        layout = [
+            {
+                "dashboard": "Parameters",
+                "emit_page": True,
+                "zones": [
+                    {
+                        "id": "parameter",
+                        "kind": "parameter",
+                        "view_ref": "SCENARIO",
+                        "filter_column_caption": "Scenario",
+                        "x_pct": 0,
+                        "y_pct": 0,
+                        "w_pct": 30,
+                        "h_pct": 10,
+                    },
+                    {
+                        "id": "dynamic-title",
+                        "kind": "text",
+                        "x_pct": 0,
+                        "y_pct": 10,
+                        "w_pct": 100,
+                        "h_pct": 10,
+                        "text_runs": [
+                            {
+                                "text": "Scenario: <[SCENARIO]>",
+                                "font_size": 18,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            {
+                "columns_by_guid": {
+                    "SCENARIO": {
+                        "caption": "Scenario",
+                        "datatype": "string",
+                    }
+                }
+            },
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+        )
+        dynamic_spec, dynamic_report = instance.build()
+        self.assertEqual("complete", dynamic_report["status"])
+        dynamic_control = next(
+            element
+            for element in dynamic_spec["document"]["elements"]
+            if element["kind"] == "control"
+        )
+        text = next(
+            element
+            for element in dynamic_spec["document"]["elements"]
+            if element["kind"] == "text"
+        )
+        self.assertIn(
+            f"{{{{[{dynamic_control['controlId']}]}}}}", text["body"]
+        )
+
+    def test_dynamic_aggregate_text_and_safe_style_are_canonical(self):
+        spec, report = self.build_zone(
+            {
+                "id": "dynamic-text",
+                "kind": "text",
+                "text_align": "center",
+                "text_runs": [
+                    {
+                        "text": "Sales: <SUM([SALES])>",
+                        "color": "#336699",
+                        "bold": True,
+                    }
+                ],
+            },
+            {"SALES": {"caption": "Sales", "datatype": "real"}},
+        )
+        self.assertEqual("complete", report["status"])
+        text = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "text"
+        )
+        self.assertNotIn("name", text)
+        self.assertIn("{{Sum([Master/Sales])}}", text["body"])
+        self.assertIn('<span style="color: #336699">', text["body"])
+        self.assertTrue(text["body"].startswith('<p style="text-align: center">'))
+
+    def test_uncontrolled_dynamic_field_text_stays_a_typed_residue(self):
+        _spec, report = self.build_zone(
+            {
+                "id": "dynamic-text",
+                "kind": "text",
+                "text_runs": [{"text": "Region: <[REGION]>"}],
+            },
+            {"REGION": {"caption": "Region", "datatype": "string"}},
+        )
+        self.assertEqual("blocked", report["status"])
+        self.assertEqual(
+            "unbound-dynamic-text", report["residues"][0]["reasonCode"]
+        )
+        self.assertEqual(
+            "one same-page filter or parameter control",
+            report["residues"][0]["signals"]["tokens"][0]["needed"],
+        )
+
+    def test_hosted_image_emits_and_local_artifact_blocks(self):
+        spec, report = self.build_zone(
+            {
+                "id": "logo",
+                "kind": "image",
+                "caption": "Logo",
+                "image_file_url": "https://assets.example.test/logo.png",
+                "image_path": "images/logo.png",
+                "is_scaled": True,
+            },
+            {},
+        )
+        self.assertEqual("complete", report["status"])
+        image = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "image"
+        )
+        self.assertEqual(
+            "https://assets.example.test/logo.png", image["url"]
+        )
+        self.assertEqual({"fit": "contain"}, image["style"])
+        self.assertEqual("Logo", image["alt"])
+
+        _spec, blocked = self.build_zone(
+            {
+                "id": "local-logo",
+                "kind": "image",
+                "image_path": "images/logo.png",
+            },
+            {},
+        )
+        self.assertEqual("blocked", blocked["status"])
+        self.assertEqual(
+            "unsupported-image-artifact", blocked["residues"][0]["reasonCode"]
+        )
+
+    def test_exact_navigation_button_maps_to_cross_page_action(self):
+        layout = [
+            {
+                "dashboard": "Overview",
+                "emit_page": True,
+                "zones": [
+                    {
+                        "id": "go-detail",
+                        "kind": "dashboard-object",
+                        "button_intent": "navigate",
+                        "button_nav_target": "Detail",
+                        "button_nav_target_class": "dashboard",
+                        "button_caption": "View detail",
+                        "x_pct": 0,
+                        "y_pct": 0,
+                        "w_pct": 20,
+                        "h_pct": 10,
+                    }
+                ],
+            },
+            {
+                "dashboard": "Detail",
+                "emit_page": True,
+                "zones": [
+                    {
+                        "id": "detail-title",
+                        "kind": "text",
+                        "text_runs": [{"text": "Detail"}],
+                        "x_pct": 0,
+                        "y_pct": 0,
+                        "w_pct": 100,
+                        "h_pct": 10,
+                    }
+                ],
+            },
+        ]
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            {"columns_by_guid": {}},
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        button = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "button"
+        )
+        detail_page = next(
+            page
+            for page in spec["document"]["pages"]
+            if page["name"] == "Detail"
+        )
+        self.assertEqual(
+            {
+                "effect": "navigate",
+                "target": {"type": "page", "page": detail_page["id"]},
+            },
+            button["actions"][0]["effects"][0],
+        )
+
+    def test_ambiguous_tableau_interactions_keep_specific_evidence(self):
+        _spec, report = self.build_zone(
+            {
+                "id": "action-chart",
+                "kind": "chart",
+                "chart_kind": "bar",
+                "caption": "Action Source",
+                "cols_shelf": shelf(field("REGION", "dim", "none")),
+                "rows_shelf": shelf(field("SALES", "measure", "sum")),
+                "filters": [
+                    {
+                        "kind": "action",
+                        "is_action": True,
+                        "raw_param": "[Action (Region)]",
+                    }
+                ],
+            },
+            {
+                "REGION": {"caption": "Region", "datatype": "string"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+            },
+        )
+        self.assertEqual("blocked", report["status"])
+        residue = next(
+            item
+            for item in report["residues"]
+            if item["reasonCode"] == "unbound-tableau-interaction"
+        )
+        self.assertEqual(
+            "filter-or-highlight", residue["signals"]["actionType"]
+        )
+        self.assertIn(
+            "target element and column",
+            residue["signals"]["evidenceNeeded"],
+        )
+
+        _spec, button_report = self.build_zone(
+            {
+                "id": "url-action",
+                "kind": "dashboard-object",
+                "button_intent": "url",
+                "button_caption": "Open",
+            },
+            {},
+        )
+        self.assertEqual("blocked", button_report["status"])
+        self.assertEqual(
+            "unsupported-tableau-button-action",
+            button_report["residues"][0]["reasonCode"],
+        )
+        self.assertEqual(
+            ["exact URL", "open target"],
+            button_report["residues"][0]["signals"]["evidenceNeeded"],
+        )
+
     def test_cli_writes_structured_residues_and_no_spec_for_unsupported_zone(self):
         layout, meta = self.signals()
         layout[0]["zones"].append(
@@ -1391,13 +1729,13 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         by_code = {}
         for residue in report["residues"]:
             by_code.setdefault(residue["reasonCode"], []).append(residue)
-        self.assertIn("unsupported-zone-kind", by_code)
-        self.assertIn("unsupported-chart-filter", by_code)
+        self.assertIn("unsupported-tableau-button-action", by_code)
+        self.assertIn("unbound-tableau-interaction", by_code)
         self.assertEqual(
             {"pie"},
             {
                 item["chartKind"]
-                for item in by_code["unsupported-chart-filter"]
+                for item in by_code["unbound-tableau-interaction"]
                 if item["zoneKind"] == "chart"
                 and item["chartKind"] == "pie"
             },
@@ -1405,8 +1743,8 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         self.assertEqual(
             {"toggle"},
             {
-                item.get("signals", {}).get("button_intent")
-                for item in by_code["unsupported-zone-kind"]
+                item.get("signals", {}).get("actionType")
+                for item in by_code["unsupported-tableau-button-action"]
                 if item["zoneKind"] == "dashboard-object"
             },
         )

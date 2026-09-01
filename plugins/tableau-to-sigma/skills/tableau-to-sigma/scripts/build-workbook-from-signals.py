@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import re
 import sys
@@ -185,6 +186,9 @@ class WorkbookBuilder:
         self.data_model_elements = self._data_model_elements(self.dm_spec)
         self.data_model_source = self._selected_data_model_element()
         self.data_model_metrics = self._data_model_metrics()
+        self.control_handles_by_field: dict[str, set[str]] = {}
+        self.parameter_field_keys: set[str] = set()
+        self._index_control_signals()
 
     def _default_title(self) -> str:
         visible = [
@@ -227,6 +231,34 @@ class WorkbookBuilder:
         if element_id:
             row["elementId"] = element_id
         self.dispositions.append(row)
+
+    @staticmethod
+    def control_handle(dashboard: str, field: Field, kind: str) -> str:
+        return stable_id(kind, f"{dashboard}:{field.key}")
+
+    def _index_control_signals(self) -> None:
+        for dashboard_index, dashboard in enumerate(self.layout, 1):
+            if not isinstance(dashboard, dict) or dashboard.get("emit_page") is False:
+                continue
+            dashboard_name = str(
+                dashboard.get("dashboard") or f"Dashboard {dashboard_index}"
+            )
+            for zone in dashboard.get("zones") or []:
+                if not isinstance(zone, dict) or zone.get("kind") not in {
+                    "filter",
+                    "parameter",
+                }:
+                    continue
+                field = self.resolve_field(zone.get("view_ref")) or self.resolve_field(
+                    zone.get("filter_column_caption")
+                )
+                if field is None:
+                    continue
+                kind = "parameter" if zone.get("kind") == "parameter" else "filter"
+                handle = self.control_handle(dashboard_name, field, kind)
+                self.control_handles_by_field.setdefault(field.key, set()).add(handle)
+                if kind == "parameter":
+                    self.parameter_field_keys.add(field.key)
 
     def resolve_field(self, reference: object) -> Field | None:
         key = field_key_from_reference(reference)
@@ -670,6 +702,15 @@ class WorkbookBuilder:
         replacements: list[tuple[int, int, str]] = []
         for start, end, reference in spans:
             mapped = self.resolve_field(reference)
+            if mapped is not None and mapped.key in self.parameter_field_keys:
+                handles = self.control_handles_by_field.get(mapped.key) or set()
+                if len(handles) != 1:
+                    missing.append(reference)
+                    continue
+                replacements.append(
+                    (start, end, f"[{next(iter(handles))}]")
+                )
+                continue
             if (
                 mapped is None
                 or mapped.key == current_field.key
@@ -1618,6 +1659,27 @@ class WorkbookBuilder:
             return None
         filters = zone.get("filters") or []
         if filters:
+            action_filters = [
+                item
+                for item in filters
+                if isinstance(item, dict)
+                and (item.get("kind") == "action" or item.get("is_action"))
+            ]
+            if action_filters:
+                self.residue(
+                    dashboard,
+                    zone,
+                    "unbound-tableau-interaction",
+                    "Tableau filter/highlight action signals omit the exact Sigma source, target, or selected-value binding",
+                    actionType="filter-or-highlight",
+                    actionSignals=action_filters,
+                    evidenceNeeded=[
+                        "source element and column",
+                        "target element and column",
+                        "selected-value transfer semantics",
+                    ],
+                )
+                return None
             self.residue(
                 dashboard,
                 zone,
@@ -1874,7 +1936,7 @@ class WorkbookBuilder:
         control: dict[str, Any] = {
             "id": element_id,
             "kind": "control",
-            "controlId": stable_id("filter", f"{dashboard}:{field.key}"),
+            "controlId": self.control_handle(dashboard, field, "filter"),
             "name": field.caption,
             "filters": [
                 {
@@ -1924,16 +1986,213 @@ class WorkbookBuilder:
             return None
         return control
 
+    def build_parameter_control(
+        self, dashboard: str, zone: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        caption = str(zone.get("filter_column_caption") or "").strip()
+        field = self.resolve_field(zone.get("view_ref")) or self.resolve_field(caption)
+        if field is None:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-parameter-control",
+                "parameter zone has no unique field in dashboard-layout-meta.json",
+                field=caption,
+                viewRef=zone.get("view_ref"),
+                evidenceNeeded=["parameter field key", "datatype"],
+            )
+            return None
+        control: dict[str, Any] = {
+            "id": stable_id("control", f"{dashboard}:{zone.get('id')}"),
+            "kind": "control",
+            "controlId": self.control_handle(dashboard, field, "parameter"),
+            "name": field.caption,
+        }
+        datatype = field.datatype.strip().casefold()
+        if datatype in {"string", "nominal"}:
+            control.update(
+                {
+                    "controlType": "text",
+                    "mode": "equals",
+                    "case": "insensitive",
+                    "includeNulls": "when-no-value-is-selected",
+                    "showOperators": False,
+                }
+            )
+        elif datatype in {"integer", "real", "number", "float"}:
+            control["controlType"] = "number"
+        elif datatype in {"date", "datetime"}:
+            control["controlType"] = "date"
+        elif datatype == "boolean":
+            control["controlType"] = "checkbox"
+        else:
+            self.residue(
+                dashboard,
+                zone,
+                "unsupported-parameter-datatype",
+                "parameter datatype has no verified automatic Sigma control mapping",
+                datatype=field.datatype,
+                evidenceNeeded=["supported parameter datatype"],
+            )
+            return None
+        return control
+
+    def dynamic_control_handle(
+        self, dashboard: str, field: Field
+    ) -> str | None:
+        available = self.control_handles_by_field.get(field.key) or set()
+        local = {
+            handle
+            for kind in ("parameter", "filter")
+            if (handle := self.control_handle(dashboard, field, kind)) in available
+        }
+        return next(iter(local)) if len(local) == 1 else None
+
+    def map_dynamic_text(
+        self, dashboard: str, zone: dict[str, Any], value: str
+    ) -> str | None:
+        failed: list[dict[str, Any]] = []
+
+        def replace(match: re.Match[str]) -> str:
+            expression = match.group(1).strip()
+            aggregate = re.fullmatch(
+                r"(SUM|AVG|AVERAGE|MIN|MAX|COUNT|COUNTD)\s*\((.+)\)",
+                expression,
+                re.IGNORECASE,
+            )
+            if aggregate:
+                field = self.resolve_field(aggregate.group(2))
+                if field is None:
+                    failed.append(
+                        {"token": match.group(0), "needed": "unique field mapping"}
+                    )
+                    return match.group(0)
+                if not self.master_column(field):
+                    failed.append(
+                        {
+                            "token": match.group(0),
+                            "needed": "resolvable Master source column",
+                        }
+                    )
+                    return match.group(0)
+                function = AGGREGATIONS.get(aggregate.group(1).casefold())
+                if function is None:
+                    failed.append(
+                        {"token": match.group(0), "needed": "supported aggregation"}
+                    )
+                    return match.group(0)
+                return f"{{{{{function}([Master/{field.caption}])}}}}"
+
+            field = self.resolve_field(expression)
+            if field is None:
+                failed.append(
+                    {"token": match.group(0), "needed": "unique field or parameter"}
+                )
+                return match.group(0)
+            handle = self.dynamic_control_handle(dashboard, field)
+            if handle is None:
+                failed.append(
+                    {
+                        "token": match.group(0),
+                        "field": field.caption,
+                        "needed": "one same-page filter or parameter control",
+                    }
+                )
+                return match.group(0)
+            return f"{{{{[{handle}]}}}}"
+
+        mapped = re.sub(r"<([^<>]*\[[^\]]+\][^<>]*)>", replace, value)
+        if failed:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-dynamic-text",
+                "dynamic Tableau text cannot be mapped to a canonical Sigma formula or control reference",
+                tokens=failed,
+            )
+            return None
+        return mapped
+
     def build_text(self, dashboard: str, zone: dict[str, Any]) -> dict[str, Any] | None:
         runs = zone.get("text_runs") or []
-        body = "".join(str(item.get("text") or "") for item in runs if isinstance(item, dict))
-        body = body.replace("Æ", "").strip()
-        if not body or re.search(r"<\[[^>]+]>", body):
+        rendered_runs = []
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            value = str(run.get("text") or "").replace("Æ", "")
+            mapped = self.map_dynamic_text(dashboard, zone, value)
+            if mapped is None:
+                return None
+            if run.get("underline"):
+                self.residue(
+                    dashboard,
+                    zone,
+                    "unsupported-text-style",
+                    "underline text has no verified canonical inline-style mapping",
+                    style="underline",
+                )
+                return None
+            styles = []
+            color = str(run.get("color") or "").strip()
+            if color:
+                if not re.fullmatch(r"#[0-9a-f]{3}(?:[0-9a-f]{3})?", color, re.I):
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "unsupported-text-style",
+                        "text color is not a canonical hexadecimal color",
+                        color=color,
+                    )
+                    return None
+                styles.append(f"color: {color}")
+            font = str(run.get("font") or "").strip()
+            if font:
+                if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 _-]*", font):
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "unsupported-text-style",
+                        "font family cannot be represented by Sigma inline text styling",
+                        font=font,
+                    )
+                    return None
+                styles.append(f"font-family: {font}")
+            font_size = run.get("font_size")
+            if font_size is not None:
+                try:
+                    size = int(font_size)
+                except (TypeError, ValueError):
+                    size = 0
+                if size <= 0:
+                    self.residue(
+                        dashboard,
+                        zone,
+                        "unsupported-text-style",
+                        "text size is not a positive pixel value",
+                        fontSize=font_size,
+                    )
+                    return None
+                styles.append(f"font-size: {size}px")
+            text = html.escape(mapped, quote=False)
+            text = re.sub(
+                r"\{\{.*?\}\}",
+                lambda formula: html.unescape(formula.group(0)),
+                text,
+            )
+            if styles:
+                text = f'<span style="{"; ".join(styles)}">{text}</span>'
+            if run.get("bold"):
+                text = f"**{text}**"
+            if run.get("italic"):
+                text = f"*{text}*"
+            rendered_runs.append(text)
+        body = "".join(rendered_runs).strip()
+        if not body:
             self.residue(
                 dashboard,
                 zone,
                 "unbound-text",
-                "text is empty or contains a dynamic Tableau token",
+                "text zone is empty",
                 text=body,
             )
             return None
@@ -1941,11 +2200,115 @@ class WorkbookBuilder:
             [int(item.get("font_size") or 0) for item in runs if isinstance(item, dict)] or [0]
         ) >= 16:
             body = f"# {body}"
+        alignment = str(zone.get("text_align") or "").strip()
+        if alignment in {"center", "right"}:
+            body = f'<p style="text-align: {alignment}">{body}</p>'
         return {
             "id": stable_id("text", f"{dashboard}:{zone.get('id')}"),
             "kind": "text",
-            "name": str(zone.get("caption") or "Text"),
             "body": body,
+        }
+
+    def build_image(
+        self, dashboard: str, zone: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        candidates = {
+            str(zone.get(key) or "").strip()
+            for key in ("image_file_url", "image_path")
+            if str(zone.get(key) or "").strip()
+        }
+        urls = sorted(
+            value
+            for value in candidates
+            if re.fullmatch(r"https?://[^\s]+", value, re.IGNORECASE)
+        )
+        if len(urls) != 1:
+            self.residue(
+                dashboard,
+                zone,
+                (
+                    "ambiguous-image-artifact"
+                    if len(urls) > 1
+                    else "unsupported-image-artifact"
+                ),
+                "Sigma image elements require one exact hosted HTTP(S) source artifact URL",
+                imagePath=zone.get("image_path"),
+                imageFileUrl=zone.get("image_file_url"),
+                evidenceNeeded=["one hosted HTTP(S) image URL"],
+            )
+            return None
+        element: dict[str, Any] = {
+            "id": stable_id("image", f"{dashboard}:{zone.get('id')}"),
+            "kind": "image",
+            "url": urls[0],
+        }
+        alt = str(zone.get("caption") or "").strip()
+        if alt:
+            element["alt"] = alt
+        if zone.get("is_scaled") or zone.get("is_centered"):
+            element["style"] = {"fit": "contain"}
+        return element
+
+    def build_button(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        page_ids_by_name: dict[str, list[str]],
+    ) -> dict[str, Any] | None:
+        intent = str(zone.get("button_intent") or "unknown")
+        if intent != "navigate":
+            self.residue(
+                dashboard,
+                zone,
+                "unsupported-tableau-button-action",
+                "Tableau button intent has no exact canonical Sigma action mapping",
+                actionType=intent,
+                buttonTarget=zone.get("button_nav_target"),
+                evidenceNeeded=(
+                    ["exact URL", "open target"]
+                    if intent == "url"
+                    else ["supported action intent and exact target"]
+                ),
+            )
+            return None
+        target = str(zone.get("button_nav_target") or "").strip()
+        target_ids = page_ids_by_name.get(target.casefold()) or []
+        text = str(
+            zone.get("button_caption") or zone.get("button_tooltip") or ""
+        ).strip()
+        if len(target_ids) != 1 or not text:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-navigation-action",
+                "navigation button requires one exact workbook page target and visible text",
+                target=target or None,
+                targetClass=zone.get("button_nav_target_class"),
+                targetMatches=len(target_ids),
+                hasText=bool(text),
+                evidenceNeeded=["unique target dashboard/page", "button caption"],
+            )
+            return None
+        element_id = stable_id("button", f"{dashboard}:{zone.get('id')}")
+        return {
+            "id": element_id,
+            "kind": "button",
+            "text": text,
+            "actions": [
+                {
+                    "id": f"{element_id}-navigate",
+                    "trigger": "on-click",
+                    "effects": [
+                        {
+                            "effect": "navigate",
+                            "target": {
+                                "type": "page",
+                                "page": target_ids[0],
+                            },
+                        }
+                    ],
+                }
+            ],
         }
 
     @staticmethod
@@ -2074,6 +2437,7 @@ class WorkbookBuilder:
 
     def build(self) -> tuple[dict[str, Any], dict[str, Any]]:
         content_elements: list[dict[str, Any]] = []
+        requires_source_fields = False
         pages = [
             {
                 "id": "page-data",
@@ -2084,6 +2448,16 @@ class WorkbookBuilder:
         ]
         page_layouts: list[str] = []
         visible_dashboards = 0
+        page_ids_by_name: dict[str, list[str]] = {}
+        for dashboard_index, dashboard in enumerate(self.layout, 1):
+            if not isinstance(dashboard, dict) or dashboard.get("emit_page") is False:
+                continue
+            dashboard_name = str(
+                dashboard.get("dashboard") or f"Dashboard {dashboard_index}"
+            )
+            page_ids_by_name.setdefault(dashboard_name.casefold(), []).append(
+                stable_id("page", dashboard_name)
+            )
 
         for dashboard_index, dashboard in enumerate(self.layout, 1):
             if not isinstance(dashboard, dict) or dashboard.get("emit_page") is False:
@@ -2123,17 +2497,20 @@ class WorkbookBuilder:
                     )
                     continue
                 if kind == "chart":
+                    requires_source_fields = True
                     element = self.build_chart(dashboard_name, zone)
                 elif kind == "filter":
+                    requires_source_fields = True
                     element = self.build_control(dashboard_name, zone)
                 elif kind in {"text", "title"}:
                     element = self.build_text(dashboard_name, zone)
                 elif kind == "parameter":
-                    self.residue(
-                        dashboard_name,
-                        zone,
-                        "unbound-parameter",
-                        "parameter control effects require an explicit formula/control binding",
+                    element = self.build_parameter_control(dashboard_name, zone)
+                elif kind == "image":
+                    element = self.build_image(dashboard_name, zone)
+                elif kind == "dashboard-object":
+                    element = self.build_button(
+                        dashboard_name, zone, page_ids_by_name
                     )
                 else:
                     self.residue(
@@ -2171,7 +2548,7 @@ class WorkbookBuilder:
                 "no-visible-dashboard",
                 "layout contains no dashboard eligible for workbook page emission",
             )
-        if not self.master_fields:
+        if requires_source_fields and not self.master_fields:
             self.residue(
                 "",
                 {},
