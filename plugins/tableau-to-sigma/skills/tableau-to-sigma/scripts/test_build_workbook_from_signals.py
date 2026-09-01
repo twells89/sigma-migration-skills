@@ -37,6 +37,18 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             builder_module.sigma_format("p0.0%"),
         )
 
+    def test_adjacent_percentage_boxes_share_one_grid_boundary(self):
+        left = builder_module.WorkbookBuilder.placement(
+            "left",
+            {"x_pct": 0, "y_pct": 0, "w_pct": 20, "h_pct": 10},
+        )
+        right = builder_module.WorkbookBuilder.placement(
+            "right",
+            {"x_pct": 20, "y_pct": 0, "w_pct": 20, "h_pct": 10},
+        )
+        self.assertIn('gridColumn="1 / 6"', left)
+        self.assertIn('gridColumn="6 / 11"', right)
+
     def signals(self):
         meta = {
             "columns_by_guid": {

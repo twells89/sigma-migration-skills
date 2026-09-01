@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import re
 import sys
 from dataclasses import dataclass
@@ -1114,10 +1113,13 @@ class WorkbookBuilder:
         y = max(0.0, min(100.0, float(zone.get("y_pct") or 0.0)))
         width = max(0.1, float(zone.get("w_pct") or 100.0))
         height = max(0.1, float(zone.get("h_pct") or 10.0))
-        col_start = max(1, min(24, math.floor(x * 24 / 100) + 1))
-        col_end = max(col_start + 1, min(25, math.ceil((x + width) * 24 / 100) + 1))
-        row_start = max(1, min(100, math.floor(y) + 1))
-        row_end = max(row_start + 1, min(101, math.ceil(y + height) + 1))
+        # Adjacent Tableau zones share the same percentage boundary. Map that
+        # boundary with the same rounding rule on both sides; floor(start) plus
+        # ceil(end) makes every non-integer boundary overlap by one grid line.
+        col_start = max(1, min(24, round(x * 24 / 100) + 1))
+        col_end = max(col_start + 1, min(25, round((x + width) * 24 / 100) + 1))
+        row_start = max(1, min(100, round(y) + 1))
+        row_end = max(row_start + 1, min(101, round(y + height) + 1))
         return (
             f"  <Element elementId={quoteattr(element_id)} "
             f'gridColumn="{col_start} / {col_end}" gridRow="{row_start} / {row_end}"/>'
