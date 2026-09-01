@@ -367,10 +367,14 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             kpi["columns"][0]["formula"],
         )
         master = spec["document"]["elements"][0]
-        metric_column = next(
-            column for column in master["columns"] if column["name"] == "Margin Ratio"
+        self.assertEqual(
+            {"Profit", "Sales"},
+            {
+                column["name"]
+                for column in master["columns"]
+                if column["name"] in {"Profit", "Sales"}
+            },
         )
-        self.assertEqual("[Metrics/Margin Ratio]", metric_column["formula"])
 
     def test_user_aggregated_kpi_without_metric_uses_qualified_translation(self):
         layout, meta = self.signals()
