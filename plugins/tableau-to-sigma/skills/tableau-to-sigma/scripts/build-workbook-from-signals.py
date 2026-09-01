@@ -20,7 +20,19 @@ from typing import Any
 from xml.sax.saxutils import quoteattr
 
 
-SUPPORTED_CHART_KINDS = {"kpi", "line", "bar"}
+SUPPORTED_CHART_KINDS = {
+    "kpi",
+    "line",
+    "bar",
+    "area",
+    "pie",
+    "donut",
+    "scatter",
+    "map-region",
+    "map-point",
+    "pivot-table",
+    "table",
+}
 STRUCTURAL_ZONE_KINDS = {"container", "spacer", "empty"}
 DEFAULT_PAGE_ROW_UNITS = 28
 MIN_PAGE_ROW_UNITS = 20
@@ -168,6 +180,7 @@ class WorkbookBuilder:
         self.master_ids: dict[str, str] = {}
         self.master_formulas: dict[str, str] = {}
         self.master_resolution_errors: dict[str, dict[str, Any]] = {}
+        self.support_elements: list[dict[str, Any]] = []
         self.formula_rows = self._formula_audit_rows()
         self.data_model_elements = self._data_model_elements(self.dm_spec)
         self.data_model_source = self._selected_data_model_element()
@@ -807,6 +820,791 @@ class WorkbookBuilder:
             return None, None, evidence
         return translated, qualified, evidence
 
+    def dimension_formula(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        item: dict[str, Any],
+        field: Field,
+    ) -> str | None:
+        derivation = str(item.get("derivation") or "").lower()
+        if field.tableau_formula or derivation in USER_DERIVATIONS:
+            _translated, formula, _evidence = self.qualify_user_calculation(
+                dashboard, zone, field
+            )
+            if formula is None:
+                return None
+        else:
+            if not self.master_column(field):
+                self.add_master_resolution_residue(dashboard, zone, field)
+                return None
+            formula = f"[Master/{field.caption}]"
+        grain = DATE_DERIVATIONS.get(derivation)
+        return f'DateTrunc("{grain}", {formula})' if grain else formula
+
+    def measure_formula(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        item: dict[str, Any],
+        field: Field,
+    ) -> str | None:
+        derivation = self._derivation(zone, item)
+        if field.tableau_formula or derivation in USER_DERIVATIONS:
+            translated, evidence = self.require_translated_calculation(
+                dashboard, zone, field
+            )
+            if translated is None:
+                return None
+            qualified, missing = self.map_formula_references(
+                translated, field, qualify=True
+            )
+            if qualified is None:
+                self.residue(
+                    dashboard,
+                    zone,
+                    "unmapped-user-calculation-reference",
+                    "translated Sigma formula contains a reference that cannot be mapped through dashboard metadata",
+                    references=missing,
+                    **evidence,
+                )
+                return None
+            if derivation in USER_DERIVATIONS:
+                # User aggregate formulas must remain in the consuming
+                # element's grouping context.
+                return qualified
+            if derivation in AGGREGATIONS:
+                return f"{AGGREGATIONS[derivation]}({qualified})"
+            self.residue(
+                dashboard,
+                zone,
+                "unsupported-user-aggregation",
+                "translated row calculation still has an unsupported shelf aggregation",
+                aggregation=derivation,
+                **evidence,
+            )
+            return None
+        if derivation not in AGGREGATIONS:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-chart-field",
+                "one or more chart fields or aggregations cannot be bound safely",
+                fields=[],
+                aggregations=[derivation],
+            )
+            return None
+        if not self.master_column(field):
+            self.add_master_resolution_residue(dashboard, zone, field)
+            return None
+        return f"{AGGREGATIONS[derivation]}([Master/{field.caption}])"
+
+    def dimension_column(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        item: dict[str, Any],
+        field: Field,
+        column_id: str,
+    ) -> dict[str, Any] | None:
+        formula = self.dimension_formula(dashboard, zone, item, field)
+        if formula is None:
+            return None
+        column: dict[str, Any] = {
+            "id": column_id,
+            "name": field.caption,
+            "formula": formula,
+        }
+        field_format = self._field_format(zone, field)
+        if field_format:
+            column["format"] = field_format
+        return column
+
+    def measure_column(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        item: dict[str, Any],
+        field: Field,
+        column_id: str,
+    ) -> dict[str, Any] | None:
+        formula = self.measure_formula(dashboard, zone, item, field)
+        if formula is None:
+            return None
+        column: dict[str, Any] = {
+            "id": column_id,
+            "name": field.caption,
+            "formula": formula,
+        }
+        field_format = self._field_format(zone, field)
+        if field_format:
+            column["format"] = field_format
+        return column
+
+    def channel_field(self, zone: dict[str, Any], channel: str) -> Field | None:
+        signal = (zone.get("channels") or {}).get(channel)
+        if not isinstance(signal, dict):
+            return None
+        return self.resolve_field(signal.get("column")) or self.resolve_field(
+            signal.get("field")
+        )
+
+    @staticmethod
+    def channel_has_signal(zone: dict[str, Any], channel: str) -> bool:
+        signal = (zone.get("channels") or {}).get(channel)
+        return isinstance(signal, dict) and any(
+            str(signal.get(key) or "").strip() for key in ("column", "field")
+        )
+
+    def unsupported_channels(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        allowed: set[str],
+        chart_name: str,
+    ) -> bool:
+        channels = sorted(
+            channel
+            for channel in (zone.get("channels") or {})
+            if channel not in allowed and self.channel_has_signal(zone, channel)
+        )
+        if not channels:
+            return False
+        self.residue(
+            dashboard,
+            zone,
+            "unsupported-chart-encoding",
+            f"{chart_name} contains encoding channels without a verified Sigma mapping",
+            channels=channels,
+        )
+        return True
+
+    @staticmethod
+    def shelf_items(
+        zone: dict[str, Any], shelf_name: str, role: str
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in (zone.get(shelf_name) or {}).get("fields") or []
+            if isinstance(item, dict) and item.get("role") == role
+        ]
+
+    def resolve_items(
+        self,
+        dashboard: str,
+        zone: dict[str, Any],
+        items: list[dict[str, Any]],
+    ) -> list[tuple[dict[str, Any], Field]] | None:
+        resolved = [(item, self.resolve_field(item.get("guid"))) for item in items]
+        missing = [
+            str(item.get("guid") or item.get("raw") or "")
+            for item, field in resolved
+            if field is None
+        ]
+        if missing:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-chart-field",
+                "one or more chart fields or aggregations cannot be bound safely",
+                fields=missing,
+                aggregations=[],
+            )
+            return None
+        return [(item, field) for item, field in resolved if field is not None]
+
+    def build_circular_chart(
+        self, dashboard: str, zone: dict[str, Any], chart_kind: str
+    ) -> dict[str, Any] | None:
+        if self.unsupported_channels(
+            dashboard, zone, {"color"}, f"{chart_kind} chart"
+        ):
+            return None
+        dimensions, measures = self._shelf_fields(zone)
+        color_field = self.channel_field(zone, "color")
+        if self.channel_has_signal(zone, "color") and color_field is None:
+            self.residue(
+                dashboard,
+                zone,
+                "unbound-chart-field",
+                "circular chart color encoding cannot be bound through dashboard metadata",
+                fields=["color"],
+                aggregations=[],
+            )
+            return None
+        dimension_pairs = self.resolve_items(dashboard, zone, dimensions)
+        if dimension_pairs is None:
+            return None
+        dimension_fields = {
+            field.key: (item, field) for item, field in dimension_pairs
+        }
+        if color_field is not None:
+            dimension_fields.setdefault(
+                color_field.key,
+                (
+                    {
+                        "guid": color_field.key,
+                        "role": "dim",
+                        "derivation": "none",
+                    },
+                    color_field,
+                ),
+            )
+        if len(dimension_fields) != 1 or len(measures) != 1:
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-chart-fields",
+                "pie and donut charts require exactly one dimension and one measure",
+                dimensionCount=len(dimension_fields),
+                measureCount=len(measures),
+            )
+            return None
+        measure_pairs = self.resolve_items(dashboard, zone, measures)
+        if measure_pairs is None:
+            return None
+        element_id = stable_id("chart", f"{dashboard}:{zone.get('id')}")
+        dimension_item, dimension_field = next(iter(dimension_fields.values()))
+        measure_item, measure_field = measure_pairs[0]
+        dimension = self.dimension_column(
+            dashboard,
+            zone,
+            dimension_item,
+            dimension_field,
+            f"{element_id}-dimension",
+        )
+        measure = self.measure_column(
+            dashboard,
+            zone,
+            measure_item,
+            measure_field,
+            f"{element_id}-measure-1",
+        )
+        if dimension is None or measure is None:
+            return None
+        element = {
+            "id": element_id,
+            "kind": f"{chart_kind}-chart",
+            "name": str(
+                zone.get("display_title")
+                or zone.get("caption")
+                or chart_kind.title()
+            ),
+            "source": {"kind": "table", "elementId": "master"},
+            "columns": [dimension, measure],
+            "value": {"id": measure["id"]},
+            "color": {"id": dimension["id"]},
+        }
+        sort = zone.get("sort") or {}
+        direction = str(sort.get("direction") or "").lower()
+        if direction in {"asc", "ascending", "desc", "descending"}:
+            element["color"]["sort"] = {
+                "by": measure["id"],
+                "direction": (
+                    "descending" if direction.startswith("desc") else "ascending"
+                ),
+            }
+        if zone.get("mark_labels_show"):
+            element["dataLabel"] = {"labels": "shown"}
+        return element
+
+    def build_tabular_chart(
+        self, dashboard: str, zone: dict[str, Any], chart_kind: str
+    ) -> dict[str, Any] | None:
+        row_dimensions = self.shelf_items(zone, "rows_shelf", "dim")
+        column_dimensions = self.shelf_items(zone, "cols_shelf", "dim")
+        dimensions, measures = self._shelf_fields(zone)
+        if not dimensions and not measures:
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-chart-fields",
+                "table signals contain no bindable dimensions or measures",
+                dimensionCount=0,
+                measureCount=0,
+            )
+            return None
+        if chart_kind == "pivot-table" and (not dimensions or not measures):
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-pivot-fields",
+                "pivot tables require at least one dimension and one value",
+                rowCount=len(row_dimensions),
+                columnCount=len(column_dimensions),
+                valueCount=len(measures),
+            )
+            return None
+        if chart_kind == "table" and measures and not dimensions:
+            self.residue(
+                dashboard,
+                zone,
+                "unsafe-aggregate-table",
+                "an aggregate table requires at least one grouping dimension",
+                valueCount=len(measures),
+            )
+            return None
+        dimension_pairs = self.resolve_items(dashboard, zone, dimensions)
+        measure_pairs = self.resolve_items(dashboard, zone, measures)
+        if dimension_pairs is None or measure_pairs is None:
+            return None
+        dimension_keys = [field.key for _item, field in dimension_pairs]
+        if len(dimension_keys) != len(set(dimension_keys)):
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-pivot-fields",
+                "a dimension appears on more than one table shelf",
+                dimensions=dimension_keys,
+            )
+            return None
+
+        element_id = stable_id("chart", f"{dashboard}:{zone.get('id')}")
+        columns = []
+        dimension_ids: dict[str, str] = {}
+        for index, (item, field) in enumerate(dimension_pairs, 1):
+            column_id = f"{element_id}-dimension-{index}"
+            column = self.dimension_column(
+                dashboard, zone, item, field, column_id
+            )
+            if column is None:
+                return None
+            columns.append(column)
+            dimension_ids[field.key] = column_id
+        measure_ids = []
+        for index, (item, field) in enumerate(measure_pairs, 1):
+            column = self.measure_column(
+                dashboard,
+                zone,
+                item,
+                field,
+                f"{element_id}-measure-{index}",
+            )
+            if column is None:
+                return None
+            columns.append(column)
+            measure_ids.append(column["id"])
+
+        element: dict[str, Any] = {
+            "id": element_id,
+            "kind": chart_kind,
+            "name": str(
+                zone.get("display_title")
+                or zone.get("caption")
+                or ("Pivot Table" if chart_kind == "pivot-table" else "Table")
+            ),
+            "source": {"kind": "table", "elementId": "master"},
+            "columns": columns,
+        }
+        if chart_kind == "pivot-table":
+            element["rowsBy"] = [
+                {"id": dimension_ids[field.key]}
+                for _item, field in dimension_pairs
+                if any(
+                    row.get("guid") == _item.get("guid")
+                    for row in row_dimensions
+                )
+            ]
+            element["columnsBy"] = [
+                {"id": dimension_ids[field.key]}
+                for _item, field in dimension_pairs
+                if any(
+                    column.get("guid") == _item.get("guid")
+                    for column in column_dimensions
+                )
+            ]
+            element["values"] = measure_ids
+        else:
+            element["order"] = [column["id"] for column in columns]
+            if measure_ids:
+                element["groupings"] = [
+                    {
+                        "id": f"{element_id}-grouping",
+                        "groupBy": list(dimension_ids.values()),
+                        "calculations": measure_ids,
+                    }
+                ]
+        return element
+
+    @staticmethod
+    def region_type(geo_role: object) -> str | None:
+        role = re.sub(r"[^a-z0-9]+", "-", str(geo_role or "").casefold()).strip("-")
+        aliases = {
+            "country": "country",
+            "nation": "country",
+            "geo-country": "country",
+            "state": "us-state",
+            "geo-state": "us-state",
+            "us-state": "us-state",
+            "county": "us-county",
+            "geo-county": "us-county",
+            "us-county": "us-county",
+            "zip": "us-zipcode",
+            "zipcode": "us-zipcode",
+            "postal-code": "us-zipcode",
+            "geo-zip-code": "us-zipcode",
+            "cbsa": "us-cbsa",
+            "metro": "us-cbsa",
+            "city": "us-postal-place",
+            "geo-city": "us-postal-place",
+            "postal-place": "us-postal-place",
+            "province": "ca-province",
+            "ca-province": "ca-province",
+        }
+        return aliases.get(role)
+
+    def build_region_map(
+        self, dashboard: str, zone: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if self.unsupported_channels(
+            dashboard, zone, {"detail", "color"}, "region map"
+        ):
+            return None
+        dimensions, measures = self._shelf_fields(zone)
+        dimension_pairs = self.resolve_items(dashboard, zone, dimensions)
+        if dimension_pairs is None:
+            return None
+        detail_field = self.channel_field(zone, "detail")
+        color_field = self.channel_field(zone, "color")
+        if self.channel_has_signal(zone, "detail") and detail_field is None:
+            self.residue(
+                dashboard,
+                zone,
+                "unverified-region-map",
+                "region map detail encoding cannot be bound to a verified geography field",
+                geoRole=zone.get("geo_role"),
+            )
+            return None
+        if self.channel_has_signal(zone, "color") and color_field is None:
+            self.residue(
+                dashboard,
+                zone,
+                "unverified-region-map",
+                "region map color encoding cannot be bound through dashboard metadata",
+                geoRole=zone.get("geo_role"),
+            )
+            return None
+        dimension_fields = {
+            field.key: (item, field) for item, field in dimension_pairs
+        }
+        if detail_field is not None:
+            dimension_fields.setdefault(
+                detail_field.key,
+                (
+                    {
+                        "guid": detail_field.key,
+                        "role": "dim",
+                        "derivation": "none",
+                    },
+                    detail_field,
+                ),
+            )
+        region_type = self.region_type(zone.get("geo_role"))
+        if (
+            len(dimension_fields) != 1
+            or len(measures) > 1
+            or region_type is None
+        ):
+            self.residue(
+                dashboard,
+                zone,
+                "unverified-region-map",
+                "region maps require one dimension, at most one measure, and a recognized Tableau geography role",
+                dimensionCount=len(dimension_fields),
+                measureCount=len(measures),
+                geoRole=zone.get("geo_role"),
+            )
+            return None
+        measure_pairs = self.resolve_items(dashboard, zone, measures)
+        if measure_pairs is None:
+            return None
+        element_id = stable_id("chart", f"{dashboard}:{zone.get('id')}")
+        region_item, region_field = next(iter(dimension_fields.values()))
+        region = self.dimension_column(
+            dashboard,
+            zone,
+            region_item,
+            region_field,
+            f"{element_id}-region",
+        )
+        if region is None:
+            return None
+        columns = [region]
+        element: dict[str, Any] = {
+            "id": element_id,
+            "kind": "region-map",
+            "name": str(
+                zone.get("display_title") or zone.get("caption") or "Region Map"
+            ),
+            "source": {"kind": "table", "elementId": "master"},
+            "columns": columns,
+            "region": {"id": region["id"], "regionType": region_type},
+        }
+        if measures:
+            measure_item, measure_field = measure_pairs[0]
+            if color_field is not None and color_field.key != measure_field.key:
+                self.residue(
+                    dashboard,
+                    zone,
+                    "unsupported-chart-encoding",
+                    "region map color field does not match its single measure",
+                    colorField=color_field.caption,
+                    measureField=measure_field.caption,
+                )
+                return None
+            measure = self.measure_column(
+                dashboard,
+                zone,
+                measure_item,
+                measure_field,
+                f"{element_id}-measure-1",
+            )
+            if measure is None:
+                return None
+            columns.append(measure)
+            element["color"] = {"by": "scale", "column": measure["id"]}
+        elif color_field is not None:
+            if color_field.key != region_field.key:
+                self.residue(
+                    dashboard,
+                    zone,
+                    "unsupported-chart-encoding",
+                    "region map color field is neither its region nor a measure",
+                    colorField=color_field.caption,
+                    regionField=region_field.caption,
+                )
+                return None
+            element["color"] = {"by": "category", "column": region["id"]}
+        return element
+
+    @staticmethod
+    def coordinate_kind(field: Field) -> str | None:
+        name = re.sub(r"[^a-z]+", " ", field.caption.casefold()).strip()
+        if re.search(r"\blat(?:itude)?\b", name):
+            return "latitude"
+        if re.search(r"\b(?:lon|lng|longitude)\b", name):
+            return "longitude"
+        return None
+
+    def build_point_map(
+        self, dashboard: str, zone: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if self.unsupported_channels(dashboard, zone, set(), "point map"):
+            return None
+        shelf_fields = [
+            item
+            for shelf_name in ("cols_shelf", "rows_shelf")
+            for item in (zone.get(shelf_name) or {}).get("fields") or []
+            if isinstance(item, dict) and item.get("role") in {"dim", "measure"}
+        ]
+        pairs = self.resolve_items(dashboard, zone, shelf_fields)
+        if pairs is None:
+            return None
+        coordinates: dict[str, list[tuple[dict[str, Any], Field]]] = {
+            "latitude": [],
+            "longitude": [],
+        }
+        extras = []
+        for pair in pairs:
+            coordinate = self.coordinate_kind(pair[1])
+            if coordinate:
+                coordinates[coordinate].append(pair)
+            else:
+                extras.append(pair)
+        if (
+            len(coordinates["latitude"]) != 1
+            or len(coordinates["longitude"]) != 1
+            or extras
+        ):
+            self.residue(
+                dashboard,
+                zone,
+                "unverified-point-map",
+                "point maps require unique latitude and longitude shelf fields without ambiguous extras",
+                latitudeCount=len(coordinates["latitude"]),
+                longitudeCount=len(coordinates["longitude"]),
+                extraFields=[field.caption for _item, field in extras],
+            )
+            return None
+        element_id = stable_id("chart", f"{dashboard}:{zone.get('id')}")
+        columns = []
+        bindings = {}
+        for coordinate in ("latitude", "longitude"):
+            item, field = coordinates[coordinate][0]
+            column_id = f"{element_id}-{coordinate}"
+            column = (
+                self.measure_column(
+                    dashboard, zone, item, field, column_id
+                )
+                if item.get("role") == "measure"
+                else self.dimension_column(
+                    dashboard, zone, item, field, column_id
+                )
+            )
+            if column is None:
+                return None
+            columns.append(column)
+            bindings[coordinate] = {"id": column_id}
+        return {
+            "id": element_id,
+            "kind": "point-map",
+            "name": str(
+                zone.get("display_title") or zone.get("caption") or "Point Map"
+            ),
+            "source": {"kind": "table", "elementId": "master"},
+            "columns": columns,
+            **bindings,
+        }
+
+    def build_scatter_chart(
+        self, dashboard: str, zone: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if self.unsupported_channels(
+            dashboard, zone, {"detail", "color"}, "scatter chart"
+        ):
+            return None
+        x_items = self.shelf_items(zone, "cols_shelf", "measure")
+        y_items = self.shelf_items(zone, "rows_shelf", "measure")
+        shelf_dimensions = (
+            self.shelf_items(zone, "cols_shelf", "dim")
+            + self.shelf_items(zone, "rows_shelf", "dim")
+        )
+        if len(x_items) != 1 or len(y_items) != 1:
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-scatter-axes",
+                "scatter charts require exactly one measure on each axis",
+                xMeasureCount=len(x_items),
+                yMeasureCount=len(y_items),
+            )
+            return None
+        axis_pairs = self.resolve_items(dashboard, zone, x_items + y_items)
+        if axis_pairs is None:
+            return None
+        identity_fields = []
+        for channel in ("detail", "color"):
+            field = self.channel_field(zone, channel)
+            if self.channel_has_signal(zone, channel) and field is None:
+                self.residue(
+                    dashboard,
+                    zone,
+                    "unbound-chart-field",
+                    "scatter point-identity encoding cannot be bound through dashboard metadata",
+                    fields=[channel],
+                    aggregations=[],
+                )
+                return None
+            if field and field.key not in {pair[1].key for pair in axis_pairs}:
+                identity_fields.append(field)
+        shelf_pairs = self.resolve_items(dashboard, zone, shelf_dimensions)
+        if shelf_pairs is None:
+            return None
+        identity_fields.extend(field for _item, field in shelf_pairs)
+        identities = {
+            field.key: field for field in identity_fields
+        }
+        if len(identities) != 1:
+            self.residue(
+                dashboard,
+                zone,
+                "unsafe-scatter-source",
+                "scatter charts require one unambiguous point dimension for a grouped source",
+                identityCount=len(identities),
+                identities=[field.caption for field in identities.values()],
+            )
+            return None
+        identity = next(iter(identities.values()))
+        x_item, x_field = axis_pairs[0]
+        y_item, y_field = axis_pairs[1]
+        if len({identity.caption, x_field.caption, y_field.caption}) != 3:
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-scatter-fields",
+                "scatter grouping and axis columns require unique display names",
+            )
+            return None
+
+        element_id = stable_id("chart", f"{dashboard}:{zone.get('id')}")
+        source_id = f"{element_id}-grouped-source"
+        grouping_id = f"{source_id}-grouping"
+        source_name = f"Scatter Source {element_id[-8:]}"
+        identity_item = next(
+            (
+                item
+                for item, field in shelf_pairs
+                if field.key == identity.key
+            ),
+            {"guid": identity.key, "role": "dim", "derivation": "none"},
+        )
+        source_columns = [
+            self.dimension_column(
+                dashboard,
+                zone,
+                identity_item,
+                identity,
+                f"{source_id}-identity",
+            ),
+            self.measure_column(
+                dashboard, zone, x_item, x_field, f"{source_id}-x"
+            ),
+            self.measure_column(
+                dashboard, zone, y_item, y_field, f"{source_id}-y"
+            ),
+        ]
+        if any(column is None for column in source_columns):
+            return None
+        grouped_columns = [column for column in source_columns if column is not None]
+        grouped_source = {
+            "id": source_id,
+            "kind": "table",
+            "name": source_name,
+            "visibleAsSource": False,
+            "source": {"kind": "table", "elementId": "master"},
+            "columns": grouped_columns,
+            "groupings": [
+                {
+                    "id": grouping_id,
+                    "groupBy": [grouped_columns[0]["id"]],
+                    "calculations": [
+                        grouped_columns[1]["id"],
+                        grouped_columns[2]["id"],
+                    ],
+                }
+            ],
+        }
+        self.support_elements.append(grouped_source)
+        chart_columns = [
+            {
+                "id": f"{element_id}-{suffix}",
+                "name": source_column["name"],
+                "formula": f"[{source_name}/{source_column['name']}]",
+            }
+            for suffix, source_column in zip(
+                ("identity", "x", "y"), grouped_columns
+            )
+        ]
+        return {
+            "id": element_id,
+            "kind": "scatter-chart",
+            "name": str(
+                zone.get("display_title") or zone.get("caption") or "Scatter"
+            ),
+            "source": {
+                "kind": "table",
+                "elementId": source_id,
+                "groupingId": grouping_id,
+            },
+            "columns": chart_columns,
+            "xAxis": {"columnId": chart_columns[1]["id"]},
+            "yAxis": {"columnIds": [chart_columns[2]["id"]]},
+            "color": {
+                "by": "category",
+                "column": chart_columns[0]["id"],
+            },
+        }
+
     def build_chart(self, dashboard: str, zone: dict[str, Any]) -> dict[str, Any] | None:
         chart_kind = str(zone.get("chart_kind") or "")
         if chart_kind not in SUPPORTED_CHART_KINDS:
@@ -814,16 +1612,8 @@ class WorkbookBuilder:
                 dashboard,
                 zone,
                 "unsupported-chart-kind",
-                "automatic builder supports only native KPI, line, and bar charts",
+                "automatic builder has no safe native binding for this chart kind",
                 supported=sorted(SUPPORTED_CHART_KINDS),
-            )
-            return None
-        if zone.get("dual_axis"):
-            self.residue(
-                dashboard,
-                zone,
-                "unsupported-dual-axis",
-                "dual-axis semantics cannot be bound to a single native line/bar shape",
             )
             return None
         filters = zone.get("filters") or []
@@ -837,6 +1627,27 @@ class WorkbookBuilder:
             )
             return None
 
+        if chart_kind in {"pie", "donut"}:
+            return self.build_circular_chart(dashboard, zone, chart_kind)
+        if chart_kind in {"table", "pivot-table"}:
+            return self.build_tabular_chart(dashboard, zone, chart_kind)
+        if chart_kind == "scatter":
+            return self.build_scatter_chart(dashboard, zone)
+        if chart_kind == "map-region":
+            return self.build_region_map(dashboard, zone)
+        if chart_kind == "map-point":
+            return self.build_point_map(dashboard, zone)
+
+        dual_axis = bool(zone.get("dual_axis"))
+        if dual_axis and chart_kind not in {"line", "bar", "area"}:
+            self.residue(
+                dashboard,
+                zone,
+                "unsupported-dual-axis",
+                "dual-axis signals are safe only for cartesian chart shelves",
+                chartKind=chart_kind,
+            )
+            return None
         dimensions, measures = self._shelf_fields(zone)
         expected_dimensions = 0 if chart_kind == "kpi" else 1
         if len(dimensions) != expected_dimensions or not measures:
@@ -847,6 +1658,27 @@ class WorkbookBuilder:
                 "chart shelves do not provide the required dimension/measure binding",
                 dimensionCount=len(dimensions),
                 measureCount=len(measures),
+            )
+            return None
+        if dual_axis and len(measures) != 2:
+            self.residue(
+                dashboard,
+                zone,
+                "ambiguous-dual-axis",
+                "dual-axis conversion requires exactly two ordered measures",
+                measureCount=len(measures),
+            )
+            return None
+        if (
+            dual_axis
+            and self.shelf_items(zone, "rows_shelf", "dim")
+            and self.shelf_items(zone, "cols_shelf", "measure")
+        ):
+            self.residue(
+                dashboard,
+                zone,
+                "unsupported-dual-axis",
+                "horizontal dual-axis orientation has no verified automatic combo mapping",
             )
             return None
         if chart_kind == "kpi" and len(measures) != 1:
@@ -979,7 +1811,11 @@ class WorkbookBuilder:
 
         element: dict[str, Any] = {
             "id": element_id,
-            "kind": "kpi-chart" if chart_kind == "kpi" else f"{chart_kind}-chart",
+            "kind": (
+                "kpi-chart"
+                if chart_kind == "kpi"
+                else ("combo-chart" if dual_axis else f"{chart_kind}-chart")
+            ),
             "name": str(zone.get("display_title") or zone.get("caption") or chart_kind.title()),
             "source": {"kind": "table", "elementId": "master"},
             "columns": columns,
@@ -988,8 +1824,19 @@ class WorkbookBuilder:
             element["value"] = {"columnId": measure_ids[0]}
         else:
             element["xAxis"] = {"columnId": dimension_column_id}
-            element["yAxis"] = {"columnIds": measure_ids}
-            if chart_kind == "bar":
+            element["yAxis"] = {
+                "columnIds": (
+                    [
+                        {"columnId": column_id, "type": chart_kind}
+                        for column_id in measure_ids
+                    ]
+                    if dual_axis
+                    else measure_ids
+                )
+            }
+            if dual_axis:
+                element["yAxis2"] = {"columnIds": [measure_ids[1]]}
+            if chart_kind == "bar" and not dual_axis:
                 rows = (zone.get("rows_shelf") or {}).get("fields") or []
                 cols = (zone.get("cols_shelf") or {}).get("fields") or []
                 if any(item.get("role") == "dim" for item in rows) and any(
@@ -1352,6 +2199,13 @@ class WorkbookBuilder:
             },
             "columns": master_columns,
         }
+        support_placements = [
+            (
+                f'  <Element elementId={quoteattr(element["id"])} '
+                f'gridColumn="1 / 25" gridRow="{20 * index} / {20 * (index + 1)}"/>'
+            )
+            for index, element in enumerate(self.support_elements, 1)
+        ]
         data_page = "\n".join(
             [
                 (
@@ -1359,6 +2213,7 @@ class WorkbookBuilder:
                     'gridTemplateRows="auto" id="page-data">'
                 ),
                 '  <Element elementId="master" gridColumn="1 / 25" gridRow="1 / 20"/>',
+                *support_placements,
                 "</Page>",
             ]
         )
@@ -1383,7 +2238,7 @@ class WorkbookBuilder:
         document = {
             "schemaVersion": 1,
             "kind": "workbook",
-            "elements": [master, *content_elements],
+            "elements": [master, *self.support_elements, *content_elements],
             "pages": pages,
             "settings": settings,
             "layout": xml,
@@ -1398,7 +2253,7 @@ class WorkbookBuilder:
             "schemaVersion": 1,
             "status": "blocked" if self.residues else "complete",
             "summary": {
-                "emittedElements": len(content_elements),
+                "emittedElements": len(content_elements) + len(self.support_elements),
                 "boundSourceFields": len(master_columns),
                 "residueCount": len(self.residues),
             },

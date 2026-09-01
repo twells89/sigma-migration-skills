@@ -308,6 +308,31 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         )
         return instance.build()
 
+    def build_zone(self, zone, columns):
+        zone = {
+            "x_pct": 0,
+            "y_pct": 0,
+            "w_pct": 100,
+            "h_pct": 100,
+            "filters": [],
+            **zone,
+        }
+        instance = builder_module.WorkbookBuilder(
+            [
+                {
+                    "dashboard": "Synthetic Shapes",
+                    "emit_page": True,
+                    "zones": [zone],
+                }
+            ],
+            {"columns_by_guid": columns},
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+        )
+        return instance.build()
+
     def test_builds_complete_flat_native_workbook_with_layout_last(self):
         spec, residues = self.build()
         self.assertEqual("complete", residues["status"])
@@ -945,14 +970,324 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             {column["formula"] for column in master["columns"]},
         )
 
+    def test_area_chart_uses_canonical_cartesian_shape(self):
+        spec, report = self.build_zone(
+            {
+                "id": "area",
+                "kind": "chart",
+                "chart_kind": "area",
+                "caption": "Sales Area",
+                "cols_shelf": shelf(field("DATE", "dim", "tmn")),
+                "rows_shelf": shelf(field("SALES", "measure", "sum")),
+            },
+            {
+                "DATE": {"caption": "Order Date", "datatype": "date"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        area = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "area-chart"
+        )
+        self.assertEqual(area["columns"][0]["id"], area["xAxis"]["columnId"])
+        self.assertEqual(
+            [area["columns"][1]["id"]], area["yAxis"]["columnIds"]
+        )
+
+    def test_pie_and_donut_use_value_and_color_id_channels(self):
+        for source_kind in ("pie", "donut"):
+            with self.subTest(source_kind=source_kind):
+                spec, report = self.build_zone(
+                    {
+                        "id": source_kind,
+                        "kind": "chart",
+                        "chart_kind": source_kind,
+                        "caption": "Sales Mix",
+                        "cols_shelf": shelf(),
+                        "rows_shelf": shelf(field("SALES", "measure", "sum")),
+                        "channels": {"color": {"column": "REGION"}},
+                    },
+                    {
+                        "REGION": {"caption": "Region", "datatype": "string"},
+                        "SALES": {"caption": "Sales", "datatype": "real"},
+                    },
+                )
+                self.assertEqual("complete", report["status"])
+                chart = next(
+                    element
+                    for element in spec["document"]["elements"]
+                    if element["kind"] == f"{source_kind}-chart"
+                )
+                self.assertEqual(
+                    chart["columns"][1]["id"], chart["value"]["id"]
+                )
+                self.assertEqual(
+                    chart["columns"][0]["id"], chart["color"]["id"]
+                )
+                self.assertNotIn("xAxis", chart)
+
+    def test_dual_axis_emits_combo_with_secondary_axis_subset(self):
+        spec, report = self.build_zone(
+            {
+                "id": "combo",
+                "kind": "chart",
+                "chart_kind": "line",
+                "caption": "Sales and Profit",
+                "dual_axis": True,
+                "cols_shelf": shelf(field("DATE", "dim", "tmn")),
+                "rows_shelf": shelf(
+                    field("SALES", "measure", "sum"),
+                    field("PROFIT", "measure", "sum"),
+                ),
+            },
+            {
+                "DATE": {"caption": "Order Date", "datatype": "date"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+                "PROFIT": {"caption": "Profit", "datatype": "real"},
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        combo = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "combo-chart"
+        )
+        y_ids = [item["columnId"] for item in combo["yAxis"]["columnIds"]]
+        self.assertEqual(2, len(y_ids))
+        self.assertTrue(
+            all(item["type"] == "line" for item in combo["yAxis"]["columnIds"])
+        )
+        self.assertEqual([y_ids[1]], combo["yAxis2"]["columnIds"])
+
+    def test_pivot_and_table_preserve_shelf_roles(self):
+        spec, report = self.build_zone(
+            {
+                "id": "pivot",
+                "kind": "chart",
+                "chart_kind": "pivot-table",
+                "caption": "Sales Pivot",
+                "rows_shelf": shelf(
+                    field("REGION", "dim", "none"),
+                    field("SALES", "measure", "sum"),
+                ),
+                "cols_shelf": shelf(field("DATE", "dim", "tyr")),
+            },
+            {
+                "REGION": {"caption": "Region", "datatype": "string"},
+                "DATE": {"caption": "Order Date", "datatype": "date"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        pivot = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "pivot-table"
+        )
+        by_name = {column["name"]: column["id"] for column in pivot["columns"]}
+        self.assertEqual([{"id": by_name["Region"]}], pivot["rowsBy"])
+        self.assertEqual([{"id": by_name["Order Date"]}], pivot["columnsBy"])
+        self.assertEqual([by_name["Sales"]], pivot["values"])
+
+        table_spec, table_report = self.build_zone(
+            {
+                "id": "table",
+                "kind": "chart",
+                "chart_kind": "table",
+                "caption": "Regions",
+                "rows_shelf": shelf(field("REGION", "dim", "none")),
+                "cols_shelf": shelf(),
+            },
+            {"REGION": {"caption": "Region", "datatype": "string"}},
+        )
+        self.assertEqual("complete", table_report["status"])
+        table = next(
+            element
+            for element in table_spec["document"]["elements"]
+            if element["id"].startswith("chart-")
+        )
+        self.assertEqual("table", table["kind"])
+        self.assertEqual([table["columns"][0]["id"]], table["order"])
+
+    def test_scatter_builds_and_binds_a_safe_grouped_source(self):
+        spec, report = self.build_zone(
+            {
+                "id": "scatter",
+                "kind": "chart",
+                "chart_kind": "scatter",
+                "caption": "Sales vs Profit",
+                "cols_shelf": shelf(field("SALES", "measure", "sum")),
+                "rows_shelf": shelf(field("PROFIT", "measure", "avg")),
+                "channels": {"detail": {"column": "REGION"}},
+            },
+            {
+                "REGION": {"caption": "Region", "datatype": "string"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+                "PROFIT": {"caption": "Profit", "datatype": "real"},
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        scatter = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "scatter-chart"
+        )
+        grouped = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["id"] == scatter["source"]["elementId"]
+        )
+        self.assertEqual(
+            grouped["groupings"][0]["id"], scatter["source"]["groupingId"]
+        )
+        self.assertEqual(
+            [grouped["columns"][0]["id"]],
+            grouped["groupings"][0]["groupBy"],
+        )
+        self.assertEqual(
+            [column["id"] for column in grouped["columns"][1:]],
+            grouped["groupings"][0]["calculations"],
+        )
+        self.assertTrue(
+            all(
+                column["formula"].startswith(f"[{grouped['name']}/")
+                for column in scatter["columns"]
+            )
+        )
+
+    def test_scatter_without_point_dimension_stays_a_residue(self):
+        _spec, report = self.build_zone(
+            {
+                "id": "scatter",
+                "kind": "chart",
+                "chart_kind": "scatter",
+                "caption": "Unsafe Scatter",
+                "cols_shelf": shelf(field("SALES", "measure", "sum")),
+                "rows_shelf": shelf(field("PROFIT", "measure", "avg")),
+            },
+            {
+                "SALES": {"caption": "Sales", "datatype": "real"},
+                "PROFIT": {"caption": "Profit", "datatype": "real"},
+            },
+        )
+        self.assertEqual("blocked", report["status"])
+        self.assertEqual(
+            "unsafe-scatter-source", report["residues"][0]["reasonCode"]
+        )
+
+    def test_region_map_requires_and_maps_verified_geography_role(self):
+        spec, report = self.build_zone(
+            {
+                "id": "region-map",
+                "kind": "chart",
+                "chart_kind": "map-region",
+                "caption": "Sales by State",
+                "geo_role": "geo:state",
+                "cols_shelf": shelf(field("STATE", "dim", "none")),
+                "rows_shelf": shelf(field("SALES", "measure", "sum")),
+            },
+            {
+                "STATE": {"caption": "State", "datatype": "string"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        region_map = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "region-map"
+        )
+        self.assertEqual("us-state", region_map["region"]["regionType"])
+        self.assertEqual(
+            region_map["columns"][0]["id"], region_map["region"]["id"]
+        )
+        self.assertEqual(
+            region_map["columns"][1]["id"], region_map["color"]["column"]
+        )
+
+        _spec, blocked = self.build_zone(
+            {
+                "id": "region-map",
+                "kind": "chart",
+                "chart_kind": "map-region",
+                "caption": "Unverified Regions",
+                "cols_shelf": shelf(field("STATE", "dim", "none")),
+                "rows_shelf": shelf(field("SALES", "measure", "sum")),
+            },
+            {
+                "STATE": {"caption": "State", "datatype": "string"},
+                "SALES": {"caption": "Sales", "datatype": "real"},
+            },
+        )
+        self.assertEqual("blocked", blocked["status"])
+        self.assertEqual(
+            "unverified-region-map", blocked["residues"][0]["reasonCode"]
+        )
+
+    def test_point_map_requires_unique_latitude_and_longitude_fields(self):
+        spec, report = self.build_zone(
+            {
+                "id": "point-map",
+                "kind": "chart",
+                "chart_kind": "map-point",
+                "caption": "Locations",
+                "cols_shelf": shelf(field("LONGITUDE", "measure", "avg")),
+                "rows_shelf": shelf(field("LATITUDE", "measure", "avg")),
+            },
+            {
+                "LATITUDE": {
+                    "caption": "Latitude (generated)",
+                    "datatype": "real",
+                },
+                "LONGITUDE": {
+                    "caption": "Longitude (generated)",
+                    "datatype": "real",
+                },
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        point_map = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "point-map"
+        )
+        self.assertEqual(
+            point_map["columns"][0]["id"], point_map["latitude"]["id"]
+        )
+        self.assertEqual(
+            point_map["columns"][1]["id"], point_map["longitude"]["id"]
+        )
+        _spec, blocked = self.build_zone(
+            {
+                "id": "point-map",
+                "kind": "chart",
+                "chart_kind": "map-point",
+                "caption": "Missing Longitude",
+                "cols_shelf": shelf(),
+                "rows_shelf": shelf(field("LATITUDE", "measure", "avg")),
+            },
+            {
+                "LATITUDE": {
+                    "caption": "Latitude",
+                    "datatype": "real",
+                }
+            },
+        )
+        self.assertEqual("blocked", blocked["status"])
+        self.assertEqual(
+            "unverified-point-map", blocked["residues"][0]["reasonCode"]
+        )
+
     def test_cli_writes_structured_residues_and_no_spec_for_unsupported_zone(self):
         layout, meta = self.signals()
         layout[0]["zones"].append(
             {
-                "id": "pie",
+                "id": "unsupported",
                 "kind": "chart",
-                "chart_kind": "pie",
-                "caption": "Sales Mix",
+                "chart_kind": "other",
+                "caption": "Unsupported Shape",
                 "x_pct": 0,
                 "y_pct": 56,
                 "w_pct": 50,
@@ -1001,7 +1336,7 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         self.assertFalse(report["outputWritten"])
         self.assertEqual(
             "unsupported-chart-kind",
-            next(item for item in report["residues"] if item["zoneId"] == "pie")[
+            next(item for item in report["residues"] if item["zoneId"] == "unsupported")[
                 "reasonCode"
             ],
         )
@@ -1056,15 +1391,15 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         by_code = {}
         for residue in report["residues"]:
             by_code.setdefault(residue["reasonCode"], []).append(residue)
-        self.assertIn("unsupported-chart-kind", by_code)
         self.assertIn("unsupported-zone-kind", by_code)
         self.assertIn("unsupported-chart-filter", by_code)
         self.assertEqual(
             {"pie"},
             {
                 item["chartKind"]
-                for item in by_code["unsupported-chart-kind"]
+                for item in by_code["unsupported-chart-filter"]
                 if item["zoneKind"] == "chart"
+                and item["chartKind"] == "pie"
             },
         )
         self.assertEqual(
