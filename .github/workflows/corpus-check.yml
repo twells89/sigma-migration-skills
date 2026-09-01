@@ -103,6 +103,7 @@ jobs:
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_scan_workbook_gaps.py
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_verify_anchors.py
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_build_workbook_from_signals.py
+          python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_assert_phase6_ran.py
           python3 tools/check-shared.py
 
   windows-smoke:
@@ -565,6 +566,7 @@ jobs:
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_scan_workbook_gaps.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_verify_anchors.py
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_build_workbook_from_signals.py
+            plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_assert_phase6_ran.py
             shared/scripts/test_runtime_profile.py
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test_scout_ledger_integrity.py
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test_warehouse_column_refs.py
