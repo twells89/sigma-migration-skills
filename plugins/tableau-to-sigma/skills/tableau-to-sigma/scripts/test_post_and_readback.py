@@ -111,6 +111,24 @@ class PostAndReadbackTest(unittest.TestCase):
         self.assertEqual("/v2/workbooks/spec/verify", api.calls[0][1])
         self.assertTrue(result["pass"])
 
+    def test_workbook_readback_keys_elements_by_preserved_id(self):
+        posted = {
+            "document": {
+                "elements": [
+                    {"id": "text-1", "kind": "text", "name": "Text", "body": "Title"}
+                ]
+            }
+        }
+        readback = {
+            "document": {
+                "elements": [
+                    {"id": "text-1", "kind": "text", "body": "Title"}
+                ]
+            }
+        }
+        result = post_and_readback.verify_census(posted, readback, "workbook")
+        self.assertTrue(result["pass"], result)
+
 
 if __name__ == "__main__":
     unittest.main()

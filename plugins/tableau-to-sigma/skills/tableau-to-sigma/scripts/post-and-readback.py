@@ -45,7 +45,9 @@ def iter_elements(spec: dict, kind: str):
         yield from document.get("elements") or []
 
 
-def element_key(element: dict) -> str:
+def element_key(element: dict, kind: str) -> str:
+    if kind == "workbook" and element.get("id"):
+        return str(element["id"])
     source = element.get("source") or {}
     path = source.get("path") or []
     return str(element.get("name") or (path[-1] if path else element.get("id")))
@@ -60,7 +62,7 @@ def column_signature(column: dict) -> str:
 
 def census(spec: dict, kind: str) -> dict[str, set[str]]:
     return {
-        element_key(element): {
+        element_key(element, kind): {
             column_signature(column) for column in element.get("columns") or []
         }
         for element in iter_elements(spec, kind)
@@ -75,7 +77,7 @@ def error_columns(spec: dict, kind: str) -> list[dict]:
             if column.get("type") == "error" or column.get("error"):
                 errors.append(
                     {
-                        "element": element_key(element),
+                        "element": element_key(element, kind),
                         "column": column.get("name") or column.get("id"),
                         "error": column.get("error") or column.get("message"),
                     }
