@@ -258,12 +258,12 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
 </Page>
 <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overview-page">
   <Element elementId="overview-title" gridColumn="10 / 18" gridRow="1 / 2"/>
-  <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="2 / 6"/>
-  <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="2 / 6"/>
-  <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="2 / 6"/>
-  <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="2 / 6"/>
-  <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="2 / 6"/>
-  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="6 / 20"/>
+  <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="2 / 7"/>
+  <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="2 / 7"/>
+  <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="2 / 7"/>
+  <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="2 / 7"/>
+  <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="2 / 7"/>
+  <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="7 / 20"/>
   <Element elementId="chart-revenue-region" gridColumn="1 / 8" gridRow="20 / 29"/>
   <Element elementId="chart-gross-ship" gridColumn="8 / 17" gridRow="20 / 29"/>
   <Element elementId="chart-margin-tier" gridColumn="17 / 25" gridRow="20 / 29"/>
