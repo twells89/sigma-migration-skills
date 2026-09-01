@@ -340,7 +340,9 @@ def detect_blends(xml)
   features = blends.group_by { |b| b['route'] }.map do |route, rs|
     {
       name:   "Data blending (#{route})",
-      status: route == 'same-warehouse-repoint' ? :hint : :manual,
+      # A secondary that must be landed or cannot be reached is not merely
+      # advisory: neither runtime can build faithful Sigma semantics yet.
+      status: route == 'same-warehouse-repoint' ? :hint : :unhandled,
       count:  rs.length,
       blurb:  "#{ROUTE_BLURB[route]}. Worksheets: #{rs.map { |b| b['worksheet'] }.uniq.join(', ')}. "               'Full linking-field report in blend-plan.json; decision tree in refs/blending.md (beads-sigma-iq8).',
       worksheets: rs.map { |b| b['worksheet'].to_s }.uniq.sort # E9.6/A2 scope attribution
