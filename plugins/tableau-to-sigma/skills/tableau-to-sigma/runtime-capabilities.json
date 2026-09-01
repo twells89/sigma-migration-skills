@@ -17,7 +17,7 @@
       ]
     },
     "python": {
-      "status": "unsupported",
+      "status": "preview",
       "requiredRuntimes": [
         "python",
         "node",
@@ -27,7 +27,7 @@
         "python",
         "scripts/migrate-tableau.py"
       ],
-      "notes": "Promote to preview only after the complete Tableau execution and hard-gate closure runs without Ruby."
+      "notes": "Explicit opt-in only. The Python orchestrator is fail-closed and requires agent-authored workbook/parity/visual artifacts; automatic source-to-workbook building remains under migration."
     }
   }
 }
