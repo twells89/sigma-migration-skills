@@ -390,25 +390,36 @@ def find_datasource_by_name(name):
     return lst[0] if lst else None
 
 
-def find_datasource_by_content_url(content_url):
+def find_datasources_by_content_url(content_url):
+    """Return every exact contentUrl match so callers can reject ambiguity."""
     encoded = urllib.parse.quote_plus(f"contentUrl:eq:{content_url}")
     j = request("get", f"{base_path()}/datasources?filter={encoded}")
-    lst = _as_list(_dig(j, "datasources", "datasource"))
-    if lst:
-        return lst[0]
+    exact = [
+        datasource
+        for datasource in _as_list(_dig(j, "datasources", "datasource"))
+        if str(datasource.get("contentUrl") or "") == str(content_url)
+    ]
+    if exact:
+        return exact
     # Fallback: scan pages and match contentUrl exactly.
+    matches = []
     page = 1
     while True:
         jj = list_datasources(page_size=100, page=page)
         ds = _as_list(_dig(jj, "datasources", "datasource"))
-        hit = next((d for d in ds if str(d.get("contentUrl")) == str(content_url)), None)
-        if hit:
-            return hit
+        matches.extend(
+            d for d in ds if str(d.get("contentUrl")) == str(content_url)
+        )
         total = int(_dig(jj, "pagination", "totalAvailable") or 0)
         if not ds or page * 100 >= total:
             break
         page += 1
-    return None
+    return matches
+
+
+def find_datasource_by_content_url(content_url):
+    matches = find_datasources_by_content_url(content_url)
+    return matches[0] if matches else None
 
 
 def download_datasource_content(datasource_id, include_extract=False):
