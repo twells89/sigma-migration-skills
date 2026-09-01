@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "lib"))
 import sigma_rest  # noqa: E402
+import published_datasource  # noqa: E402
 import tableau_source  # noqa: E402
 
 
@@ -410,6 +411,35 @@ def read_manifest(path: Path) -> list[dict]:
     )
 
 
+def published_datasource_gate(
+    workdir: Path,
+    classification: dict,
+    *,
+    api=published_datasource.tableau_rest,
+) -> tuple[Path, dict]:
+    """Hydrate sqlproxy sources without suppressing independent sibling routing."""
+    source = workdir / "workbook-content.twb"
+    hydrated = workdir / "workbook-hydrated.twb"
+    published_members = [
+        item
+        for item in classification.get("datasources") or []
+        if item.get("classification") == "published-sqlproxy"
+        or item.get("published_classes")
+    ]
+    result = published_datasource.resolve_and_hydrate(
+        source,
+        hydrated,
+        descriptors_path=workdir / "pds.json",
+        lineage_path=workdir / "published-datasource-lineage.json",
+        evidence_path=workdir / "published-datasource-hydration.json",
+        api=api,
+    )
+    result["classifiedPublishedDatasources"] = [
+        item.get("name") for item in published_members
+    ]
+    return (hydrated if result["status"] == "hydrated" else source), result
+
+
 def extract_landing_gate(
     args,
     workdir: Path,
@@ -726,6 +756,27 @@ def main() -> int:
     )
     write(workdir / "source-classification.json", classification)
     try:
+        conversion_twb, pds_result = published_datasource_gate(
+            workdir, classification
+        )
+    except published_datasource.PublishedDatasourceError as exc:
+        return stop(
+            1,
+            "PUBLISHED DATASOURCE RESOLUTION REQUIRED",
+            [
+                str(exc),
+                f"REST lineage: {workdir / 'published-datasource-lineage.json'}",
+                "The converter was not run; unresolved sqlproxy placeholders are never "
+                "fabricated as warehouse tables.",
+            ],
+        )
+    state["published_datasource_status"] = pds_result["status"]
+    write(state_path, state)
+
+    # This gate deliberately consumes the ORIGINAL classification.  A mixed
+    # workbook's embedded sibling still needs landing/remap after the unrelated
+    # sqlproxy sibling has been hydrated for conversion.
+    try:
         landing = extract_landing_gate(args, workdir, classification)
     except ExtractLandingRequired as exc:
         return stop(
@@ -746,7 +797,7 @@ def main() -> int:
             "convert-tableau.py",
             [
                 "--twb",
-                str(workdir / "workbook-content.twb"),
+                str(conversion_twb),
                 "--connection",
                 args.connection,
                 "--database",
