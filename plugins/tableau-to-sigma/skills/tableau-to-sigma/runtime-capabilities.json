@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../shared/schemas/runtime-capabilities.schema.json",
+  "schemaVersion": 1,
+  "skill": "tableau-to-sigma",
+  "profiles": {
+    "ruby": {
+      "status": "supported",
+      "requiredRuntimes": [
+        "ruby",
+        "python",
+        "node",
+        "bash"
+      ],
+      "entrypoint": [
+        "ruby",
+        "scripts/migrate-tableau.rb"
+      ]
+    },
+    "python": {
+      "status": "unsupported",
+      "requiredRuntimes": [
+        "python",
+        "node",
+        "bash"
+      ],
+      "entrypoint": [
+        "python",
+        "scripts/migrate-tableau.py"
+      ],
+      "notes": "Promote to preview only after the complete Tableau execution and hard-gate closure runs without Ruby."
+    }
+  }
+}

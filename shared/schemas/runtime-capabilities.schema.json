@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sigma-migration.local/schemas/runtime-capabilities.schema.json",
+  "title": "Sigma migration skill runtime capabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "skill", "profiles"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "skill": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/profile"
+      }
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "requiredRuntimes", "entrypoint"],
+      "properties": {
+        "status": {
+          "enum": ["unsupported", "preview", "supported"]
+        },
+        "requiredRuntimes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["ruby", "python", "node", "bash"]
+          }
+        },
+        "entrypoint": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

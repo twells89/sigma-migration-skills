@@ -24,6 +24,10 @@ get running; this doc tells a contributor where we are headed and why.
 - **Direction: converge on Node/TypeScript incrementally**, because the hard logic (the
   converters) already lives there (`sigma-data-model-mcp` → vendored `converter/*.mjs`), and Node
   is already a required runtime on every migration. Fewer runtimes + no required bash is the goal.
+- **Customer compatibility lane: Python-led, no Ruby.** Skills may declare a
+  certified `python` runtime profile (Python plus Node/shell where that skill
+  needs them). The doctor may select it only after that skill's complete
+  migration and hard-gate closure passes no-Ruby CI.
 - **Do the cheap thing first.** We are ~70% of the way to "works on Windows" already. Finish the
   shell-neutral hot path (self-scoped as "P1" in PR #299) before any rewrite of anything.
 
@@ -135,6 +139,16 @@ not correctness. The right version of A is **eliminate bash, don't port it**.
 > (already a required runtime, resolved via `py_resolve`) or a pure-JS lib (`fflate`/`yauzl`,
 > no native compile) — not "Node built-in." See the template's `lib/extract-zip.mjs`.
 
+### D. Add a certified Python-led, no-Ruby runtime — **CHOSEN compatibility lane**
+This does not replace the Node/TypeScript convergence direction. It gives
+customers who cannot install Ruby an executable path using the Python
+orchestrators and the already-vendored Node converters. Support is declared per
+skill in `runtime-capabilities.json`; missing metadata remains legacy
+Ruby-required. `auto` may fall back to Python only when the profile is
+`supported`, all required runtimes are present, and the entrypoint exists.
+`preview` requires an explicit opt-in. Missing Ruby never waives migration
+gates.
+
 ---
 
 ## Decision & phased plan
@@ -157,7 +171,9 @@ This is the "P1" already scoped in PR #299. Tracked as beads under the portabili
 and a clean-Windows migration of one representative skill passes end-to-end in CI.
 
 ### Phase 1 — Set direction: new work goes to Node/TS
-Freeze net-new Ruby/Python *orchestrators*. New skills and any substantial rewrite land in TS,
+Freeze net-new Ruby/Python *orchestrators*, except a Python entrypoint replacing
+an existing Ruby path as part of a certified no-Ruby profile. New skills and
+other substantial rewrites land in TS,
 colocated with the converter engine, using **cognos as the template** (and the
 [`node-orchestration-template`](../examples/node-orchestration-template/) in this repo as the
 minimal, bash-free reference). This also retires bilingual-twin maintenance over time.

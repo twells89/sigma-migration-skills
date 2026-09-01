@@ -617,6 +617,12 @@
       ]
     },
     {
+      "canonical": "shared/scripts/runtime_profile.py",
+      "targets": [
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/runtime_profile.py"
+      ]
+    },
+    {
       "canonical": "shared/scripts/setup.rb",
       "targets": [
         "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/setup.rb",
