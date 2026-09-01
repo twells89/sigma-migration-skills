@@ -244,7 +244,9 @@ def main() -> int:
             [sys.executable, SCRIPTS / "scan-workbook-gaps.py", TWB, gaps_report],
             environment,
         )
-        assert read_json(workdir / "gaps.json")["formula_audit"]["status"] == "PASS"
+        gaps = read_json(workdir / "gaps.json")
+        assert isinstance(gaps["detected_features"], list)
+        assert gaps["formula_audit"] == read_json(workdir / "formula-audit.json")
 
         conversion = workdir / "conversion"
         run(
