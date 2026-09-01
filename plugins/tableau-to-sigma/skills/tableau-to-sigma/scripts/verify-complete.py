@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -15,6 +16,14 @@ def load(path: Path) -> dict:
     if not isinstance(value, dict):
         raise ValueError("expected a JSON object")
     return value
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def evaluate(workdir: Path, blind_grade: Path) -> dict:
@@ -59,6 +68,16 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
     if documents.get("semantic_edits", {}).get("match") is not True:
         failures.append("semantic_edits: structural proof missing or failed")
     blind = documents.get("blind_grade") or {}
+    for path_key, hash_key in (
+        ("source_png", "source_sha256"),
+        ("target_png", "target_sha256"),
+    ):
+        image_path = Path(str(blind.get(path_key) or ""))
+        expected_hash = blind.get(hash_key)
+        if not image_path.is_file() or not expected_hash:
+            failures.append(f"blind_grade: missing bound {path_key}")
+        elif sha256(image_path) != expected_hash:
+            failures.append(f"blind_grade: stale {path_key} hash")
     failed_dimensions = [
         name
         for name, value in (blind.get("dimensions") or {}).items()

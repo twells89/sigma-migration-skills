@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import tempfile
 import unittest
@@ -37,6 +38,10 @@ class VerifyCompleteTest(unittest.TestCase):
         for name, value in self.docs.items():
             (self.workdir / name).write_text(json.dumps(value), encoding="utf-8")
         self.blind = self.workdir / "blind.json"
+        self.source_png = self.workdir / "source.png"
+        self.target_png = self.workdir / "target.png"
+        self.source_png.write_bytes(b"source pixels")
+        self.target_png.write_bytes(b"target pixels")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -46,6 +51,10 @@ class VerifyCompleteTest(unittest.TestCase):
             json.dumps(
                 {
                     "verdict": verdict,
+                    "source_png": str(self.source_png),
+                    "target_png": str(self.target_png),
+                    "source_sha256": hashlib.sha256(self.source_png.read_bytes()).hexdigest(),
+                    "target_sha256": hashlib.sha256(self.target_png.read_bytes()).hexdigest(),
                     "dimensions": {
                         "composition_match": {
                             "verdict": verdict,
@@ -79,6 +88,13 @@ class VerifyCompleteTest(unittest.TestCase):
         result = verify_complete.evaluate(self.workdir, self.blind)
         self.assertFalse(result["complete"])
         self.assertTrue(any("destination" in item for item in result["failures"]))
+
+    def test_stale_blind_grade_hash_blocks_completion(self):
+        self.write_blind("pass")
+        self.target_png.write_bytes(b"changed pixels")
+        result = verify_complete.evaluate(self.workdir, self.blind)
+        self.assertFalse(result["complete"])
+        self.assertTrue(any("stale target_png hash" in item for item in result["failures"]))
 
 
 if __name__ == "__main__":
