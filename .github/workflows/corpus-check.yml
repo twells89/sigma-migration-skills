@@ -107,6 +107,49 @@ jobs:
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_build_source_object_census.py
           python3 tools/check-shared.py
 
+  tableau-python-cold:
+    name: Tableau Python cold / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Python-only smoke with Ruby quarantined
+        # The runner images may contain Ruby. The Python harness builds a
+        # minimal PATH, explicitly asserts `ruby` cannot resolve, then drives
+        # the production Python entry points with no credentials or network.
+        # Keep this as one portable command: Windows uses PowerShell by default.
+        run: python tools/test-tableau-python-runtime.py
+
+  tableau-runtime-parity:
+    name: Tableau Ruby/Python normalized fixture parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Compare normalized Ruby and Python artifacts
+        run: >-
+          python
+          plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/tableau-runtime-parity.py
+
   windows-smoke:
     name: windows PowerShell path (doctor.ps1 + offline corpus)
     # Proves the Windows/PowerShell path works BEFORE an event does (P0.4):
