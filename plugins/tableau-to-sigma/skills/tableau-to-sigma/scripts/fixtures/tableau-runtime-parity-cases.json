@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "layout-partner-crosstab-controls",
+      "kind": "layout",
+      "twb": "corpus/tableau/partner-crosstab-controls/workbook-content.twb",
+      "artifacts": [
+        "dashboard-layout.json",
+        "dashboard-layout-meta.json"
+      ]
+    },
+    {
+      "id": "layout-structural-workarounds",
+      "kind": "layout",
+      "twb": "corpus/tableau/structural-workarounds/workbook-content.twb",
+      "artifacts": [
+        "dashboard-layout.json",
+        "dashboard-layout-meta.json",
+        "story-plan.json"
+      ]
+    },
+    {
+      "id": "gaps-structural-workarounds",
+      "kind": "gaps",
+      "twb": "corpus/tableau/structural-workarounds/workbook-content.twb",
+      "artifacts": [
+        "gaps.json",
+        "formula-audit.json",
+        "blend-plan.json"
+      ]
+    },
+    {
+      "id": "gaps-union-wildcard-seed",
+      "kind": "gaps",
+      "twb": "corpus/tableau/union-wildcard-seed/workbook-content.twb",
+      "artifacts": [
+        "gaps.json",
+        "formula-audit.json"
+      ]
+    },
+    {
+      "id": "conversion-orders-overview",
+      "kind": "conversion",
+      "twb": "corpus/tableau/orders-overview/workbook-content.twb",
+      "artifacts": [
+        "conv-meta.json"
+      ]
+    },
+    {
+      "id": "conversion-logical-model-objectgraph",
+      "kind": "conversion",
+      "twb": "corpus/tableau/logical-model-objectgraph/workbook-content.twb",
+      "artifacts": [
+        "conv-meta.json"
+      ]
+    }
+  ]
+}
