@@ -115,6 +115,13 @@ def request_paths(kind: str, object_id: str | None = None) -> tuple[str, str]:
     )
 
 
+def create_envelope(kind: str, spec: dict) -> dict:
+    if kind == "workbook":
+        allowed = ("name", "folderId", "description", "document")
+        return {key: spec[key] for key in allowed if key in spec}
+    return spec
+
+
 def post_and_readback(
     kind: str,
     spec: dict,
@@ -125,7 +132,7 @@ def post_and_readback(
     outgoing = strip_derivation_fields(copy.deepcopy(spec))
     path, id_field = request_paths(kind, update_id)
     method = "put" if update_id else "post"
-    body = outgoing
+    body = outgoing if update_id else create_envelope(kind, outgoing)
     if update_id and kind == "workbook":
         body = {"document": outgoing.get("document") or outgoing}
 

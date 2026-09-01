@@ -129,6 +129,24 @@ class PostAndReadbackTest(unittest.TestCase):
         result = post_and_readback.verify_census(posted, readback, "workbook")
         self.assertTrue(result["pass"], result)
 
+    def test_workbook_create_strips_response_only_fields(self):
+        envelope = post_and_readback.create_envelope(
+            "workbook",
+            {
+                "name": "Fixture",
+                "folderId": "folder",
+                "description": "safe",
+                "document": {"schemaVersion": 1, "kind": "workbook"},
+                "workbookId": "old",
+                "url": "https://example.invalid/old",
+                "documentVersion": 9,
+            },
+        )
+        self.assertEqual(
+            {"name", "folderId", "description", "document"},
+            set(envelope),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
