@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "mode-to-sigma",
   "displayName": "Mode \u2192 Sigma",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Convert a Mode Report (Queries + Charts) into a Sigma data model and matching workbook. Discovery via the Mode REST API (Queries, Charts, Filters, plus a live run to sample each Query's output columns), a reuse check before building a new data model, DM + workbook creation via REST (every Query wraps its raw SQL verbatim as a native-SQL table element \u2014 no formula translation needed, since Mode's SQL already runs in the target warehouse dialect), a notebook-flow layout, and parity verification against the source Mode Query values. Bundles mode-to-sigma (registered, converter-only for this release) + mode-assessment (not yet registered).",
   "author": {
     "name": "Thomas Wells"

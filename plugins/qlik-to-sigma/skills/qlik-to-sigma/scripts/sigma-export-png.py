@@ -28,6 +28,23 @@ interaction verdict never depends on it).
 """
 import argparse, os, sys, time, requests
 
+def credentials():
+    base = os.environ.get("SIGMA_BASE_URL")
+    token = os.environ.get("SIGMA_API_TOKEN")
+    if base and token:
+        return base, token
+    # Shell-neutral no-Ruby path: mint from client credentials or the neutral
+    # env file using the co-located stdlib helper. Never print the token.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from get_token import mint_token
+        return mint_token()
+    except (ImportError, SystemExit) as exc:
+        raise SystemExit(
+            "Sigma token unavailable: set SIGMA_API_TOKEN or provide "
+            "SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL"
+        ) from exc
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--workbook", required=True)
@@ -37,7 +54,7 @@ def main():
     ap.add_argument("--param", action="append", default=[],
                     metavar="CID=VALUE", help="control value for the render (repeatable)")
     a = ap.parse_args()
-    base = os.environ["SIGMA_BASE_URL"]; tok = os.environ["SIGMA_API_TOKEN"]
+    base, tok = credentials()
     h = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
     fmt = {"type": "png", "pixelWidth": a.w, "pixelHeight": a.h}
     body = {"format": fmt}
