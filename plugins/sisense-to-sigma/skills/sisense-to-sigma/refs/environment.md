@@ -9,6 +9,11 @@ creds from env vars, run the doctor, write the bootstrap sentinel):
 - **Windows PowerShell**: `powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1`
 - Dry run (report what WOULD install, change nothing): `bash scripts/bootstrap.sh --check`
   / `bootstrap.ps1 -Check`
+- Runtime profile: `--runtime-profile auto|ruby|python` /
+  `-RuntimeProfile auto|ruby|python`. `auto` uses Ruby when healthy and falls
+  back to Python only when the current skill declares a certified Python
+  profile. An explicit Python preview additionally requires
+  `--allow-preview-runtime` / `-AllowPreviewRuntime`.
 
 It never requires admin (user-scoped winget/scoop on Windows; brew/rbenv/fnm
 version-manager activation elsewhere; `pip --user` for Python deps), never
@@ -34,6 +39,12 @@ bootstrap one-liner above.
 | **python 3** | looker / thoughtspot / microstrategy / sisense entrypoints + all discovery scripts | **Windows: the Store-alias stub bites — see below** |
 | **node 18+** | the vendored converters (`converter/*.mjs`) and `*.mjs` build steps | often installed-but-not-on-PATH (version managers) — bootstrap activates it |
 | **bash** | `get-token.sh`, `*-auth.sh` (Sigma token minting) | Windows: Git Bash (bootstrap.ps1 installs Git user-scoped if absent) |
+
+The table describes the legacy profile. A skill-level
+`runtime-capabilities.json` may certify a Python profile whose
+`requiredRuntimes` omits Ruby. The doctor records the requested and selected
+profiles in `doctor.json`; a missing Ruby binary remains visible as
+`runtimes.ruby=false`. It is never converted into a silent gate waiver.
 
 ## Windows footguns (what the bootstrap handles for you)
 

@@ -21,6 +21,8 @@ set -u
 # --workdir DIR: also drop doctor.json here (in addition to the stable
 # ~/.sigma-migration/doctor.json). Everything else is positional-agnostic.
 WORKDIR="${DOCTOR_WORKDIR:-}"
+RUNTIME_PROFILE_REQUESTED="${SIGMA_RUNTIME_PROFILE:-auto}"
+ALLOW_PREVIEW_RUNTIME=false
 while [ $# -gt 0 ]; do
   case "$1" in
     # Value-taking flags MUST verify $2 exists (bootstrap.sh's parser rule):
@@ -30,9 +32,18 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "doctor.sh: missing value for --workdir" >&2; exit 2; }
       WORKDIR="$2"; shift 2 ;;
     --workdir=*) WORKDIR="${1#*=}"; shift ;;
+    --runtime-profile)
+      [ $# -ge 2 ] || { echo "doctor.sh: missing value for --runtime-profile" >&2; exit 2; }
+      RUNTIME_PROFILE_REQUESTED="$2"; shift 2 ;;
+    --runtime-profile=*) RUNTIME_PROFILE_REQUESTED="${1#*=}"; shift ;;
+    --allow-preview-runtime) ALLOW_PREVIEW_RUNTIME=true; shift ;;
     *) shift ;;
   esac
 done
+case "$RUNTIME_PROFILE_REQUESTED" in
+  auto|ruby|python) ;;
+  *) echo "doctor.sh: --runtime-profile must be auto, ruby, or python" >&2; exit 2 ;;
+esac
 
 PASS=0; FAIL=0; WARN=0
 FAILURES=()
@@ -46,6 +57,52 @@ case "$(uname -s 2>/dev/null)" in
 esac
 echo "Environment doctor — host: $OS"
 echo
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUNTIME_PROFILE_SELECTED=""
+RUNTIME_PROFILE_REQUIRED=""
+RUNTIME_PROFILE_FALLBACK_REASON=""
+RUNTIME_PROFILE_PASS=false
+RUNTIME_CAPABILITIES="$HERE/../runtime-capabilities.json"
+RUNTIME_PROFILE_HELPER="$HERE/runtime_profile.py"
+_PROFILE_PY=()
+if command -v py >/dev/null 2>&1 && py -3 --version 2>&1 | grep -q '^Python [0-9]'; then
+  _PROFILE_PY=(py -3)
+elif command -v python3 >/dev/null 2>&1 && python3 --version 2>&1 | grep -q '^Python [0-9]'; then
+  _PROFILE_PY=(python3)
+elif command -v python >/dev/null 2>&1 && python --version 2>&1 | grep -q '^Python [0-9]'; then
+  _PROFILE_PY=(python)
+fi
+if [ -f "$RUNTIME_PROFILE_HELPER" ] && [ "${#_PROFILE_PY[@]}" -gt 0 ]; then
+  _PROFILE_ARGS=(
+    --requested "$RUNTIME_PROFILE_REQUESTED"
+    --format shell
+    --runtime "ruby=$([ -x "$(command -v ruby 2>/dev/null)" ] && echo true || echo false)"
+    --runtime "python=true"
+    --runtime "node=$([ -x "$(command -v node 2>/dev/null)" ] && echo true || echo false)"
+    --runtime "bash=true"
+  )
+  [ -f "$RUNTIME_CAPABILITIES" ] && _PROFILE_ARGS+=(--capabilities "$RUNTIME_CAPABILITIES")
+  [ "$ALLOW_PREVIEW_RUNTIME" = true ] && _PROFILE_ARGS+=(--allow-preview)
+  _PROFILE_OUTPUT="$("${_PROFILE_PY[@]}" "$RUNTIME_PROFILE_HELPER" "${_PROFILE_ARGS[@]}" 2>/dev/null)"
+  _PROFILE_RC=$?
+  [ -n "$_PROFILE_OUTPUT" ] && eval "$_PROFILE_OUTPUT"
+  [ "$_PROFILE_RC" -eq 0 ] && RUNTIME_PROFILE_PASS=true
+else
+  # Old plugin installs have no resolver/capability file. Preserve the
+  # pre-profile contract exactly: Ruby + Python + Node + bash are required.
+  RUNTIME_PROFILE_SELECTED=ruby
+  RUNTIME_PROFILE_REQUIRED=ruby,python,node,bash
+  RUNTIME_PROFILE_PASS=true
+fi
+if [ "$RUNTIME_PROFILE_PASS" != true ] && { [ -f "$RUNTIME_CAPABILITIES" ] || [ "$RUNTIME_PROFILE_REQUESTED" != auto ]; }; then
+  bad "runtime profile '$RUNTIME_PROFILE_REQUESTED' has no certified executable path for this skill" \
+      "Use --runtime-profile ruby, or update the skill after its Python profile is certified. Preview profiles require --runtime-profile python --allow-preview-runtime."
+fi
+RUBY_REQUIRED=true
+if [ "$RUNTIME_PROFILE_REQUESTED" = python ] || [ "$RUNTIME_PROFILE_SELECTED" = python ]; then
+  RUBY_REQUIRED=false
+fi
 
 # --- ruby ------------------------------------------------------------------
 if command -v ruby >/dev/null 2>&1; then
@@ -89,7 +146,10 @@ if command -v ruby >/dev/null 2>&1; then
     ok "ruby — $RUBY_V"
   fi
 else
-  if [ "$OS" = "windows-bash" ]; then
+  if [ "$RUBY_REQUIRED" != true ]; then
+    warn "ruby not found — accepted by the selected Python runtime profile" \
+         "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
+  elif [ "$OS" = "windows-bash" ]; then
     bad "ruby not found" "Run the bootstrap: bash scripts/bootstrap.sh   — no-admin install/activation; it re-runs this doctor when done."
   else
     bad "ruby not found" "Run the bootstrap: bash scripts/bootstrap.sh   — installs only what's missing (macOS: brew; Linux: apt-get only when already root — never sudo; otherwise it names the exact admin ask)."
@@ -258,10 +318,23 @@ if grep -Eq 'SIGMA_(API_TOKEN|CLIENT_ID)' "$HOME/.sigma-migration/env" 2>/dev/nu
   _SIGMA_CREDS=true
 fi
 if [ "$_SIGMA_CREDS" != true ]; then
-  bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" \
-      "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+  if [ "$RUBY_REQUIRED" = true ]; then
+    _SIGMA_SETUP_FIX="Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+  else
+    _SIGMA_SETUP_FIX="Export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+  fi
+  bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
 elif [ -n "${SIGMA_SKIP_CRED_SMOKE:-}" ]; then
   ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
+elif [ "$RUNTIME_PROFILE_SELECTED" = python ] && [ -f "$HERE/lib/sigma_rest.py" ] && [ -n "$PY_ARGV" ]; then
+  if $PY_ARGV -c 'import sys; sys.path.insert(0, sys.argv[1] + "/lib"); import sigma_rest; sigma_rest.refresh_token()' "$HERE" >/dev/null 2>&1; then
+    ok "Sigma credentials present + live token mint OK (Python)"
+    SMOKE_SIGMA="pass"
+  else
+    bad "Sigma credentials present but the live Python token mint FAILED (bad/stale client id/secret, or wrong SIGMA_BASE_URL)" \
+        "Refresh the exported Sigma credentials. Genuinely offline? SIGMA_SKIP_CRED_SMOKE=1 skips this probe."
+    SMOKE_SIGMA="fail"
+  fi
 elif [ -f "$HERE/lib/sigma_rest.rb" ] && command -v ruby >/dev/null 2>&1; then
   if ruby -e '$LOAD_PATH.unshift File.join(ARGV[0], "lib"); require "timeout"; require "sigma_rest"; Timeout.timeout(20) { Sigma.refresh_token! }' "$HERE" >/dev/null 2>&1; then
     ok "Sigma credentials present + live token mint OK"
@@ -284,17 +357,34 @@ fi
 # starts doomed. SIGMA_SKIP_CRED_SMOKE=1 skips. Recorded in doctor.json
 # {cred_smoke:{tableau: pass|fail|skipped}}.
 SMOKE_TABLEAU="skipped"
-if [ -f "$HERE/setup-tableau.rb" ] && [ -f "$HERE/lib/tableau_rest.rb" ]; then
+_TABLEAU_RUBY_PATH=false
+_TABLEAU_PYTHON_PATH=false
+[ -f "$HERE/setup-tableau.rb" ] && [ -f "$HERE/lib/tableau_rest.rb" ] && _TABLEAU_RUBY_PATH=true
+[ -f "$HERE/get-tableau-token.py" ] && [ -f "$HERE/lib/tableau_rest.py" ] && _TABLEAU_PYTHON_PATH=true
+if [ "$_TABLEAU_RUBY_PATH" = true ] || [ "$_TABLEAU_PYTHON_PATH" = true ]; then
   _TAB_CREDS=false
   if { [ -n "${TABLEAU_PAT_NAME:-}" ] && [ -n "${TABLEAU_PAT_SECRET:-}" ]; } || \
      grep -q 'TABLEAU_PAT_SECRET' "$HOME/.sigma-migration/env" 2>/dev/null; then
     _TAB_CREDS=true
   fi
   if [ "$_TAB_CREDS" != true ]; then
-    warn "no Tableau credentials found (needed for Tableau discovery)" \
-         "Run 'ruby scripts/setup-tableau.rb' once (PAT), or export TABLEAU_PAT_NAME/TABLEAU_PAT_SECRET/TABLEAU_SITE_CONTENT_URL (+ TABLEAU_SERVER_URL)."
+    if [ "$RUBY_REQUIRED" = true ]; then
+      _TABLEAU_SETUP_FIX="Run 'ruby scripts/setup-tableau.rb' once (PAT), or export TABLEAU_PAT_NAME/TABLEAU_PAT_SECRET/TABLEAU_SITE_CONTENT_URL (+ TABLEAU_SERVER_URL)."
+    else
+      _TABLEAU_SETUP_FIX="Export TABLEAU_PAT_NAME/TABLEAU_PAT_SECRET/TABLEAU_SITE_CONTENT_URL/TABLEAU_SERVER_URL, or use the Python credential setup shipped with the certified profile."
+    fi
+    warn "no Tableau credentials found (needed for Tableau discovery)" "$_TABLEAU_SETUP_FIX"
   elif [ -n "${SIGMA_SKIP_CRED_SMOKE:-}" ]; then
     ok "Tableau credentials present (live PAT signin smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
+  elif [ "$RUNTIME_PROFILE_SELECTED" = python ] && [ "$_TABLEAU_PYTHON_PATH" = true ] && [ -n "$PY_ARGV" ]; then
+    if $PY_ARGV "$HERE/get-tableau-token.py" --print-token >/dev/null 2>&1; then
+      ok "Tableau credentials present + live PAT signin OK (Python)"
+      SMOKE_TABLEAU="pass"
+    else
+      bad "Tableau credentials present but the live Python PAT signin FAILED (expired/revoked PAT, wrong site or server URL)" \
+          "Refresh the exported Tableau PAT. Genuinely offline? SIGMA_SKIP_CRED_SMOKE=1 skips this probe."
+      SMOKE_TABLEAU="fail"
+    fi
   elif command -v ruby >/dev/null 2>&1; then
     # Two attempts, 30s bound each: a single 20s-bounded probe false-negatived
     # in a real field run (parallel-agent load) while get-tableau-token.sh
@@ -448,6 +538,16 @@ esac
 # Human output above is unchanged. Always to ~/.sigma-migration/doctor.json;
 # also to <WORKDIR> if given.
 jstr() { local s="${1:-}"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; printf '%s' "$s"; }
+json_csv() {
+  local raw="${1:-}" out="" item
+  local parts=()
+  IFS=',' read -r -a parts <<< "$raw"
+  for item in "${parts[@]}"; do
+    [ -z "$item" ] && continue
+    out="${out}${out:+,}\"$(jstr "$item")\""
+  done
+  printf '%s' "$out"
+}
 
 RUBY_OK=false; RUBY_V=""
 if command -v ruby >/dev/null 2>&1; then RUBY_OK=true; RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"; fi
@@ -477,6 +577,9 @@ write_doctor_json() {
     printf '"shell":"%s",' "$(jstr "$SHELL_KIND")"
     printf '"runtimes":{"ruby":%s,"python":%s,"node":%s,"bash":true},' "$RUBY_OK" "$PY_OK" "$NODE_OK"
     printf '"versions":{"ruby":"%s","python":"%s","node":"%s"},' "$(jstr "$RUBY_V")" "$(jstr "$PY_VER")" "$(jstr "$NODE_V")"
+    printf '"runtime_profile":{"requested":"%s","selected":"%s","required_runtimes":[%s],"fallback_reason":"%s"},' \
+      "$(jstr "$RUNTIME_PROFILE_REQUESTED")" "$(jstr "$RUNTIME_PROFILE_SELECTED")" \
+      "$(json_csv "$RUNTIME_PROFILE_REQUIRED")" "$(jstr "$RUNTIME_PROFILE_FALLBACK_REASON")"
     printf '"sandbox_hint":"%s",' "$(jstr "$SANDBOX_HINT")"
     printf '"cred_smoke":{"sigma":"%s","tableau":"%s","looker":"%s"},' "$SMOKE_SIGMA" "$SMOKE_TABLEAU" "$LOOKER_PROBE"
     printf '"hyperapi_present":%s,' "$HYPERAPI"

@@ -37,7 +37,7 @@ d = json.load(open(sys.argv[1]))
 rc = int(sys.argv[2])
 req = ["os", "shell", "runtimes", "hyperapi_present", "skill_sha", "behind_count",
        "days_since_commit", "agent_vision", "model_hint", "pass", "failures",
-       "generated_at", "cred_smoke"]
+       "generated_at", "cred_smoke", "runtime_profile"]
 missing = [k for k in req if k not in d]
 assert not missing, f"missing keys: {missing}"
 assert d["days_since_commit"] is None or isinstance(d["days_since_commit"], int), d["days_since_commit"]
@@ -63,6 +63,12 @@ assert set(d["cred_smoke"]) == {"sigma", "tableau", "looker"}, d["cred_smoke"]
 assert all(v in ("pass", "fallback", "fail", "skipped") for v in d["cred_smoke"].values()), d["cred_smoke"]
 assert isinstance(d["pass"], bool) and isinstance(d["failures"], list)
 assert all(isinstance(f, str) for f in d["failures"])
+rp = d["runtime_profile"]
+assert set(rp) == {"requested", "selected", "required_runtimes", "fallback_reason"}, rp
+assert rp["requested"] in ("auto", "ruby", "python")
+assert isinstance(rp["selected"], str)
+assert isinstance(rp["required_runtimes"], list)
+assert isinstance(rp["fallback_reason"], str)
 assert d["pass"] == (rc == 0), f"pass={d['pass']} but doctor exited {rc}"
 assert d["pass"] == (len(d["failures"]) == 0)
 datetime.datetime.strptime(d["generated_at"], "%Y-%m-%dT%H:%M:%SZ")
@@ -128,6 +134,45 @@ assert d["skill_sha"] == "unknown (no git — mirror/plugin install)", d["skill_
 assert d["days_since_commit"] is None, d["days_since_commit"]
 PY
 check $? "doctor.json records the unknown skill_sha + null days_since_commit"
+
+echo "Part G — an explicitly certified Python profile does not require Ruby"
+mkdir -p "$TMP/profile/scripts"
+cp "$HERE/doctor.sh" "$TMP/profile/scripts/doctor.sh"
+cp "$HERE/runtime_profile.py" "$TMP/profile/scripts/runtime_profile.py"
+: > "$TMP/profile/scripts/migrate.py"
+cat > "$TMP/profile/runtime-capabilities.json" <<'JSON'
+{
+  "schemaVersion": 1,
+  "skill": "doctor-profile-fixture",
+  "profiles": {
+    "ruby": {
+      "status": "supported",
+      "requiredRuntimes": ["ruby", "python", "node", "bash"],
+      "entrypoint": ["ruby", "scripts/migrate.rb"]
+    },
+    "python": {
+      "status": "supported",
+      "requiredRuntimes": ["python", "node", "bash"],
+      "entrypoint": ["python", "scripts/migrate.py"]
+    }
+  }
+}
+JSON
+HOME="$TMP/nohome" SIGMA_CLIENT_ID=id-test SIGMA_CLIENT_SECRET=sec-test \
+  bash "$TMP/profile/scripts/doctor.sh" --runtime-profile python \
+  --workdir "$TMP/w6" >"$TMP/w6.out" 2>&1
+rc_g=$?
+check "$rc_g" "doctor accepts an explicitly certified Python profile"
+python3 - "$TMP/w6/doctor.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+rp = d["runtime_profile"]
+assert rp["requested"] == "python", rp
+assert rp["selected"] == "python", rp
+assert "ruby" not in rp["required_runtimes"], rp
+assert d["pass"] is True, d["failures"]
+PY
+check $? "doctor.json records Python selection without a Ruby requirement"
 
 echo
 if [ "$fails" -gt 0 ]; then

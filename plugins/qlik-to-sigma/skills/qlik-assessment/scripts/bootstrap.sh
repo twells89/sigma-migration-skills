@@ -43,6 +43,8 @@ set -u
 
 MODE=full
 WORKDIR="${BOOTSTRAP_WORKDIR:-}"
+RUNTIME_PROFILE_REQUESTED="${SIGMA_RUNTIME_PROFILE:-auto}"
+ALLOW_PREVIEW_RUNTIME=false
 CRED_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -54,6 +56,11 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "bootstrap.sh: missing value for $1 (see --help)" >&2; exit 2; }
       WORKDIR="$2"; shift 2 ;;
     --workdir=*) WORKDIR="${1#*=}"; shift ;;
+    --runtime-profile)
+      [ $# -ge 2 ] || { echo "bootstrap.sh: missing value for $1 (see --help)" >&2; exit 2; }
+      RUNTIME_PROFILE_REQUESTED="$2"; shift 2 ;;
+    --runtime-profile=*) RUNTIME_PROFILE_REQUESTED="${1#*=}"; shift ;;
+    --allow-preview-runtime) ALLOW_PREVIEW_RUNTIME=true; shift ;;
     # Creds chaining: pass-through to setup.rb (same flag names). setup.rb
     # stays the SINGLE credential writer; values are never echoed by this
     # script (the check-mode plan line prints a redacted count only).
@@ -66,9 +73,13 @@ while [ $# -gt 0 ]; do
       # can't silently truncate the printed help.
       sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0 ;;
-    *) echo "bootstrap.sh: unknown arg '$1' (supported: --check, --workdir DIR, --from-env, --client-id/--client-secret/--base-url/--connection-id VALUE)" >&2; exit 2 ;;
+    *) echo "bootstrap.sh: unknown arg '$1' (supported: --check, --workdir DIR, --runtime-profile auto|ruby|python, --allow-preview-runtime, --from-env, --client-id/--client-secret/--base-url/--connection-id VALUE)" >&2; exit 2 ;;
   esac
 done
+case "$RUNTIME_PROFILE_REQUESTED" in
+  auto|ruby|python) ;;
+  *) echo "bootstrap.sh: --runtime-profile must be auto, ruby, or python" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_DIR="$HOME/.sigma-migration"
@@ -248,8 +259,48 @@ say ""
 # last bootstrap activated (idempotency).
 [ -f "$PATH_SNIPPET" ] && . "$PATH_SNIPPET" 2>/dev/null
 
+RUNTIME_PROFILE_SELECTED=""
+RUNTIME_PROFILE_REQUIRED=""
+RUNTIME_PROFILE_FALLBACK_REASON=""
+RUNTIME_PROFILE_PASS=false
+RUNTIME_CAPABILITIES="$HERE/../runtime-capabilities.json"
+RUNTIME_PROFILE_HELPER="$HERE/runtime_profile.py"
+PY_RUN=""
+if py_real py -3 || py_real python3 || py_real python; then
+  if [ -f "$RUNTIME_PROFILE_HELPER" ]; then
+    _PROFILE_ARGS=(
+      --requested "$RUNTIME_PROFILE_REQUESTED"
+      --format shell
+      --runtime "ruby=$([ -x "$(command -v ruby 2>/dev/null)" ] && echo true || echo false)"
+      --runtime "python=true"
+      --runtime "node=$([ -x "$(command -v node 2>/dev/null)" ] && echo true || echo false)"
+      --runtime "bash=true"
+    )
+    [ -f "$RUNTIME_CAPABILITIES" ] && _PROFILE_ARGS+=(--capabilities "$RUNTIME_CAPABILITIES")
+    [ "$ALLOW_PREVIEW_RUNTIME" = true ] && _PROFILE_ARGS+=(--allow-preview)
+    _PROFILE_OUTPUT="$($PY_RUN "$RUNTIME_PROFILE_HELPER" "${_PROFILE_ARGS[@]}" 2>/dev/null)"
+    _PROFILE_RC=$?
+    [ -n "$_PROFILE_OUTPUT" ] && eval "$_PROFILE_OUTPUT"
+    [ "$_PROFILE_RC" -eq 0 ] && RUNTIME_PROFILE_PASS=true
+  fi
+fi
+if [ ! -f "$RUNTIME_PROFILE_HELPER" ]; then
+  RUNTIME_PROFILE_SELECTED=ruby
+  RUNTIME_PROFILE_REQUIRED=ruby,python,node,bash
+  RUNTIME_PROFILE_PASS=true
+fi
+SKIP_RUBY=false
+if [ "$RUNTIME_PROFILE_REQUESTED" = python ] || [ "$RUNTIME_PROFILE_SELECTED" = python ]; then
+  SKIP_RUBY=true
+fi
+if [ "$SKIP_RUBY" = true ]; then
+  okay "runtime profile '$RUNTIME_PROFILE_REQUESTED' selects the Python path — Ruby installation skipped"
+fi
+
 # ── ruby ─────────────────────────────────────────────────────────────────────
-if command -v ruby >/dev/null 2>&1; then
+if [ "$SKIP_RUBY" = true ]; then
+  :
+elif command -v ruby >/dev/null 2>&1; then
   okay "ruby $(ruby -e 'print RUBY_VERSION' 2>/dev/null)"
 else
   RUBY_DIR="$(latest_bindir \
@@ -309,7 +360,6 @@ else
 fi
 
 # ── python3 ──────────────────────────────────────────────────────────────────
-PY_RUN=""
 if py_real py -3 || py_real python3 || py_real python; then
   okay "python ($PY_RUN) $($PY_RUN --version 2>&1 | sed 's/^Python //')"
 else
@@ -641,49 +691,64 @@ fi
 
 # ── credentials (non-interactive only — setup.rb is the single writer) ──────
 NEUTRAL_ENV="$STATE_DIR/env"
+SETUP_RUN=()
+SETUP_LABEL=""
+if [ "$SKIP_RUBY" = true ] && [ -n "$PY_RUN" ] && [ -f "$HERE/setup.py" ]; then
+  SETUP_RUN=($PY_RUN "$HERE/setup.py")
+  SETUP_LABEL="python scripts/setup.py"
+elif command -v ruby >/dev/null 2>&1 && [ -f "$HERE/setup.rb" ]; then
+  SETUP_RUN=(ruby "$HERE/setup.rb")
+  SETUP_LABEL="ruby scripts/setup.rb"
+fi
 if [ "${#CRED_ARGS[@]}" -gt 0 ]; then
   # Flag form first: explicit flags beat auto-detection (they can rotate
   # already-persisted creds). Values are redacted everywhere.
   plan "Sigma credentials provided via flags" \
-       "ruby scripts/setup.rb <cred flags redacted: ${#CRED_ARGS[@]} token(s)> (single credential writer; values never echoed)"
+       "$SETUP_LABEL <cred flags redacted: ${#CRED_ARGS[@]} token(s)> (values never echoed)"
   if [ "$MODE" = full ]; then
-    if [ -f "$HERE/setup.rb" ] && command -v ruby >/dev/null 2>&1 \
-       && ruby "$HERE/setup.rb" ${CRED_ARGS[@]+"${CRED_ARGS[@]}"} >/dev/null 2>&1; then
-      act "creds: setup.rb (flag form)"
-      okay "Sigma credentials persisted via setup.rb (flag form)"
+    if [ "${#SETUP_RUN[@]}" -gt 0 ] \
+       && "${SETUP_RUN[@]}" ${CRED_ARGS[@]+"${CRED_ARGS[@]}"} >/dev/null 2>&1; then
+      act "creds: $SETUP_LABEL (flag form)"
+      okay "Sigma credentials persisted via $SETUP_LABEL (flag form)"
     else
-      INSTALL_FAILED=1; note "setup.rb (flag form) FAILED — check the flag values (needs ruby + setup.rb next to this script); or run 'ruby scripts/setup.rb' once in a real terminal"
+      INSTALL_FAILED=1; note "credential setup (flag form) FAILED — check the flag values and selected runtime profile"
     fi
   fi
 elif [ -f "$NEUTRAL_ENV" ] && grep -q 'SIGMA_CLIENT_ID' "$NEUTRAL_ENV" 2>/dev/null; then
   okay "Sigma credentials present ($NEUTRAL_ENV)"
 elif [ -n "${SIGMA_CLIENT_ID:-}" ] && [ -n "${SIGMA_CLIENT_SECRET:-}" ]; then
   plan "Sigma credentials not yet persisted (env vars ARE exported)" \
-       "ruby scripts/setup.rb --from-env (persists them; values never echoed)"
+       "$SETUP_LABEL --from-env (persists them; values never echoed)"
   if [ "$MODE" = full ]; then
-    if [ -f "$HERE/setup.rb" ] && command -v ruby >/dev/null 2>&1 && ruby "$HERE/setup.rb" --from-env >/dev/null 2>&1; then
-      act "creds: setup.rb --from-env"
-      okay "Sigma credentials persisted from the environment (setup.rb --from-env)"
+    if [ "${#SETUP_RUN[@]}" -gt 0 ] && "${SETUP_RUN[@]}" --from-env >/dev/null 2>&1; then
+      act "creds: $SETUP_LABEL --from-env"
+      okay "Sigma credentials persisted from the environment ($SETUP_LABEL --from-env)"
     else
-      INSTALL_FAILED=1; note "setup.rb --from-env FAILED — check SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET exports"
+      INSTALL_FAILED=1; note "credential setup --from-env FAILED — check SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET exports"
     fi
   fi
 else
   plan "Sigma credentials MISSING (no $NEUTRAL_ENV, no SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET in the env)" \
-       "export SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL) and re-run bootstrap — or the USER runs 'ruby scripts/setup.rb' once in a real terminal"
+       "export SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL) and re-run bootstrap — or run the selected profile's setup script once in a real terminal"
   # Not an install failure: bootstrap cannot invent credentials. Doctor will
   # fail-close on them below, keeping the run honestly red until they exist.
 fi
 
 # Tableau PAT (only where the tableau scripts ship next to this bootstrap).
-if [ -f "$HERE/setup-tableau.rb" ]; then
+if [ -f "$HERE/setup-tableau.rb" ] || [ -f "$HERE/setup-tableau.py" ]; then
   if [ -f "$NEUTRAL_ENV" ] && grep -q 'TABLEAU_PAT_SECRET' "$NEUTRAL_ENV" 2>/dev/null; then
     okay "Tableau credentials present ($NEUTRAL_ENV)"
   elif [ -n "${TABLEAU_PAT_NAME:-}" ] && [ -n "${TABLEAU_PAT_SECRET:-}" ]; then
-    plan "Tableau PAT not yet persisted (env vars ARE exported)" "ruby scripts/setup-tableau.rb --from-env"
+    TABLEAU_SETUP_RUN=()
+    if [ "$SKIP_RUBY" = true ] && [ -n "$PY_RUN" ] && [ -f "$HERE/setup-tableau.py" ]; then
+      TABLEAU_SETUP_RUN=($PY_RUN "$HERE/setup-tableau.py")
+    elif command -v ruby >/dev/null 2>&1 && [ -f "$HERE/setup-tableau.rb" ]; then
+      TABLEAU_SETUP_RUN=(ruby "$HERE/setup-tableau.rb")
+    fi
+    plan "Tableau PAT not yet persisted (env vars ARE exported)" "${TABLEAU_SETUP_RUN[*]} --from-env"
     if [ "$MODE" = full ]; then
-      if command -v ruby >/dev/null 2>&1 && ruby "$HERE/setup-tableau.rb" --from-env >/dev/null 2>&1; then
-        act "creds: setup-tableau.rb --from-env"
+      if [ "${#TABLEAU_SETUP_RUN[@]}" -gt 0 ] && "${TABLEAU_SETUP_RUN[@]}" --from-env >/dev/null 2>&1; then
+        act "creds: ${TABLEAU_SETUP_RUN[*]} --from-env"
         okay "Tableau credentials persisted from the environment"
       else
         INSTALL_FAILED=1; note "setup-tableau.rb --from-env FAILED — check TABLEAU_PAT_NAME/TABLEAU_PAT_SECRET/TABLEAU_SITE_CONTENT_URL/TABLEAU_SERVER_URL exports"
@@ -708,10 +773,12 @@ fi
 # ── doctor (writes doctor.json — the report the orchestrator gates on) ───────
 say ""
 say "Running the environment doctor…"
+DOCTOR_PROFILE_ARGS=(--runtime-profile "$RUNTIME_PROFILE_REQUESTED")
+[ "$ALLOW_PREVIEW_RUNTIME" = true ] && DOCTOR_PROFILE_ARGS+=(--allow-preview-runtime)
 if [ -n "$WORKDIR" ]; then
-  bash "$HERE/doctor.sh" --workdir "$WORKDIR"
+  bash "$HERE/doctor.sh" --workdir "$WORKDIR" "${DOCTOR_PROFILE_ARGS[@]}"
 else
-  bash "$HERE/doctor.sh"
+  bash "$HERE/doctor.sh" "${DOCTOR_PROFILE_ARGS[@]}"
 fi
 DOCTOR_EXIT=$?
 DOCTOR_PASS=false
@@ -729,6 +796,17 @@ $1
 EOF
   printf '%s' "$_jl_out"
 }
+json_csv() {
+  _jc_out=""
+  _jc_rest="${1:-}"
+  while [ -n "$_jc_rest" ]; do
+    _jc_item="${_jc_rest%%,*}"
+    if [ "$_jc_rest" = "$_jc_item" ]; then _jc_rest=""; else _jc_rest="${_jc_rest#*,}"; fi
+    [ -z "$_jc_item" ] && continue
+    _jc_out="${_jc_out}${_jc_out:+,}\"$(jstr "$_jc_item")\""
+  done
+  printf '%s' "$_jc_out"
+}
 write_sentinel() {
   _ws_dest="$1"
   mkdir -p "$(dirname "$_ws_dest")" 2>/dev/null || return 0
@@ -737,6 +815,9 @@ write_sentinel() {
     printf '"bootstrap_version":1,'
     printf '"mode":"full",'
     printf '"os":"%s",' "$(jstr "$OS")"
+    printf '"runtime_profile":{"requested":"%s","selected":"%s","required_runtimes":[%s],"fallback_reason":"%s"},' \
+      "$(jstr "$RUNTIME_PROFILE_REQUESTED")" "$(jstr "$RUNTIME_PROFILE_SELECTED")" \
+      "$(json_csv "$RUNTIME_PROFILE_REQUIRED")" "$(jstr "$RUNTIME_PROFILE_FALLBACK_REASON")"
     printf '"actions":[%s],' "$(json_lines "$ACTIONS")"
     printf '"path_additions":[%s],' "$(json_lines "$PATH_ADDED")"
     printf '"install_failed":%s,' "$([ "$INSTALL_FAILED" -eq 0 ] && echo false || echo true)"

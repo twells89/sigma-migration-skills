@@ -47,9 +47,14 @@ param(
   [string]$ClientSecret = "",
   [string]$BaseUrl = "",
   [string]$ConnectionId = "",
-  [switch]$FromEnv
+  [switch]$FromEnv,
+  [ValidateSet("auto", "ruby", "python")][string]$RuntimeProfile = "",
+  [switch]$AllowPreviewRuntime
 )
 if (-not $WorkDir -and $env:BOOTSTRAP_WORKDIR) { $WorkDir = $env:BOOTSTRAP_WORKDIR }
+if (-not $RuntimeProfile) {
+  $RuntimeProfile = if ($env:SIGMA_RUNTIME_PROFILE) { $env:SIGMA_RUNTIME_PROFILE } else { "auto" }
+}
 
 # PS 5.1 on older Windows builds may exclude TLS 1.2 by default; every web
 # download here (incl. scoop's installer) needs it.
@@ -126,13 +131,68 @@ function Ensure-Scoop {
   return (HaveScoop)
 }
 
+# Test-RealPython -- KEEP IN LOCKSTEP with doctor.ps1.
+function Test-RealPython($exe, $pre) {
+  $cmd = Get-Command $exe -ErrorAction SilentlyContinue
+  if (-not $cmd) { return $null }
+  if ($exe -ne 'py' -and $cmd.Source -and $cmd.Source.ToLower().Contains('windowsapps')) { return $null }
+  try {
+    $argsv = @(); if ($pre) { $argsv += $pre }
+    $ver = (& $exe @argsv --version 2>&1 | Out-String).Trim()
+    if ($ver -notmatch 'Python\s+\d') { return $null }
+    $where = (& $exe @argsv -c 'import sys;print(sys.executable)' 2>&1 | Out-String).Trim()
+    if ($where.ToLower().Contains('windowsapps')) { return $null }
+    return "$ver  ($where)"
+  } catch { return $null }
+}
+
+$script:PyExe = $null; $script:PyPre = $null
+if (Test-RealPython 'py' '-3')           { $script:PyExe = 'py'; $script:PyPre = '-3' }
+elseif (Test-RealPython 'python' $null)  { $script:PyExe = 'python' }
+elseif (Test-RealPython 'python3' $null) { $script:PyExe = 'python3' }
+
+$script:RuntimeProfileSelected = ""
+$script:RuntimeProfileRequired = @()
+$script:RuntimeProfileFallbackReason = ""
+$script:RuntimeProfilePass = $false
+$profileHelper = Join-Path $PSScriptRoot "runtime_profile.py"
+$capabilities = Join-Path (Split-Path -Parent $PSScriptRoot) "runtime-capabilities.json"
+if ((Test-Path $profileHelper) -and $script:PyExe) {
+  $profileArgs = @(); if ($script:PyPre) { $profileArgs += $script:PyPre }
+  $profileArgs += @(
+    $profileHelper,
+    "--requested", $RuntimeProfile,
+    "--format", "json",
+    "--runtime", "ruby=$(([bool](Get-Command ruby -ErrorAction SilentlyContinue)).ToString().ToLower())",
+    "--runtime", "python=true",
+    "--runtime", "node=$(([bool](Get-Command node -ErrorAction SilentlyContinue)).ToString().ToLower())",
+    "--runtime", "bash=$(([bool](Get-Command bash -ErrorAction SilentlyContinue)).ToString().ToLower())"
+  )
+  if (Test-Path $capabilities) { $profileArgs += @("--capabilities", $capabilities) }
+  if ($AllowPreviewRuntime) { $profileArgs += "--allow-preview" }
+  try {
+    $profileJson = (& $script:PyExe @profileArgs 2>$null | Out-String).Trim()
+    $profileResult = $profileJson | ConvertFrom-Json
+    $script:RuntimeProfileSelected = if ($profileResult.selectedProfile) { "$($profileResult.selectedProfile)" } else { "" }
+    $script:RuntimeProfileRequired = @($profileResult.requiredRuntimes)
+    $script:RuntimeProfileFallbackReason = if ($profileResult.fallbackReason) { "$($profileResult.fallbackReason)" } else { "" }
+    $script:RuntimeProfilePass = [bool]$profileResult.pass
+  } catch { }
+} elseif (-not (Test-Path $profileHelper)) {
+  $script:RuntimeProfileSelected = "ruby"
+  $script:RuntimeProfileRequired = @("ruby", "python", "node", "bash")
+  $script:RuntimeProfilePass = $true
+}
+$skipRuby = ($RuntimeProfile -eq "python") -or ($script:RuntimeProfileSelected -eq "python")
+
 Write-Host "Environment bootstrap - host: windows (PowerShell)  mode: $(if ($Check) {'check'} else {'full'})"
 # Up-front write disclosure (both modes -- in -Check it is the complete list
 # of what a full run WOULD touch outside the workdir; nothing else, ever):
 Write-Host "Writes outside the workdir: user-dir runtime installs, the USER PATH env var, creds via setup.rb in $StateDir\env, and the $StateDir bootstrap.json/doctor.json reports (disclosed; nothing else -- pip wiring stays session-only).`n"
 
 # --- ruby -------------------------------------------------------------------
-if (Have 'ruby') { Okay "ruby $((& ruby -e 'print RUBY_VERSION' 2>$null))" }
+if ($skipRuby) { Okay "runtime profile '$RuntimeProfile' selects the Python path - Ruby installation skipped" }
+elseif (Have 'ruby') { Okay "ruby $((& ruby -e 'print RUBY_VERSION' 2>$null))" }
 else {
   # scoop shims / RubyInstaller user dirs that just need PATH activation
   $rubyBin = @(
@@ -172,27 +232,7 @@ else {
 }
 
 # --- python (real interpreter, not the Store stub) --------------------------
-# Test-RealPython -- KEEP IN LOCKSTEP with doctor.ps1's Test-RealPython: same
-# probe body, same WindowsApps Store-stub rejection, so bootstrap and doctor
-# agree on what counts as "a real Python" (the tableau skill's
-# test-bootstrap-lockstep.sh Part C diffs the two bodies, ignoring comments,
-# and fails on drift).
-function Test-RealPython($exe, $pre) {
-  $cmd = Get-Command $exe -ErrorAction SilentlyContinue
-  if (-not $cmd) { return $null }
-  # `py` is the launcher (always real); for python/python3 inspect the source path.
-  if ($exe -ne 'py' -and $cmd.Source -and $cmd.Source.ToLower().Contains('windowsapps')) { return $null }
-  try {
-    $argsv = @(); if ($pre) { $argsv += $pre }
-    $ver = (& $exe @argsv --version 2>&1 | Out-String).Trim()
-    if ($ver -notmatch 'Python\s+\d') { return $null }
-    $where = (& $exe @argsv -c 'import sys;print(sys.executable)' 2>&1 | Out-String).Trim()
-    if ($where.ToLower().Contains('windowsapps')) { return $null }
-    return "$ver  ($where)"
-  } catch { return $null }
-}
-$script:PyExe = $null; $script:PyPre = $null
-if (Test-RealPython 'py' '-3')      { $script:PyExe = 'py'; $script:PyPre = '-3' }
+if (-not $script:PyExe -and (Test-RealPython 'py' '-3'))      { $script:PyExe = 'py'; $script:PyPre = '-3' }
 elseif (Test-RealPython 'python' $null)  { $script:PyExe = 'python' }
 elseif (Test-RealPython 'python3' $null) { $script:PyExe = 'python3' }
 if ($script:PyExe) {
@@ -503,6 +543,21 @@ else {
 # --- credentials (non-interactive only; values never echoed) ----------------
 $envFile = Join-Path $StateDir 'env'
 $hasSigmaFile = (Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'SIGMA_CLIENT_ID')
+$setupPy = Join-Path $PSScriptRoot 'setup.py'
+$setupRb = Join-Path $PSScriptRoot 'setup.rb'
+$setupLabel = if ($skipRuby) { 'python scripts/setup.py' } else { 'ruby scripts/setup.rb' }
+function Invoke-SigmaSetup([object[]]$extraArgs) {
+  if ($skipRuby -and $script:PyExe -and (Test-Path $setupPy)) {
+    $a = @(); if ($script:PyPre) { $a += $script:PyPre }
+    & $script:PyExe @a $setupPy @extraArgs 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  }
+  if ((Have 'ruby') -and (Test-Path $setupRb)) {
+    & ruby $setupRb @extraArgs 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  }
+  return $false
+}
 # Flag form first: explicit cred flags beat auto-detection (they can rotate
 # already-persisted creds). setup.rb stays the SINGLE credential writer;
 # values are redacted everywhere (the plan line prints a token count only).
@@ -513,35 +568,37 @@ if ($BaseUrl)      { $credArgs += @('--base-url', $BaseUrl) }
 if ($ConnectionId) { $credArgs += @('--connection-id', $ConnectionId) }
 if ($FromEnv)      { $credArgs += '--from-env' }
 if ($credArgs.Count -gt 0) {
-  Plan "Sigma credentials provided via flags" "ruby scripts/setup.rb <cred flags redacted: $($credArgs.Count) token(s)> (single credential writer; values never echoed)"
+  Plan "Sigma credentials provided via flags" "$setupLabel <cred flags redacted: $($credArgs.Count) token(s)> (values never echoed)"
   if (-not $Check) {
-    if ((Have 'ruby') -and (Test-Path (Join-Path $PSScriptRoot 'setup.rb'))) {
-      & ruby (Join-Path $PSScriptRoot 'setup.rb') @credArgs 2>&1 | Out-Null
-      if ($LASTEXITCODE -eq 0) { $script:Actions += 'creds: setup.rb (flag form)'; Okay 'Sigma credentials persisted via setup.rb (flag form)' }
-      else { $script:InstallFailed = $true; Note 'setup.rb (flag form) FAILED -- check the flag values; or run ruby scripts/setup.rb once in a real terminal' }
-    } else { $script:InstallFailed = $true; Note 'setup.rb (or ruby) unavailable -- re-run bootstrap with the same flags after ruby resolves' }
+    if (Invoke-SigmaSetup $credArgs) { $script:Actions += "creds: $setupLabel (flag form)"; Okay "Sigma credentials persisted via $setupLabel (flag form)" }
+    else { $script:InstallFailed = $true; Note 'credential setup (flag form) FAILED -- check the values and selected runtime profile' }
   }
 }
 elseif ($hasSigmaFile) { Okay "Sigma credentials present ($envFile)" }
 elseif ($env:SIGMA_CLIENT_ID -and $env:SIGMA_CLIENT_SECRET) {
-  Plan "Sigma credentials not yet persisted (env vars ARE set)" "ruby scripts/setup.rb --from-env"
+  Plan "Sigma credentials not yet persisted (env vars ARE set)" "$setupLabel --from-env"
   if (-not $Check) {
-    if ((Have 'ruby') -and (Test-Path (Join-Path $PSScriptRoot 'setup.rb'))) {
-      & ruby (Join-Path $PSScriptRoot 'setup.rb') --from-env 2>&1 | Out-Null
-      if ($LASTEXITCODE -eq 0) { $script:Actions += 'creds: setup.rb --from-env'; Okay 'Sigma credentials persisted from the environment' }
-      else { $script:InstallFailed = $true; Note 'setup.rb --from-env FAILED -- check SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET' }
-    } else { $script:InstallFailed = $true; Note 'setup.rb (or ruby) unavailable -- re-run bootstrap after ruby resolves' }
+    if (Invoke-SigmaSetup @('--from-env')) { $script:Actions += "creds: $setupLabel --from-env"; Okay 'Sigma credentials persisted from the environment' }
+    else { $script:InstallFailed = $true; Note 'credential setup --from-env FAILED -- check SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET' }
   }
 } else {
-  Plan "Sigma credentials MISSING (no $envFile, no SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET)" "set SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL) and re-run bootstrap - or the USER runs 'ruby scripts/setup.rb' once in a real terminal"
+  Plan "Sigma credentials MISSING (no $envFile, no SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET)" "set SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL) and re-run bootstrap - or run the selected profile's setup script once in a real terminal"
 }
-if (Test-Path (Join-Path $PSScriptRoot 'setup-tableau.rb')) {
+$tableauSetupRb = Join-Path $PSScriptRoot 'setup-tableau.rb'
+$tableauSetupPy = Join-Path $PSScriptRoot 'setup-tableau.py'
+if ((Test-Path $tableauSetupRb) -or (Test-Path $tableauSetupPy)) {
   $hasTabFile = (Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'TABLEAU_PAT_SECRET')
   if ($hasTabFile) { Okay "Tableau credentials present ($envFile)" }
   elseif ($env:TABLEAU_PAT_NAME -and $env:TABLEAU_PAT_SECRET) {
-    Plan "Tableau PAT not yet persisted (env vars ARE set)" "ruby scripts/setup-tableau.rb --from-env"
+    $tableauSetupLabel = if ($skipRuby) { 'python scripts/setup-tableau.py' } else { 'ruby scripts/setup-tableau.rb' }
+    Plan "Tableau PAT not yet persisted (env vars ARE set)" "$tableauSetupLabel --from-env"
     if (-not $Check) {
-      & ruby (Join-Path $PSScriptRoot 'setup-tableau.rb') --from-env 2>&1 | Out-Null
+      if ($skipRuby -and $script:PyExe -and (Test-Path $tableauSetupPy)) {
+        $a = @(); if ($script:PyPre) { $a += $script:PyPre }
+        & $script:PyExe @a $tableauSetupPy --from-env 2>&1 | Out-Null
+      } else {
+        & ruby $tableauSetupRb --from-env 2>&1 | Out-Null
+      }
       if ($LASTEXITCODE -eq 0) { $script:Actions += 'creds: setup-tableau.rb --from-env'; Okay 'Tableau credentials persisted from the environment' }
       else { $script:InstallFailed = $true; Note 'setup-tableau.rb --from-env FAILED -- check the TABLEAU_* exports' }
     }
@@ -563,6 +620,8 @@ if ($Check) {
 Write-Host "`nRunning the environment doctor..."
 $doctorArgs = @('-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'doctor.ps1'))
 if ($WorkDir) { $doctorArgs += @('-WorkDir', $WorkDir) }
+$doctorArgs += @('-RuntimeProfile', $RuntimeProfile)
+if ($AllowPreviewRuntime) { $doctorArgs += '-AllowPreviewRuntime' }
 & powershell @doctorArgs
 $doctorPass = ($LASTEXITCODE -eq 0)
 
@@ -571,6 +630,12 @@ $sentinel = [ordered]@{
   bootstrap_version = 1
   mode              = 'full'
   os                = 'windows'
+  runtime_profile   = [ordered]@{
+    requested = "$RuntimeProfile"
+    selected = "$($script:RuntimeProfileSelected)"
+    required_runtimes = @($script:RuntimeProfileRequired)
+    fallback_reason = "$($script:RuntimeProfileFallbackReason)"
+  }
   actions           = @($script:Actions)
   path_additions    = @($script:PathAdded)
   install_failed    = [bool]$script:InstallFailed

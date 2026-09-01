@@ -13,8 +13,15 @@
 #
 #   -WorkDir <dir>  also drop doctor.json there (always also written to
 #                   ~/.sigma-migration/doctor.json).
-param([string]$WorkDir = "")
+param(
+  [string]$WorkDir = "",
+  [ValidateSet("auto", "ruby", "python")][string]$RuntimeProfile = "",
+  [switch]$AllowPreviewRuntime
+)
 if (-not $WorkDir -and $env:DOCTOR_WORKDIR) { $WorkDir = $env:DOCTOR_WORKDIR }
+if (-not $RuntimeProfile) {
+  $RuntimeProfile = if ($env:SIGMA_RUNTIME_PROFILE) { $env:SIGMA_RUNTIME_PROFILE } else { "auto" }
+}
 
 $script:Pass = 0; $script:Fail = 0; $script:Warn = 0
 $script:Failures = @()
@@ -23,11 +30,6 @@ function Bad([string]$m,$fix)  { Write-Host "  [X]  $m" -ForegroundColor Red;   
 function Warn([string]$m,$fix) { Write-Host "  [!]  $m" -ForegroundColor Yellow; Write-Host "       -> $fix" -ForegroundColor DarkGray; $script:Warn++ }
 
 Write-Host "Environment doctor - host: windows (PowerShell)`n"
-
-# --- ruby ------------------------------------------------------------------
-$ruby = Get-Command ruby -ErrorAction SilentlyContinue
-if ($ruby) { Ok "ruby - $((& ruby -e 'print RUBY_VERSION' 2>$null))" }
-else { Bad "ruby not found" "Run the bootstrap: 'powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1' (user-scoped winget/scoop install, never admin; it re-runs this doctor when done)." }
 
 # --- python (reject the Microsoft Store App-Execution-Alias stub) ----------
 # Detect by PATH first: the stub lives under ...\WindowsApps\. We check py -3,
@@ -63,6 +65,52 @@ else {
     Bad "no real Python (the 'python'/'python3' on PATH is likely the Microsoft Store alias stub)" `
         "Run the bootstrap: 'powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1' (installs a real user-scoped Python, never admin; the stub is rejected by its probe). Manual alternative: disable the stub under Settings > Apps > Advanced app settings > App execution aliases."
   }
+}
+
+# --- runtime profile + ruby -------------------------------------------------
+$script:RuntimeProfileSelected = "ruby"
+$script:RuntimeProfileRequired = @("ruby", "python", "node", "bash")
+$script:RuntimeProfileFallbackReason = ""
+$script:RuntimeProfilePass = $true
+$profileHelper = Join-Path $PSScriptRoot "runtime_profile.py"
+$capabilities = Join-Path (Split-Path -Parent $PSScriptRoot) "runtime-capabilities.json"
+if ((Test-Path $profileHelper) -and $script:PyExe) {
+  $profileArgs = @()
+  if ($script:PyPre) { $profileArgs += $script:PyPre }
+  $profileArgs += @(
+    $profileHelper,
+    "--requested", $RuntimeProfile,
+    "--format", "json",
+    "--runtime", "ruby=$(([bool](Get-Command ruby -ErrorAction SilentlyContinue)).ToString().ToLower())",
+    "--runtime", "python=true",
+    "--runtime", "node=$(([bool](Get-Command node -ErrorAction SilentlyContinue)).ToString().ToLower())",
+    "--runtime", "bash=$(([bool](Get-Command bash -ErrorAction SilentlyContinue)).ToString().ToLower())"
+  )
+  if (Test-Path $capabilities) { $profileArgs += @("--capabilities", $capabilities) }
+  if ($AllowPreviewRuntime) { $profileArgs += "--allow-preview" }
+  try {
+    $profileJson = (& $script:PyExe @profileArgs 2>$null | Out-String).Trim()
+    $profileResult = $profileJson | ConvertFrom-Json
+    $script:RuntimeProfileSelected = if ($profileResult.selectedProfile) { "$($profileResult.selectedProfile)" } else { "" }
+    $script:RuntimeProfileRequired = @($profileResult.requiredRuntimes)
+    $script:RuntimeProfileFallbackReason = if ($profileResult.fallbackReason) { "$($profileResult.fallbackReason)" } else { "" }
+    $script:RuntimeProfilePass = [bool]$profileResult.pass
+  } catch {
+    $script:RuntimeProfilePass = $false
+  }
+}
+if (-not $script:RuntimeProfilePass -and ((Test-Path $capabilities) -or $RuntimeProfile -ne "auto")) {
+  Bad "runtime profile '$RuntimeProfile' has no certified executable path for this skill" `
+      "Use -RuntimeProfile ruby, or update the skill after its Python profile is certified. Preview profiles require -RuntimeProfile python -AllowPreviewRuntime."
+}
+$rubyRequired = -not (($RuntimeProfile -eq "python") -or ($script:RuntimeProfileSelected -eq "python"))
+$ruby = Get-Command ruby -ErrorAction SilentlyContinue
+if ($ruby) { Ok "ruby - $((& ruby -e 'print RUBY_VERSION' 2>$null))" }
+elseif (-not $rubyRequired) {
+  Warn "ruby not found - accepted by the selected Python runtime profile" `
+       "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
+} else {
+  Bad "ruby not found" "Run the bootstrap: 'powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1' (user-scoped winget/scoop install, never admin; it re-runs this doctor when done)."
 }
 
 # --- python TLS trust (P1.4) -----------------------------------------------
@@ -139,11 +187,28 @@ $envFile = Join-Path $env:USERPROFILE ".sigma-migration\env"
 # (anything a future writer persists there) as "credentials present".
 $sigmaCreds = ((Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'SIGMA_(API_TOKEN|CLIENT_ID)')) -or $env:SIGMA_API_TOKEN -or $env:SIGMA_CLIENT_ID
 $sigmaLib = Join-Path $PSScriptRoot "lib\sigma_rest.rb"
+$sigmaTokenPy = Join-Path $PSScriptRoot "get_token.py"
 if (-not $sigmaCreds) {
+  $sigmaFix = if ($rubyRequired) {
+    "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+  } else {
+    "Set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+  }
   Bad "no Sigma credentials found (REQUIRED - the run would die at its first Sigma API call)" `
-      "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+      $sigmaFix
 } elseif ($env:SIGMA_SKIP_CRED_SMOKE) {
   Ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
+} elseif (($script:RuntimeProfileSelected -eq "python") -and (Test-Path $sigmaTokenPy) -and $script:PyExe) {
+  $pyArgs = @(); if ($script:PyPre) { $pyArgs += $script:PyPre }
+  & $script:PyExe @pyArgs $sigmaTokenPy --print-token 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    Ok "Sigma credentials present + live token mint OK (Python)"
+    $script:SmokeSigma = "pass"
+  } else {
+    Bad "Sigma credentials present but the live Python token mint FAILED (bad/stale client id/secret, or wrong SIGMA_BASE_URL)" `
+        "Refresh the exported Sigma credentials. Genuinely offline? Set SIGMA_SKIP_CRED_SMOKE=1 to skip this probe."
+    $script:SmokeSigma = "fail"
+  }
 } elseif ((Test-Path $sigmaLib) -and (Get-Command ruby -ErrorAction SilentlyContinue)) {
   # Quote-free -e payload (portability lint): Windows PowerShell 5.1 native-arg
   # passing strips embedded double quotes, so the old inline requires reached
@@ -171,14 +236,34 @@ if (-not $sigmaCreds) {
 $script:SmokeTableau = "skipped"
 $tabSetup = Join-Path $PSScriptRoot "setup-tableau.rb"
 $tabLib = Join-Path $PSScriptRoot "lib\tableau_rest.rb"
-if ((Test-Path $tabSetup) -and (Test-Path $tabLib)) {
+$tabTokenPy = Join-Path $PSScriptRoot "get-tableau-token.py"
+$tabPyLib = Join-Path $PSScriptRoot "lib\tableau_rest.py"
+$tableauRubyPath = (Test-Path $tabSetup) -and (Test-Path $tabLib)
+$tableauPythonPath = (Test-Path $tabTokenPy) -and (Test-Path $tabPyLib)
+if ($tableauRubyPath -or $tableauPythonPath) {
   $tabCreds = ($env:TABLEAU_PAT_NAME -and $env:TABLEAU_PAT_SECRET) -or `
               ((Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'TABLEAU_PAT_SECRET'))
   if (-not $tabCreds) {
+    $tableauFix = if ($rubyRequired) {
+      "Run 'ruby scripts/setup-tableau.rb' once (PAT), or set TABLEAU_PAT_NAME / TABLEAU_PAT_SECRET / TABLEAU_SITE_CONTENT_URL (+ TABLEAU_SERVER_URL)."
+    } else {
+      "Set TABLEAU_PAT_NAME / TABLEAU_PAT_SECRET / TABLEAU_SITE_CONTENT_URL / TABLEAU_SERVER_URL, or use the Python credential setup shipped with the certified profile."
+    }
     Warn "no Tableau credentials found (needed for Tableau discovery)" `
-         "Run 'ruby scripts/setup-tableau.rb' once (PAT), or set TABLEAU_PAT_NAME / TABLEAU_PAT_SECRET / TABLEAU_SITE_CONTENT_URL (+ TABLEAU_SERVER_URL)."
+         $tableauFix
   } elseif ($env:SIGMA_SKIP_CRED_SMOKE) {
     Ok "Tableau credentials present (live PAT signin smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
+  } elseif (($script:RuntimeProfileSelected -eq "python") -and $tableauPythonPath -and $script:PyExe) {
+    $pyArgs = @(); if ($script:PyPre) { $pyArgs += $script:PyPre }
+    & $script:PyExe @pyArgs $tabTokenPy --print-token 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Ok "Tableau credentials present + live PAT signin OK (Python)"
+      $script:SmokeTableau = "pass"
+    } else {
+      Bad "Tableau credentials present but the live Python PAT signin FAILED (expired/revoked PAT, wrong site or server URL)" `
+          "Refresh the exported Tableau PAT. Genuinely offline? Set SIGMA_SKIP_CRED_SMOKE=1 to skip this probe."
+      $script:SmokeTableau = "fail"
+    }
   } elseif (Get-Command ruby -ErrorAction SilentlyContinue) {
     # Quote-free -e payload - same PS 5.1 native-arg constraint as the Sigma
     # probe above.
@@ -284,6 +369,12 @@ $doctor = [ordered]@{
   shell        = "powershell"
   runtimes     = [ordered]@{ ruby = $rubyOk; python = $pyOk; node = $nodeOk; bash = [bool](Get-Command bash -ErrorAction SilentlyContinue) }
   versions     = [ordered]@{ ruby = "$rubyV"; python = "$pyV"; node = "$nodeV" }
+  runtime_profile = [ordered]@{
+    requested = "$RuntimeProfile"
+    selected = "$($script:RuntimeProfileSelected)"
+    required_runtimes = @($script:RuntimeProfileRequired)
+    fallback_reason = "$($script:RuntimeProfileFallbackReason)"
+  }
   sandbox_hint = $sandbox
   cred_smoke   = [ordered]@{ sigma = $script:SmokeSigma; tableau = $script:SmokeTableau; looker = $script:LookerProbe }
   hyperapi_present = $hyperapiPresent

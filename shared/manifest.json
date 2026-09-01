@@ -638,6 +638,12 @@
       ]
     },
     {
+      "canonical": "shared/scripts/setup.py",
+      "targets": [
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/setup.py"
+      ]
+    },
+    {
       "canonical": "shared/lib/redact.rb",
       "targets": [
         "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/lib/redact.rb",
