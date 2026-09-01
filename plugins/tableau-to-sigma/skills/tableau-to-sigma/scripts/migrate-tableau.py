@@ -332,32 +332,65 @@ def main() -> int:
     state["data_model_element_id"] = element_id
     write(state_path, state)
 
-    if not args.workbook_template:
-        return stop(
-            4,
-            "WORKBOOK TEMPLATE REQUIRED",
+    if args.workbook_template:
+        run(
+            "Phase 5 template binding",
+            "build-workbook-template.py",
             [
-                "Author the complete workbook template from source XML, CSVs, and PNG.",
-                "Use placeholders __DATA_MODEL_ID__, __DATA_MODEL_ELEMENT_ID__, __FOLDER_ID__.",
-                "Re-run with --workbook-template <template.json>.",
+                "--template",
+                args.workbook_template,
+                "--data-model-id",
+                data_model_id,
+                "--element-id",
+                element_id,
+                "--folder-id",
+                args.folder,
+                "--out",
+                str(workdir / "wb-spec-python.json"),
             ],
         )
-    run(
-        "Phase 5",
-        "build-workbook-template.py",
-        [
-            "--template",
-            args.workbook_template,
-            "--data-model-id",
-            data_model_id,
-            "--element-id",
-            element_id,
-            "--folder-id",
-            args.folder,
-            "--out",
-            str(workdir / "wb-spec-python.json"),
-        ],
-    )
+    else:
+        print("── Phase 5 automatic build: build-workbook-from-signals.py")
+        automatic = subprocess.run(
+            [
+                sys.executable,
+                str(HERE / "build-workbook-from-signals.py"),
+                "--layout",
+                str(workdir / "dashboard-layout.json"),
+                "--meta",
+                str(workdir / "dashboard-layout-meta.json"),
+                "--data-model-id",
+                data_model_id,
+                "--element-id",
+                element_id,
+                "--data-model-element-name",
+                args.fact_element,
+                "--folder-id",
+                args.folder,
+                "--title",
+                name,
+                "--out",
+                str(workdir / "wb-spec-python.json"),
+                "--residues-out",
+                str(workdir / "workbook-residues.json"),
+            ],
+            check=False,
+        )
+        if automatic.returncode == 2:
+            return stop(
+                4,
+                "WORKBOOK BUILD RESIDUES",
+                [
+                    "Automatic source-signal binding found unsupported or ambiguous zones.",
+                    f"See {workdir / 'workbook-residues.json'}.",
+                    "Repair every residue in a complete customer-local template and re-run",
+                    "with --workbook-template <template.json>.",
+                ],
+            )
+        if automatic.returncode:
+            raise RuntimeError(
+                f"automatic workbook builder exited {automatic.returncode}"
+            )
 
     workbook_id = args.sigma_workbook_id or state.get("workbook_id")
     post_args = [
