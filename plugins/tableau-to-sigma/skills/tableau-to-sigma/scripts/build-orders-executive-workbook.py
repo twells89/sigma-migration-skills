@@ -249,16 +249,16 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
   <Element elementId="orders-master" gridColumn="1 / 25" gridRow="1 / 20"/>
 </Page>
 <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overview-page">
-  <Element elementId="overview-title" gridColumn="1 / 25" gridRow="1 / 3"/>
+  <Element elementId="overview-title" gridColumn="10 / 18" gridRow="1 / 3"/>
   <Element elementId="kpi-net-revenue" gridColumn="1 / 6" gridRow="3 / 7"/>
   <Element elementId="kpi-net-profit" gridColumn="6 / 11" gridRow="3 / 7"/>
   <Element elementId="kpi-total-orders" gridColumn="11 / 16" gridRow="3 / 7"/>
   <Element elementId="kpi-gross-margin" gridColumn="16 / 21" gridRow="3 / 7"/>
   <Element elementId="kpi-return-rate" gridColumn="21 / 25" gridRow="3 / 7"/>
   <Element elementId="chart-revenue-trend" gridColumn="1 / 25" gridRow="7 / 18"/>
-  <Element elementId="chart-revenue-region" gridColumn="1 / 8" gridRow="18 / 27"/>
-  <Element elementId="chart-gross-ship" gridColumn="8 / 18" gridRow="18 / 27"/>
-  <Element elementId="chart-margin-tier" gridColumn="18 / 25" gridRow="18 / 27"/>
+  <Element elementId="chart-revenue-region" gridColumn="1 / 7" gridRow="18 / 27"/>
+  <Element elementId="chart-gross-ship" gridColumn="7 / 16" gridRow="18 / 27"/>
+  <Element elementId="chart-margin-tier" gridColumn="16 / 25" gridRow="18 / 27"/>
 </Page>
 """
     spec = {
