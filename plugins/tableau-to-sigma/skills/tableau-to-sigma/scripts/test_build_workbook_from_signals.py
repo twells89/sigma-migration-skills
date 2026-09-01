@@ -49,6 +49,132 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         self.assertIn('gridColumn="1 / 6"', left)
         self.assertIn('gridColumn="6 / 11"', right)
 
+    def test_dashboard_canvas_scales_full_height_to_bounded_rows(self):
+        layout, meta = self.signals()
+        layout[0]["canvas_px"] = {"w": 1200, "h": 800}
+        line_zone = next(
+            zone
+            for zone in layout[0]["zones"]
+            if zone.get("id") == "sales-line"
+        )
+        line_zone["y_pct"] = 60
+        line_zone["h_pct"] = 40
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        line = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "line-chart"
+        )
+        visible_page = next(
+            page
+            for page in spec["document"]["layout"].split("</Page>")
+            if "page-executive-overview" in page
+        )
+        self.assertIn('gridTemplateRows="repeat(28, auto)"', visible_page)
+        self.assertIn(
+            f'<Element elementId="{line["id"]}"', visible_page
+        )
+        line_placement = next(
+            row
+            for row in visible_page.splitlines()
+            if f'elementId="{line["id"]}"' in row
+        )
+        self.assertIn('gridRow="18 / 29"', line_placement)
+        self.assertEqual(
+            20,
+            builder_module.WorkbookBuilder.dashboard_row_units(
+                {"canvas_px": {"w": 1200, "h": 100}}
+            ),
+        )
+        self.assertEqual(
+            36,
+            builder_module.WorkbookBuilder.dashboard_row_units(
+                {"canvas_px": {"w": 1200, "h": 5000}}
+            ),
+        )
+
+    def test_adjacent_kpi_title_text_is_chart_managed_but_main_title_remains(self):
+        layout, meta = self.signals()
+        layout[0]["zones"].append(
+            {
+                "id": "sales-kpi-title",
+                "kind": "text",
+                "x_pct": 0,
+                "y_pct": 12,
+                "w_pct": 24,
+                "h_pct": 4,
+                "text_runs": [{"text": "  Total   Sales  ", "font_size": 12}],
+            }
+        )
+        instance = builder_module.WorkbookBuilder(
+            layout,
+            meta,
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+        )
+        spec, report = instance.build()
+        self.assertEqual("complete", report["status"])
+        texts = [
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "text"
+        ]
+        self.assertEqual(1, len(texts))
+        self.assertEqual("# Executive Overview", texts[0]["body"])
+        managed = next(
+            row
+            for row in report["dispositions"]
+            if row["zoneId"] == "sales-kpi-title"
+        )
+        self.assertEqual("chart-managed-title", managed["status"])
+        kpi = next(
+            element
+            for element in spec["document"]["elements"]
+            if element["kind"] == "kpi-chart"
+        )
+        self.assertEqual(kpi["id"], managed["elementId"])
+        self.assertEqual("Total Sales", kpi["name"])
+        self.assertEqual(
+            {},
+            builder_module.WorkbookBuilder.kpi_managed_title_zones(
+                {
+                    "zones": [
+                        {
+                            "id": "main-title",
+                            "kind": "text",
+                            "x_pct": 0,
+                            "y_pct": 0,
+                            "w_pct": 100,
+                            "h_pct": 8,
+                            "text_runs": [{"text": "Executive Overview"}],
+                        },
+                        {
+                            "id": "full-width-kpi",
+                            "kind": "chart",
+                            "chart_kind": "kpi",
+                            "caption": "Executive Overview",
+                            "x_pct": 0,
+                            "y_pct": 8,
+                            "w_pct": 100,
+                            "h_pct": 20,
+                        },
+                    ]
+                },
+                "Executive Overview",
+            ),
+        )
+
     def signals(self):
         meta = {
             "columns_by_guid": {

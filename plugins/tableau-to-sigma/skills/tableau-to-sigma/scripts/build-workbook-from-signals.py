@@ -22,6 +22,12 @@ from xml.sax.saxutils import quoteattr
 
 SUPPORTED_CHART_KINDS = {"kpi", "line", "bar"}
 STRUCTURAL_ZONE_KINDS = {"container", "spacer", "empty"}
+DEFAULT_PAGE_ROW_UNITS = 28
+MIN_PAGE_ROW_UNITS = 20
+MAX_PAGE_ROW_UNITS = 36
+REFERENCE_CANVAS_HEIGHT_PX = 800
+KPI_TITLE_HORIZONTAL_TOLERANCE_PCT = 0.5
+KPI_TITLE_VERTICAL_TOLERANCE_PCT = 1.0
 DATE_DERIVATIONS = {
     "tyr": "year",
     "yr": "year",
@@ -1096,18 +1102,124 @@ class WorkbookBuilder:
         }
 
     @staticmethod
-    def placement(element_id: str, zone: dict[str, Any]) -> str:
+    def dashboard_row_units(dashboard: dict[str, Any]) -> int:
+        canvas = dashboard.get("canvas_px")
+        if not isinstance(canvas, dict):
+            return DEFAULT_PAGE_ROW_UNITS
+        try:
+            height = float(canvas.get("h") or 0)
+        except (TypeError, ValueError):
+            return DEFAULT_PAGE_ROW_UNITS
+        if height <= 0:
+            return DEFAULT_PAGE_ROW_UNITS
+        scaled = round(
+            DEFAULT_PAGE_ROW_UNITS * height / REFERENCE_CANVAS_HEIGHT_PX
+        )
+        return max(MIN_PAGE_ROW_UNITS, min(MAX_PAGE_ROW_UNITS, scaled))
+
+    @staticmethod
+    def normalized_title(value: object) -> str:
+        return re.sub(r"\s+", " ", str(value or "").replace("Æ", " ")).strip().casefold()
+
+    @classmethod
+    def zone_text(cls, zone: dict[str, Any]) -> str:
+        return cls.normalized_title(
+            "".join(
+                str(item.get("text") or "")
+                for item in zone.get("text_runs") or []
+                if isinstance(item, dict)
+            )
+        )
+
+    @staticmethod
+    def _zone_edges(zone: dict[str, Any]) -> tuple[float, float, float, float]:
+        x = float(zone.get("x_pct") or 0)
+        y = float(zone.get("y_pct") or 0)
+        width = float(zone.get("w_pct") or 0)
+        height = float(zone.get("h_pct") or 0)
+        return x, y, x + width, y + height
+
+    @classmethod
+    def kpi_managed_title_zones(
+        cls, dashboard: dict[str, Any], dashboard_name: str
+    ) -> dict[int, dict[str, Any]]:
+        zones = dashboard.get("zones") or []
+        kpis = [
+            zone
+            for zone in zones
+            if isinstance(zone, dict)
+            and zone.get("kind") == "chart"
+            and zone.get("chart_kind") == "kpi"
+        ]
+        managed: dict[int, dict[str, Any]] = {}
+        dashboard_title = cls.normalized_title(dashboard_name)
+        for index, zone in enumerate(zones):
+            if not isinstance(zone, dict) or zone.get("kind") != "text":
+                continue
+            text = cls.zone_text(zone)
+            if not text or text == dashboard_title:
+                continue
+            try:
+                text_left, text_top, text_right, text_bottom = cls._zone_edges(zone)
+            except (TypeError, ValueError):
+                continue
+            matches = []
+            for chart in kpis:
+                titles = {
+                    cls.normalized_title(chart.get("display_title")),
+                    cls.normalized_title(chart.get("caption")),
+                }
+                titles.discard("")
+                if text not in titles:
+                    continue
+                try:
+                    chart_left, chart_top, chart_right, _chart_bottom = cls._zone_edges(
+                        chart
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    abs(text_left - chart_left)
+                    <= KPI_TITLE_HORIZONTAL_TOLERANCE_PCT
+                    and abs(text_right - chart_right)
+                    <= KPI_TITLE_HORIZONTAL_TOLERANCE_PCT
+                    and text_top <= chart_top
+                    and abs(text_bottom - chart_top)
+                    <= KPI_TITLE_VERTICAL_TOLERANCE_PCT
+                ):
+                    matches.append(chart)
+            if len(matches) == 1:
+                managed[index] = matches[0]
+        return managed
+
+    @staticmethod
+    def placement(
+        element_id: str,
+        zone: dict[str, Any],
+        row_units: int = DEFAULT_PAGE_ROW_UNITS,
+    ) -> str:
         x = max(0.0, min(100.0, float(zone.get("x_pct") or 0.0)))
         y = max(0.0, min(100.0, float(zone.get("y_pct") or 0.0)))
         width = max(0.1, float(zone.get("w_pct") or 100.0))
         height = max(0.1, float(zone.get("h_pct") or 10.0))
+        row_units = max(
+            MIN_PAGE_ROW_UNITS, min(MAX_PAGE_ROW_UNITS, int(row_units))
+        )
         # Adjacent Tableau zones share the same percentage boundary. Map that
-        # boundary with the same rounding rule on both sides; floor(start) plus
-        # ceil(end) makes every non-integer boundary overlap by one grid line.
+        # boundary with the same rounding rule on both sides so they share one
+        # grid line after conversion.
         col_start = max(1, min(24, round(x * 24 / 100) + 1))
         col_end = max(col_start + 1, min(25, round((x + width) * 24 / 100) + 1))
-        row_start = max(1, min(100, round(y) + 1))
-        row_end = max(row_start + 1, min(101, round(y + height) + 1))
+        row_start = max(
+            1, min(row_units, round(y * row_units / 100) + 1)
+        )
+        row_end = max(
+            row_start + 1,
+            min(
+                row_units + 1,
+                round((y + height) * row_units / 100) + 1,
+            ),
+        )
         return (
             f"  <Element elementId={quoteattr(element_id)} "
             f'gridColumn="{col_start} / {col_end}" gridRow="{row_start} / {row_end}"/>'
@@ -1134,12 +1246,16 @@ class WorkbookBuilder:
             page_id = stable_id("page", dashboard_name)
             pages.append({"id": page_id, "name": dashboard_name, "pageWidth": "full"})
             placements = []
+            row_units = self.dashboard_row_units(dashboard)
+            managed_kpi_titles = self.kpi_managed_title_zones(
+                dashboard, dashboard_name
+            )
             chart_captions = {
                 str(zone.get("caption") or "")
                 for zone in dashboard.get("zones") or []
                 if zone.get("kind") == "chart"
             }
-            for zone in dashboard.get("zones") or []:
+            for zone_index, zone in enumerate(dashboard.get("zones") or []):
                 if not isinstance(zone, dict):
                     continue
                 kind = str(zone.get("kind") or "")
@@ -1149,6 +1265,15 @@ class WorkbookBuilder:
                     continue
                 if kind == "legend" and str(zone.get("caption") or "") in chart_captions:
                     self.disposition(dashboard_name, zone, "chart-managed-legend")
+                    continue
+                if zone_index in managed_kpi_titles:
+                    chart = managed_kpi_titles[zone_index]
+                    chart_id = stable_id(
+                        "chart", f"{dashboard_name}:{chart.get('id')}"
+                    )
+                    self.disposition(
+                        dashboard_name, zone, "chart-managed-title", chart_id
+                    )
                     continue
                 if kind == "chart":
                     element = self.build_chart(dashboard_name, zone)
@@ -1174,14 +1299,17 @@ class WorkbookBuilder:
                     )
                 if element is not None:
                     content_elements.append(element)
-                    placements.append(self.placement(element["id"], zone))
+                    placements.append(
+                        self.placement(element["id"], zone, row_units)
+                    )
                     self.disposition(dashboard_name, zone, "emitted", element["id"])
             page_layouts.append(
                 "\n".join(
                     [
                         (
                             f'<Page type="grid" gridTemplateColumns="repeat(24, 1fr)" '
-                            f'gridTemplateRows="auto" id={quoteattr(page_id)}>'
+                            f'gridTemplateRows="repeat({row_units}, auto)" '
+                            f'id={quoteattr(page_id)}>'
                         ),
                         *placements,
                         "</Page>",
