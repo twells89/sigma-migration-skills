@@ -35,6 +35,38 @@ class MigrateTableauPythonTest(unittest.TestCase):
         }
         self.assertEqual("fact-live", migrate.find_element_id(readback, "FACT"))
 
+    def test_warehouse_paths_are_unique_and_sorted(self):
+        model = {
+            "pages": [
+                {
+                    "elements": [
+                        {
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["DB", "S", "B"],
+                            }
+                        },
+                        {
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["DB", "S", "A"],
+                            }
+                        },
+                        {
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["DB", "S", "B"],
+                            }
+                        },
+                    ]
+                }
+            ]
+        }
+        self.assertEqual(
+            [["DB", "S", "A"], ["DB", "S", "B"]],
+            migrate.warehouse_paths(model),
+        )
+
     def test_orchestrator_contains_no_ruby_subprocess(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn('["ruby"', source)

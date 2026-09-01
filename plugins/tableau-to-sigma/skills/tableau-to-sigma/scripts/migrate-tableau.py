@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -64,6 +65,17 @@ def find_element_id(readback: dict, element_name: str) -> str | None:
             if element.get("name") == element_name:
                 return element.get("id")
     return None
+
+
+def warehouse_paths(model: dict) -> list[list[str]]:
+    found = {}
+    for page in model.get("pages") or []:
+        for element in page.get("elements") or []:
+            source = element.get("source") or {}
+            path = source.get("path")
+            if source.get("kind") == "warehouse-table" and isinstance(path, list):
+                found[tuple(str(part) for part in path)] = path
+    return [found[key] for key in sorted(found)]
 
 
 def main() -> int:
@@ -156,6 +168,26 @@ def main() -> int:
                 args.schema,
                 "--out",
                 str(workdir),
+            ],
+        )
+
+    raw_model = load(workdir / "dm-raw.json", {}) or {}
+    for path in warehouse_paths(raw_model):
+        table_path = ".".join(path)
+        slug = re.sub(r"[^A-Za-z0-9_-]+", "-", path[-1]).strip("-")
+        columns_path = workdir / f"cols-{slug}.json"
+        if columns_path.is_file():
+            continue
+        run(
+            "Phase 2 warehouse columns",
+            "discover-columns.py",
+            [
+                "--connection-id",
+                args.connection,
+                "--table-path",
+                table_path,
+                "--out",
+                str(columns_path),
             ],
         )
 
