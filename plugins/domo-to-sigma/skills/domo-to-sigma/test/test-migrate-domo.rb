@@ -336,6 +336,9 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
      'workbook document has a merged authoritative <Page> layout XML (put-layout offline step ran)')
   ok(!document['layout'].match?(%r{</?(?:LayoutElement|GridContainer)\b}),
      'workbook document layout contains no rejected legacy layout aliases')
+  color_overrides = document.dig('settings', 'theme', 'overrides', 'colorOverrides')
+  eq(color_overrides, [{ 'name' => 'backgroundCanvas', 'color' => '#F4F4F4' }],
+     'theme colorOverrides uses the live API array-of-name/color shape')
   placed = document['layout'].scan(/\belementId="([^"]+)"/).flatten
   eq(placed.sort, all_elements.map { |element| element['id'] }.sort,
      'authoritative layout places every flat element exactly once')
