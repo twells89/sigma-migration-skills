@@ -42,6 +42,14 @@ class VerifyCompleteTest(unittest.TestCase):
                 "render_health": {"path": str(self.target_png)},
             },
             "semantic-edits.json": {"match": True},
+            "source-object-census.json": {
+                "summary": {"complete": True, "total": 0},
+                "objects": [],
+            },
+            "security-decision.json": {
+                "decision": "not-required",
+                "rules_detected": 0,
+            },
             "dm-ids.json": {"dataModelId": "dm-1"},
             "wb-ids.json": {"workbookId": "wb-1"},
         }

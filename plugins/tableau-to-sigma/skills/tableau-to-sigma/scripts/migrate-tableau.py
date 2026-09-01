@@ -34,6 +34,12 @@ def write(path: Path, value) -> None:
     )
 
 
+def copy_artifact(source: str, destination: Path) -> None:
+    source_path = Path(source).expanduser().resolve()
+    if source_path != destination.resolve():
+        shutil.copyfile(source_path, destination)
+
+
 def run(phase: str, script: str, arguments: list[str]) -> None:
     print(f"── {phase}: {script}")
     completed = subprocess.run(
@@ -88,7 +94,10 @@ def unresolved_gaps(gaps: dict, resolutions: dict | None) -> list[dict]:
     return [
         row
         for row in rows
-        if (accepted.get(row.get("name")) or {}).get("status") != "validated"
+        if (
+            (accepted.get(row.get("name")) or {}).get("status") != "validated"
+            or not (accepted.get(row.get("name")) or {}).get("evidence")
+        )
     ]
 
 
@@ -121,6 +130,7 @@ def main() -> int:
         choices=("port", "customize", "skip"),
         help="required when source security rules are detected",
     )
+    parser.add_argument("--security-reason")
     parser.add_argument("--skip-doctor-gate", help="named reason; recorded by gate")
     parser.add_argument("--discover-only", action="store_true")
     args = parser.parse_args()
@@ -192,6 +202,8 @@ def main() -> int:
         if args.gap_resolutions
         else None
     )
+    if args.gap_resolutions:
+        copy_artifact(args.gap_resolutions, workdir / "gap-resolutions.json")
     open_gaps = unresolved_gaps(gaps, resolutions)
     if open_gaps:
         write(workdir / "unresolved-gaps.json", open_gaps)
@@ -265,6 +277,25 @@ def main() -> int:
                 "Then re-run this command. Security is never silently dropped.",
             ],
         )
+    if security and args.security_decision == "skip" and not args.security_reason:
+        return stop(
+            15,
+            "SECURITY SKIP REASON REQUIRED",
+            ["Re-run with --security-reason <explicit user-approved reason>."],
+        )
+    write(
+        workdir / "security-decision.json",
+        (
+            {
+                "decision": "skip",
+                "rules_detected": len(security),
+                "reason": args.security_reason,
+                "acknowledges_all_rows_visible": True,
+            }
+            if security
+            else {"decision": "not-required", "rules_detected": 0}
+        ),
+    )
 
     unsupported = [
         pattern
@@ -410,6 +441,26 @@ def main() -> int:
     state["workbook_id"] = workbook_id
     write(state_path, state)
 
+    print("── Accounting: build-source-object-census.py")
+    accounting = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "build-source-object-census.py"),
+            "--workdir",
+            str(workdir),
+        ],
+        check=False,
+    )
+    if accounting.returncode:
+        return stop(
+            4,
+            "SOURCE OBJECT ACCOUNTING REQUIRED",
+            [
+                f"See {workdir / 'source-object-census.json'}.",
+                "Every source formula and dashboard zone needs one terminal disposition.",
+            ],
+        )
+
     if not args.expected or not args.actuals:
         return stop(
             12,
@@ -431,6 +482,7 @@ def main() -> int:
             str(workdir / "parity-final.json"),
         ],
     )
+    copy_artifact(args.actuals, workdir / "parity-actuals.json")
     if not args.source_anchors:
         return stop(
             16,
@@ -440,6 +492,7 @@ def main() -> int:
                 "Re-run with --source-anchors <source-anchors.json>.",
             ],
         )
+    copy_artifact(args.source_anchors, workdir / "source-anchors.json")
     run(
         "Phase 6 source anchors",
         "verify-anchors.py",
@@ -517,7 +570,19 @@ def main() -> int:
         "build-migration-report.py",
         ["--workdir", str(workdir)],
     )
-    return completed.returncode
+    print("── Consolidated hard gate: assert-phase6-ran.py")
+    hard_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "assert-phase6-ran.py"),
+            "--workdir",
+            str(workdir),
+            "--blind-grade",
+            args.blind_grade,
+        ],
+        check=False,
+    )
+    return hard_gate.returncode or completed.returncode
 
 
 if __name__ == "__main__":

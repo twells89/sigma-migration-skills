@@ -36,6 +36,8 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         "anchors": workdir / "anchors-verdict.json",
         "visual_similarity": workdir / "visual-similarity-final.json",
         "semantic_edits": workdir / "semantic-edits.json",
+        "source_census": workdir / "source-object-census.json",
+        "security_decision": workdir / "security-decision.json",
         "data_model_ids": workdir / "dm-ids.json",
         "workbook_ids": workdir / "wb-ids.json",
         "blind_grade": blind_grade,
@@ -72,6 +74,17 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         failures.append("visual_similarity: machine floor failed")
     if documents.get("semantic_edits", {}).get("match") is not True:
         failures.append("semantic_edits: structural proof missing or failed")
+    census = documents.get("source_census") or {}
+    census_summary = census.get("summary") or {}
+    source_objects = census.get("objects") or []
+    if (
+        census_summary.get("complete") is not True
+        or census_summary.get("total") != len(source_objects)
+    ):
+        failures.append("source_census: accounting is incomplete")
+    security = documents.get("security_decision") or {}
+    if security.get("decision") not in {"not-required", "port", "customize", "skip"}:
+        failures.append("security_decision: missing or invalid")
     blind = documents.get("blind_grade") or {}
     for path_key, hash_key, health_key in (
         ("source_png", "source_sha256", "source_health"),
@@ -99,22 +112,62 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
 
     dm_ids = documents.get("data_model_ids") or {}
     wb_ids = documents.get("workbook_ids") or {}
+    yellow = security.get("decision") == "skip" or any(
+        item.get("status") in {"approximated", "needs-review", "skipped"}
+        for item in source_objects
+        if isinstance(item, dict)
+    )
+    verdict = "BLOCKED" if failures else ("YELLOW" if yellow else "GREEN")
+    counts = {
+        status: sum(item.get("status") == status for item in source_objects)
+        for status in (
+            "migrated",
+            "approximated",
+            "needs-review",
+            "skipped",
+            "not-applicable",
+        )
+    }
+    gates = {
+        "mission": not inferred and "mission" in documents,
+        "data_model_readback": documents.get("data_model_readback", {}).get("pass") is True,
+        "workbook_readback": documents.get("workbook_readback", {}).get("pass") is True,
+        "source_accounting": census_summary.get("complete") is True,
+        "numeric_parity": documents.get("parity", {}).get("match") is True,
+        "source_anchors": documents.get("anchors", {}).get("pass") is True,
+        "visual_floor": visual_pass,
+        "blind_visual_grade": blind.get("verdict") == "pass" and not failed_dimensions,
+        "semantic_edit_proof": documents.get("semantic_edits", {}).get("match") is True,
+        "security_decision": security.get("decision") in {"not-required", "port", "customize", "skip"},
+    }
     return {
-        "status": "GREEN" if not failures else "BLOCKED",
+        "schema_version": 1,
+        "status": verdict,
+        "verdict": verdict,
         "complete": not failures,
         "dataModelId": dm_ids.get("dataModelId"),
         "workbookId": wb_ids.get("workbookId"),
-        "failures": failures,
-        "gates": {
-            "mission": not inferred and "mission" in documents,
-            "data_model_readback": documents.get("data_model_readback", {}).get("pass") is True,
-            "workbook_readback": documents.get("workbook_readback", {}).get("pass") is True,
-            "numeric_parity": documents.get("parity", {}).get("match") is True,
-            "source_anchors": documents.get("anchors", {}).get("pass") is True,
-            "visual_floor": visual_pass,
-            "blind_visual_grade": blind.get("verdict") == "pass" and not failed_dimensions,
-            "semantic_edit_proof": documents.get("semantic_edits", {}).get("match") is True,
+        "summary": {
+            "complete": not failures and census_summary.get("complete") is True,
+            "total": len(source_objects),
+            "accounted": len(source_objects),
+            "counts": counts,
         },
+        "source_objects": source_objects,
+        "checks": [
+            {"name": "source-accounting", "status": "PASS" if gates["source_accounting"] else "FAIL"},
+            {"name": "parity", "status": "PASS" if gates["numeric_parity"] else "FAIL"},
+            {
+                "name": "render",
+                "status": (
+                    "PASS"
+                    if gates["visual_floor"] and gates["blind_visual_grade"]
+                    else "FAIL"
+                ),
+            },
+        ],
+        "failures": failures,
+        "gates": gates,
     }
 
 

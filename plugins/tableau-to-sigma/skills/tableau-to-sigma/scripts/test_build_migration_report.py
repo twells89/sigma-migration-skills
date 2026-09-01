@@ -33,6 +33,17 @@ class BuildMigrationReportTest(unittest.TestCase):
                 "parity-final.json": {"status": "PASS", "differences": []},
                 "visual-similarity-final.json": {"pass": True, "score_overall": 0.9},
                 "semantic-edits.json": {"match": True},
+                "source-object-census.json": {
+                    "summary": {"complete": True, "total": 1},
+                    "objects": [
+                        {
+                            "type": "formula",
+                            "id": "calc-1",
+                            "name": "Metric",
+                            "status": "migrated",
+                        }
+                    ],
+                },
                 "conv-meta.json": {"warnings": [], "workbookPatterns": [], "security": []},
             }
             for name, value in fixtures.items():
@@ -42,6 +53,7 @@ class BuildMigrationReportTest(unittest.TestCase):
             self.assertIn("PASS — numeric parity", report)
             self.assertIn("FAIL — blind visual grade", report)
             self.assertIn("blind visual mismatch", report)
+            self.assertIn("| formula | calc-1 | Metric | migrated |", report)
 
 
 if __name__ == "__main__":

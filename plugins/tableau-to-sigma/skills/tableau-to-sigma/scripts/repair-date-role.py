@@ -198,6 +198,15 @@ def repair(
         "template_element": template_element,
         "proof": proof,
         "match": True,
+        "edits": [
+            {
+                "edit_description": (
+                    f"Replace {replace_element} with proven {role_name} "
+                    f"relationship on {source_key}"
+                ),
+                "proof": proof,
+            }
+        ],
     }
     return model, metadata, report
 

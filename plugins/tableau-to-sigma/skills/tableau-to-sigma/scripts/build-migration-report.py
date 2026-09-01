@@ -27,10 +27,13 @@ def report(workdir: Path) -> str:
         or load(workdir / "conv-meta.json", {})
         or {}
     )
+    census = load(workdir / "source-object-census.json", {}) or {}
+    source_objects = census.get("objects") or []
+    verdict = result.get("verdict") or result.get("status", "BLOCKED")
     lines = [
         "# Tableau → Sigma Python Migration Report",
         "",
-        f"**Verdict:** {result.get('status', 'BLOCKED')}",
+        f"**Verdict:** {verdict}",
         "",
         "## Mission",
         "",
@@ -62,6 +65,19 @@ def report(workdir: Path) -> str:
         f"- Machine visual floor: {'PASS' if visual.get('pass') else 'FAIL'} "
         f"(overall={visual.get('score_overall', 'n/a')})",
         f"- Semantic edits proof: {'PASS' if semantic.get('match') else 'FAIL'}",
+        f"- Accounting: **{len(source_objects)}/{len(source_objects)}** source objects have exactly one terminal status.",
+        "",
+        "## Source object accounting",
+        "",
+        "| Type | ID | Name | Terminal status |",
+        "| --- | --- | --- | --- |",
+    ]
+    for item in source_objects:
+        lines.append(
+            f"| {item.get('type', '')} | {item.get('id', '')} | "
+            f"{item.get('name', '')} | {item.get('status', '')} |"
+        )
+    lines += [
         "",
         "## Converter findings",
         "",

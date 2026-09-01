@@ -112,6 +112,7 @@ class RepairDateRoleTest(unittest.TestCase):
         self.assertEqual("equivalence-proof", relationship["derivedVia"])
         self.assertFalse(repaired_meta["workbookPatterns"])
         self.assertTrue(report["match"])
+        self.assertTrue(report["edits"][0]["proof"]["match"])
 
     def test_repair_can_restore_an_explicit_discovered_source_key(self):
         model, metadata = fixture()
