@@ -81,7 +81,7 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
         {
             "id": "overview-title",
             "kind": "text",
-            "body": "# Orders — Executive Overview",
+            "body": "### Orders — Executive Overview",
         },
         kpi(
             "kpi-net-revenue",
@@ -185,6 +185,13 @@ def build(data_model_id: str, element_id: str, folder_id: str) -> dict:
             "xAxis": {
                 "columnId": "ship-category",
                 "sort": {"by": "ship-revenue", "direction": "descending"},
+                "format": {
+                    "labels": {
+                        "labelAngle": 0,
+                        "fontSize": 8,
+                        "allowLongerLabels": True,
+                    }
+                },
             },
             "yAxis": {"columnIds": ["ship-revenue"]},
             "color": {"by": "single", "value": "#4E79A7"},
