@@ -84,6 +84,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify profile, doctor, discovery, and converter paths without Ruby
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           python3 shared/scripts/test_runtime_profile.py
           bash plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-doctor-json.sh
           python3 plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test_assert_doctor_ran.py
