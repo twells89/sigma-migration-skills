@@ -35,6 +35,10 @@ class ReuseRequired(RuntimeError):
     pass
 
 
+class ParityPreparationError(RuntimeError):
+    pass
+
+
 def load(path: Path, default=None):
     if not path.is_file():
         return default
@@ -54,6 +58,232 @@ def copy_artifact(source: str, destination: Path) -> None:
     source_path = Path(source).expanduser().resolve()
     if source_path != destination.resolve():
         shutil.copyfile(source_path, destination)
+
+
+def parity_plan_chart_names(plan: dict) -> list[str]:
+    charts = plan.get("charts") if isinstance(plan, dict) else None
+    if not isinstance(charts, list) or not charts:
+        raise ParityPreparationError("parity-plan.json contains no charts")
+    if plan.get("plan_status") != "green":
+        raise ParityPreparationError(
+            f"parity-plan.json status is {plan.get('plan_status')!r}, not 'green'"
+        )
+    unresolved = [
+        item
+        for item in plan.get("hidden_filters") or []
+        if not isinstance(item, dict)
+        or item.get("status") not in {"translated", "waived"}
+    ]
+    if unresolved:
+        raise ParityPreparationError(
+            f"{len(unresolved)} hidden source filter(s) remain unresolved"
+        )
+    names = []
+    for index, chart in enumerate(charts):
+        if not isinstance(chart, dict):
+            raise ParityPreparationError(f"parity chart at index {index} is malformed")
+        name = str(chart.get("chart") or chart.get("name") or "").strip()
+        required = (
+            chart.get("tableau_view"),
+            chart.get("sigma_element_id"),
+            chart.get("sigma_columns"),
+            chart.get("expected"),
+        )
+        if not name or any(value in (None, "", []) for value in required):
+            raise ParityPreparationError(
+                f"parity chart {name or index!r} lacks source/target coverage"
+            )
+        names.append(name)
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ParityPreparationError(
+            "parity chart names are duplicated: " + ", ".join(duplicates)
+        )
+    return names
+
+
+def validate_parity_rows(path: Path, chart_names: list[str], label: str) -> dict:
+    try:
+        artifact = load(path, None)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ParityPreparationError(
+            f"{label} artifact is unreadable: {path}: {exc}"
+        ) from exc
+    if not isinstance(artifact, dict):
+        raise ParityPreparationError(f"{label} artifact must be a JSON object: {path}")
+    expected = set(chart_names)
+    present = set(artifact)
+    if present != expected:
+        missing = sorted(expected - present)
+        extra = sorted(present - expected)
+        detail = []
+        if missing:
+            detail.append("missing " + ", ".join(repr(name) for name in missing))
+        if extra:
+            detail.append("unexpected " + ", ".join(repr(name) for name in extra))
+        raise ParityPreparationError(
+            f"{label} coverage does not match parity plan ({'; '.join(detail)})"
+        )
+    for name in chart_names:
+        rows = artifact[name]
+        if not isinstance(rows, list) or not rows:
+            raise ParityPreparationError(
+                f"{label} for displayed tile {name!r} is failed, empty, or truncated"
+            )
+        if any(not isinstance(row, list) or not row for row in rows):
+            raise ParityPreparationError(
+                f"{label} for displayed tile {name!r} contains malformed rows"
+            )
+    return artifact
+
+
+def validate_workbook_readback_fresh(
+    readback_path: Path, workbook_id: str, *, api=sigma_rest
+) -> str:
+    try:
+        readback = load(readback_path, None)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ParityPreparationError(
+            f"workbook readback is unreadable: {readback_path}: {exc}"
+        ) from exc
+    if not isinstance(readback, dict):
+        raise ParityPreparationError(f"workbook readback is unreadable: {readback_path}")
+    artifact_id = readback.get("workbookId")
+    if artifact_id is not None and str(artifact_id) != str(workbook_id):
+        raise ParityPreparationError(
+            f"workbook readback belongs to {artifact_id!r}, not {workbook_id!r}"
+        )
+    artifact_version = readback.get("latestDocumentVersion") or readback.get(
+        "latestVersion"
+    )
+    if artifact_version is None or str(artifact_version) == "":
+        raise ParityPreparationError(
+            "workbook readback lacks latestDocumentVersion/latestVersion"
+        )
+    try:
+        live = api.request("get", f"/v2/workbooks/{workbook_id}/spec")
+    except Exception as exc:
+        raise ParityPreparationError(
+            f"live workbook document-version check failed: {exc}"
+        ) from exc
+    if not isinstance(live, dict):
+        raise ParityPreparationError("live workbook spec returned no JSON object")
+    live_version = live.get("latestDocumentVersion") or live.get("latestVersion")
+    if live_version is None or str(live_version) == "":
+        raise ParityPreparationError("live workbook spec lacks a document version")
+    if str(live_version) != str(artifact_version):
+        raise ParityPreparationError(
+            f"stale workbook readback: artifact is document version "
+            f"{artifact_version}, live workbook is {live_version}"
+        )
+    return str(live_version)
+
+
+def prepare_numeric_parity(
+    args,
+    workdir: Path,
+    workbook_id: str,
+    *,
+    runner=subprocess.run,
+    api=sigma_rest,
+) -> tuple[Path, Path, Path]:
+    """Build/validate the plan, expected projection, and Sigma actuals."""
+    readback_path = workdir / "workbook-readback.json"
+    plan_path = workdir / "parity-plan.json"
+    expected_path = workdir / "parity-expected.json"
+    actuals_path = workdir / "parity-actuals.json"
+    if not readback_path.is_file():
+        raise ParityPreparationError(f"missing workbook readback: {readback_path}")
+    validate_workbook_readback_fresh(readback_path, workbook_id, api=api)
+
+    plan_command = [
+        sys.executable,
+        str(HERE / "auto-parity-plan.py"),
+        "--tableau",
+        str(workdir),
+        "--workbook-spec",
+        str(readback_path),
+        "--workbook-id",
+        workbook_id,
+        "--out",
+        str(plan_path),
+    ]
+    for dashboard in args.dashboard:
+        plan_command += ["--dashboard", dashboard]
+    completed = runner(plan_command, check=False)
+    if completed.returncode:
+        raise ParityPreparationError(
+            f"automatic parity plan failed with exit {completed.returncode}"
+        )
+    try:
+        plan = load(plan_path, None)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ParityPreparationError(
+            f"automatic parity plan is unreadable: {exc}"
+        ) from exc
+    if not isinstance(plan, dict):
+        raise ParityPreparationError("automatic parity plan was not written")
+    chart_names = parity_plan_chart_names(plan)
+
+    if args.expected:
+        explicit_expected = Path(args.expected).expanduser().resolve()
+        validate_parity_rows(explicit_expected, chart_names, "explicit expected")
+        try:
+            copy_artifact(str(explicit_expected), expected_path)
+        except OSError as exc:
+            raise ParityPreparationError(
+                f"could not stage explicit expected artifact: {exc}"
+            ) from exc
+    else:
+        completed = runner(
+            [
+                sys.executable,
+                str(HERE / "parity-plan-to-expected.py"),
+                "--plan",
+                str(plan_path),
+                "--out",
+                str(expected_path),
+            ],
+            check=False,
+        )
+        if completed.returncode:
+            raise ParityPreparationError(
+                f"parity expected transform failed with exit {completed.returncode}"
+            )
+    validate_parity_rows(expected_path, chart_names, "expected")
+
+    if args.actuals:
+        explicit_actuals = Path(args.actuals).expanduser().resolve()
+        validate_parity_rows(explicit_actuals, chart_names, "explicit actuals")
+        try:
+            copy_artifact(str(explicit_actuals), actuals_path)
+        except OSError as exc:
+            raise ParityPreparationError(
+                f"could not stage explicit actuals artifact: {exc}"
+            ) from exc
+    else:
+        completed = runner(
+            [
+                sys.executable,
+                str(HERE / "collect-parity-actuals.py"),
+                "--plan",
+                str(plan_path),
+                "--workbook-id",
+                workbook_id,
+                "--workbook-spec",
+                str(readback_path),
+                "--out",
+                str(actuals_path),
+            ],
+            check=False,
+        )
+        if completed.returncode:
+            raise ParityPreparationError(
+                f"automatic Sigma actuals collection failed with exit "
+                f"{completed.returncode}; see {actuals_path}"
+            )
+    validate_parity_rows(actuals_path, chart_names, "actuals")
+    return plan_path, expected_path, actuals_path
 
 
 def run(phase: str, script: str, arguments: list[str]) -> None:
@@ -386,8 +616,14 @@ def main() -> int:
         metavar="REASON",
         help="explicitly proceed without frozen-extract attribution; prohibits exact-parity claims",
     )
-    parser.add_argument("--expected")
-    parser.add_argument("--actuals")
+    parser.add_argument(
+        "--expected",
+        help="explicit/backcompat expected JSON override; default derives from parity-plan.json",
+    )
+    parser.add_argument(
+        "--actuals",
+        help="explicit/backcompat Sigma actuals JSON override; default collects via REST export",
+    )
     parser.add_argument("--source-anchors")
     parser.add_argument("--source-png")
     parser.add_argument("--page-id")
@@ -900,13 +1136,20 @@ def main() -> int:
             ],
         )
 
-    if not args.expected or not args.actuals:
+    try:
+        _, expected_path, actuals_path = prepare_numeric_parity(
+            args, workdir, workbook_id
+        )
+    except ParityPreparationError as exc:
         return stop(
             12,
-            "PARITY ACTUALS REQUIRED",
+            "PARITY PREPARATION REQUIRED",
             [
-                "Collect every KPI/chart result from the live Sigma workbook.",
-                "Re-run with --expected <source.json> --actuals <sigma.json>.",
+                str(exc),
+                f"Review {workdir / 'parity-plan.json'} and "
+                f"{workdir / 'parity-actuals.json'}.",
+                "Resolve every source filter/tile/export failure, then re-run. "
+                "--expected/--actuals remain explicit override inputs.",
             ],
         )
     run(
@@ -914,14 +1157,13 @@ def main() -> int:
         "verify-parity.py",
         [
             "--expected",
-            args.expected,
+            str(expected_path),
             "--actual",
-            args.actuals,
+            str(actuals_path),
             "--out",
             str(workdir / "parity-final.json"),
         ],
     )
-    copy_artifact(args.actuals, workdir / "parity-actuals.json")
     if not args.source_anchors:
         return stop(
             16,
@@ -939,9 +1181,9 @@ def main() -> int:
             "--workdir",
             str(workdir),
             "--anchors",
-            args.source_anchors,
+            str(workdir / "source-anchors.json"),
             "--actuals",
-            args.actuals,
+            str(actuals_path),
         ],
     )
 

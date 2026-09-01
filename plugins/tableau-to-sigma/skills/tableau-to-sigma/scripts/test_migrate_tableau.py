@@ -15,6 +15,52 @@ spec.loader.exec_module(migrate)
 
 class MigrateTableauPythonTest(unittest.TestCase):
     @staticmethod
+    def parity_args(**overrides):
+        values = {"dashboard": [], "expected": None, "actuals": None}
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    @staticmethod
+    def complete_plan(status="green"):
+        return {
+            "plan_status": status,
+            "hidden_filters": [],
+            "charts": [
+                {
+                    "chart": "Revenue",
+                    "tableau_view": "Revenue Sheet",
+                    "sigma_element_id": "el-revenue",
+                    "sigma_columns": ["x", "y"],
+                    "expected": [["East", 10.0]],
+                }
+            ],
+        }
+
+    def parity_workdir(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        workdir = Path(temporary.name)
+        migrate.write(
+            workdir / "workbook-readback.json",
+            {
+                "workbookId": "wb-1",
+                "latestDocumentVersion": 4,
+                "document": {"elements": []},
+            },
+        )
+        return workdir
+
+    @staticmethod
+    def version_api(version=4):
+        return SimpleNamespace(
+            request=lambda method, path: {
+                "workbookId": "wb-1",
+                "latestDocumentVersion": version,
+                "document": {},
+            }
+        )
+
+    @staticmethod
     def embedded_classification():
         return {
             "classification": "embedded-file-extract",
@@ -164,6 +210,200 @@ class MigrateTableauPythonTest(unittest.TestCase):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn('["ruby"', source)
         self.assertNotIn("RbConfig", source)
+
+    def test_parity_is_automatic_after_readback_without_overrides(self):
+        workdir = self.parity_workdir()
+        commands = []
+
+        def fake_runner(command, check):
+            self.assertFalse(check)
+            commands.append(command)
+            script = Path(command[1]).name
+            if script == "auto-parity-plan.py":
+                migrate.write(workdir / "parity-plan.json", self.complete_plan())
+            elif script == "parity-plan-to-expected.py":
+                migrate.write(
+                    workdir / "parity-expected.json",
+                    {"Revenue": [["East", 10.0]]},
+                )
+            elif script == "collect-parity-actuals.py":
+                migrate.write(
+                    workdir / "parity-actuals.json",
+                    {"Revenue": [["East", 10.0]]},
+                )
+            else:
+                self.fail(f"unexpected script {script}")
+            return SimpleNamespace(returncode=0)
+
+        plan, expected, actuals = migrate.prepare_numeric_parity(
+            self.parity_args(dashboard=["Overview"]),
+            workdir,
+            "wb-1",
+            runner=fake_runner,
+            api=self.version_api(),
+        )
+
+        self.assertEqual(workdir / "parity-plan.json", plan)
+        self.assertEqual(workdir / "parity-expected.json", expected)
+        self.assertEqual(workdir / "parity-actuals.json", actuals)
+        scripts = [Path(command[1]).name for command in commands]
+        self.assertEqual(
+            [
+                "auto-parity-plan.py",
+                "parity-plan-to-expected.py",
+                "collect-parity-actuals.py",
+            ],
+            scripts,
+        )
+        self.assertNotIn("ruby", " ".join(part for command in commands for part in command))
+        plan_command = commands[0]
+        self.assertEqual(
+            str(workdir / "workbook-readback.json"),
+            plan_command[plan_command.index("--workbook-spec") + 1],
+        )
+        self.assertIn("--dashboard", plan_command)
+
+    def test_explicit_parity_overrides_are_validated_and_not_recollected(self):
+        workdir = self.parity_workdir()
+        explicit_dir = workdir / "explicit"
+        explicit_dir.mkdir()
+        expected = explicit_dir / "expected.json"
+        actuals = explicit_dir / "actuals.json"
+        migrate.write(expected, {"Revenue": [["East", 10.0]]})
+        migrate.write(actuals, {"Revenue": [["East", 10.0]]})
+        original_expected = expected.read_bytes()
+        original_actuals = actuals.read_bytes()
+        commands = []
+
+        def fake_runner(command, check):
+            commands.append(command)
+            self.assertEqual("auto-parity-plan.py", Path(command[1]).name)
+            migrate.write(workdir / "parity-plan.json", self.complete_plan())
+            return SimpleNamespace(returncode=0)
+
+        _, expected_path, actuals_path = migrate.prepare_numeric_parity(
+            self.parity_args(expected=str(expected), actuals=str(actuals)),
+            workdir,
+            "wb-1",
+            runner=fake_runner,
+            api=self.version_api(),
+        )
+
+        self.assertEqual(["auto-parity-plan.py"], [Path(c[1]).name for c in commands])
+        self.assertEqual(original_expected, expected.read_bytes())
+        self.assertEqual(original_actuals, actuals.read_bytes())
+        self.assertEqual(
+            {"Revenue": [["East", 10.0]]}, migrate.load(expected_path)
+        )
+        self.assertEqual(
+            {"Revenue": [["East", 10.0]]}, migrate.load(actuals_path)
+        )
+
+    def test_unresolved_hidden_filters_stop_before_expected_or_actuals(self):
+        workdir = self.parity_workdir()
+        plan = self.complete_plan(status="needs_review")
+        plan["hidden_filters"] = [
+            {"tile": "Revenue Sheet", "calc_ref": "[Calc]", "status": "unresolved"}
+        ]
+        commands = []
+
+        def fake_runner(command, check):
+            commands.append(command)
+            migrate.write(workdir / "parity-plan.json", plan)
+            return SimpleNamespace(returncode=0)
+
+        with self.assertRaisesRegex(
+            migrate.ParityPreparationError, "not 'green'"
+        ):
+            migrate.prepare_numeric_parity(
+                self.parity_args(),
+                workdir,
+                "wb-1",
+                runner=fake_runner,
+                api=self.version_api(),
+            )
+        self.assertEqual(["auto-parity-plan.py"], [Path(c[1]).name for c in commands])
+
+    def test_failed_collection_and_missing_coverage_fail_closed(self):
+        workdir = self.parity_workdir()
+
+        def failed_collection(command, check):
+            script = Path(command[1]).name
+            if script == "auto-parity-plan.py":
+                migrate.write(workdir / "parity-plan.json", self.complete_plan())
+                return SimpleNamespace(returncode=0)
+            if script == "parity-plan-to-expected.py":
+                migrate.write(
+                    workdir / "parity-expected.json",
+                    {"Revenue": [["East", 10.0]]},
+                )
+                return SimpleNamespace(returncode=0)
+            if script == "collect-parity-actuals.py":
+                migrate.write(
+                    workdir / "parity-actuals.json",
+                    {
+                        "Revenue": {
+                            "status": "timeout",
+                            "reason": "deadline reached",
+                        }
+                    },
+                )
+                return SimpleNamespace(returncode=3)
+            self.fail(f"unexpected script {script}")
+
+        with self.assertRaisesRegex(
+            migrate.ParityPreparationError, "collection failed with exit 3"
+        ):
+            migrate.prepare_numeric_parity(
+                self.parity_args(),
+                workdir,
+                "wb-1",
+                runner=failed_collection,
+                api=self.version_api(),
+            )
+
+        bad_actuals = workdir / "bad-actuals.json"
+        migrate.write(bad_actuals, {"Another Tile": [[1]]})
+
+        def plan_only(command, check):
+            migrate.write(workdir / "parity-plan.json", self.complete_plan())
+            return SimpleNamespace(returncode=0)
+
+        with self.assertRaisesRegex(
+            migrate.ParityPreparationError, "coverage does not match"
+        ):
+            migrate.prepare_numeric_parity(
+                self.parity_args(
+                    expected=str(workdir / "parity-expected.json"),
+                    actuals=str(bad_actuals),
+                ),
+                workdir,
+                "wb-1",
+                runner=plan_only,
+                api=self.version_api(),
+            )
+
+    def test_stale_readback_stops_before_plan_or_override_use(self):
+        workdir = self.parity_workdir()
+        commands = []
+
+        with self.assertRaisesRegex(
+            migrate.ParityPreparationError, "stale workbook readback"
+        ):
+            migrate.prepare_numeric_parity(
+                self.parity_args(),
+                workdir,
+                "wb-1",
+                runner=lambda command, check: commands.append(command),
+                api=self.version_api(version=5),
+            )
+        self.assertEqual([], commands)
+
+    def test_anchor_phase_uses_canonical_auto_collected_actuals(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        anchor_phase = source[source.index('"Phase 6 source anchors"') :]
+        self.assertIn('"--actuals",\n            str(actuals_path)', anchor_phase)
+        self.assertNotIn('"--actuals",\n            args.actuals', anchor_phase)
 
     def test_state_json_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
