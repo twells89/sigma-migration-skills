@@ -152,6 +152,24 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         )
         return instance.build()
 
+    def build_dm_case(self, zones, columns, dm_spec):
+        instance = builder_module.WorkbookBuilder(
+            [
+                {
+                    "dashboard": "Relationship Resolution",
+                    "emit_page": True,
+                    "zones": zones,
+                }
+            ],
+            {"columns_by_guid": columns},
+            data_model_id="dm",
+            element_id="fact",
+            folder_id="folder",
+            data_model_element_name="FACT",
+            dm_spec=dm_spec,
+        )
+        return instance.build()
+
     def test_builds_complete_flat_native_workbook_with_layout_last(self):
         spec, residues = self.build()
         self.assertEqual("complete", residues["status"])
@@ -296,6 +314,11 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
                             "id": "local-fact",
                             "kind": "table",
                             "name": "FACT",
+                            "columns": [
+                                {"id": "dm-order-date", "name": "Order Date"},
+                                {"id": "dm-region", "name": "Region"},
+                                {"id": "dm-sales", "name": "Sales"},
+                            ],
                             "metrics": [
                                 {
                                     "id": "metric-margin",
@@ -483,6 +506,297 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         )
         self.assertEqual(
             ["Unknown Input"], residue["signals"]["references"]
+        )
+
+    def test_dm_spec_resolves_direct_source_column_by_guid(self):
+        sales_guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        spec, report = self.build_dm_case(
+            [
+                {
+                    "id": "sales-kpi",
+                    "kind": "chart",
+                    "chart_kind": "kpi",
+                    "caption": "Sales",
+                    "rows_shelf": shelf(field(sales_guid, "measure", "sum")),
+                    "cols_shelf": shelf(),
+                    "filters": [],
+                }
+            ],
+            {sales_guid: {"caption": "Sales", "datatype": "real"}},
+            {
+                "sigmaDataModel": {
+                    "pages": [
+                        {
+                            "elements": [
+                                {
+                                    "id": "fact",
+                                    "source": {
+                                        "kind": "warehouse-table",
+                                        "path": ["SCHEMA", "FACT"],
+                                    },
+                                    "columns": [
+                                        {
+                                            "id": (
+                                                "inode-NORM0001/"
+                                                "AAAAAAAA-BBBB-CCCC-DDDD-EEEE~suffix"
+                                            ),
+                                            "name": "Sales",
+                                            "formula": "[FACT/Sales]",
+                                        },
+                                    ],
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        master = spec["document"]["elements"][0]
+        self.assertEqual("[FACT/Sales]", master["columns"][0]["formula"])
+
+    def test_dm_spec_resolves_related_column_by_guid(self):
+        region_guid = "11111111-2222-3333-4444-555555555555"
+        sales_guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        spec, report = self.build_dm_case(
+            [
+                {
+                    "id": "sales-region",
+                    "kind": "chart",
+                    "chart_kind": "bar",
+                    "caption": "Sales by Region",
+                    "rows_shelf": shelf(field(sales_guid, "measure", "sum")),
+                    "cols_shelf": shelf(field(region_guid, "dim", "none")),
+                    "filters": [],
+                }
+            ],
+            {
+                sales_guid: {"caption": "Sales", "datatype": "real"},
+                region_guid: {"caption": "Region", "datatype": "string"},
+            },
+            {
+                "pages": [
+                    {
+                        "elements": [
+                            {
+                                "id": "fact",
+                                "name": "FACT",
+                                "columns": [
+                                    {"id": sales_guid, "name": "Sales"}
+                                ],
+                                "relationships": [
+                                    {
+                                        "id": "region-rel",
+                                        "name": "Customer",
+                                        "targetElementId": "customer",
+                                        "keys": [],
+                                    }
+                                ],
+                            },
+                            {
+                                "id": "customer",
+                                "name": "CUSTOMER",
+                                "columns": [
+                                    {
+                                        "id": (
+                                            "inode-NORM0002/"
+                                            "11111111-2222-3333-4444-5555~suffix"
+                                        ),
+                                        "name": "Sales Territory",
+                                    }
+                                ],
+                            },
+                        ]
+                    }
+                ]
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        master = spec["document"]["elements"][0]
+        self.assertEqual(
+            {"[FACT/Sales]", "[FACT/Customer/Sales Territory]"},
+            {column["formula"] for column in master["columns"]},
+        )
+
+    def test_dm_spec_blocks_ambiguous_related_caption_matches(self):
+        sales_guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        _spec, report = self.build_dm_case(
+            [
+                {
+                    "id": "sales-region",
+                    "kind": "chart",
+                    "chart_kind": "bar",
+                    "caption": "Sales by Region",
+                    "rows_shelf": shelf(field(sales_guid, "measure", "sum")),
+                    "cols_shelf": shelf(field("REGION", "dim", "none")),
+                    "filters": [],
+                }
+            ],
+            {
+                sales_guid: {"caption": "Sales", "datatype": "real"},
+                "REGION": {"caption": "Region", "datatype": "string"},
+            },
+            {
+                "pages": [
+                    {
+                        "elements": [
+                            {
+                                "id": "fact",
+                                "name": "FACT",
+                                "columns": [
+                                    {"id": sales_guid, "name": "Sales"}
+                                ],
+                                "relationships": [
+                                    {
+                                        "id": "billing-rel",
+                                        "name": "Billing Customer",
+                                        "targetElementId": "billing",
+                                    },
+                                    {
+                                        "id": "shipping-rel",
+                                        "name": "Shipping Customer",
+                                        "targetElementId": "shipping",
+                                    },
+                                ],
+                            },
+                            {
+                                "id": "billing",
+                                "name": "BILLING_CUSTOMER",
+                                "columns": [{"id": "billing-region", "name": "Region"}],
+                            },
+                            {
+                                "id": "shipping",
+                                "name": "SHIPPING_CUSTOMER",
+                                "columns": [{"id": "shipping-region", "name": "Region"}],
+                            },
+                        ]
+                    }
+                ]
+            },
+        )
+        self.assertEqual("blocked", report["status"])
+        residue = next(
+            item
+            for item in report["residues"]
+            if item["zoneId"] == "sales-region"
+        )
+        self.assertEqual(
+            "ambiguous-master-source-field", residue["reasonCode"]
+        )
+        self.assertEqual(2, len(residue["signals"]["candidates"]))
+
+    def test_dm_spec_blocks_absent_source_graph_match(self):
+        _spec, report = self.build_dm_case(
+            [
+                {
+                    "id": "lifetime-kpi",
+                    "kind": "chart",
+                    "chart_kind": "kpi",
+                    "caption": "Lifetime Value",
+                    "rows_shelf": shelf(
+                        field("LIFETIME_VALUE", "measure", "sum")
+                    ),
+                    "cols_shelf": shelf(),
+                    "filters": [],
+                }
+            ],
+            {
+                "LIFETIME_VALUE": {
+                    "caption": "Lifetime Value",
+                    "datatype": "real",
+                }
+            },
+            {
+                "pages": [
+                    {
+                        "elements": [
+                            {
+                                "id": "fact",
+                                "name": "FACT",
+                                "columns": [{"id": "sales", "name": "Sales"}],
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+        self.assertEqual("blocked", report["status"])
+        residue = next(
+            item
+            for item in report["residues"]
+            if item["zoneId"] == "lifetime-kpi"
+        )
+        self.assertEqual(
+            "unbound-master-source-field", residue["reasonCode"]
+        )
+
+    def test_dm_spec_resolves_unique_semantic_date_role_to_full_date(self):
+        date_guid = "99999999-aaaa-bbbb-cccc-dddddddddddd"
+        sales_guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        spec, report = self.build_dm_case(
+            [
+                {
+                    "id": "sales-date",
+                    "kind": "chart",
+                    "chart_kind": "line",
+                    "caption": "Monthly Sales",
+                    "rows_shelf": shelf(field(sales_guid, "measure", "sum")),
+                    "cols_shelf": shelf(field(date_guid, "dim", "tmn")),
+                    "filters": [],
+                }
+            ],
+            {
+                sales_guid: {"caption": "Sales", "datatype": "real"},
+                date_guid: {"caption": "Order Date", "datatype": "date"},
+            },
+            {
+                "pages": [
+                    {
+                        "elements": [
+                            {
+                                "id": "fact",
+                                "name": "FACT",
+                                "columns": [
+                                    {"id": sales_guid, "name": "Sales"}
+                                ],
+                                "relationships": [
+                                    {
+                                        "id": "order-date-rel",
+                                        "name": "DATE_DIM (Order Date)",
+                                        "targetElementId": "order-date",
+                                    },
+                                    {
+                                        "id": "ship-date-rel",
+                                        "name": "Ship Date",
+                                        "targetElementId": "ship-date",
+                                    },
+                                ],
+                            },
+                            {
+                                "id": "order-date",
+                                "name": "ORDER_DATE_DIM",
+                                "columns": [
+                                    {"id": "date-key", "name": "Date Key"},
+                                    {"id": "full-date", "name": "Full Date"},
+                                ],
+                            },
+                            {
+                                "id": "ship-date",
+                                "name": "SHIP_DATE_DIM",
+                                "columns": [
+                                    {"id": "ship-full-date", "name": "Full Date"}
+                                ],
+                            },
+                        ]
+                    }
+                ]
+            },
+        )
+        self.assertEqual("complete", report["status"])
+        master = spec["document"]["elements"][0]
+        self.assertIn(
+            "[FACT/DATE_DIM (Order Date)/Full Date]",
+            {column["formula"] for column in master["columns"]},
         )
 
     def test_cli_writes_structured_residues_and_no_spec_for_unsupported_zone(self):

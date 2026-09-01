@@ -156,12 +156,16 @@ class WorkbookBuilder:
             raise ValueError("dm-spec input must contain an object")
         self.formula_audit = formula_audit or {}
         self.dm_spec = dm_spec or {}
+        self.has_dm_spec = dm_spec is not None
         self.residues: list[dict[str, Any]] = []
         self.dispositions: list[dict[str, Any]] = []
         self.master_fields: dict[str, Field] = {}
         self.master_ids: dict[str, str] = {}
         self.master_formulas: dict[str, str] = {}
+        self.master_resolution_errors: dict[str, dict[str, Any]] = {}
         self.formula_rows = self._formula_audit_rows()
+        self.data_model_elements = self._data_model_elements(self.dm_spec)
+        self.data_model_source = self._selected_data_model_element()
         self.data_model_metrics = self._data_model_metrics()
 
     def _default_title(self) -> str:
@@ -246,11 +250,21 @@ class WorkbookBuilder:
             current.caption.casefold() == field.caption.casefold() and current.key != field.key
             for current in self.master_fields.values()
         ):
+            self.master_resolution_errors[field.key] = {
+                "reasonCode": "ambiguous-master-source-field",
+                "field": field.caption,
+                "match": "workbook-column-caption",
+            }
             return None
+        if formula is None:
+            formula, error = self.derive_master_source_formula(field)
+            if formula is None:
+                self.master_resolution_errors[field.key] = error
+                return None
         column_id = stable_id("master-col", field.key)
         self.master_fields[field.key] = field
         self.master_ids[field.key] = column_id
-        self.master_formulas[field.key] = formula or f"[{self.source_name}/{field.caption}]"
+        self.master_formulas[field.key] = formula
         return column_id
 
     def _formula_audit_rows(self) -> list[dict[str, Any]]:
@@ -266,7 +280,10 @@ class WorkbookBuilder:
 
     @staticmethod
     def _data_model_elements(spec: dict[str, Any]) -> list[dict[str, Any]]:
-        root = spec.get("document") if isinstance(spec.get("document"), dict) else spec
+        root = spec
+        for wrapper in ("sigmaDataModel", "model", "document"):
+            if isinstance(root.get(wrapper), dict):
+                root = root[wrapper]
         elements = [
             element
             for page in root.get("pages") or []
@@ -281,22 +298,276 @@ class WorkbookBuilder:
         )
         return elements
 
-    def _data_model_metrics(self) -> list[dict[str, Any]]:
-        elements = self._data_model_elements(self.dm_spec)
-        candidates = [
+    @staticmethod
+    def _element_names(element: dict[str, Any]) -> set[str]:
+        values = [element.get("name")]
+        path = (element.get("source") or {}).get("path")
+        if isinstance(path, list) and path:
+            values.append(path[-1])
+        return {
+            str(value).strip().casefold()
+            for value in values
+            if str(value or "").strip()
+        }
+
+    def _selected_data_model_element(self) -> dict[str, Any] | None:
+        by_id = [
             element
-            for element in elements
+            for element in self.data_model_elements
             if str(element.get("id") or "") == self.element_id
-            or str(element.get("name") or "").strip().casefold()
-            == self.source_name.casefold()
         ]
-        if len(candidates) != 1:
+        if len(by_id) == 1:
+            return by_id[0]
+        by_name = [
+            element
+            for element in self.data_model_elements
+            if self.source_name.casefold() in self._element_names(element)
+        ]
+        return by_name[0] if len(by_name) == 1 else None
+
+    def _data_model_metrics(self) -> list[dict[str, Any]]:
+        if self.data_model_source is None:
             return []
         return [
             metric
-            for metric in candidates[0].get("metrics") or []
+            for metric in self.data_model_source.get("metrics") or []
             if isinstance(metric, dict)
         ]
+
+    @staticmethod
+    def _guid_tokens(value: object) -> list[str]:
+        return [
+            match.group(0).lower()
+            for match in re.finditer(
+                r"[0-9a-f]{8}(?:-[0-9a-f]{4}){2,3}(?:-[0-9a-f]{1,12})?",
+                str(value or ""),
+                re.IGNORECASE,
+            )
+        ]
+
+    @classmethod
+    def _column_id_matches_field(cls, field: Field, column: dict[str, Any]) -> bool:
+        field_key = strip_brackets(field.key).strip().casefold()
+        column_id = str(column.get("id") or "").strip().casefold()
+        if not field_key or not column_id:
+            return False
+        if field_key == column_id:
+            return True
+        field_guids = cls._guid_tokens(field_key)
+        column_guids = cls._guid_tokens(column_id)
+        return any(
+            left.startswith(right) or right.startswith(left)
+            for left in field_guids
+            for right in column_guids
+            if min(len(left), len(right)) >= 8
+        )
+
+    @staticmethod
+    def _column_name(column: dict[str, Any]) -> str:
+        return str(column.get("name") or "").strip()
+
+    @staticmethod
+    def _candidate(
+        element: dict[str, Any],
+        column: dict[str, Any],
+        relationship: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "elementId": element.get("id"),
+            "elementName": element.get("name"),
+            "columnId": column.get("id"),
+            "columnName": column.get("name"),
+            "relationshipId": relationship.get("id") if relationship else None,
+            "relationshipName": relationship.get("name") if relationship else None,
+        }
+
+    def _related_candidates(
+        self,
+        predicate,
+    ) -> list[dict[str, Any]]:
+        if self.data_model_source is None:
+            return []
+        by_id = {
+            str(element.get("id") or ""): element
+            for element in self.data_model_elements
+            if element.get("id") is not None
+        }
+        candidates = []
+        for relationship in self.data_model_source.get("relationships") or []:
+            if not isinstance(relationship, dict):
+                continue
+            target = by_id.get(str(relationship.get("targetElementId") or ""))
+            relationship_name = str(relationship.get("name") or "").strip()
+            if target is None or not relationship_name or any(
+                token in relationship_name for token in "[]/"
+            ):
+                continue
+            for column in target.get("columns") or []:
+                if (
+                    isinstance(column, dict)
+                    and self._column_name(column)
+                    and predicate(relationship, target, column)
+                ):
+                    candidates.append(
+                        self._candidate(target, column, relationship)
+                    )
+        return candidates
+
+    def _formula_from_candidate(self, candidate: dict[str, Any]) -> str | None:
+        column_name = str(candidate.get("columnName") or "").strip()
+        relationship_name = str(candidate.get("relationshipName") or "").strip()
+        if not column_name or any(token in column_name for token in "[]"):
+            return None
+        if relationship_name:
+            return f"[{self.source_name}/{relationship_name}/{column_name}]"
+        return f"[{self.source_name}/{column_name}]"
+
+    @staticmethod
+    def _relationship_matches_date_role(
+        relationship: dict[str, Any], caption: str
+    ) -> bool:
+        name = str(relationship.get("name") or "").strip().casefold()
+        if name == caption:
+            return True
+        parenthetical_role = re.search(r"\(([^()]*)\)\s*$", name)
+        return bool(
+            parenthetical_role
+            and parenthetical_role.group(1).strip().casefold() == caption
+        )
+
+    def derive_master_source_formula(
+        self, field: Field
+    ) -> tuple[str | None, dict[str, Any]]:
+        if not self.has_dm_spec:
+            return f"[{self.source_name}/{field.caption}]", {}
+        if self.data_model_source is None:
+            return None, {
+                "reasonCode": "unbound-data-model-source",
+                "field": field.caption,
+                "sourceElementId": self.element_id,
+                "sourceElementName": self.source_name,
+            }
+
+        direct_columns = [
+            column
+            for column in self.data_model_source.get("columns") or []
+            if isinstance(column, dict) and self._column_name(column)
+        ]
+        direct_guid = [
+            self._candidate(self.data_model_source, column)
+            for column in direct_columns
+            if self._column_id_matches_field(field, column)
+        ]
+        if len(direct_guid) == 1:
+            return f"[{self.source_name}/{field.caption}]", {
+                "match": "direct-column-id",
+                "candidate": direct_guid[0],
+            }
+        if len(direct_guid) > 1:
+            return None, {
+                "reasonCode": "ambiguous-master-source-field",
+                "field": field.caption,
+                "match": "direct-column-id",
+                "candidates": direct_guid,
+            }
+
+        related_guid = self._related_candidates(
+            lambda _relationship, _target, column: self._column_id_matches_field(
+                field, column
+            ),
+        )
+        if len(related_guid) == 1:
+            return self._formula_from_candidate(related_guid[0]), {
+                "match": "related-column-id",
+                "candidate": related_guid[0],
+            }
+        if len(related_guid) > 1:
+            return None, {
+                "reasonCode": "ambiguous-master-source-field",
+                "field": field.caption,
+                "match": "related-column-id",
+                "candidates": related_guid,
+            }
+
+        caption = field.caption.casefold()
+        direct_caption = [
+            self._candidate(self.data_model_source, column)
+            for column in direct_columns
+            if self._column_name(column).casefold() == caption
+        ]
+        related_caption = self._related_candidates(
+            lambda _relationship, _target, column: (
+                self._column_name(column).casefold() == caption
+            ),
+        )
+        caption_candidates = direct_caption + related_caption
+        if len(caption_candidates) == 1:
+            candidate = caption_candidates[0]
+            formula = (
+                self._formula_from_candidate(candidate)
+                if candidate.get("relationshipName")
+                else f"[{self.source_name}/{field.caption}]"
+            )
+            return formula, {
+                "match": (
+                    "related-caption"
+                    if candidate.get("relationshipName")
+                    else "direct-caption"
+                ),
+                "candidate": candidate,
+            }
+        if len(caption_candidates) > 1:
+            return None, {
+                "reasonCode": "ambiguous-master-source-field",
+                "field": field.caption,
+                "match": "caption",
+                "candidates": caption_candidates,
+            }
+
+        if field.datatype.strip().casefold() in {"date", "datetime"}:
+            date_roles = self._related_candidates(
+                lambda relationship, _target, column: (
+                    self._relationship_matches_date_role(relationship, caption)
+                    and self._column_name(column).casefold() == "full date"
+                ),
+            )
+            if len(date_roles) == 1:
+                return self._formula_from_candidate(date_roles[0]), {
+                    "match": "semantic-date-role",
+                    "candidate": date_roles[0],
+                }
+            if len(date_roles) > 1:
+                return None, {
+                    "reasonCode": "ambiguous-master-source-field",
+                    "field": field.caption,
+                    "match": "semantic-date-role",
+                    "candidates": date_roles,
+                }
+
+        return None, {
+            "reasonCode": "unbound-master-source-field",
+            "field": field.caption,
+            "fieldKey": field.key,
+        }
+
+    def add_master_resolution_residue(
+        self, dashboard: str, zone: dict[str, Any], field: Field
+    ) -> None:
+        evidence = dict(
+            self.master_resolution_errors.get(field.key)
+            or {
+                "reasonCode": "ambiguous-master-source-field",
+                "field": field.caption,
+            }
+        )
+        code = str(evidence.pop("reasonCode", "unbound-master-source-field"))
+        self.residue(
+            dashboard,
+            zone,
+            code,
+            "field cannot be resolved uniquely from the selected data-model source graph",
+            **evidence,
+        )
 
     @staticmethod
     def _audit_names(row: dict[str, Any]) -> set[str]:
@@ -629,13 +900,7 @@ class WorkbookBuilder:
             else:
                 master_id = self.master_column(field)
                 if not master_id:
-                    self.residue(
-                        dashboard,
-                        zone,
-                        "ambiguous-master-column",
-                        "two source fields resolve to the same display caption",
-                        caption=field.caption,
-                    )
+                    self.add_master_resolution_residue(dashboard, zone, field)
                     return None
                 formula = f"[Master/{field.caption}]"
             grain = DATE_DERIVATIONS.get(str(dimensions[0].get("derivation") or "").lower())
@@ -704,13 +969,7 @@ class WorkbookBuilder:
                         return None
             else:
                 if not self.master_column(field):
-                    self.residue(
-                        dashboard,
-                        zone,
-                        "ambiguous-master-column",
-                        "two source fields resolve to the same display caption",
-                        caption=field.caption,
-                    )
+                    self.add_master_resolution_residue(dashboard, zone, field)
                     return None
                 formula = f"{AGGREGATIONS[derivation]}([Master/{field.caption}])"
             column_id = f"{element_id}-measure-{index}"
@@ -769,13 +1028,7 @@ class WorkbookBuilder:
             return None
         master_id = self.master_column(field)
         if not master_id:
-            self.residue(
-                dashboard,
-                zone,
-                "ambiguous-master-column",
-                "two source fields resolve to the same display caption",
-                caption=field.caption,
-            )
+            self.add_master_resolution_residue(dashboard, zone, field)
             return None
         element_id = stable_id("control", f"{dashboard}:{zone.get('id')}")
         control: dict[str, Any] = {
