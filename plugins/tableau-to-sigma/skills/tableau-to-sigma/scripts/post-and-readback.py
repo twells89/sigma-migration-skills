@@ -156,13 +156,20 @@ def main() -> int:
     parser.add_argument("--out", required=True, help="ID map JSON")
     parser.add_argument("--workdir")
     parser.add_argument("--update-id")
+    parser.add_argument("--name", help="override create name")
+    parser.add_argument("--folder-id", help="override create destination folder")
     args = parser.parse_args()
     workdir = Path(args.workdir or Path(args.spec).resolve().parent)
     workdir.mkdir(parents=True, exist_ok=True)
     try:
+        draft = load_object(args.spec)
+        if args.name:
+            draft["name"] = args.name
+        if args.folder_id:
+            draft["folderId"] = args.folder_id
         object_id, response, readback, result = post_and_readback(
             args.type,
-            load_object(args.spec),
+            draft,
             update_id=args.update_id,
         )
         id_field = "dataModelId" if args.type == "datamodel" else "workbookId"
