@@ -63,21 +63,26 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
             failures.append(f"{key}: readback verdict is not pass")
     if documents.get("parity", {}).get("match") is not True:
         failures.append("parity: numeric source/target comparison failed")
-    if documents.get("visual_similarity", {}).get("status") != "PASS":
+    visual = documents.get("visual_similarity") or {}
+    visual_pass = visual.get("pass") is True or visual.get("status") == "PASS"
+    if not visual_pass:
         failures.append("visual_similarity: machine floor failed")
     if documents.get("semantic_edits", {}).get("match") is not True:
         failures.append("semantic_edits: structural proof missing or failed")
     blind = documents.get("blind_grade") or {}
-    for path_key, hash_key in (
-        ("source_png", "source_sha256"),
-        ("target_png", "target_sha256"),
+    for path_key, hash_key, health_key in (
+        ("source_png", "source_sha256", "source_health"),
+        ("target_png", "target_sha256", "render_health"),
     ):
         image_path = Path(str(blind.get(path_key) or ""))
         expected_hash = blind.get(hash_key)
+        measured_path = Path(str((visual.get(health_key) or {}).get("path") or ""))
         if not image_path.is_file() or not expected_hash:
             failures.append(f"blind_grade: missing bound {path_key}")
         elif sha256(image_path) != expected_hash:
             failures.append(f"blind_grade: stale {path_key} hash")
+        elif not measured_path.is_file() or image_path.resolve() != measured_path.resolve():
+            failures.append(f"blind_grade: {path_key} does not match visual-similarity input")
     failed_dimensions = [
         name
         for name, value in (blind.get("dimensions") or {}).items()
@@ -102,7 +107,7 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
             "data_model_readback": documents.get("data_model_readback", {}).get("pass") is True,
             "workbook_readback": documents.get("workbook_readback", {}).get("pass") is True,
             "numeric_parity": documents.get("parity", {}).get("match") is True,
-            "visual_floor": documents.get("visual_similarity", {}).get("status") == "PASS",
+            "visual_floor": visual_pass,
             "blind_visual_grade": blind.get("verdict") == "pass" and not failed_dimensions,
             "semantic_edit_proof": documents.get("semantic_edits", {}).get("match") is True,
         },

@@ -16,6 +16,11 @@ class VerifyCompleteTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.workdir = Path(self.tmp.name)
+        self.blind = self.workdir / "blind.json"
+        self.source_png = self.workdir / "source.png"
+        self.target_png = self.workdir / "target.png"
+        self.source_png.write_bytes(b"source pixels")
+        self.target_png.write_bytes(b"target pixels")
         self.docs = {
             "mission.json": {
                 key: {"value": key, "provenance": "stated"}
@@ -30,18 +35,17 @@ class VerifyCompleteTest(unittest.TestCase):
             "datamodel-readback-verdict.json": {"pass": True},
             "workbook-readback-verdict.json": {"pass": True},
             "parity-final.json": {"match": True},
-            "visual-similarity-final.json": {"status": "PASS"},
+            "visual-similarity-final.json": {
+                "pass": True,
+                "source_health": {"path": str(self.source_png)},
+                "render_health": {"path": str(self.target_png)},
+            },
             "semantic-edits.json": {"match": True},
             "dm-ids.json": {"dataModelId": "dm-1"},
             "wb-ids.json": {"workbookId": "wb-1"},
         }
         for name, value in self.docs.items():
             (self.workdir / name).write_text(json.dumps(value), encoding="utf-8")
-        self.blind = self.workdir / "blind.json"
-        self.source_png = self.workdir / "source.png"
-        self.target_png = self.workdir / "target.png"
-        self.source_png.write_bytes(b"source pixels")
-        self.target_png.write_bytes(b"target pixels")
 
     def tearDown(self):
         self.tmp.cleanup()
