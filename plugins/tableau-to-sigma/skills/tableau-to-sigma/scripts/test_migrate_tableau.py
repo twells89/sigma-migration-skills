@@ -67,6 +67,39 @@ class MigrateTableauPythonTest(unittest.TestCase):
             migrate.warehouse_paths(model),
         )
 
+    def test_unhandled_gaps_require_validated_resolutions(self):
+        gaps = {
+            "detected_features": [
+                {"name": "hard gap", "status": "unhandled"},
+                {"name": "automatic", "status": "auto"},
+            ]
+        }
+        self.assertEqual(
+            [{"name": "hard gap", "status": "unhandled"}],
+            migrate.unresolved_gaps(gaps, None),
+        )
+        self.assertEqual(
+            [],
+            migrate.unresolved_gaps(
+                gaps,
+                {
+                    "resolutions": {
+                        "hard gap": {
+                            "status": "validated",
+                            "evidence": "fixture",
+                        }
+                    }
+                },
+            ),
+        )
+        self.assertEqual(
+            [{"name": "hard gap", "status": "unhandled"}],
+            migrate.unresolved_gaps(
+                gaps,
+                {"resolutions": {"hard gap": {"status": "accepted"}}},
+            ),
+        )
+
     def test_orchestrator_contains_no_ruby_subprocess(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn('["ruby"', source)

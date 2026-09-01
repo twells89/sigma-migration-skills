@@ -78,6 +78,20 @@ def warehouse_paths(model: dict) -> list[list[str]]:
     return [found[key] for key in sorted(found)]
 
 
+def unresolved_gaps(gaps: dict, resolutions: dict | None) -> list[dict]:
+    rows = [
+        row
+        for row in gaps.get("detected_features") or []
+        if row.get("status") == "unhandled"
+    ]
+    accepted = (resolutions or {}).get("resolutions") or {}
+    return [
+        row
+        for row in rows
+        if (accepted.get(row.get("name")) or {}).get("status") != "validated"
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbook", required=True, help="name or Tableau share URL")
@@ -91,6 +105,7 @@ def main() -> int:
     parser.add_argument("--name")
     parser.add_argument("--fact-element", default="ORDER_FACT")
     parser.add_argument("--dm-spec")
+    parser.add_argument("--gap-resolutions")
     parser.add_argument("--data-model-id")
     parser.add_argument("--data-model-element-id")
     parser.add_argument("--workbook-template")
@@ -152,6 +167,43 @@ def main() -> int:
     if args.discover_only:
         print(f"DISCOVERY COMPLETE: {workdir}")
         return 0
+
+    if not (workdir / "dashboard-layout.json").is_file():
+        layout_args = [
+            str(workdir / "workbook-content.twb"),
+            str(workdir / "dashboard-layout.json"),
+        ]
+        for dashboard in args.dashboard:
+            layout_args += ["--dashboard", dashboard]
+        run("Phase 1 layout signals", "parse-twb-layout.py", layout_args)
+    if not (workdir / "gaps.json").is_file():
+        run(
+            "Phase 1 gap scan",
+            "scan-workbook-gaps.py",
+            [
+                str(workdir / "workbook-content.twb"),
+                str(workdir / "gaps-report.md"),
+            ],
+        )
+    gaps = load(workdir / "gaps.json", {}) or {}
+    resolutions = (
+        load(Path(args.gap_resolutions).resolve(), {})
+        if args.gap_resolutions
+        else None
+    )
+    open_gaps = unresolved_gaps(gaps, resolutions)
+    if open_gaps:
+        write(workdir / "unresolved-gaps.json", open_gaps)
+        return stop(
+            11,
+            "GAP REVIEW REQUIRED",
+            [
+                f"{len(open_gaps)} unhandled source feature(s) remain.",
+                f"See {workdir / 'unresolved-gaps.json'}.",
+                "Validate full-fidelity resolutions and re-run with",
+                "--gap-resolutions <resolutions.json>. Accepted degradation is not validation.",
+            ],
+        )
 
     if not (workdir / "dm-raw.json").is_file():
         run(
