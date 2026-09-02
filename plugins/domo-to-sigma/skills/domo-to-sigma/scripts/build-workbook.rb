@@ -516,29 +516,32 @@ def apply_chart_axis_override!(card, element)
   path = File.join(OUT, 'chart-axis-overrides.json')
   all = (JSON.parse(File.read(path)) rescue {}) if File.exist?(path)
   rule = all && all[card['id'].to_s]
-  return element unless rule.is_a?(Hash) && rule['scale'].to_f.nonzero?
+  return element unless rule.is_a?(Hash)
   measure_ids = Array(element.dig('yAxis', 'columnIds'))
   return element if measure_ids.empty?
 
-  raw = Marshal.load(Marshal.dump(element))
-  raw['id'] = "#{element['id']}-verify"
-  raw['name'] = "#{element['name']} (Parity)"
-  $chart_verification_elements << raw
+  if rule['scale'].to_f.nonzero?
+    raw = Marshal.load(Marshal.dump(element))
+    raw['id'] = "#{element['id']}-verify"
+    raw['name'] = "#{element['name']} (Parity)"
+    $chart_verification_elements << raw
 
-  decimals = rule['decimals'].to_i
-  Array(element['columns']).each do |column|
-    next unless measure_ids.include?(column['id'])
-    column['formula'] = "(#{column['formula']}) / #{rule['scale'].to_f}"
-    column['format'] = {
-      'kind' => 'number',
-      'formatString' => "#{rule['prefix']},.#{decimals}f",
-      'suffix' => rule['suffix'].to_s
-    }
+    decimals = rule['decimals'].to_i
+    Array(element['columns']).each do |column|
+      next unless measure_ids.include?(column['id'])
+      column['formula'] = "(#{column['formula']}) / #{rule['scale'].to_f}"
+      column['format'] = {
+        'kind' => 'number',
+        'formatString' => "#{rule['prefix']},.#{decimals}f",
+        'suffix' => rule['suffix'].to_s
+      }
+    end
+    element['visibleAsSource'] = false
   end
   element['yAxis']['format'] = {
-    'marks' => 'none', 'labels' => { 'fontSize' => 9 }
+    'marks' => 'none',
+    'labels' => rule['hideLabels'] ? 'hidden' : { 'fontSize' => 9 }
   }
-  element['visibleAsSource'] = false
   element
 end
 
@@ -2430,7 +2433,7 @@ def observed_page_title_element(page_name)
     'id' => "title-#{slug}",
     'kind' => 'text',
     'name' => page_name,
-    'body' => "# #{page_name}"
+    'body' => "## #{page_name}"
   }
 end
 

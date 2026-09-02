@@ -8,14 +8,15 @@
 #
 #   kpi-format-overrides.json    Domo-style compact KPI display + font size
 #   kpi-card-header-overrides.json screenshot-backed KPI title/subtitle blocks
+#   card-header-overrides.json   screenshot-backed chart title/summary blocks
 #   chart-axis-overrides.json    compact currency axis display
 #   category-order-overrides.json source category order from Domo rows
 #
 # The existing builders consume these files. Raw-value parity twins remain the
 # builder's responsibility, so display scaling never changes the measured value.
-# Chart card-header overrides remain hand-authored. KPI card headers are emitted
-# only when layout-observed.json proves the source card geometry; the observed
-# layout path nests each header with its KPI so no element is left unplaced.
+# Card headers are emitted only when layout-observed.json proves the source card
+# geometry; the observed path nests each header with its primary chart/KPI so no
+# element is left unplaced.
 #
 # Usage:
 #   ruby scripts/derive-presentation-overrides.rb --workdir /tmp/run
@@ -146,12 +147,21 @@ def dynamic_summary(expression, format, value)
   "{{#{expression} | ,.#{precision}f}}"
 end
 
+def full_summary(expression, format)
+  type = format_type(format)
+  precision = format.to_h.fetch('precision', 1).to_i.clamp(0, 4)
+  return "{{#{expression} | $,.#{precision}f}}" if type.match?(/currency|money/)
+  return "{{#{expression} | .#{precision}%}}" if type.include?('percent')
+  "{{#{expression} | ,.#{precision}f}}"
+end
+
 def dateish?(value)
   value.to_s.match?(/\A(?:\d{4}[-\/]\d{1,2}|[A-Z][a-z]{2}\s+\d{2}|Week-\d+\s+\d{4})/)
 end
 
 kpi_formats = {}
 kpi_headers = {}
+card_headers = {}
 axis_formats = {}
 category_orders = {}
 warnings = []
@@ -177,15 +187,8 @@ cards.each do |card|
     if observed_layout && summary
       aggregate = AGGREGATIONS.fetch(summary['aggregation'])
       expression = "#{aggregate}([Master/#{summary['ref']}])"
-      precision = summary['format'].to_h.fetch('precision', 1).to_i.clamp(0, 4)
-      formatted =
-        case format_type(summary['format'])
-        when /currency|money/ then "{{#{expression} | $,.#{precision}f}}"
-        when /percent/ then "{{#{expression} | .#{precision}%}}"
-        else "{{#{expression} | ,.#{precision}f}}"
-        end
       kpi_headers[id] = {
-        'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{formatted}\n#{summary['label']}</p>"
+        'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{full_summary(expression, summary['format'])}\n#{summary['label']}</p>"
       }
     end
     next
@@ -200,6 +203,16 @@ cards.each do |card|
       'suffix' => '',
       'decimals' => summary['format'].fetch('precision', 1).to_i.clamp(0, 4),
       'prefix' => '$'
+    }
+  end
+  if observed_layout && summary
+    aggregate = AGGREGATIONS.fetch(summary['aggregation'])
+    expression = "#{aggregate}([Master/#{summary['ref']}])"
+    grain = card.dig('dateGrain', 'dateTimeElement').to_s.downcase
+    grain_line = grain.empty? ? nil : "by #{grain.capitalize}"
+    details = [grain_line, full_summary(expression, summary['format']), summary['label']].compact
+    card_headers[id] = {
+      'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{details.join("\n")}</p>"
     }
   end
 
@@ -225,6 +238,10 @@ cards.each do |card|
       'scale' => compact[0].to_i, 'prefix' => '$', 'suffix' => compact[1], 'decimals' => 0
     }
   end
+  if observed_layout && VALUE_AXIS_KINDS.include?(kind)
+    axis_formats[id] ||= {}
+    axis_formats[id]['hideLabels'] = true
+  end
 
   first_column = Array(card['columns']).find { |column| column['aggregation'].to_s.empty? }
   first_values = rows.map { |row| Array(row).first }.compact
@@ -242,6 +259,7 @@ files = {
   'category-order-overrides.json' => category_orders
 }
 files['kpi-card-header-overrides.json'] = kpi_headers if observed_layout
+files['card-header-overrides.json'] = card_headers if observed_layout
 
 written = []
 skipped = []
@@ -265,6 +283,7 @@ manifest = {
     'cards' => cards.size,
     'kpi_formats' => kpi_formats.size,
     'kpi_headers' => kpi_headers.size,
+    'card_headers' => card_headers.size,
     'axis_formats' => axis_formats.size,
     'category_orders' => category_orders.size
   },

@@ -1163,7 +1163,7 @@ Dir.mktmpdir do |dir|
     title = observed_page_title_element('Observed Dashboard')
     eq(title['id'], 'title-observed-dashboard',
        'screenshot-backed page title gets a stable layout-resolvable id')
-    eq(title['body'], '# Observed Dashboard',
+    eq(title['body'], '## Observed Dashboard',
        'screenshot-backed page title reproduces the Domo page title')
   end
 end

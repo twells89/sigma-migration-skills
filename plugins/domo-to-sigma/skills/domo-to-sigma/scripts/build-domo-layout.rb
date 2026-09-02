@@ -675,6 +675,22 @@ def load_chart_specs_kpi_headers(dir)
   end
 end
 
+def load_chart_specs_card_headers(dir)
+  path = File.join(dir, 'chart-specs.json')
+  return {} unless File.exist?(path)
+  data = JSON.parse(File.read(path)) rescue nil
+  return {} unless data.is_a?(Hash) && data['pages'].is_a?(Array)
+  data['pages'].each_with_object({}) do |page, out|
+    next unless page['name']
+    headers = Array(page['elements']).filter_map do |element|
+      match = element['id'].to_s.match(/\Aheader-(?!kpi-)(.+)\z/)
+      next unless match && element['kind'] == 'text'
+      { 'id' => element['id'].to_s, 'name' => element['name'].to_s, 'primary_card_id' => match[1] }
+    end
+    out[page['name']] = headers unless headers.empty?
+  end
+end
+
 # This card's best-known Sigma-ish kind string, per the priority above.
 # `kind_map` keys on "el-<cardId>" — build-workbook.rb's own element-id
 # convention for a card-derived element (confirmed against a live chart-specs
@@ -1117,6 +1133,7 @@ if $PROGRAM_NAME == __FILE__
   # landing anywhere at all.
   orphan_companions_by_page = load_chart_specs_companions(OUT)
   kpi_headers_by_page = load_chart_specs_kpi_headers(OUT)
+  card_headers_by_page = load_chart_specs_card_headers(OUT)
   # PageLayoutV4 non-card content is authored page content, not furniture:
   # discovery preserved HEADER/PAGE_BREAK geometry on pages.json and
   # build-workbook emitted matching text/page-break elements with these ids.
@@ -1151,6 +1168,14 @@ if $PROGRAM_NAME == __FILE__
                   '_synthesized' => true, '_primary_card_id' => primary_card_id }
     end
     Array(kpi_headers_by_page[pname]).each do |header|
+      pcards << {
+        'id' => header['id'], 'title' => header['name'], 'chartType' => 'text',
+        'sigmaKindHint' => 'text', '_size' => '', '_pageOrder' => -1,
+        '_synthesized' => true, '_primary_card_id' => header['primary_card_id'],
+        '_kpi_header' => true
+      }
+    end
+    Array(card_headers_by_page[pname]).each do |header|
       pcards << {
         'id' => header['id'], 'title' => header['name'], 'chartType' => 'text',
         'sigmaKindHint' => 'text', '_size' => '', '_pageOrder' => -1,

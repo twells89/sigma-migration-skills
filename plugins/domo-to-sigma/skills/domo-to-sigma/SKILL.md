@@ -427,10 +427,9 @@ consume — Domo-style compact KPI display, compact currency axes, source catego
 order, and (when screenshot geometry is present) KPI title/subtitle blocks —
 from source facts, so a customer run reproduces the gold-path styling without
 hand-authored files. It only writes sidecars that don't already exist (an
-operator's hand-authored sidecar always wins) and never fails the run. It does
-not auto-author chart `card-header-overrides.json`; chart Summary Numbers use
-the companion-KPI mechanism. Screenshot-backed KPI headers are safe because the
-observed-layout path nests each header and KPI inside one source-card container. The
+operator's hand-authored sidecar always wins) and never fails the run.
+Screenshot-backed chart and KPI headers are safe because the observed-layout
+path nests each header with its primary element inside one source-card container. The
 `domo/orders-presentation` corpus case pins this derivation offline/creds-free.
 
 `ruby scripts/build-workbook.rb` → map each card to a Sigma element, following

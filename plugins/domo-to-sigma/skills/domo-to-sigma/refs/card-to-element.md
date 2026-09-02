@@ -130,8 +130,8 @@ as a broken `Count([Master/])`.
 
 **Layout placement:** `build-domo-layout.rb` gives the companion its own zone.
 When source geometry is known (API geometry or `layout-observed.json`), the
-companion and its primary chart are nested in one source-card container, with
-the summary above the plot just as Domo renders it. When geometry is unknown,
+companion is rendered as a compact title/summary text header and nested with its
+primary chart in one source-card container, just as Domo renders it. When geometry is unknown,
 the fallback kind-aware composition still places companions in a shared KPI
 band; that fallback is intentionally reasonable rather than presented as
 pixel-faithful.
