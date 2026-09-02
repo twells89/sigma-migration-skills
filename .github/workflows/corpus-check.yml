@@ -655,6 +655,7 @@ jobs:
         run: |
           set -uo pipefail
           tests=(
+            plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-pick-destination.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-scout-ledger-integrity.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-metric-reference.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-warehouse-column-refs.mjs

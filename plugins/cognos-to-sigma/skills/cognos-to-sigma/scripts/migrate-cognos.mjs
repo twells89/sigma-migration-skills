@@ -145,15 +145,21 @@ async function resolveFolder() {
   const who = await api('GET', '/v2/whoami');
   const uid = who.json?.userId;
   if (!uid) die(`could not resolve My Documents: whoami → HTTP ${who.status} — pass --folder <id>`);
+  const member = await api('GET', `/v2/members/${uid}`);
+  if (member.json?.homeFolderId) {
+    line(`no --folder supplied — using your My Documents (${member.json.homeFolderId})`);
+    return member.json.homeFolderId;
+  }
+  // Legacy fallback: use the folder's id, never its parentId.
   const mine = await api('GET', `/v2/members/${uid}/files`);
   let entry = (mine.json?.entries || []).find((e) => e.path === 'My Documents');
-  if (!entry?.parentId) {
+  if (!entry?.id) {
     const all = await api('GET', '/v2/files?typeFilters=folder&limit=500');
     entry = (all.json?.entries || []).find((e) => e.path === 'My Documents' && e.ownerId === uid);
   }
-  if (!entry?.parentId) die('could not resolve the caller\'s My Documents folder id — pass --folder <id> (find one via GET /v2/files?typeFilters=folder)');
-  line(`no --folder supplied — using your My Documents (${entry.parentId})`);
-  return entry.parentId;
+  if (!entry?.id) die('could not resolve the caller\'s My Documents folder id — pass --folder <id> (find one via GET /v2/files?typeFilters=folder)');
+  line(`no --folder supplied — using your My Documents (${entry.id})`);
+  return entry.id;
 }
 
 // Tiny CSV parser (quoted fields, no embedded newlines-in-quotes edge beyond basic).

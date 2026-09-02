@@ -61,6 +61,9 @@ async function myDocumentsId() {
   try {
     const uid = (await call('GET', '/v2/whoami'))?.userId;
     if (!uid) return null;
+    const home = (await call('GET', `/v2/members/${uid}`))?.homeFolderId;
+    if (home) return home;
+    // Legacy fallback: use the folder's id, never its parentId.
     const entries = (await call('GET', `/v2/members/${uid}/files?typeFilters=folder&limit=500`))?.entries || [];
     const hit = entries.find(e => e.name === 'My Documents' || e.path === 'My Documents');
     return hit ? hit.id : null;
