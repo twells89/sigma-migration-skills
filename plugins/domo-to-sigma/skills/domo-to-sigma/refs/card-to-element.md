@@ -128,17 +128,13 @@ exists for the companion (independent of whether the primary built), the
 headline value is dropped with a named warning rather than silently emitted
 as a broken `Count([Master/])`.
 
-**Layout placement:** `build-domo-layout.rb` gives the companion its own
-zone via the same synthesis mechanism it already uses for an orphan control
-(a page-level filter with no backing card) — see `load_chart_specs_companions`
-/ `load_chart_specs_controls`. The companion lands wherever that page's
-kind-aware composition puts any other `kpi-chart` element (the page's shared
-KPI band, or — for a page with real pixel geometry — appended below the
-primary content), **not** guaranteed immediately adjacent to its own specific
-primary chart/table: the kind-grouped composition model buckets every KPI
-element on a page into one band together, regardless of which card produced
-it. Landing in the KPI band is the honest, tractable placement this
-converter can make today.
+**Layout placement:** `build-domo-layout.rb` gives the companion its own zone.
+When source geometry is known (API geometry or `layout-observed.json`), the
+companion and its primary chart are nested in one source-card container, with
+the summary above the plot just as Domo renders it. When geometry is unknown,
+the fallback kind-aware composition still places companions in a shared KPI
+band; that fallback is intentionally reasonable rather than presented as
+pixel-faithful.
 
 ### Row limit → Sigma top-n filter (bead 2ef7)
 

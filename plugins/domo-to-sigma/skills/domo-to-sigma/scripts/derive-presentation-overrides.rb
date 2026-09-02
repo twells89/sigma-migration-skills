@@ -177,6 +177,18 @@ cards.each do |card|
     next
   end
 
+  # A chart/table Summary Number becomes a companion KPI in Sigma. Keep that
+  # value at full source precision inside the card header instead of allowing
+  # Sigma's narrow-KPI default to abbreviate it with a lowercase "k".
+  if summary && format_type(summary['format']).match?(/currency|money/)
+    kpi_formats[id] = {
+      'scale' => 1,
+      'suffix' => '',
+      'decimals' => summary['format'].fetch('precision', 1).to_i.clamp(0, 4),
+      'prefix' => '$'
+    }
+  end
+
   # NOTE: a card's source Summary Number is surfaced automatically by the
   # EXISTING companion-KPI mechanism (build-workbook.rb emits an `-summary`
   # kpi-chart beside the chart, and build-domo-layout.rb already synthesizes a

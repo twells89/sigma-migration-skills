@@ -46,6 +46,11 @@ ruby -rjson -e '
   errs << "percent KPI must NOT get a currency scale" if ret.key?("scale")
   errs << "percent KPI missing font size" unless ret["fontSize"].to_i > 0
 
+  companion = kpi["bar_channel"] || {}
+  errs << "currency companion KPI must preserve the full source value" unless
+    companion["scale"] == 1 && companion["suffix"] == "" && companion["prefix"] == "$" &&
+    companion["decimals"] == 1
+
   ax = axis["bar_channel"] || {}
   errs << "currency chart axis not compacted" unless ax["scale"] == 1000 && ax["suffix"] == "K" && ax["prefix"] == "$"
   errs << "percent/count chart wrongly given a currency axis" if axis.key?("kpi_ret") || axis.key?("table_detail")
@@ -72,7 +77,7 @@ ruby -rjson -e '
   m = JSON.parse(File.read(ARGV[0]))
   abort "manifest schema wrong" unless m["schema"] == "domo-presentation-overrides/v1"
   c = m["counts"] || {}
-  abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 5 && c["kpi_formats"] == 2 &&
+  abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 5 && c["kpi_formats"] == 5 &&
     c["axis_formats"] == 2 && c["category_orders"] == 1
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }

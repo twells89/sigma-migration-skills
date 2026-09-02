@@ -1080,9 +1080,15 @@ dash_layout.each do |d|
   bands_detected['header'] ||= structure[:header].any?
   bands_detected['kpi_rows'] += structure[:kpi_rows].length
   bands_detected['sidebar'] ||= !structure[:sidebar].nil?
-  use_synth = !opts[:no_containers] && (structure[:sidebar] || structure[:kpi_rows].any?)
   use_tree  = !opts[:no_containers] &&
               (tree_has_controls?(d['zone_tree']) || tree_has_styled_containers?(d['zone_tree']))
+  # Explicit source containers carry stronger composition intent than flat
+  # KPI/sidebar detection. In particular, Domo observed-layout cards nest a
+  # chart's companion summary KPI inside the same source card. Synthesizing
+  # from the flattened leaves would pull those summaries into separate KPI
+  # rows and destroy the source's card identity.
+  use_synth = !opts[:no_containers] && !use_tree &&
+              (structure[:sidebar] || structure[:kpi_rows].any?)
   result = nil
   if use_synth
     begin

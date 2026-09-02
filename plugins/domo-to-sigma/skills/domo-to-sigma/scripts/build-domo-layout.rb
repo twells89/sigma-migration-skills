@@ -301,6 +301,30 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
       '_source' => 'observed-from-screenshot-summary',
     }
   end
+  primary_zones = obs_zones.each_with_object({}) { |zone, out| out[zone['id'].to_s] = zone }
+  companion_zones_by_primary = attached_companions.each_with_object({}) do |card, out|
+    out[card['_primary_card_id'].to_s] = companion_zones.find { |zone| zone['id'].to_s == card['id'].to_s }
+  end
+  observed_tree = observed_cards.map do |card|
+    primary = primary_zones.fetch(card['id'].to_s)
+    companion = companion_zones_by_primary[card['id'].to_s]
+    next primary unless companion
+
+    o = observed.fetch(card['id'].to_s)
+    {
+      'id' => "observed-card-#{card['id']}",
+      'kind' => 'container',
+      'caption' => card['title'],
+      'x_pct' => (o['x'].to_f * 100.0).round(2),
+      'y_pct' => (o['y'].to_f * 100.0).round(2),
+      'w_pct' => (o['w'].to_f * 100.0).round(2),
+      'h_pct' => (o['h'].to_f * 100.0).round(2),
+      'fill_color' => '#FFFFFF',
+      'border_color' => '#D9DEE5',
+      'children' => [companion, primary],
+      '_source' => 'observed-from-screenshot-card',
+    }
+  end
 
   # Optional 'section' grouping (schema note above): one thin heading zone per
   # named group, at that group's own topmost observed y — no reflow.
@@ -320,6 +344,7 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
   end
 
   zones = obs_zones + companion_zones + hdr_zones
+  tree_zones = observed_tree + hdr_zones
   observed_max_y_pct = obs_zones.map { |z| z['y_pct'] + z['h_pct'] }.max
 
   unless unobserved_cards.empty?
@@ -331,11 +356,12 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
         shifted['y_pct'] = (observed_max_y_pct + z['y_pct'] / 100.0 * remaining_budget).round(2)
         shifted['h_pct'] = (z['h_pct'] / 100.0 * remaining_budget).round(2)
         zones << shifted
+        tree_zones << shifted
       end
     end
   end
 
-  { 'dashboard' => name, 'zone_tree' => zones, 'zones' => zones }
+  { 'dashboard' => name, 'zone_tree' => tree_zones, 'zones' => zones }
 end
 
 # ==== rung 2 — classic-page fallback: collections[] + size tokens ==========
