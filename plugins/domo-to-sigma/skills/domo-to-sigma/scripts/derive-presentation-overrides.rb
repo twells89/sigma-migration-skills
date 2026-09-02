@@ -185,7 +185,7 @@ cards.each do |card|
         else "{{#{expression} | ,.#{precision}f}}"
         end
       kpi_headers[id] = {
-        'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{formatted}<br>#{summary['label']}</p>"
+        'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{formatted}\n#{summary['label']}</p>"
       }
     end
     next
