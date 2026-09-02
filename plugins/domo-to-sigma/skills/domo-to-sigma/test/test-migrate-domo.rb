@@ -208,15 +208,27 @@ live_parity_at = oracle_hdr_at && migrate_src.index("hr('verify-parity')", oracl
 ok(oracle_hdr_at && live_parity_at && oracle_hdr_at < live_parity_at,
    'oracle: the plan is built BEFORE verify-parity consumes it')
 
-render_call_at  = migrate_src.index('phase_render_visual!(opts, workbook_id, wb_ids)')
-parity_hdr_at   = migrate_src.index("hr('verify-parity')")
-record_call_at  = migrate_src.index('phase_record_visual_check!(opts)')
+run_live_at     = migrate_src.index('def run_live!')
+render_call_at  = run_live_at && migrate_src.index('phase_render_visual!(opts, workbook_id, wb_ids)', run_live_at)
+parity_hdr_at   = run_live_at && migrate_src.index("hr('verify-parity')", run_live_at)
+record_call_at  = run_live_at && migrate_src.index('phase_record_visual_check!(opts)', run_live_at)
 ok([render_call_at, parity_hdr_at, record_call_at].all?,
    'bead B5: run_live! calls phase_render_visual! and phase_record_visual_check! at all')
 ok(render_call_at && parity_hdr_at && record_call_at &&
    render_call_at < parity_hdr_at && parity_hdr_at < record_call_at,
    'bead B5: run_live! renders BEFORE verify-parity (gate 8 render) and records the verdict AFTER it ' \
    '(record-visual-check.rb hard-requires parity-final.json to already exist)')
+ok(migrate_src.include?('--source-dashboard-png') && migrate_src.include?('--blind-grade') &&
+   migrate_src.include?('--visual-grader'),
+   'visual handoff: CLI accepts source image, completed grade, and optional one-process grader adapter')
+ok(migrate_src.include?('DomoVisualHandoff.write_request!') &&
+   migrate_src.include?('raise VisualGradePending.new') &&
+   migrate_src.include?('exit DomoVisualHandoff::EXIT_PENDING'),
+   'visual handoff: missing grade becomes an explicit resumable exit-20 WAITING state')
+ok(!migrate_src.include?("'--agent-vision', 'false'"),
+   'visual handoff: orchestrator no longer records a guaranteed not-executable verdict')
+ok(migrate_src.include?('DomoVisualHandoff.record_args'),
+   'visual handoff: a completed blind grade is consumed and recorded automatically')
 
 # Track E: the fixture's discovery/beast-modes.json (see test/fixtures/domo-estate/
 # beast-modes.json) drives migrate-domo.rb's convert-beast-modes phase through its
@@ -345,10 +357,12 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
   image_el = all_elements.find { |e| e['kind'] == 'image' }
   ok(image_el, 'workbook-spec.json contains an image-kind element')
   if image_el
-    ok(image_el['url'].to_s.start_with?('data:image/png;base64,'),
-       "image element's url is an inline data-URI (data:image/png;base64,...), got #{image_el['url'].to_s[0, 40].inspect}")
-    b64 = image_el['url'].to_s.sub('data:image/png;base64,', '')
+    image_url = image_el.dig('source', 'url').to_s
+    ok(image_url.start_with?('data:image/png;base64,'),
+       "image element's source.url is an inline data-URI, got #{image_url[0, 40].inspect}")
+    b64 = image_url.sub('data:image/png;base64,', '')
     ok(!b64.strip.empty?, 'image data-URI carries non-empty base64 payload')
+    eq(image_el['name'], 'Logo', 'image keeps the source title for exact layout matching')
   end
 
   # ---- (c) the KPI element's formula is <Agg>([Master/...]) -------------
@@ -387,7 +401,9 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
 
   # ---- (f) bead 08sf: a companion kpi-chart element for a card whose ------
   # Summary Number is NOT the whole card (i.e. not a Rule-0 KPI card).
-  kpi_els = all_elements.select { |e| e['kind'] == 'kpi-chart' }
+  kpi_els = all_elements.select do |e|
+    e['kind'] == 'kpi-chart' && !e['id'].to_s.end_with?('-verify')
+  end
   rule0_kpi_cards = cards.count do |c|
     c['sigmaKindHint'] == 'kpi-chart' ||
       (c['summaryNumber'] && Array(c['groupBy']).empty? && (c['columns'] || []).size <= 1)

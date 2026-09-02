@@ -1142,7 +1142,7 @@ end
 def build_image(card)
   path = png_path(card)
   return nil unless path && File.exist?(path.to_s)
-  { 'id' => eid(card), 'kind' => 'image', 'alt' => card['title'],
+  { 'id' => eid(card), 'kind' => 'image', 'name' => card['title'], 'alt' => card['title'],
     'source' => { 'kind' => 'url',
                   'url' => "data:image/png;base64,#{Base64.strict_encode64(File.binread(path))}" } }
 end

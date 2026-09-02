@@ -17,19 +17,12 @@
 #   put-layout -> render-visual -> verify-parity -> record-visual-check ->
 #   assert-phase6-ran
 #
-#   render-visual (bead B5) renders the posted workbook's first visible page
-#   to <out>/sigma-render.png via sigma-export-png.py — assert-phase6-ran.rb's
-#   gate 8 hard-requires this file and nothing upstream of this fix ever
-#   produced it. record-visual-check.rb (the verdict recorder gate 8b reads)
-#   runs AFTER verify-parity rather than immediately after the render: it
-#   hard-requires parity-final.json to already exist on disk (it merges into
-#   it, never creates it from nothing), and that file is first written by
-#   phase6-parity-domo.rb, the parity finalizer (bead 2tkm — it used to be
-#   written by verify-parity.rb's --score-out, which is what BROKE gate 1:
-#   --score-out emits the tiles_* score schema, not the gate's charts_*
-#   contract. --score-out now targets parity-score.json). This orchestrator has no image input, so
-#   it records the only HONEST verdict it is entitled to — not-executable —
-#   rather than fabricate a pass; see phase_record_visual_check! below.
+#   render-visual writes <out>/sigma-render.png. The visual gate is resumable:
+#   --source-dashboard-png stages the source, an optional --visual-grader
+#   adapter can produce a context-free blind grade in-process, and otherwise
+#   the run exits 20 WAITING with visual-grade-request.json. A calling agent
+#   fulfills that request and reruns the same command; the orchestrator then
+#   validates, records, and gates the grade without artifact hand-editing.
 #
 #   * build-dm + the data-model half of post-and-readback are NOT named as
 #     their own step in this task's phase list, but build-workbook-spec.rb
@@ -89,6 +82,7 @@ require_relative 'lib/code_rep'
 require_relative 'lib/layout'
 require_relative 'lib/sigma_rest'
 require_relative 'lib/domo_warehouse_column_refs'
+require_relative 'lib/visual_handoff'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -116,6 +110,16 @@ OptionParser.new do |o|
        '--parity-plan this leaves the run with no gate-1 evidence at all, so ' \
        'assert-phase6-ran.rb gets --skip-parity-gate and rejects it (exit 18) absent a passing ' \
        'anchors-verdict.json. In other words: this run cannot then be GREEN.') { |v| opts[:skip_parity_oracle] = v }
+  o.on('--source-dashboard-png PATH', 'Full source dashboard PNG for the blind visual gate. ' \
+       'Staged into <out>/source-dashboard.png so an idempotent rerun needs no repeated flag.') {
+    |v| opts[:source_dashboard_png] = v
+  }
+  o.on('--blind-grade PATH', 'Completed context-free blind-grade JSON. Defaults to ' \
+       '<out>/blind-grade.json; consumed and recorded automatically.') { |v| opts[:blind_grade] = v }
+  o.on('--visual-grader PATH', 'Optional executable adapter. Receives visual-grade-request.json ' \
+       'as its only argument and must write the request output_json; no shell is used.') {
+    |v| opts[:visual_grader] = v
+  }
 end.parse!(ARGV)
 
 abort('FATAL: --out DIR is required') unless opts[:out]
@@ -125,6 +129,26 @@ DISCOVERY = File.join(OUT, 'discovery')
 FileUtils.mkdir_p(DISCOVERY)
 SCRIPTS = __dir__
 BASE_ENV = { 'DOMO_DISCOVERY_DIR' => DISCOVERY, 'DOMO_DM_IDS_PATH' => File.join(OUT, 'dm-ids.json') }.freeze
+
+class VisualGradePending < StandardError
+  attr_reader :request_path
+
+  def initialize(message, request_path)
+    super(message)
+    @request_path = request_path
+  end
+end
+
+if opts[:source_dashboard_png]
+  begin
+    staged = DomoVisualHandoff.stage_source!(opts[:source_dashboard_png], OUT)
+    opts[:source_dashboard_png] = staged
+  rescue ArgumentError => e
+    abort("FATAL: #{e.message}")
+  end
+elsif File.file?(File.join(OUT, DomoVisualHandoff::SOURCE_BASENAME))
+  opts[:source_dashboard_png] = File.join(OUT, DomoVisualHandoff::SOURCE_BASENAME)
+end
 
 DomoRunState.record(OUT, 'mode' => (opts[:offline] ? 'offline' : 'live'), 'started_at' => Time.now.utc.iso8601)
 
@@ -668,20 +692,17 @@ def phase_render_visual!(opts, workbook_id, wb_ids)
   done_phase!('render-visual', "rendered page #{page['id'].inspect} -> #{render_path}")
 end
 
-# bead B5 (continued): gate 8b needs a RECORDED source-vs-target verdict, not
-# just a render — but record-visual-check.rb (a) hard-requires parity-final.json
-# to already exist (it merges into it; never creates it from nothing — see its
-# own "run finalize first" abort) and (b) refuses to accept a --verdict pass
-# from a caller that has no image input (its VISION PRECONDITION). This
-# orchestrator is an unattended Ruby process — it cannot itself read
-# sigma-render.png against the source, so recording a fabricated pass would be
-# exactly the false attestation record-visual-check.rb exists to prevent.
-# --verdict not-executable is the ONLY honest verdict available here: it is
-# genuinely recorded (never silently omitted), and gate 8b will correctly keep
-# failing on it until a vision-capable agent reads the render and re-records
-# pass/divergent (or the operator names an explicit --skip-visual-comparison
-# waiver at the gate).
-def phase_record_visual_check!(_opts)
+# Gate 8b requires an independent, hash-bound visual grade. Ruby cannot honestly
+# invent one, so the orchestration contract is resumable:
+#   1. stage --source-dashboard-png, render Sigma, finalize parity;
+#   2. consume <out>/blind-grade.json when already present, OR invoke the
+#      optional --visual-grader adapter;
+#   3. if neither exists, write visual-grade-request.json and exit 20 WAITING
+#      instead of recording not-executable and crashing the final gate.
+# The calling agent handles exit 20 by launching a fresh context-free grader
+# from the request and rerunning the SAME command. No artifact hand-edit or
+# special finalize command is required.
+def phase_record_visual_check!(opts)
   hr('record-visual-check (Phase 6f verdict — gate 8b)')
   parity_final_path = File.join(OUT, 'parity-final.json')
   unless File.exist?(parity_final_path)
@@ -692,18 +713,67 @@ def phase_record_visual_check!(_opts)
                 "by hand: ruby scripts/record-visual-check.rb --workdir #{OUT} --agent-vision true --verdict pass ...")
     return
   end
+
   render_path = File.join(OUT, 'sigma-render.png')
-  ok, code, _out = run_script!('record-visual-check.rb', '--workdir', OUT, '--agent-vision', 'false',
-                                '--verdict', 'not-executable',
-                                '--notes', 'migrate-domo.rb is an unattended orchestrator with no image ' \
-                                           "input and cannot itself judge #{render_path} against the source " \
-                                           'dashboard (record-visual-check.rb VISION PRECONDITION); a ' \
-                                           'vision-capable agent must read it and re-record --verdict ' \
-                                           'pass|divergent, or the operator must waive gate 8b explicitly via ' \
-                                           'assert-phase6-ran.rb --skip-visual-comparison "<reason>".')
+  grade_path = File.expand_path(opts[:blind_grade] || DomoVisualHandoff::GRADE_BASENAME, OUT)
+  source_path = opts[:source_dashboard_png]
+  rubric_path = File.expand_path('../refs/layout-visual-qa.md', __dir__)
+  brief_path = File.expand_path('../refs/blind-grader-brief.md', __dir__)
+
+  validation = DomoVisualHandoff.validate_grade(grade_path, workdir: OUT) if File.file?(grade_path)
+  invalid_reason = validation && validation['errors'].any? ? validation['errors'].join('; ') : nil
+
+  unless validation && validation['errors'].empty?
+    request_path = DomoVisualHandoff.write_request!(
+      workdir: OUT,
+      source_path: source_path,
+      target_path: render_path,
+      rubric_path: rubric_path,
+      brief_path: brief_path,
+      grade_path: grade_path,
+      reason: invalid_reason
+    )
+
+    if opts[:visual_grader] && source_path
+      log "$ #{opts[:visual_grader]} #{request_path}"
+      begin
+        output, status = Open3.capture2e(BASE_ENV, opts[:visual_grader], request_path)
+      rescue Errno::ENOENT
+        fail_phase!('record-visual-check',
+                    "visual grader executable not found: #{opts[:visual_grader]}")
+      end
+      output.each_line { |line| print "    #{line}" }
+      fail_phase!('record-visual-check',
+                  "visual grader adapter exited #{status.exitstatus}") unless status.success?
+      validation = DomoVisualHandoff.validate_grade(grade_path, workdir: OUT)
+      unless validation['errors'].empty?
+        fail_phase!('record-visual-check',
+                    "visual grader wrote an invalid grade: #{validation['errors'].join('; ')}")
+      end
+    else
+      reason =
+        if source_path.nil?
+          "source dashboard PNG required — rerun with --source-dashboard-png PATH; request: #{request_path}"
+        else
+          "context-free blind grade required — request: #{request_path}; write #{grade_path} and rerun the same command"
+        end
+      DomoRunState.wait(OUT, 'record-visual-check', reason)
+      DomoRunState.record(OUT, 'status' => 'waiting-for-visual-grade',
+                               'visual_grade_request' => request_path)
+      raise VisualGradePending.new(reason, request_path)
+    end
+  end
+
+  args = DomoVisualHandoff.record_args(
+    validation,
+    workdir: OUT,
+    target_path: render_path,
+    grade_path: grade_path
+  )
+  ok, code, _out = run_script!('record-visual-check.rb', *args)
   fail_phase!('record-visual-check', "record-visual-check.rb exited #{code}") unless ok
-  done_phase!('record-visual-check',
-              'recorded not-executable — a vision-capable agent must re-judge and re-record before gate 8b can pass')
+  done_phase!('record-visual-check', "consumed context-free blind grade #{grade_path}")
+  DomoRunState.record(OUT, 'status' => 'running')
 end
 
 # ---------------------------------------------------------------------------
@@ -1166,13 +1236,20 @@ end
 
 # ---------------------------------------------------------------------------
 
-if opts[:offline]
-  run_offline!(opts)
-else
-  run_live!(opts)
+begin
+  if opts[:offline]
+    run_offline!(opts)
+  else
+    run_live!(opts)
+  end
+rescue VisualGradePending => e
+  hr('WAITING — visual grade required')
+  log e.message
+  log 'No failure or waiver was recorded. A vision-capable agent should fulfill the request and rerun this command.'
+  exit DomoVisualHandoff::EXIT_PENDING
 end
 
-DomoRunState.record(OUT, 'finished_at' => Time.now.utc.iso8601)
+DomoRunState.record(OUT, 'finished_at' => Time.now.utc.iso8601, 'status' => 'complete')
 hr('DONE')
 log "run-state: #{DomoRunState.path(OUT)}"
 log "workbook-spec: #{File.join(OUT, 'workbook-spec.json')}"
