@@ -1160,6 +1160,11 @@ Dir.mktmpdir do |dir|
        'each observed section is visible authored text')
     eq(divider_els, [],
        'observed sections do not emit unplaced divider furniture')
+    title = observed_page_title_element('Observed Dashboard')
+    eq(title['id'], 'title-observed-dashboard',
+       'screenshot-backed page title gets a stable layout-resolvable id')
+    eq(title['body'], '# Observed Dashboard',
+       'screenshot-backed page title reproduces the Domo page title')
   end
 end
 

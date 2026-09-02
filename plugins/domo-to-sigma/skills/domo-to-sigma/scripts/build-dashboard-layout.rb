@@ -242,7 +242,10 @@ def resolve_leaf(node, ctx)
     # control lands in its container even when its target column didn't resolve.
     ctx[:zone_to_ctl][node['id']]
   when 'text', 'title'
-    if ctx[:title_el] && !ctx[:title_used]
+    exact = ctx[:els_by_id][node['id'].to_s]
+    if exact
+      exact['id']
+    elsif ctx[:title_el] && !ctx[:title_used]
       ctx[:title_used] = true
       ctx[:title_el]['id']
     else

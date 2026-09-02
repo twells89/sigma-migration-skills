@@ -27,6 +27,7 @@ note() { printf '     %s\n' "$*"; }
 mkdir -p "$TMP/discovery"
 cp "$CASE_DIR/fixtures/cards.json" "$TMP/discovery/cards.json"
 cp "$CASE_DIR/fixtures/parity-expected.json" "$TMP/parity-expected.json"
+printf '{}\n' > "$TMP/discovery/layout-observed.json"
 
 ruby "$SCRIPTS/derive-presentation-overrides.rb" --workdir "$TMP" --discovery "$TMP/discovery" --force \
   >"$TMP/derive.out" 2>&1 || { note "FAIL: derive-presentation-overrides.rb exited nonzero"; sed -n '1,20p' "$TMP/derive.out"; exit 1; }
@@ -36,6 +37,7 @@ ruby -rjson -e '
   kpi   = JSON.parse(File.read(File.join(dir, "kpi-format-overrides.json")))
   axis  = JSON.parse(File.read(File.join(dir, "chart-axis-overrides.json")))
   order = JSON.parse(File.read(File.join(dir, "category-order-overrides.json")))
+  headers = JSON.parse(File.read(File.join(dir, "kpi-card-header-overrides.json")))
   errs = []
 
   rev = kpi["kpi_rev"] || {}
@@ -58,9 +60,11 @@ ruby -rjson -e '
   errs << "categorical order not preserved from Domo rows" unless order["bar_channel"] == ["In-Store", "Online", "App"]
   errs << "date axis wrongly treated as a category" if order.key?("line_month")
   errs << "table wrongly given a categorical order" if order.key?("table_detail")
+  errs << "screenshot-backed KPI header missing dynamic full value" unless
+    headers.dig("kpi_rev", "body").to_s.include?("{{Sum([Master/Net Revenue]) | $,.1f}}")
 
-  # Layout-safe automation only: no card-header sidecar is auto-emitted (it
-  # would add header elements the automated layout cannot place).
+  # Chart card-header sidecars remain operator-authored. Screenshot-backed KPI
+  # headers are safe because observed layout nests them with their KPI.
   errs << "card-header-overrides.json must NOT be auto-emitted" if File.exist?(File.join(dir, "card-header-overrides.json"))
 
   if errs.empty?
@@ -78,6 +82,7 @@ ruby -rjson -e '
   abort "manifest schema wrong" unless m["schema"] == "domo-presentation-overrides/v1"
   c = m["counts"] || {}
   abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 5 && c["kpi_formats"] == 5 &&
+    c["kpi_headers"] == 2 &&
     c["axis_formats"] == 2 && c["category_orders"] == 1
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }

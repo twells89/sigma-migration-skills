@@ -429,19 +429,23 @@ Dir.mktmpdir('domo-build-layout-observed') do |dir|
   w.call('cards.json', [
     { 'id' => 'ov1', 'title' => 'Observed Chart', 'chartType' => 'badge_vert_bar', '_size' => '', '_pageOrder' => 0 },
     { 'id' => 'ov2', 'title' => 'Composed Chart', 'chartType' => 'badge_vert_bar', '_size' => '', '_pageOrder' => 1 },
+    { 'id' => 'ov3', 'title' => 'Observed KPI', 'chartType' => 'badge_singlevalue', '_size' => '', '_pageOrder' => 2 },
   ])
-  w.call('pages.json', [{ 'id' => 'p1', 'title' => 'Observed Page', 'cardIds' => %w[ov1 ov2] }])
+  w.call('pages.json', [{ 'id' => 'p1', 'title' => 'Observed Page', 'cardIds' => %w[ov1 ov2 ov3] }])
   w.call('chart-specs.json', {
     'pages' => [{
       'name' => 'Observed Page',
       'elements' => [
         { 'id' => 'el-ov1', 'kind' => 'bar-chart', 'name' => 'Observed Chart' },
         { 'id' => 'el-ov1-summary', 'kind' => 'kpi-chart', 'name' => 'Observed Total' },
+        { 'id' => 'el-ov3', 'kind' => 'kpi-chart', 'name' => ' ' },
+        { 'id' => 'header-kpi-ov3', 'kind' => 'text', 'name' => nil },
       ],
     }],
   })
   w.call('layout-observed.json', {
     'ov1' => { 'x' => 0.0, 'y' => 0.0, 'w' => 0.4, 'h' => 0.15 },
+    'ov3' => { 'x' => 0.5, 'y' => 0.0, 'w' => 0.4, 'h' => 0.15 },
     'nonexistent-card-id' => { 'x' => 0.0, 'y' => 0.0, 'w' => 1.0, 'h' => 1.0 }, # typo -> must WARN
   })
 
@@ -468,6 +472,9 @@ Dir.mktmpdir('domo-build-layout-observed') do |dir|
      'observed chart + companion KPI stay grouped in one source-card container')
   eq(card_container['children'].map { |child| child['id'] }, %w[el-ov1-summary el-ov1],
      'source-card container places the summary above its primary chart')
+  kpi_container = dash['zone_tree'].find { |z| z['id'] == 'dc-ov3' }
+  eq(kpi_container['children'].map { |child| child['id'] }, %w[header-kpi-ov3 el-ov3],
+     'screenshot-backed KPI header stays inside its observed source card')
   ok(zov2['_source'].nil?, 'ov2 (not in the sidecar) falls back to the kind-aware default composition, untagged')
   ok(zov2['y_pct'] > zov1['y_pct'], 'the composed remainder (ov2) is placed below the observed region, end to end')
 end

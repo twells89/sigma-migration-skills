@@ -7,17 +7,15 @@
 # when available, an EARLY Domo card-data snapshot (`parity-expected.json`):
 #
 #   kpi-format-overrides.json    Domo-style compact KPI display + font size
+#   kpi-card-header-overrides.json screenshot-backed KPI title/subtitle blocks
 #   chart-axis-overrides.json    compact currency axis display
 #   category-order-overrides.json source category order from Domo rows
 #
 # The existing builders consume these files. Raw-value parity twins remain the
 # builder's responsibility, so display scaling never changes the measured value.
-# Only LAYOUT-SAFE overrides are auto-emitted: each of these three restyles an
-# element that already exists, adding no new elements. The card-header override
-# (which swaps a chart's companion KPI for a bespoke text header) is left to
-# hand-authoring — it introduces `header-*` elements the automated layout
-# builder has no zone for, and the source Summary Number is already surfaced by
-# the companion-KPI mechanism the layout builder does place.
+# Chart card-header overrides remain hand-authored. KPI card headers are emitted
+# only when layout-observed.json proves the source card geometry; the observed
+# layout path nests each header with its KPI so no element is left unplaced.
 #
 # Usage:
 #   ruby scripts/derive-presentation-overrides.rb --workdir /tmp/run
@@ -153,9 +151,11 @@ def dateish?(value)
 end
 
 kpi_formats = {}
+kpi_headers = {}
 axis_formats = {}
 category_orders = {}
 warnings = []
+observed_layout = File.exist?(File.join(discovery, 'layout-observed.json'))
 
 cards.each do |card|
   next if card['_error'] || card['_tierB']
@@ -174,6 +174,20 @@ cards.each do |card|
       )
     end
     kpi_formats[id] = rule
+    if observed_layout && summary
+      aggregate = AGGREGATIONS.fetch(summary['aggregation'])
+      expression = "#{aggregate}([Master/#{summary['ref']}])"
+      precision = summary['format'].to_h.fetch('precision', 1).to_i.clamp(0, 4)
+      formatted =
+        case format_type(summary['format'])
+        when /currency|money/ then "{{#{expression} | $,.#{precision}f}}"
+        when /percent/ then "{{#{expression} | .#{precision}%}}"
+        else "{{#{expression} | ,.#{precision}f}}"
+        end
+      kpi_headers[id] = {
+        'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{formatted}<br>#{summary['label']}</p>"
+      }
+    end
     next
   end
 
@@ -227,6 +241,7 @@ files = {
   'chart-axis-overrides.json' => axis_formats,
   'category-order-overrides.json' => category_orders
 }
+files['kpi-card-header-overrides.json'] = kpi_headers if observed_layout
 
 written = []
 skipped = []
@@ -249,6 +264,7 @@ manifest = {
   'counts' => {
     'cards' => cards.size,
     'kpi_formats' => kpi_formats.size,
+    'kpi_headers' => kpi_headers.size,
     'axis_formats' => axis_formats.size,
     'category_orders' => category_orders.size
   },

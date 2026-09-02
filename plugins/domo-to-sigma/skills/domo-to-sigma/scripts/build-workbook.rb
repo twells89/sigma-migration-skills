@@ -2423,6 +2423,17 @@ def observed_section_elements(cards)
   end
 end
 
+def observed_page_title_element(page_name)
+  return nil unless File.exist?(File.join(OUT, 'layout-observed.json'))
+  slug = page_name.to_s.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/\A-+|-+\z/, '')[0, 40]
+  {
+    'id' => "title-#{slug}",
+    'kind' => 'text',
+    'name' => page_name,
+    'body' => "# #{page_name}"
+  }
+end
+
 if $PROGRAM_NAME == __FILE__
   cards = JSON.parse(File.read(File.join(OUT, 'cards.json'))) rescue []
   pages = JSON.parse(File.read(File.join(OUT, 'pages.json'))) rescue []
@@ -2438,6 +2449,8 @@ if $PROGRAM_NAME == __FILE__
     before = $companion_elements.length
     els = pcards.map { |c| build_element(c, overrides, master_ds) }.compact
     els += $companion_elements[before..]
+    title_element = observed_page_title_element(pname)
+    els.unshift(title_element) if title_element
     els += build_controls(pcards, master_ds)
     source_page = pages.find { |page| page_name(page) == pname }
     els += page_layout_elements(source_page || {})
