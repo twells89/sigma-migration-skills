@@ -408,6 +408,23 @@ ruby scripts/migrate-domo.rb --offline <fixtureDir> --out <dir> # offline dry-ru
 
 `migrate-domo.rb` chains every phase below — one log line per phase, a `run-state.json` ledger, fail-fast, idempotent (`--force` to redo), Windows-safe (argv shell-outs, no inline bash). It folds in the `build-dm` + DM `post-and-readback` that `build-workbook-spec.rb` requires. `--offline` proves the deterministic build end-to-end against a fixture, writing `workbook-spec.json` + a `layout-2d.flag` (`grid`|`stack`) computed from the **real** layout engine — so you can confirm a true 2D grid (not a stack), inline logos, and `decimalPlaces` formats with no creds.
 
+For a GREEN live run, pass the full source screenshot:
+
+```bash
+ruby scripts/migrate-domo.rb ... --source-dashboard-png /path/source.png
+```
+
+The orchestrator stages it, renders Sigma, and finalizes strict value parity.
+If `<out>/blind-grade.json` is absent, it writes
+`<out>/visual-grade-request.json`, stamps `record-visual-check` as `waiting`,
+and exits **20** (resumable, not failed). The driving agent must launch a fresh
+context-free vision grader from that request, then rerun the **same command**;
+the rerun validates the image hashes, records the six-dimension verdict, and
+continues through `assert-phase6-ran.rb` automatically. No JSON hand-edit or
+special finalize command is allowed. A provider can make this literally one
+process by passing `--visual-grader /path/adapter`; the executable receives the
+request JSON path as its only argument and must write its `output_json`.
+
 The phase sections below document what the orchestrator runs **internally** — read them to understand or debug a phase, not to run them by hand.
 
 ## Phase 4 — Post DM
@@ -501,6 +518,9 @@ page to PNG and compare it **side-by-side against the Domo full-page PDF**
 (`discovery/png/pages/<pageId>.pdf`) plus the per-card PNGs. Check the
 source-fidelity → structural → design-quality rubrics, fix the spec, re-render,
 and loop until the render passes. Declare done on a *clean render*, never on HTTP 200.
+In the orchestrated path, fulfill `visual-grade-request.json` with a fresh
+context-free grader per `refs/blind-grader-brief.md`; exit 20 means WAITING for
+that evidence, not a failed migration and not permission to waive the gate.
 
 Plus the Domo-specific gate from `refs/card-to-element.md`:
 - **Every Domo summary-number tile → a Sigma `kpi-chart`.** Count summary tiles

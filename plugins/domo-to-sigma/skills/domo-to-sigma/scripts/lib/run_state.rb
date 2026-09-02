@@ -35,7 +35,7 @@ module DomoRunState
     { 'tool' => 'domo-to-sigma', 'phases' => {} }
   end
 
-  # Record a phase. status: 'done' | 'skip' | 'fail'. Best-effort — a ledger
+  # Record a phase. status: 'done' | 'skip' | 'fail' | 'waiting'. Best-effort — a ledger
   # write must never crash the migration; failures are swallowed.
   def self.stamp(workdir, phase, status: 'done', note: nil)
     return unless workdir && File.directory?(workdir)
@@ -53,6 +53,10 @@ module DomoRunState
 
   def self.fail(workdir, phase, reason)
     stamp(workdir, phase, status: 'fail', note: reason)
+  end
+
+  def self.wait(workdir, phase, reason)
+    stamp(workdir, phase, status: 'waiting', note: reason)
   end
 
   # Record TOP-LEVEL run facts (not phases) — e.g. run mode / tier.

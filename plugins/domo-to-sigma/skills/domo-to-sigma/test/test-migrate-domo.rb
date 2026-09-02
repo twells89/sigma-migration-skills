@@ -217,6 +217,17 @@ ok(render_call_at && parity_hdr_at && record_call_at &&
    render_call_at < parity_hdr_at && parity_hdr_at < record_call_at,
    'bead B5: run_live! renders BEFORE verify-parity (gate 8 render) and records the verdict AFTER it ' \
    '(record-visual-check.rb hard-requires parity-final.json to already exist)')
+ok(migrate_src.include?('--source-dashboard-png') && migrate_src.include?('--blind-grade') &&
+   migrate_src.include?('--visual-grader'),
+   'visual handoff: CLI accepts source image, completed grade, and optional one-process grader adapter')
+ok(migrate_src.include?('DomoVisualHandoff.write_request!') &&
+   migrate_src.include?('raise VisualGradePending.new') &&
+   migrate_src.include?('exit DomoVisualHandoff::EXIT_PENDING'),
+   'visual handoff: missing grade becomes an explicit resumable exit-20 WAITING state')
+ok(!migrate_src.include?("'--agent-vision', 'false'"),
+   'visual handoff: orchestrator no longer records a guaranteed not-executable verdict')
+ok(migrate_src.include?('DomoVisualHandoff.record_args'),
+   'visual handoff: a completed blind grade is consumed and recorded automatically')
 
 # Track E: the fixture's discovery/beast-modes.json (see test/fixtures/domo-estate/
 # beast-modes.json) drives migrate-domo.rb's convert-beast-modes phase through its
