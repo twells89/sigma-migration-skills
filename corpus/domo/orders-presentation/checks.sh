@@ -61,7 +61,7 @@ ruby -rjson -e '
   errs << "date axis wrongly treated as a category" if order.key?("line_month")
   errs << "table wrongly given a categorical order" if order.key?("table_detail")
   errs << "screenshot-backed KPI header missing dynamic full value" unless
-    headers.dig("kpi_rev", "body").to_s.include?("{{Sum([Master/Net Revenue]) | $,.1f}}")
+    headers.dig("kpi_rev", "body").to_s.include?("{{Sum([Master/NET REVENUE]) | $,.1f}}")
 
   # Chart card-header sidecars remain operator-authored. Screenshot-backed KPI
   # headers are safe because observed layout nests them with their KPI.
