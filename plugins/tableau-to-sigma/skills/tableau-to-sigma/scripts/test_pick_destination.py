@@ -23,6 +23,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         self._orig = sigma_rest.request
         self._routes = {}
+        self._gets = []
         self._posts = []
         sigma_rest.request = self._fake
         pd.sigma_rest = sigma_rest  # ensure the module ref points at our patched one
@@ -34,6 +35,7 @@ class Base(unittest.TestCase):
         if method == "post":
             self._posts.append({"path": path, "body": body})
             return self._routes.get(("post", path), {})
+        self._gets.append(path)
         if ("get", path) in self._routes:
             r = self._routes[("get", path)]
             if isinstance(r, Exception):
@@ -86,6 +88,18 @@ class ListCmd(Base):
         self.route("get", "/v2/files?typeFilters=folder&limit=500", {"entries": []})
         out = json.loads(self.run_main(["list"]))
         self.assertIsNone(out["myDocuments"])
+
+    def test_my_documents_prefers_member_home_folder_id(self):
+        self.route("get", "/v2/whoami", {"userId": "u1"})
+        self.route("get", "/v2/members/u1", {"homeFolderId": "home1"})
+        self.route("get", "/v2/workspaces?limit=500", {"entries": []})
+        self.route("get", "/v2/files?typeFilters=folder&limit=500", {"entries": []})
+        out = json.loads(self.run_main(["list"]))
+        self.assertEqual(out["myDocuments"], "home1")
+        self.assertNotIn(
+            "/v2/members/u1/files?typeFilters=folder&limit=500",
+            self._gets,
+        )
 
     def test_errors_swallowed_to_empty(self):
         # whoami raises -> myDocuments None; workspaces raise -> empty lists
