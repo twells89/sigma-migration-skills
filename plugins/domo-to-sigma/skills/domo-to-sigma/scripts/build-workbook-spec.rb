@@ -372,6 +372,7 @@ if opts[:layout]
     overrides = {}
     overrides['colorOverrides'] = sigma_color_overrides(theme['backgroundCanvas']) if theme['backgroundCanvas']
     overrides['categoricalScheme'] = theme['categoricalScheme'] if theme['categoricalScheme']
+    overrides['titleFont'] = { 'fontSize' => 10, 'fontWeight' => 'bold' }
     # Live since 2026-08: themeName/themeOverrides moved to
     # document.settings.theme.{name,overrides} (shared/lib/code_rep.rb
     # DOC_KEYS) — a flat top-level themeName/themeOverrides is invalid on
@@ -389,7 +390,8 @@ else
     name: 'Light',
     overrides: {
       'colorOverrides' => sigma_color_overrides('#F4F4F4'),
-      'categoricalScheme' => %w[#82BADF #8BC34A #F3A24F #D95C59 #C8E5A3 #7FB4D3 #F8DFA0 #8BBF78]
+      'categoricalScheme' => %w[#82BADF #8BC34A #F3A24F #D95C59 #C8E5A3 #7FB4D3 #F8DFA0 #8BBF78],
+      'titleFont' => { 'fontSize' => 10, 'fontWeight' => 'bold' }
     }
   )
   warn '  theme: Domo default canvas + 8-color categorical scheme'

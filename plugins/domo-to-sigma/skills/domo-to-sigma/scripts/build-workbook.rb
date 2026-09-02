@@ -2415,18 +2415,11 @@ def observed_section_elements(cards)
     [rec['section'].to_s, rec['y'].to_f]
   end
   sections.group_by(&:first).map { |name, members| [name, members.map(&:last).min] }
-          .sort_by(&:last).each_with_index.flat_map do |(name, _y), i|
-    [
-      {
-        'id' => "text-observed-section-#{i}", 'kind' => 'text',
-        'name' => name, 'body' => "### #{name}",
-      },
-      {
-        'id' => "divider-observed-section-#{i}", 'kind' => 'divider',
-        'direction' => 'horizontal',
-        'style' => { 'color' => '#D9DEE5', 'width' => 1, 'strokeStyle' => 'solid' }
-      }
-    ]
+          .sort_by(&:last).each_with_index.map do |(name, _y), i|
+    {
+      'id' => "text-observed-section-#{i}", 'kind' => 'text',
+      'name' => name, 'body' => "### #{name}",
+    }
   end
 end
 
