@@ -31,6 +31,11 @@ require 'domo_rest'
 require 'sigma_rest'
 
 opts = { band_size: 20_000, grant_role: 'PUBLIC' }
+
+def sigma_sync_body(database, schema)
+  JSON.generate('path' => [database, schema])
+end
+
 OptionParser.new do |p|
   p.on('--dataset-id IDS', 'Comma-separated Domo DataSet ids. Default: every domo-landed-data entry in dataset-map.json.') { |v| opts[:dataset_ids] = v.split(',') }
   p.on('--target-db DB', 'Snowflake database to land into (required unless --dry-run).') { |v| opts[:target_db] = v }
@@ -154,7 +159,11 @@ end
 
 landed = results.select { |r| r[:status] == :landed }
 if !opts[:dry_run] && !landed.empty? && opts[:sigma_connection]
-  Sigma.request(:post, "/v2/connections/#{opts[:sigma_connection]}/sync")
+  Sigma.request(
+    :post,
+    "/v2/connections/#{opts[:sigma_connection]}/sync",
+    body: sigma_sync_body(opts[:target_db], opts[:target_schema])
+  )
   puts "synced Sigma connection #{opts[:sigma_connection]}"
 end
 

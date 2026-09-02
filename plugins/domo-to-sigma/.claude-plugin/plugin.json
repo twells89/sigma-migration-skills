@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "domo-to-sigma",
   "displayName": "Domo \u2192 Sigma",
-  "version": "0.16.92",
+  "version": "0.16.94",
   "description": "Migrate Domo dashboards to Sigma \u2014 DataSets \u2192 Sigma data model (flat materialized tables \u2192 table elements), Beast Mode calc fields \u2192 Sigma formulas (MySQL-dialect SQL via the shared SQL-formula converter), and cards \u2192 charts/KPIs/pivots (every card's Summary Number \u2192 a Sigma KPI, not a table). Ports page + card filters as controls, detects PDP policies for opt-in row-level security, pre-flights Domo dataset columns against the real warehouse schema before building the data model, and defers live parity verification. Bundles a read-only domo-assessment skill (public governance-dataset inventory \u2192 value/cost-ranked migration-readiness readout) and domo-import-to-snowflake for landing DataSets with no connector-backed warehouse source. Companion to the sigma-migration-skills converters.",
   "author": {
     "name": "Thomas Wells"

@@ -516,29 +516,32 @@ def apply_chart_axis_override!(card, element)
   path = File.join(OUT, 'chart-axis-overrides.json')
   all = (JSON.parse(File.read(path)) rescue {}) if File.exist?(path)
   rule = all && all[card['id'].to_s]
-  return element unless rule.is_a?(Hash) && rule['scale'].to_f.nonzero?
+  return element unless rule.is_a?(Hash)
   measure_ids = Array(element.dig('yAxis', 'columnIds'))
   return element if measure_ids.empty?
 
-  raw = Marshal.load(Marshal.dump(element))
-  raw['id'] = "#{element['id']}-verify"
-  raw['name'] = "#{element['name']} (Parity)"
-  $chart_verification_elements << raw
+  if rule['scale'].to_f.nonzero?
+    raw = Marshal.load(Marshal.dump(element))
+    raw['id'] = "#{element['id']}-verify"
+    raw['name'] = "#{element['name']} (Parity)"
+    $chart_verification_elements << raw
 
-  decimals = rule['decimals'].to_i
-  Array(element['columns']).each do |column|
-    next unless measure_ids.include?(column['id'])
-    column['formula'] = "(#{column['formula']}) / #{rule['scale'].to_f}"
-    column['format'] = {
-      'kind' => 'number',
-      'formatString' => "#{rule['prefix']},.#{decimals}f",
-      'suffix' => rule['suffix'].to_s
-    }
+    decimals = rule['decimals'].to_i
+    Array(element['columns']).each do |column|
+      next unless measure_ids.include?(column['id'])
+      column['formula'] = "(#{column['formula']}) / #{rule['scale'].to_f}"
+      column['format'] = {
+        'kind' => 'number',
+        'formatString' => "#{rule['prefix']},.#{decimals}f",
+        'suffix' => rule['suffix'].to_s
+      }
+    end
+    element['visibleAsSource'] = false
   end
   element['yAxis']['format'] = {
-    'marks' => 'none', 'labels' => { 'fontSize' => 9 }
+    'marks' => 'none',
+    'labels' => rule['hideLabels'] ? 'hidden' : { 'fontSize' => 9 }
   }
-  element['visibleAsSource'] = false
   element
 end
 
@@ -2415,19 +2418,23 @@ def observed_section_elements(cards)
     [rec['section'].to_s, rec['y'].to_f]
   end
   sections.group_by(&:first).map { |name, members| [name, members.map(&:last).min] }
-          .sort_by(&:last).each_with_index.flat_map do |(name, _y), i|
-    [
-      {
-        'id' => "text-observed-section-#{i}", 'kind' => 'text',
-        'name' => name, 'body' => "### #{name}",
-      },
-      {
-        'id' => "divider-observed-section-#{i}", 'kind' => 'divider',
-        'direction' => 'horizontal',
-        'style' => { 'color' => '#D9DEE5', 'width' => 1, 'strokeStyle' => 'solid' }
-      }
-    ]
+          .sort_by(&:last).each_with_index.map do |(name, _y), i|
+    {
+      'id' => "text-observed-section-#{i}", 'kind' => 'text',
+      'name' => name, 'body' => "### #{name}",
+    }
   end
+end
+
+def observed_page_title_element(page_name)
+  return nil unless File.exist?(File.join(OUT, 'layout-observed.json'))
+  slug = page_name.to_s.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/\A-+|-+\z/, '')[0, 40]
+  {
+    'id' => "title-#{slug}",
+    'kind' => 'text',
+    'name' => page_name,
+    'body' => "## #{page_name}"
+  }
 end
 
 if $PROGRAM_NAME == __FILE__
@@ -2445,6 +2452,8 @@ if $PROGRAM_NAME == __FILE__
     before = $companion_elements.length
     els = pcards.map { |c| build_element(c, overrides, master_ds) }.compact
     els += $companion_elements[before..]
+    title_element = observed_page_title_element(pname)
+    els.unshift(title_element) if title_element
     els += build_controls(pcards, master_ds)
     source_page = pages.find { |page| page_name(page) == pname }
     els += page_layout_elements(source_page || {})

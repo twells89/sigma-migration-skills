@@ -423,13 +423,13 @@ server element IDs, verify zero error columns.
 `migrate-domo.rb` runs `scripts/derive-presentation-overrides.rb` first (live:
 after an early `collect-parity-expected.rb`, which reads Domo card-data only and
 needs no Sigma). It derives the **layout-safe** styling sidecars the builders
-consume — Domo-style compact KPI display, compact currency axes, and source
-category order — from source facts, so a customer run reproduces the gold-path
-styling without hand-authored files. It only writes sidecars that don't already
-exist (an operator's hand-authored sidecar always wins) and never fails the run.
-It deliberately does **not** auto-author `card-header-overrides.json` (that
-override adds `header-*` text elements the automated layout has no zone for; the
-source Summary Number is already surfaced by the companion-KPI mechanism). The
+consume — Domo-style compact KPI display, compact currency axes, source category
+order, and (when screenshot geometry is present) KPI title/subtitle blocks —
+from source facts, so a customer run reproduces the gold-path styling without
+hand-authored files. It only writes sidecars that don't already exist (an
+operator's hand-authored sidecar always wins) and never fails the run.
+Screenshot-backed chart and KPI headers are safe because the observed-layout
+path nests each header with its primary element inside one source-card container. The
 `domo/orders-presentation` corpus case pins this derivation offline/creds-free.
 
 `ruby scripts/build-workbook.rb` → map each card to a Sigma element, following

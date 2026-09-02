@@ -129,6 +129,7 @@
 require 'json'
 require 'fileutils'
 require_relative 'lib/domo_sigma_util'
+require_relative 'lib/ruby_compat'
 include DomoSigma
 
 OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
@@ -291,14 +292,40 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
   end
   companion_zones = attached_companions.map do |c|
     o = observed[c['_primary_card_id'].to_s]
+    header = c['_kpi_header']
     {
-      'id' => c['id'], 'kind' => 'chart', 'caption' => c['title'],
-      'chart_kind' => 'kpi', 'measures' => ['value'], 'children' => [],
+      'id' => c['id'], 'kind' => header ? 'text' : 'chart', 'caption' => c['title'],
+      'chart_kind' => header ? nil : 'kpi', 'measures' => header ? [] : ['value'], 'children' => [],
       'x_pct' => (o['x'].to_f * 100.0).round(2),
       'y_pct' => (o['y'].to_f * 100.0).round(2),
       'w_pct' => (o['w'].to_f * 100.0).round(2),
       'h_pct' => (o['h'].to_f * 0.24 * 100.0).round(2),
       '_source' => 'observed-from-screenshot-summary',
+    }
+  end
+  primary_zones = obs_zones.each_with_object({}) { |zone, out| out[zone['id'].to_s] = zone }
+  companion_zones_by_primary = attached_companions.each_with_object({}) do |card, out|
+    out[card['_primary_card_id'].to_s] = companion_zones.find { |zone| zone['id'].to_s == card['id'].to_s }
+  end
+  observed_tree = observed_cards.map do |card|
+    primary = primary_zones.fetch(card['id'].to_s)
+    tree_primary = primary.merge('id' => "el-#{card['id']}")
+    companion = companion_zones_by_primary[card['id'].to_s]
+    next tree_primary unless companion
+
+    o = observed.fetch(card['id'].to_s)
+    {
+      'id' => "dc-#{card['id']}",
+      'kind' => 'container',
+      'caption' => card['title'],
+      'x_pct' => (o['x'].to_f * 100.0).round(2),
+      'y_pct' => (o['y'].to_f * 100.0).round(2),
+      'w_pct' => (o['w'].to_f * 100.0).round(2),
+      'h_pct' => (o['h'].to_f * 100.0).round(2),
+      'fill_color' => '#FFFFFF',
+      'border_color' => '#D9DEE5',
+      'children' => [companion, tree_primary],
+      '_source' => 'observed-from-screenshot-card',
     }
   end
 
@@ -320,6 +347,7 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
   end
 
   zones = obs_zones + companion_zones + hdr_zones
+  tree_zones = observed_tree + hdr_zones
   observed_max_y_pct = obs_zones.map { |z| z['y_pct'] + z['h_pct'] }.max
 
   unless unobserved_cards.empty?
@@ -331,11 +359,12 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
         shifted['y_pct'] = (observed_max_y_pct + z['y_pct'] / 100.0 * remaining_budget).round(2)
         shifted['h_pct'] = (z['h_pct'] / 100.0 * remaining_budget).round(2)
         zones << shifted
+        tree_zones << shifted
       end
     end
   end
 
-  { 'dashboard' => name, 'zone_tree' => zones, 'zones' => zones }
+  { 'dashboard' => name, 'zone_tree' => tree_zones, 'zones' => zones }
 end
 
 # ==== rung 2 — classic-page fallback: collections[] + size tokens ==========
@@ -629,6 +658,38 @@ def load_chart_specs_companions(dir)
     out[pname] = comps.map { |el| { 'id' => el['id'].to_s, 'name' => el['name'].to_s } } unless comps.empty?
   end
   out
+end
+
+def load_chart_specs_kpi_headers(dir)
+  path = File.join(dir, 'chart-specs.json')
+  return {} unless File.exist?(path)
+  data = JSON.parse(File.read(path)) rescue nil
+  return {} unless data.is_a?(Hash) && data['pages'].is_a?(Array)
+  data['pages'].each_with_object({}) do |page, out|
+    next unless page['name']
+    headers = Array(page['elements']).filter_map do |element|
+      match = element['id'].to_s.match(/\Aheader-kpi-(.+)\z/)
+      next unless match && element['kind'] == 'text'
+      { 'id' => element['id'].to_s, 'name' => element['name'].to_s, 'primary_card_id' => match[1] }
+    end
+    out[page['name']] = headers unless headers.empty?
+  end
+end
+
+def load_chart_specs_card_headers(dir)
+  path = File.join(dir, 'chart-specs.json')
+  return {} unless File.exist?(path)
+  data = JSON.parse(File.read(path)) rescue nil
+  return {} unless data.is_a?(Hash) && data['pages'].is_a?(Array)
+  data['pages'].each_with_object({}) do |page, out|
+    next unless page['name']
+    headers = Array(page['elements']).filter_map do |element|
+      match = element['id'].to_s.match(/\Aheader-(?!kpi-)(.+)\z/)
+      next unless match && element['kind'] == 'text'
+      { 'id' => element['id'].to_s, 'name' => element['name'].to_s, 'primary_card_id' => match[1] }
+    end
+    out[page['name']] = headers unless headers.empty?
+  end
 end
 
 # This card's best-known Sigma-ish kind string, per the priority above.
@@ -1072,6 +1133,8 @@ if $PROGRAM_NAME == __FILE__
   # express. Landing in the KPI band (a real, deliberate placement) beats not
   # landing anywhere at all.
   orphan_companions_by_page = load_chart_specs_companions(OUT)
+  kpi_headers_by_page = load_chart_specs_kpi_headers(OUT)
+  card_headers_by_page = load_chart_specs_card_headers(OUT)
   # PageLayoutV4 non-card content is authored page content, not furniture:
   # discovery preserved HEADER/PAGE_BREAK geometry on pages.json and
   # build-workbook emitted matching text/page-break elements with these ids.
@@ -1104,6 +1167,22 @@ if $PROGRAM_NAME == __FILE__
       pcards << { 'id' => comp['id'], 'title' => comp['name'], 'chartType' => 'badge_singlevalue',
                   'sigmaKindHint' => 'kpi-chart', '_size' => '', '_pageOrder' => -1,
                   '_synthesized' => true, '_primary_card_id' => primary_card_id }
+    end
+    Array(kpi_headers_by_page[pname]).each do |header|
+      pcards << {
+        'id' => header['id'], 'title' => header['name'], 'chartType' => 'text',
+        'sigmaKindHint' => 'text', '_size' => '', '_pageOrder' => -1,
+        '_synthesized' => true, '_primary_card_id' => header['primary_card_id'],
+        '_kpi_header' => true
+      }
+    end
+    Array(card_headers_by_page[pname]).each do |header|
+      pcards << {
+        'id' => header['id'], 'title' => header['name'], 'chartType' => 'text',
+        'sigmaKindHint' => 'text', '_size' => '', '_pageOrder' => -1,
+        '_synthesized' => true, '_primary_card_id' => header['primary_card_id'],
+        '_kpi_header' => true
+      }
     end
   end
 

@@ -7,17 +7,16 @@
 # when available, an EARLY Domo card-data snapshot (`parity-expected.json`):
 #
 #   kpi-format-overrides.json    Domo-style compact KPI display + font size
+#   kpi-card-header-overrides.json screenshot-backed KPI title/subtitle blocks
+#   card-header-overrides.json   screenshot-backed chart title/summary blocks
 #   chart-axis-overrides.json    compact currency axis display
 #   category-order-overrides.json source category order from Domo rows
 #
 # The existing builders consume these files. Raw-value parity twins remain the
 # builder's responsibility, so display scaling never changes the measured value.
-# Only LAYOUT-SAFE overrides are auto-emitted: each of these three restyles an
-# element that already exists, adding no new elements. The card-header override
-# (which swaps a chart's companion KPI for a bespoke text header) is left to
-# hand-authoring — it introduces `header-*` elements the automated layout
-# builder has no zone for, and the source Summary Number is already surfaced by
-# the companion-KPI mechanism the layout builder does place.
+# Card headers are emitted only when layout-observed.json proves the source card
+# geometry; the observed path nests each header with its primary chart/KPI so no
+# element is left unplaced.
 #
 # Usage:
 #   ruby scripts/derive-presentation-overrides.rb --workdir /tmp/run
@@ -148,14 +147,25 @@ def dynamic_summary(expression, format, value)
   "{{#{expression} | ,.#{precision}f}}"
 end
 
+def full_summary(expression, format)
+  type = format_type(format)
+  precision = format.to_h.fetch('precision', 1).to_i.clamp(0, 4)
+  return "{{#{expression} | $,.#{precision}f}}" if type.match?(/currency|money/)
+  return "{{#{expression} | .#{precision}%}}" if type.include?('percent')
+  "{{#{expression} | ,.#{precision}f}}"
+end
+
 def dateish?(value)
   value.to_s.match?(/\A(?:\d{4}[-\/]\d{1,2}|[A-Z][a-z]{2}\s+\d{2}|Week-\d+\s+\d{4})/)
 end
 
 kpi_formats = {}
+kpi_headers = {}
+card_headers = {}
 axis_formats = {}
 category_orders = {}
 warnings = []
+observed_layout = File.exist?(File.join(discovery, 'layout-observed.json'))
 
 cards.each do |card|
   next if card['_error'] || card['_tierB']
@@ -165,7 +175,7 @@ cards.each do |card|
   summary_value = expected['summary_value'] || expected['summaryValue']
 
   if kpi_card?(card)
-    rule = { 'fontSize' => 64 }
+    rule = { 'fontSize' => observed_layout ? 48 : 64 }
     if summary && format_type(summary['format']).match?(/currency|money/) && (compact = compact_parts(summary_value))
       rule.merge!(
         'scale' => compact[0].to_i, 'suffix' => compact[1],
@@ -174,7 +184,36 @@ cards.each do |card|
       )
     end
     kpi_formats[id] = rule
+    if observed_layout && summary
+      aggregate = AGGREGATIONS.fetch(summary['aggregation'])
+      expression = "#{aggregate}([Master/#{summary['ref']}])"
+      kpi_headers[id] = {
+        'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{full_summary(expression, summary['format'])}\n#{summary['label']}</p>"
+      }
+    end
     next
+  end
+
+  # A chart/table Summary Number becomes a companion KPI in Sigma. Keep that
+  # value at full source precision inside the card header instead of allowing
+  # Sigma's narrow-KPI default to abbreviate it with a lowercase "k".
+  if summary && format_type(summary['format']).match?(/currency|money/)
+    kpi_formats[id] = {
+      'scale' => 1,
+      'suffix' => '',
+      'decimals' => summary['format'].fetch('precision', 1).to_i.clamp(0, 4),
+      'prefix' => '$'
+    }
+  end
+  if observed_layout && summary
+    aggregate = AGGREGATIONS.fetch(summary['aggregation'])
+    expression = "#{aggregate}([Master/#{summary['ref']}])"
+    grain = card.dig('dateGrain', 'dateTimeElement').to_s.downcase
+    grain_line = grain.empty? ? nil : "by #{grain.capitalize}"
+    details = [grain_line, full_summary(expression, summary['format']), summary['label']].compact
+    card_headers[id] = {
+      'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{details.join("\n")}</p>"
+    }
   end
 
   # NOTE: a card's source Summary Number is surfaced automatically by the
@@ -199,6 +238,10 @@ cards.each do |card|
       'scale' => compact[0].to_i, 'prefix' => '$', 'suffix' => compact[1], 'decimals' => 0
     }
   end
+  if observed_layout && VALUE_AXIS_KINDS.include?(kind)
+    axis_formats[id] ||= {}
+    axis_formats[id]['hideLabels'] = true
+  end
 
   first_column = Array(card['columns']).find { |column| column['aggregation'].to_s.empty? }
   first_values = rows.map { |row| Array(row).first }.compact
@@ -215,6 +258,8 @@ files = {
   'chart-axis-overrides.json' => axis_formats,
   'category-order-overrides.json' => category_orders
 }
+files['kpi-card-header-overrides.json'] = kpi_headers if observed_layout
+files['card-header-overrides.json'] = card_headers if observed_layout
 
 written = []
 skipped = []
@@ -237,6 +282,8 @@ manifest = {
   'counts' => {
     'cards' => cards.size,
     'kpi_formats' => kpi_formats.size,
+    'kpi_headers' => kpi_headers.size,
+    'card_headers' => card_headers.size,
     'axis_formats' => axis_formats.size,
     'category_orders' => category_orders.size
   },

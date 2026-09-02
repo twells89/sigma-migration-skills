@@ -1158,9 +1158,13 @@ Dir.mktmpdir do |dir|
        'section text follows screenshot y-order, not discovery card order')
     eq(text_els.map { |e| e['body'] }, ['### First', '### Second'],
        'each observed section is visible authored text')
-    eq(divider_els.map { |e| e['id'] },
-       %w[divider-observed-section-0 divider-observed-section-1],
-       'each observed section gets a real divider element')
+    eq(divider_els, [],
+       'observed sections do not emit unplaced divider furniture')
+    title = observed_page_title_element('Observed Dashboard')
+    eq(title['id'], 'title-observed-dashboard',
+       'screenshot-backed page title gets a stable layout-resolvable id')
+    eq(title['body'], '## Observed Dashboard',
+       'screenshot-backed page title reproduces the Domo page title')
   end
 end
 

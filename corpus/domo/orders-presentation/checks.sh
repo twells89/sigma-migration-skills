@@ -27,6 +27,7 @@ note() { printf '     %s\n' "$*"; }
 mkdir -p "$TMP/discovery"
 cp "$CASE_DIR/fixtures/cards.json" "$TMP/discovery/cards.json"
 cp "$CASE_DIR/fixtures/parity-expected.json" "$TMP/parity-expected.json"
+printf '{}\n' > "$TMP/discovery/layout-observed.json"
 
 ruby "$SCRIPTS/derive-presentation-overrides.rb" --workdir "$TMP" --discovery "$TMP/discovery" --force \
   >"$TMP/derive.out" 2>&1 || { note "FAIL: derive-presentation-overrides.rb exited nonzero"; sed -n '1,20p' "$TMP/derive.out"; exit 1; }
@@ -36,6 +37,8 @@ ruby -rjson -e '
   kpi   = JSON.parse(File.read(File.join(dir, "kpi-format-overrides.json")))
   axis  = JSON.parse(File.read(File.join(dir, "chart-axis-overrides.json")))
   order = JSON.parse(File.read(File.join(dir, "category-order-overrides.json")))
+  headers = JSON.parse(File.read(File.join(dir, "kpi-card-header-overrides.json")))
+  card_headers = JSON.parse(File.read(File.join(dir, "card-header-overrides.json")))
   errs = []
 
   rev = kpi["kpi_rev"] || {}
@@ -46,17 +49,27 @@ ruby -rjson -e '
   errs << "percent KPI must NOT get a currency scale" if ret.key?("scale")
   errs << "percent KPI missing font size" unless ret["fontSize"].to_i > 0
 
+  companion = kpi["bar_channel"] || {}
+  errs << "currency companion KPI must preserve the full source value" unless
+    companion["scale"] == 1 && companion["suffix"] == "" && companion["prefix"] == "$" &&
+    companion["decimals"] == 1
+
   ax = axis["bar_channel"] || {}
   errs << "currency chart axis not compacted" unless ax["scale"] == 1000 && ax["suffix"] == "K" && ax["prefix"] == "$"
+  errs << "screenshot-backed chart must hide source-hidden value-axis labels" unless ax["hideLabels"] == true
   errs << "percent/count chart wrongly given a currency axis" if axis.key?("kpi_ret") || axis.key?("table_detail")
 
   errs << "categorical order not preserved from Domo rows" unless order["bar_channel"] == ["In-Store", "Online", "App"]
   errs << "date axis wrongly treated as a category" if order.key?("line_month")
   errs << "table wrongly given a categorical order" if order.key?("table_detail")
+  errs << "screenshot-backed KPI header missing dynamic full value" unless
+    headers.dig("kpi_rev", "body").to_s.include?("{{Sum([Master/NET REVENUE]) | $,.1f}}")
+  errs << "screenshot-backed chart header missing title/full value" unless
+    card_headers.dig("bar_channel", "body").to_s.include?("**Revenue by Channel**") &&
+    card_headers.dig("bar_channel", "body").to_s.include?("{{Sum([Master/NET REVENUE]) | $,.1f}}")
 
-  # Layout-safe automation only: no card-header sidecar is auto-emitted (it
-  # would add header elements the automated layout cannot place).
-  errs << "card-header-overrides.json must NOT be auto-emitted" if File.exist?(File.join(dir, "card-header-overrides.json"))
+  # Screenshot-backed headers are safe because observed layout nests each one
+  # with its primary chart/KPI.
 
   if errs.empty?
     puts "OK"
@@ -72,7 +85,9 @@ ruby -rjson -e '
   m = JSON.parse(File.read(ARGV[0]))
   abort "manifest schema wrong" unless m["schema"] == "domo-presentation-overrides/v1"
   c = m["counts"] || {}
-  abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 5 && c["kpi_formats"] == 2 &&
+  abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 5 && c["kpi_formats"] == 5 &&
+    c["kpi_headers"] == 2 &&
+    c["card_headers"] == 3 &&
     c["axis_formats"] == 2 && c["category_orders"] == 1
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }
