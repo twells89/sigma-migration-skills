@@ -463,10 +463,10 @@ Dir.mktmpdir('domo-build-layout-observed') do |dir|
   eq(zsum['_source'], 'observed-from-screenshot-summary',
      'the companion placement is explicitly tagged as screenshot-derived')
   eq(zov1['_source'], 'observed-from-screenshot', "ov1's zone is tagged _source, end to end")
-  card_container = dash['zone_tree'].find { |z| z['id'] == 'observed-card-ov1' }
+  card_container = dash['zone_tree'].find { |z| z['id'] == 'dc-ov1' }
   ok(card_container && card_container['kind'] == 'container',
      'observed chart + companion KPI stay grouped in one source-card container')
-  eq(card_container['children'].map { |child| child['id'] }, %w[el-ov1-summary ov1],
+  eq(card_container['children'].map { |child| child['id'] }, %w[el-ov1-summary el-ov1],
      'source-card container places the summary above its primary chart')
   ok(zov2['_source'].nil?, 'ov2 (not in the sidecar) falls back to the kind-aware default composition, untagged')
   ok(zov2['y_pct'] > zov1['y_pct'], 'the composed remainder (ov2) is placed below the observed region, end to end')

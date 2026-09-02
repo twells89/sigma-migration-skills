@@ -307,12 +307,13 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
   end
   observed_tree = observed_cards.map do |card|
     primary = primary_zones.fetch(card['id'].to_s)
+    tree_primary = primary.merge('id' => "el-#{card['id']}")
     companion = companion_zones_by_primary[card['id'].to_s]
-    next primary unless companion
+    next tree_primary unless companion
 
     o = observed.fetch(card['id'].to_s)
     {
-      'id' => "observed-card-#{card['id']}",
+      'id' => "dc-#{card['id']}",
       'kind' => 'container',
       'caption' => card['title'],
       'x_pct' => (o['x'].to_f * 100.0).round(2),
@@ -321,7 +322,7 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
       'h_pct' => (o['h'].to_f * 100.0).round(2),
       'fill_color' => '#FFFFFF',
       'border_color' => '#D9DEE5',
-      'children' => [companion, primary],
+      'children' => [companion, tree_primary],
       '_source' => 'observed-from-screenshot-card',
     }
   end
