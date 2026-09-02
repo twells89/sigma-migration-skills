@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "qlik-to-sigma",
   "displayName": "Qlik \u2192 Sigma",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "Migrate Qlik Sense / Qlik Cloud apps to Sigma \u2014 discovery via qlik-cli or corectl unbuild, Qlik-expression \u2192 Sigma-formula translation (incl. Set Analysis + calculated LOAD fields), REST-only warehouse catalog preflight, data model + source-covered workbook build, and parity verification. Also migrates legacy QlikView (.qvw) apps from the -prj project folder. Includes a tenant assessment skill.",
   "author": {
     "name": "Thomas Wells"
