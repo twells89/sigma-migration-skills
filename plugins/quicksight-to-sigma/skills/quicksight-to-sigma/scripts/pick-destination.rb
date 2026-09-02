@@ -20,15 +20,11 @@
 require 'json'
 require_relative 'lib/cli_encoding'
 require_relative 'lib/sigma_rest'
+require_relative 'lib/destination_resolver'
 
 def my_documents_id
-  # Only resolvable for a user-bound token; service-account tokens return nil.
-  uid = (Sigma.request(:get, '/v2/whoami') rescue {})&.dig('userId')
-  return nil unless uid && !uid.to_s.empty?
-  entries = ((Sigma.request(:get, "/v2/members/#{uid}/files?typeFilters=folder&limit=500") rescue {}) || {})['entries'] || []
-  hit = entries.find { |e| e['name'] == 'My Documents' || e['path'] == 'My Documents' }
-  hit && hit['id']
-rescue StandardError
+  DestinationResolver.my_documents_id
+rescue Sigma::Error, DestinationResolver::Error
   nil
 end
 

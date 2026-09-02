@@ -449,6 +449,7 @@ jobs:
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-qs-trellis.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-metric-reference.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-deterministic-ids-kpi-format.rb
+            shared/lib/test-destination-resolver.rb
             shared/lib/test_metric_binding.rb
             shared/lib/test_phase_metrics.rb
             shared/scripts/test-intake-triage.rb
@@ -578,6 +579,7 @@ jobs:
             plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_grounding.py
             plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_completion_contract.py
             shared/lib/test_metric_binding.py
+            shared/scripts/test_pick_destination.py
             # powerbi-to-sigma uses HYPHENATED test-*.py names, which is why these were
             # never picked up by the test_*.py convention above. Listed explicitly.
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-extract-viz-signals.py
