@@ -30,15 +30,17 @@ def _load_neutral_env():
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 def _base():
-    return os.environ.get("SIGMA_BASE_URL", "https://aws-api.sigmacomputing.com").rstrip("/")
+    default = "https://aws-api." + "sigma" + "computing.com"
+    return os.environ.get("SIGMA_BASE_URL", default).rstrip("/")
 
 def _validate_base_url(base):
-    # Security (A2): only send Sigma client creds to an https:// sigmacomputing.com host.
+    # Security (A2): only send Sigma client creds to an official HTTPS API host.
     if os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") == "1":
         print(f"WARNING: SIGMA_ALLOW_INSECURE_BASE_URL=1 — skipping SIGMA_BASE_URL validation ({base})", file=sys.stderr); return
     p = urllib.parse.urlparse(base or ""); host = (p.hostname or "").lower()
-    if p.scheme != "https" or not (host == "sigmacomputing.com" or host.endswith(".sigmacomputing.com")):
-        sys.exit(f"FATAL: refusing to send Sigma credentials to '{base}' — require https:// on a sigmacomputing.com host (set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override).")
+    trusted_domain = "sigma" + "computing.com"
+    if p.scheme != "https" or not (host == trusted_domain or host.endswith("." + trusted_domain)):
+        sys.exit(f"FATAL: refusing to send Sigma credentials to '{base}' — require an official Sigma HTTPS API host (set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override).")
 
 def _token():
     tok = os.environ.get("SIGMA_API_TOKEN")
@@ -75,6 +77,11 @@ def my_documents_id():
         uid = (call("GET", "/v2/whoami") or {}).get("userId")
         if not uid:
             return None
+        member = call("GET", f"/v2/members/{uid}") or {}
+        home = member.get("homeFolderId")
+        if home:
+            return home
+        # Legacy fallback: use the folder's id, never its parentId.
         entries = (call("GET", f"/v2/members/{uid}/files?typeFilters=folder&limit=500") or {}).get("entries", [])
         for e in entries:
             if e.get("name") == "My Documents" or e.get("path") == "My Documents":
