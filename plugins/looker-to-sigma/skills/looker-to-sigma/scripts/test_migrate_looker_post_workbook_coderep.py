@@ -17,6 +17,8 @@ run.
 
 Usage: python3 scripts/test_migrate_looker_post_workbook_coderep.py
 """
+import ast
+import json
 import os
 import re
 import sys
@@ -91,6 +93,69 @@ check("report_rc == 0" in main_src and 'report_verdict != "RED"' in main_src,
       "failed or RED completion report prevents migration success")
 check("args.yes" not in SRC and "not a.yes" in SRC,
       "gap-scout gate uses parsed namespace a.yes")
+
+# Execute the isolated destination resolver with a fake Sigma request function.
+tree = ast.parse(SRC)
+resolver_node = next(
+    node for node in tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "my_documents_id"
+)
+resolver_namespace = {"json": json}
+resolver_calls = []
+
+
+def fake_sigma(method, path, body=None):
+    resolver_calls.append((method, path, body))
+    responses = {
+        "/v2/whoami": {"userId": "member-1"},
+        "/v2/members/member-1": {"homeFolderId": "home-folder-id"},
+    }
+    return json.dumps(responses[path])
+
+
+resolver_namespace["sigma"] = fake_sigma
+exec(
+    compile(
+        ast.fix_missing_locations(
+            ast.Module(body=[resolver_node], type_ignores=[])
+        ),
+        filename="migrate-looker.py",
+        mode="exec",
+    ),
+    resolver_namespace,
+)
+check(
+    resolver_namespace["my_documents_id"]() == "home-folder-id",
+    "My Documents resolves from the authenticated member's homeFolderId",
+)
+check(
+    resolver_calls == [
+        ("GET", "/v2/whoami", None),
+        ("GET", "/v2/members/member-1", None),
+    ],
+    "homeFolderId resolution avoids legacy file-list scans",
+)
+
+def fake_legacy_sigma(method, path, body=None):
+    responses = {
+        "/v2/whoami": {"userId": "member-1"},
+        "/v2/members/member-1": {},
+        "/v2/members/member-1/files": {
+            "entries": [{
+                "id": "my-documents-id",
+                "parentId": "wrong-parent-id",
+                "path": "My Documents",
+            }]
+        },
+    }
+    return json.dumps(responses[path])
+
+
+resolver_namespace["sigma"] = fake_legacy_sigma
+check(
+    resolver_namespace["my_documents_id"]() == "my-documents-id",
+    "legacy My Documents fallback returns the folder id, not parentId",
+)
 
 print()
 if FAILS:

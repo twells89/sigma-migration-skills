@@ -332,17 +332,20 @@ def sigma(method, path, body=None):
 
 
 def my_documents_id():
-    """Caller's My Documents folder id via whoami (prior art:
-    migrate-tableau.rb's folderId default)."""
+    """Return the caller's documented My Documents inode ID."""
     uid = json.loads(sigma("GET", "/v2/whoami"))["userId"]
+    member = json.loads(sigma("GET", f"/v2/members/{uid}")) or {}
+    if member.get("homeFolderId"):
+        return member["homeFolderId"]
+    # Legacy fallback: use the folder's id, never its parentId.
     entries = (json.loads(sigma("GET", f"/v2/members/{uid}/files")) or {}).get("entries") or []
     entry = next((e for e in entries if e.get("path") == "My Documents"), None)
-    if entry and entry.get("parentId"):
-        return entry["parentId"]
+    if entry and entry.get("id"):
+        return entry["id"]
     entries = (json.loads(sigma("GET", "/v2/files?typeFilters=folder&limit=500")) or {}).get("entries") or []
     entry = next((e for e in entries
                   if e.get("path") == "My Documents" and e.get("ownerId") == uid), None)
-    return entry.get("parentId") if entry else None
+    return entry.get("id") if entry else None
 
 
 def resolve_folder(arg):
