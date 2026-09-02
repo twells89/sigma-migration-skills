@@ -48,6 +48,10 @@ $LOAD_PATH.unshift File.expand_path('lib', __dir__)
 require 'code_rep'
 require 'layout'
 
+def sigma_color_overrides(background_canvas)
+  [{ 'name' => 'backgroundCanvas', 'color' => background_canvas }]
+end
+
 opts = { mode: 'page-per-worksheet' }
 OptionParser.new do |p|
   p.on('--chart-specs PATH')    { |v| opts[:specs] = v }
@@ -366,9 +370,7 @@ if opts[:layout]
   theme = derive_theme(JSON.parse(File.read(opts[:layout])))
   unless theme.empty?
     overrides = {}
-    overrides['colorOverrides'] = [
-      { 'name' => 'backgroundCanvas', 'color' => theme['backgroundCanvas'] }
-    ] if theme['backgroundCanvas']
+    overrides['colorOverrides'] = sigma_color_overrides(theme['backgroundCanvas']) if theme['backgroundCanvas']
     overrides['categoricalScheme'] = theme['categoricalScheme'] if theme['categoricalScheme']
     # Live since 2026-08: themeName/themeOverrides moved to
     # document.settings.theme.{name,overrides} (shared/lib/code_rep.rb
@@ -386,7 +388,7 @@ else
     document,
     name: 'Light',
     overrides: {
-      'colorOverrides' => [{ 'name' => 'backgroundCanvas', 'color' => '#F4F4F4' }],
+      'colorOverrides' => sigma_color_overrides('#F4F4F4'),
       'categoricalScheme' => %w[#82BADF #8BC34A #F3A24F #D95C59 #C8E5A3 #7FB4D3 #F8DFA0 #8BBF78]
     }
   )
