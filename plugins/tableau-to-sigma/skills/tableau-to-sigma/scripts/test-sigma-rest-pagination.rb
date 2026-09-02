@@ -139,15 +139,19 @@ check(out.length == 1 && http.reqs.length == 1,
 # --- orchestrator wiring pins (migrate-tableau.rb): mint-once-per-TTL +
 #     paginated list reads through the shared lib ----------------------------
 src = File.read(File.expand_path('migrate-tableau.rb', __dir__), encoding: 'UTF-8')
+destination_src = File.read(
+  File.expand_path('lib/destination_resolver.rb', __dir__), encoding: 'UTF-8'
+)
 check(src =~ /def sigma_token!.*?Sigma\.token_minted_at\.nil\? \|\| Sigma\.token_stale\?.*?Sigma\.refresh_token!/m,
       'sigma_token! reuses a fresh-stamped token and mints only when stale/unknown (once per TTL, not per child)', fails)
 check(src.scan("'SIGMA_TOKEN_MINTED_AT' => ENV['SIGMA_TOKEN_MINTED_AT']").size == 2,
       'both Sigma child-spawn wrappers pass the mint stamp so children age the token correctly', fails)
 check(src.include?('TABLEAU_ENV_TTL_SECONDS') && src.include?('$tableau_env_cache'),
       'tableau_env reuses the signin within a TTL window instead of re-signing per child', fails)
-check(src.scan('Sigma.list_entries(').size == 5 &&
+check(src.scan('Sigma.list_entries(').size +
+        destination_src.scan('api.list_entries(').size == 5 &&
         !src.match?(%r{Sigma\.request\(:get, "/v2/(?:workbooks|dataModels)/[^"]*/columns"\)}),
-      'all five orchestrator list reads (catalog /columns, members/files, files, DM /columns, WB /columns) paginate via Sigma.list_entries', fails)
+      'all five orchestrator list reads (including My Documents fallbacks) paginate via list_entries', fails)
 
 puts
 if fails.empty?
