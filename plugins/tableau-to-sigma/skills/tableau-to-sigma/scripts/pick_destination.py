@@ -38,6 +38,11 @@ def my_documents_id():
         uid = (_get("/v2/whoami") or {}).get("userId")
         if not uid:
             return None
+        member = _get(f"/v2/members/{uid}") or {}
+        home = member.get("homeFolderId")
+        if home:
+            return home
+        # Legacy fallback: use the folder's id, never its parentId.
         entries = (_get(f"/v2/members/{uid}/files?typeFilters=folder&limit=500")
                    or {}).get("entries") or []
         hit = next((e for e in entries

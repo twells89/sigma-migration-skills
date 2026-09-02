@@ -3970,22 +3970,11 @@ end # ═══ unless FASTPATH (full discovery → gates → decisions pipeline
 # ---------------------------------------------------------------------------
 if opts[:folder].to_s.empty?
   require 'sigma_rest'
+  require 'destination_resolver'
   begin
-    uid = Sigma.request(:get, '/v2/whoami')['userId']
-    # list_entries: both file lists paginate (default page 50) — a busy account
-    # with 50+ root files used to lose My Documents past the first page.
-    entry = Sigma.list_entries("/v2/members/#{uid}/files")
-                 .find { |e| e['path'] == 'My Documents' }
-    folder_id = entry && entry['parentId']
-    unless folder_id
-      entry2 = Sigma.list_entries('/v2/files?typeFilters=folder')
-                    .find { |e| e['path'] == 'My Documents' && e['ownerId'] == uid }
-      folder_id = entry2 && entry2['parentId']
-    end
-    abort "FATAL: could not resolve the caller's My Documents folder id (the DM POST requires folderId) — pass --folder <id>" unless folder_id
-    opts[:folder] = folder_id
-    line "folderId default: resolved caller's My Documents = #{folder_id} (no --folder supplied)"
-  rescue Sigma::Error => e
+    opts[:folder] = DestinationResolver.my_documents_id
+    line "folderId default: resolved caller's My Documents = #{opts[:folder]} (no --folder supplied)"
+  rescue Sigma::Error, DestinationResolver::Error => e
     abort "FATAL: My Documents folder resolution failed (#{e.message.lines.first&.strip}) — pass --folder <id>"
   end
 end

@@ -87,6 +87,13 @@ folder. If the user did **not** supply a destination (no `--folder <id>` on
 
 `folderId` accepts a workspace id (lands in the root) **or** a folder id. If the
 user already passed `--folder` / `SIGMA_FOLDER_ID`, honor it silently — do NOT ask.
+For **My Documents**, use the authenticated member's `homeFolderId` from
+`GET /v2/members/{memberId}` (the orchestrator resolves this automatically when
+the user chooses the default). Do not copy the `/f/<urlId>` segment from a Sigma
+browser URL: `urlId` and the API's inode/folder ID are different identifiers.
+The data model and workbook create endpoints accept `homeFolderId` directly;
+creating elsewhere and moving them afterward with `PATCH /v2/files/{inodeId}`
+is unnecessary.
 
 > **Data blending:** when the scanner writes `blend-plan.json`, route each
 > blend BEFORE Phase 2 using its `route` field — (a) `same-warehouse-repoint`
