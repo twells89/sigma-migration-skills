@@ -389,7 +389,7 @@ else
     document,
     name: 'Light',
     overrides: {
-      'colorOverrides' => sigma_color_overrides('#F4F4F4'),
+      'colorOverrides' => sigma_color_overrides('#F6F6F6'),
       'categoricalScheme' => %w[#82BADF #8BC34A #F3A24F #D95C59 #C8E5A3 #7FB4D3 #F8DFA0 #8BBF78],
       'titleFont' => { 'fontSize' => 10, 'fontWeight' => 'bold' }
     }
