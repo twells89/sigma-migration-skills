@@ -165,7 +165,7 @@ cards.each do |card|
   summary_value = expected['summary_value'] || expected['summaryValue']
 
   if kpi_card?(card)
-    rule = { 'fontSize' => 64 }
+    rule = { 'fontSize' => observed_layout ? 48 : 64 }
     if summary && format_type(summary['format']).match?(/currency|money/) && (compact = compact_parts(summary_value))
       rule.merge!(
         'scale' => compact[0].to_i, 'suffix' => compact[1],
