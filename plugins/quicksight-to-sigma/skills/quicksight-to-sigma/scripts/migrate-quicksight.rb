@@ -436,6 +436,19 @@ if opts[:folder] && opts[:folder] !~ /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
   opts[:folder] = hits[0]['id']
 end
 
+# The create-spec endpoints require a folderId; accepting the "proceed into
+# My Documents" decision cannot leave it nil. Resolve the authenticated
+# member's documented homeFolderId and stamp it into both outgoing specs.
+if opts[:folder].to_s.empty?
+  require 'destination_resolver'
+  begin
+    opts[:folder] = DestinationResolver.my_documents_id
+    puts "   folderId default: resolved caller's My Documents = #{opts[:folder]}"
+  rescue Sigma::Error, DestinationResolver::Error => e
+    abort "FATAL: My Documents folder resolution failed (#{e.message.lines.first&.strip}) — pass --folder <id>"
+  end
+end
+
 hdr('2.5', TOTAL, 'DM reuse check')
 if opts[:reuse_dm]
   puts "   --reuse-dm #{opts[:reuse_dm]} — attaching to the existing DM (Phase 3 skipped)"

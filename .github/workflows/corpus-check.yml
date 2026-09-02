@@ -717,6 +717,7 @@ jobs:
             plugins/looker-to-sigma/skills/looker-to-sigma/scripts/test-verify-complete.rb
             plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/test-verify-guards.rb
             plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/test-verify-complete.rb
+            plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-destination-resolver.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-verify-complete.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/tests/test-grounding.rb
             plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/test-verify-complete.rb
