@@ -129,6 +129,7 @@
 require 'json'
 require 'fileutils'
 require_relative 'lib/domo_sigma_util'
+require_relative 'lib/ruby_compat'
 include DomoSigma
 
 OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
