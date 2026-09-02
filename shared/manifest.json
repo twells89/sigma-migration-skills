@@ -1216,12 +1216,38 @@
       ]
     },
     {
+      "canonical": "shared/lib/destination_resolver.rb",
+      "targets": [
+        "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/destination_resolver.rb",
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/lib/destination_resolver.rb"
+      ]
+    },
+    {
       "canonical": "shared/scripts/pick-destination.rb",
       "targets": [
         "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/pick-destination.rb",
         "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/pick-destination.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/pick-destination.rb",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/pick-destination.rb"
+      ]
+    },
+    {
+      "canonical": "shared/scripts/pick_destination.py",
+      "targets": [
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/pick_destination.py",
+        "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/pick_destination.py",
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/pick_destination.py"
       ]
     },
     {
