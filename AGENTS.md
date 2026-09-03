@@ -63,6 +63,8 @@ Maturity labels (`gold` / `live` / `foundation` / `scaffold`) are defined in
 | Convert a Mode Report (SQL Queries + Charts) → Sigma | `mode-to-sigma` | foundation | `plugins/mode-to-sigma/skills/mode-to-sigma/` |
 | Author / repair Sigma workbooks (canonical spec) | `sigma-workbooks` | live | `plugins/sigma-authoring/skills/sigma-workbooks/` |
 | Author / repair Sigma data models (canonical spec) | `sigma-data-models` | live | `plugins/sigma-authoring/skills/sigma-data-models/` |
+| Convert a Streamlit source project → Sigma | `streamlit-to-sigma` | gold | `plugins/streamlit-to-sigma/skills/streamlit-to-sigma/` |
+| Scope/assess a Streamlit instance | `streamlit-assessment` | scaffold | `plugins/streamlit-to-sigma/skills/streamlit-assessment/` |
 
 Assessments are read-only (never write to the source or post to Sigma); run one
 to pick what to convert, then hand off to the matching converter.

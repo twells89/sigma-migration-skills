@@ -169,6 +169,13 @@
       "description": "Mode Analytics Reports (SQL Queries + Charts) -> Sigma, with parity verification. No formula translation needed -- Mode's SQL already runs in the target warehouse dialect.",
       "category": "migration",
       "keywords": ["mode", "migration", "bi"]
+    },
+    {
+      "name": "streamlit-to-sigma",
+      "source": "./plugins/streamlit-to-sigma",
+      "description": "Streamlit → Sigma static converter and assessment — SQL/dataframe lineage, controls, charts, pages, layout, gaps, and parity.",
+      "category": "migration",
+      "keywords": ["streamlit", "migration", "bi"]
     }
   ]
 }

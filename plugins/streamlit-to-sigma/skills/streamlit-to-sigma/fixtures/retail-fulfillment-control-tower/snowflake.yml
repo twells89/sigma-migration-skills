@@ -1,0 +1,27 @@
+# created-by: streamlit-in-workspaces; skill-version=1.0.0
+definition_version: 2
+entities:
+  streamlit_app:
+    type: streamlit
+    main_file: streamlit_app.py
+    artifacts:
+      - pyproject.toml
+      - streamlit_app.py
+      - .streamlit/config.toml
+      - app_pages/executive.py
+      - app_pages/fulfillment.py
+      - app_pages/returns.py
+      - app_pages/exceptions.py
+      - lib/data.py
+      - lib/filters.py
+      - lib/metrics.py
+      - sql/orders.sql
+    identifier:
+      database: DEMO_DB
+      schema: DEMO
+      name: RETAIL_FULFILLMENT_CONTROL_TOWER
+    title: retail-fulfillment-control-tower
+    query_warehouse: SIGMA_WH
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    run_mode: SpcsOnly
+    execute_as: OWNER

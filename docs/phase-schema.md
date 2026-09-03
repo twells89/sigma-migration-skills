@@ -190,3 +190,20 @@ local mapping:
 | C8 Parity hard gate | Phase 5 — Parity (`verify-parity.rb`, hard-gated by `assert-phase6-ran.rb`); the separate visual-render sub-gate (gate 8) is honestly waived in v1 (`--skip-visual-gate` — no Mode UI render capability), but the parity comparison itself is never skipped |
 | C9 Security/RLS | "Security: RLS/CLS" section — Mode has no row/column-level security on query results; access control is Space/Report visibility only |
 | C10 Enhance | — (scripts vendored; wire flags per adoption checklist) |
+
+### streamlit-to-sigma
+
+Streamlit uses local phase numbering aligned directly to the canonical arc:
+
+| Canonical | streamlit-to-sigma |
+|---|---|
+| C1 Assess | Phase 0 — static feature/security scan; estate mode uses `streamlit-assessment` |
+| C2 Discover | Phase 1 — parse `snowflake.yml`, Python pages/helpers, SQL loaders, dataframe lineage, controls/elements |
+| C3 Reuse-check | Phase 1.5 — `source-signature.json` + `find-or-pick-dm.rb`; posting requires explicit `--reuse-decision` |
+| C4 Convert | Phase 2 — Streamlit IR → DM candidate + wrapped workbook spec |
+| C5 Post-DM gate | Phase 3 — `new-dm` POST + mandatory GET readback; workbook binds only read-back ids |
+| C6 Build workbook | Phase 4 — controls/charts/tables/pages/overlays + hidden sources |
+| C7 Layout | Phase 5 — authoritative layout emitted with workbook and preserved on every write |
+| C8 Parity hard gate | Phase 6 — warehouse/Sigma values, control flips, page/overlay PNGs, `assert-phase6-ran.rb` |
+| C9 Security/RLS | Security section — static detection always, acknowledge/apply explicitly |
+| C10 Enhance | — foundation release defers shared Phase E wiring |

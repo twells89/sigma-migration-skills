@@ -1,0 +1,64 @@
+{
+  "dataModel": {
+    "name": "Streamlit Retail Fixture — Streamlit Source",
+    "folderId": "id0001",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0002",
+        "name": "Streamlit Sources",
+        "elements": [
+          {
+            "id": "id0003",
+            "kind": "table",
+            "name": "Load Sales",
+            "source": {
+              "kind": "sql",
+              "connectionId": "connection-placeholder",
+              "statement": "\n        SELECT\n          ORDER_DATE AS \"Order Date\",\n          REGION AS \"Region\",\n          CATEGORY AS \"Category\",\n          ORDER_ID AS \"Order Id\",\n          REVENUE AS \"Revenue\",\n          PROFIT AS \"Profit\"\n        FROM EXAMPLE_DB.ANALYTICS.RETAIL_SALES\n        "
+            },
+            "columns": [
+              {
+                "id": "id0004",
+                "name": "Order Date",
+                "formula": "[Custom SQL/Order Date]"
+              },
+              {
+                "id": "id0005",
+                "name": "Region",
+                "formula": "[Custom SQL/Region]"
+              },
+              {
+                "id": "id0006",
+                "name": "Category",
+                "formula": "[Custom SQL/Category]"
+              },
+              {
+                "id": "id0007",
+                "name": "Order Id",
+                "formula": "[Custom SQL/Order Id]"
+              },
+              {
+                "id": "id0008",
+                "name": "Revenue",
+                "formula": "[Custom SQL/Revenue]"
+              },
+              {
+                "id": "id0009",
+                "name": "Profit",
+                "formula": "[Custom SQL/Profit]"
+              }
+            ],
+            "visibleAsSource": true
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [],
+  "stats": {
+    "queries": 1,
+    "elements": 1,
+    "columns": 6
+  }
+}

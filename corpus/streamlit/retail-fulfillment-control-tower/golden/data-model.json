@@ -1,0 +1,119 @@
+{
+  "dataModel": {
+    "name": "Retail Fulfillment Control Tower Fixture — Streamlit Source",
+    "folderId": "id0001",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0002",
+        "name": "Streamlit Sources",
+        "elements": [
+          {
+            "id": "id0003",
+            "kind": "table",
+            "name": "Load Orders",
+            "source": {
+              "kind": "sql",
+              "connectionId": "connection-placeholder",
+              "statement": "-- Static SQL query for retail fulfillment and returns data\n-- Co-authored with CoCo\nSELECT\n    o.ORDER_ID                          AS order_id,\n    d.FULL_DATE                         AS order_date,\n    s.REGION                            AS region,\n    s.STORE_NAME                        AS store_name,\n    p.CATEGORY                          AS category,\n    p.SUBCATEGORY                       AS subcategory,\n    o.ORDER_CHANNEL                     AS order_channel,\n    o.SHIP_METHOD                       AS ship_method,\n    o.ORDER_STATUS                      AS order_status,\n    o.QUANTITY_ORDERED                  AS quantity_ordered,\n    o.QUANTITY_RETURNED                 AS quantity_returned,\n    o.NET_REVENUE                       AS net_revenue,\n    o.NET_PROFIT                        AS net_profit,\n    o.SHIPPING_AMOUNT                   AS shipping_amount,\n    o.IS_RETURNED                       AS is_returned,\n    o.IS_CANCELLED                      AS is_cancelled,\n    o.DAYS_TO_SHIP                      AS days_to_ship\nFROM DEMO_DB.DEMO.ORDER_FACT o\nJOIN DEMO_DB.DEMO.STORE_DIM s\n    ON o.ORDER_STORE_KEY = s.STORE_KEY\nJOIN DEMO_DB.DEMO.PRODUCT_DIM p\n    ON o.PRODUCT_KEY = p.PRODUCT_KEY\nJOIN DEMO_DB.DEMO.DATE_DIM d\n    ON o.ORDER_DATE_KEY = d.DATE_KEY\n"
+            },
+            "columns": [
+              {
+                "id": "id0004",
+                "name": "order_id",
+                "formula": "[Custom SQL/order_id]"
+              },
+              {
+                "id": "id0005",
+                "name": "order_date",
+                "formula": "[Custom SQL/order_date]"
+              },
+              {
+                "id": "id0006",
+                "name": "region",
+                "formula": "[Custom SQL/region]"
+              },
+              {
+                "id": "id0007",
+                "name": "store_name",
+                "formula": "[Custom SQL/store_name]"
+              },
+              {
+                "id": "id0008",
+                "name": "category",
+                "formula": "[Custom SQL/category]"
+              },
+              {
+                "id": "id0009",
+                "name": "subcategory",
+                "formula": "[Custom SQL/subcategory]"
+              },
+              {
+                "id": "id0010",
+                "name": "order_channel",
+                "formula": "[Custom SQL/order_channel]"
+              },
+              {
+                "id": "id0011",
+                "name": "ship_method",
+                "formula": "[Custom SQL/ship_method]"
+              },
+              {
+                "id": "id0012",
+                "name": "order_status",
+                "formula": "[Custom SQL/order_status]"
+              },
+              {
+                "id": "id0013",
+                "name": "quantity_ordered",
+                "formula": "[Custom SQL/quantity_ordered]"
+              },
+              {
+                "id": "id0014",
+                "name": "quantity_returned",
+                "formula": "[Custom SQL/quantity_returned]"
+              },
+              {
+                "id": "id0015",
+                "name": "net_revenue",
+                "formula": "[Custom SQL/net_revenue]"
+              },
+              {
+                "id": "id0016",
+                "name": "net_profit",
+                "formula": "[Custom SQL/net_profit]"
+              },
+              {
+                "id": "id0017",
+                "name": "shipping_amount",
+                "formula": "[Custom SQL/shipping_amount]"
+              },
+              {
+                "id": "id0018",
+                "name": "is_returned",
+                "formula": "[Custom SQL/is_returned]"
+              },
+              {
+                "id": "id0019",
+                "name": "is_cancelled",
+                "formula": "[Custom SQL/is_cancelled]"
+              },
+              {
+                "id": "id0020",
+                "name": "days_to_ship",
+                "formula": "[Custom SQL/days_to_ship]"
+              }
+            ],
+            "visibleAsSource": true
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [],
+  "stats": {
+    "queries": 1,
+    "elements": 1,
+    "columns": 17
+  }
+}

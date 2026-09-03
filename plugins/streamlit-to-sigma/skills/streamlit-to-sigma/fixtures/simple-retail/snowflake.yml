@@ -1,0 +1,15 @@
+definition_version: 2
+entities:
+  streamlit_app:
+    type: streamlit
+    identifier:
+      database: EXAMPLE_DB
+      schema: ANALYTICS
+      name: RETAIL_DASHBOARD
+    query_warehouse: EXAMPLE_WH
+    compute_pool: EXAMPLE_POOL
+    main_file: streamlit_app.py
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml
+      - .streamlit/config.toml

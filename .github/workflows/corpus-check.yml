@@ -640,6 +640,10 @@ jobs:
             plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_sigma_ids.py
             plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_convert_dm.py
             plugins/hex-to-sigma/skills/hex-to-sigma/tests/test_convert_workbook.py
+            plugins/streamlit-to-sigma/skills/streamlit-to-sigma/tests/test_analyzer.py
+            plugins/streamlit-to-sigma/skills/streamlit-to-sigma/tests/test_workbook.py
+            plugins/streamlit-to-sigma/skills/streamlit-to-sigma/tests/test_advanced_patterns.py
+            plugins/streamlit-to-sigma/skills/streamlit-to-sigma/tests/test_safety_gates.py
           )
           fail=0
           for t in "${tests[@]}"; do

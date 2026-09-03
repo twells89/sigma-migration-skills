@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/streamlit-to-sigma/streamlit-ir.schema.json",
+  "title": "Streamlit migration IR",
+  "type": "object",
+  "required": [
+    "irVersion",
+    "source_root",
+    "main_file",
+    "project_name",
+    "pages",
+    "queries",
+    "dataframes",
+    "controls",
+    "elements",
+    "gaps",
+    "security",
+    "metadata"
+  ],
+  "properties": {
+    "irVersion": {
+      "const": 1
+    },
+    "source_root": {
+      "type": "string"
+    },
+    "main_file": {
+      "type": "string"
+    },
+    "project_name": {
+      "type": "string"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/page"
+      }
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/query"
+      }
+    },
+    "dataframes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dataframe"
+      }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/control"
+      }
+    },
+    "elements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/element"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gap"
+      }
+    },
+    "security": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "required": [
+        "file",
+        "line"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "file",
+        "order"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "id",
+        "function",
+        "sql",
+        "columns",
+        "dynamic",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "function": {
+          "type": "string"
+        },
+        "sql": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dynamic": {
+          "type": "boolean"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "dataframe": {
+      "type": "object",
+      "required": [
+        "name",
+        "operations",
+        "expression",
+        "provenance"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "root_query": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expression": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "control": {
+      "type": "object",
+      "required": [
+        "id",
+        "control_type",
+        "selection_mode",
+        "label",
+        "sidebar",
+        "page",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "control_type": {
+          "type": "string"
+        },
+        "selection_mode": {
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "variable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dataframe": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sidebar": {
+          "type": "boolean"
+        },
+        "page": {
+          "type": "string"
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "element": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "page",
+        "bindings",
+        "context",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "page": {
+          "type": "string"
+        },
+        "dataframe": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bindings": {
+          "type": "object"
+        },
+        "expression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "required": [
+        "code",
+        "severity",
+        "message",
+        "feature",
+        "provenance"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "blocking",
+            "plugin-candidate",
+            "restructure",
+            "review",
+            "info"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "feature": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "affected": {
+          "type": "array"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "resolution": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "provenance"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    }
+  }
+}
