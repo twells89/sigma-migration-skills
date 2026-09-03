@@ -9,6 +9,27 @@ questions. Do not collapse them into one score:
   `medium`, `complex`)?
 - **Delivery class** — mostly automated, engineer-led, or multi-specialist?
 - **Disposition** — which implementation path applies?
+- **Recommendation** — should this app enter a migration wave now?
+
+## Recommendation contract
+
+Every source-backed project must receive one explicit decision:
+
+| Decision | Meaning |
+|---|---|
+| `Migrate now` | Direct path with no unresolved restructuring or blockers. |
+| `Redesign, then migrate` | A bounded Sigma-native or warehouse redesign is identified. |
+| `Architecture review` | Complex state, AI, plugin, or writeback behavior needs a target decision first. |
+| `Defer until unblocked` | Source ambiguity, access, security, or another blocking finding prevents migration. |
+
+Rank by recommendation first, then technical-fit score, then complexity score.
+Always show the reason, blockers, and next action. Technical fit is not business
+value: usage, criticality, ownership, and decommissioning approval require
+separate evidence.
+
+An inventory built from `SHOW STREAMLITS` or warehouse metadata has no source
+complexity evidence. Mark those entries `source-required`; do not recommend them
+for migration until their source has been exported and assessed.
 
 ## Ease-of-migration chart
 

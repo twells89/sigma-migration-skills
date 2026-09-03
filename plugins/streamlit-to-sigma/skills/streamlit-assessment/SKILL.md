@@ -25,7 +25,8 @@ Accept one or more project directories or main Python files:
 python3 scripts/assess-streamlit.py \
   /exports/app-one /exports/app-two \
   --out /tmp/streamlit-assessment.json \
-  --markdown-out /tmp/streamlit-assessment.md
+  --markdown-out /tmp/streamlit-assessment.md \
+  --html-out /tmp/streamlit-assessment.html
 ```
 
 For Snowflake-hosted apps, export the source first. Do not request or inspect
@@ -46,6 +47,12 @@ The assessment reuses the converter's static analyzer and records:
 
 No Streamlit process is started.
 
+`SHOW STREAMLITS`, ownership, warehouse usage, and creation dates are inventory
+evidence only. They cannot establish code complexity or migration fit. If source
+has not been exported, label the app `source-required` and recommend source
+collection—not migration. Never present a metadata-only inventory as the
+migration assessment.
+
 ## Phase 2 — Score and shortlist
 
 Each project receives:
@@ -62,12 +69,17 @@ Each project receives:
   `blocked`
 - `resolvedPatterns` and `unresolvedGapCount` — preserve source findings while
   keeping successfully lowered patterns out of readiness/complexity penalties
+- `recommendation` — explicit `Migrate now`, `Redesign, then migrate`,
+  `Architecture review`, or `Defer until unblocked` decision
+- `recommendation.technicalFitScore`, `wave`, `reason`, `nextAction`, and
+  `blockers` — explain rank and make the shortlist actionable
 
-The score combines pages, queries, controls, elements, and weighted gaps. Use it
-to sequence migrations, not as a calendar estimate. The Markdown readout carries
-the ease-of-migration chart, technical drivers, disposition, and qualified Sigma
-benefits. Calendar ranges must come from observed organization telemetry rather
-than hardcoded source-count promises.
+The score combines pages, queries, controls, elements, and weighted gaps. The
+technical-fit score reverses that evidence into an intuitive recommendation
+where higher means easier to migrate. Use the ranked recommendation to sequence
+migrations, not as a calendar estimate. Markdown and HTML must both show the
+recommendation, reason, blockers, and next action. Calendar ranges must come from
+observed organization telemetry rather than hardcoded source-count promises.
 
 Recommended order:
 
@@ -87,6 +99,7 @@ Recommended order:
     "calendarEstimatePolicy": "..."
   },
   "sigmaBenefits": [],
+  "recommendationSummary": {},
   "projects": [],
   "shortlist": []
 }
