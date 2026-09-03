@@ -99,9 +99,9 @@ class SafetyGateTest(unittest.TestCase):
             self.assertIn("blocked", project["migrationDispositions"])
             self.assertEqual(
                 project["recommendation"]["decision"],
-                "defer-until-unblocked",
+                "validate-then-migrate",
             )
-            self.assertFalse(project["recommendation"]["recommended"])
+            self.assertTrue(project["recommendation"]["recommended"])
             self.assertIn(
                 "warehouse-write",
                 project["recommendation"]["blockers"],
@@ -206,6 +206,11 @@ class SafetyGateTest(unittest.TestCase):
                 project["migrationDispositions"],
             )
             self.assertEqual(project["complexity"]["class"], "complex")
+            self.assertEqual(
+                project["recommendation"]["decision"],
+                "migrate-with-redesign",
+            )
+            self.assertTrue(project["recommendation"]["recommended"])
 
     def test_assessment_shortlist_ranks_migration_decisions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -254,7 +259,7 @@ class SafetyGateTest(unittest.TestCase):
                     item["recommendation"]["decision"]
                     for item in report["shortlist"]
                 ],
-                ["migrate-now", "defer-until-unblocked"],
+                ["migrate-now", "resolve-then-migrate"],
             )
             self.assertEqual(
                 [item["rank"] for item in report["shortlist"]],

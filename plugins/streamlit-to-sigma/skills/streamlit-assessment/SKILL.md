@@ -69,8 +69,8 @@ Each project receives:
   `blocked`
 - `resolvedPatterns` and `unresolvedGapCount` — preserve source findings while
   keeping successfully lowered patterns out of readiness/complexity penalties
-- `recommendation` — explicit `Migrate now`, `Redesign, then migrate`,
-  `Architecture review`, or `Defer until unblocked` decision
+- `recommendation` — explicit `Migrate now`, `Migrate with redesign`,
+  `Validate design, then migrate`, or `Resolve blockers, then migrate` path
 - `recommendation.technicalFitScore`, `wave`, `reason`, `nextAction`, and
   `blockers` — explain rank and make the shortlist actionable
 
