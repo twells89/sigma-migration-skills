@@ -224,7 +224,9 @@ class SafetyGateTest(unittest.TestCase):
                     import streamlit as st
                     conn = st.connection("snowflake")
                     table = st.text_input("Table")
-                    conn.query(f"SELECT * FROM {table}")
+                    def load_data():
+                        return conn.query(f"SELECT * FROM {table}")
+                    load_data()
                     """
                 ),
                 encoding="utf-8",
