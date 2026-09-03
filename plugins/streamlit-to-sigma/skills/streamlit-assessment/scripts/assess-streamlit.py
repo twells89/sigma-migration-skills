@@ -164,9 +164,9 @@ def complexity_profile(ir, score: int, readiness: str) -> dict:
 
 RECOMMENDATION_ORDER = {
     "migrate-now": 0,
-    "redesign-then-migrate": 1,
-    "architecture-review": 2,
-    "defer-until-unblocked": 3,
+    "migrate-with-redesign": 1,
+    "validate-then-migrate": 2,
+    "resolve-then-migrate": 3,
 }
 
 
@@ -199,42 +199,54 @@ def migration_recommendation(project: dict) -> dict:
             "Run the converter, complete reuse/readback gates, then validate "
             "data, interactions, security, and rendered parity."
         )
-    elif readiness == "redesign" and complexity != "complex":
-        decision = "redesign-then-migrate"
-        label = "Redesign, then migrate"
-        wave = "Wave 2"
-        fit_score = 65
-        reason = (
-            "Sigma can cover the app, but unresolved behavior requires a "
-            "bounded native or warehouse-backed redesign."
-        )
-        next_action = (
-            "Approve the listed migration disposition and redesign, then run "
-            "conversion with explicit manual-finish gates."
-        )
     elif readiness == "redesign":
-        decision = "architecture-review"
-        label = "Architecture review"
-        wave = "Wave 3"
-        fit_score = 40
+        decision = "migrate-with-redesign"
+        label = "Migrate with redesign"
+        wave = "Wave 2" if complexity == "medium" else "Wave 3"
+        fit_score = 65 if complexity == "medium" else 50
         reason = (
-            "Complex state, Python, AI, plugin, or writeback behavior prevents "
-            "a responsible converter-first recommendation."
+            "The app is a migration candidate, but state, Python, AI, plugin, "
+            "or writeback behavior requires an explicit Sigma architecture."
         )
         next_action = (
-            "Choose the target architecture and validate capability hosts "
-            "before committing this app to a migration wave."
+            "Choose and validate the listed Sigma-native, workbook-agent, "
+            "plugin, or warehouse-backed design, then migrate with parity gates."
         )
     else:
-        decision = "defer-until-unblocked"
-        label = "Defer until unblocked"
-        wave = "Hold"
-        fit_score = max(5, 25 - min(len(blockers), 5) * 3)
+        known_redesign = bool(
+            {
+                "warehouse-backed",
+                "workbook-agent-candidate",
+                "python-element-candidate",
+                "manual-ui-finish",
+                "redesign",
+            }
+            & set(dispositions)
+        )
+        decision = (
+            "validate-then-migrate"
+            if known_redesign
+            else "resolve-then-migrate"
+        )
+        label = (
+            "Validate design, then migrate"
+            if known_redesign
+            else "Resolve blockers, then migrate"
+        )
+        wave = "Wave 3" if known_redesign else "Unblock"
+        fit_score = (
+            40
+            if known_redesign
+            else max(15, 35 - min(len(blockers), 5) * 3)
+        )
         blocker_text = ", ".join(blockers) if blockers else "blocking findings"
-        reason = f"Migration cannot proceed reliably while {blocker_text} remains."
+        reason = (
+            "The app remains a migration candidate, but implementation cannot "
+            f"start reliably while {blocker_text} remains."
+        )
         next_action = (
             "Resolve source ambiguity, access, security, or writeback blockers "
-            "and rerun the assessment."
+            "and rerun the assessment before conversion."
         )
 
     if "workbook-agent-candidate" in dispositions:
@@ -242,7 +254,7 @@ def migration_recommendation(project: dict) -> dict:
             "Map the observed AI runtime to a governed workbook agent, attach "
             "proven grounding sources, and validate representative answers."
         )
-    elif "warehouse-backed" in dispositions and readiness != "blocked":
+    elif "warehouse-backed" in dispositions:
         next_action = (
             "Approve the warehouse/input-table writeback design and security "
             "model before conversion."
@@ -251,8 +263,7 @@ def migration_recommendation(project: dict) -> dict:
     return {
         "decision": decision,
         "label": label,
-        "recommended": decision
-        in {"migrate-now", "redesign-then-migrate"},
+        "recommended": True,
         "wave": wave,
         "technicalFitScore": fit_score,
         "reason": reason,
@@ -275,6 +286,16 @@ def prioritize_projects(projects: list[dict]) -> list[dict]:
     )
     for rank, project in enumerate(projects, start=1):
         project["priorityRank"] = rank
+    name_counts = {
+        name: sum(project["project"] == name for project in projects)
+        for name in {project["project"] for project in projects}
+    }
+    for project in projects:
+        project["displayName"] = (
+            f"{project['project']} — {Path(project['path']).name}"
+            if name_counts[project["project"]] > 1
+            else project["project"]
+        )
     return projects
 
 
@@ -363,7 +384,7 @@ def markdown_report(report: dict) -> str:
     for project in report["projects"]:
         recommendation = project["recommendation"]
         lines.append(
-            f"| {project['priorityRank']} | {project['project']} | "
+            f"| {project['priorityRank']} | {project['displayName']} | "
             f"**{recommendation['label']}** | {recommendation['wave']} | "
             f"{recommendation['technicalFitScore']}/100 | "
             f"{recommendation['reason']} | {recommendation['nextAction']} |"
@@ -379,7 +400,7 @@ def markdown_report(report: dict) -> str:
     )
     for project in report["projects"]:
         lines.append(
-            f"| {project['project']} | {project['readiness']} | "
+            f"| {project['displayName']} | {project['readiness']} | "
             f"{project['complexity']['class']} | "
             f"{project['complexity']['deliveryClass']} | "
             f"{project['migrationDisposition']} |"
@@ -387,7 +408,7 @@ def markdown_report(report: dict) -> str:
     lines.extend(["", "### Complexity drivers", ""])
     for project in report["projects"]:
         lines.append(
-            f"- **{project['project']}:** "
+            f"- **{project['displayName']}:** "
             + "; ".join(project["complexity"]["drivers"])
             + "."
         )
@@ -419,7 +440,7 @@ def html_report(report: dict) -> str:
         rows.append(
             "<tr>"
             f"<td>{project['priorityRank']}</td>"
-            f"<td><strong>{esc(project['project'])}</strong></td>"
+            f"<td><strong>{esc(project['displayName'])}</strong></td>"
             f"<td><span class=\"decision {esc(recommendation['decision'])}\">"
             f"{esc(recommendation['label'])}</span></td>"
             f"<td>{esc(recommendation['wave'])}</td>"
@@ -464,9 +485,9 @@ def html_report(report: dict) -> str:
     .decision {{ border-radius: 999px; padding: 3px 8px; white-space: nowrap;
       font-weight: 650; }}
     .migrate-now {{ background: #dcfce7; color: #166534; }}
-    .redesign-then-migrate {{ background: #dbeafe; color: #1e40af; }}
-    .architecture-review {{ background: #fef3c7; color: #92400e; }}
-    .defer-until-unblocked {{ background: #fee2e2; color: #991b1b; }}
+    .migrate-with-redesign {{ background: #dbeafe; color: #1e40af; }}
+    .validate-then-migrate {{ background: #fef3c7; color: #92400e; }}
+    .resolve-then-migrate {{ background: #fee2e2; color: #991b1b; }}
   </style>
 </head>
 <body>
@@ -478,8 +499,8 @@ def html_report(report: dict) -> str:
   <div class="summary">
     <div class="card"><div class="value">{counts['total']}</div>Total apps</div>
     <div class="card"><div class="value">{counts['migrateNow']}</div>Migrate now</div>
-    <div class="card"><div class="value">{counts['redesignThenMigrate']}</div>Redesign then migrate</div>
-    <div class="card"><div class="value">{counts['deferOrReview']}</div>Review / defer</div>
+    <div class="card"><div class="value">{counts['migrateWithRedesign']}</div>Migrate with redesign</div>
+    <div class="card"><div class="value">{counts['validateOrUnblock']}</div>Validate / unblock</div>
   </div>
   <h2>Recommended migration order</h2>
   <div class="table-wrap"><table>
@@ -541,19 +562,20 @@ def main() -> int:
         "recommendationSummary": {
             "total": len(projects),
             "migrateNow": recommendation_counts["migrate-now"],
-            "redesignThenMigrate": recommendation_counts[
-                "redesign-then-migrate"
+            "migrateWithRedesign": recommendation_counts[
+                "migrate-with-redesign"
             ],
-            "deferOrReview": (
-                recommendation_counts["architecture-review"]
-                + recommendation_counts["defer-until-unblocked"]
+            "validateOrUnblock": (
+                recommendation_counts["validate-then-migrate"]
+                + recommendation_counts["resolve-then-migrate"]
             ),
         },
         "projects": projects,
         "shortlist": [
             {
                 "rank": item["priorityRank"],
-                "project": item["project"],
+                "project": item["displayName"],
+                "sourceProject": item["project"],
                 "readiness": item["readiness"],
                 "complexityScore": item["complexityScore"],
                 "complexity": item["complexity"]["class"],
