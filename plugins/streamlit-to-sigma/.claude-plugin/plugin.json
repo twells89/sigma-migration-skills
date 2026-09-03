@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "streamlit-to-sigma",
   "displayName": "Streamlit → Sigma",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Migrate Streamlit projects to Sigma with static analysis, architecture dispositions, complexity readouts, controls/charts/layout conversion, parity gates, and read-only assessment.",
   "author": {
     "name": "Thomas Wells"

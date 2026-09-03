@@ -18,9 +18,14 @@ Every source-backed project must receive one explicit decision:
 | Decision | Meaning |
 |---|---|
 | `Migrate now` | Direct path with no unresolved restructuring or blockers. |
-| `Redesign, then migrate` | A bounded Sigma-native or warehouse redesign is identified. |
-| `Architecture review` | Complex state, AI, plugin, or writeback behavior needs a target decision first. |
-| `Defer until unblocked` | Source ambiguity, access, security, or another blocking finding prevents migration. |
+| `Migrate with redesign` | State, Python, plugin, or writeback behavior needs an explicit Sigma architecture. |
+| `Validate design, then migrate` | A workbook-agent or warehouse-backed path exists but must pass capability/security gates. |
+| `Resolve blockers, then migrate` | Source ambiguity or access must be resolved before implementation starts. |
+
+`blocked` readiness means the current automatic conversion cannot proceed. It
+does not mean the app should stay on Streamlit. Known workbook-agent,
+input-table, warehouse-backed, and manual-finish paths remain positive migration
+recommendations with later waves and lower technical-fit scores.
 
 Rank by recommendation first, then technical-fit score, then complexity score.
 Always show the reason, blockers, and next action. Technical fit is not business
