@@ -244,7 +244,7 @@
       },
       {
         "color": {
-          "id": "ID0030",
+          "columnId": "ID0030",
           "sort": {
             "by": "ID0031",
             "direction": "descending"
@@ -270,7 +270,7 @@
           "kind": "table"
         },
         "value": {
-          "id": "ID0031"
+          "columnId": "ID0031"
         }
       },
       {

@@ -1133,8 +1133,8 @@ class WorkbookBuilder:
             ),
             "source": {"kind": "table", "elementId": "master"},
             "columns": [dimension, measure],
-            "value": {"id": measure["id"]},
-            "color": {"id": dimension["id"]},
+            "value": {"columnId": measure["id"]},
+            "color": {"columnId": dimension["id"]},
         }
         sort = zone.get("sort") or {}
         direction = str(sort.get("direction") or "").lower()
@@ -1239,7 +1239,7 @@ class WorkbookBuilder:
         }
         if chart_kind == "pivot-table":
             element["rowsBy"] = [
-                {"id": dimension_ids[field.key]}
+                {"columnId": dimension_ids[field.key]}
                 for _item, field in dimension_pairs
                 if any(
                     row.get("guid") == _item.get("guid")
@@ -1247,7 +1247,7 @@ class WorkbookBuilder:
                 )
             ]
             element["columnsBy"] = [
-                {"id": dimension_ids[field.key]}
+                {"columnId": dimension_ids[field.key]}
                 for _item, field in dimension_pairs
                 if any(
                     column.get("guid") == _item.get("guid")
@@ -1379,7 +1379,7 @@ class WorkbookBuilder:
             ),
             "source": {"kind": "table", "elementId": "master"},
             "columns": columns,
-            "region": {"id": region["id"], "regionType": region_type},
+            "region": {"columnId": region["id"], "regionType": region_type},
         }
         if measures:
             measure_item, measure_field = measure_pairs[0]
@@ -1485,7 +1485,7 @@ class WorkbookBuilder:
             if column is None:
                 return None
             columns.append(column)
-            bindings[coordinate] = {"id": column_id}
+            bindings[coordinate] = {"columnId": column_id}
         return {
             "id": element_id,
             "kind": "point-map",

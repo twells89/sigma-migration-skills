@@ -362,13 +362,28 @@
         "id": "nav-pg-1",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "pg-1": "Retail Orders \u2014 Overview",
-          "pg-2": "Product Performance",
-          "pg-3": "Customer Analytics",
-          "pg-4": "Store Operations",
-          "pg-5": "Promotions & Channel"
-        }
+        "pageLabels": [
+          {
+            "pageId": "pg-1",
+            "label": "Retail Orders \u2014 Overview"
+          },
+          {
+            "pageId": "pg-2",
+            "label": "Product Performance"
+          },
+          {
+            "pageId": "pg-3",
+            "label": "Customer Analytics"
+          },
+          {
+            "pageId": "pg-4",
+            "label": "Store Operations"
+          },
+          {
+            "pageId": "pg-5",
+            "label": "Promotions & Channel"
+          }
+        ]
       },
       {
         "id": "el-krev",
@@ -809,13 +824,28 @@
         "id": "nav-pg-2",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "pg-1": "Retail Orders \u2014 Overview",
-          "pg-2": "Product Performance",
-          "pg-3": "Customer Analytics",
-          "pg-4": "Store Operations",
-          "pg-5": "Promotions & Channel"
-        }
+        "pageLabels": [
+          {
+            "pageId": "pg-1",
+            "label": "Retail Orders \u2014 Overview"
+          },
+          {
+            "pageId": "pg-2",
+            "label": "Product Performance"
+          },
+          {
+            "pageId": "pg-3",
+            "label": "Customer Analytics"
+          },
+          {
+            "pageId": "pg-4",
+            "label": "Store Operations"
+          },
+          {
+            "pageId": "pg-5",
+            "label": "Promotions & Channel"
+          }
+        ]
       },
       {
         "id": "el-pk1",
@@ -1139,13 +1169,28 @@
         "id": "nav-pg-3",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "pg-1": "Retail Orders \u2014 Overview",
-          "pg-2": "Product Performance",
-          "pg-3": "Customer Analytics",
-          "pg-4": "Store Operations",
-          "pg-5": "Promotions & Channel"
-        }
+        "pageLabels": [
+          {
+            "pageId": "pg-1",
+            "label": "Retail Orders \u2014 Overview"
+          },
+          {
+            "pageId": "pg-2",
+            "label": "Product Performance"
+          },
+          {
+            "pageId": "pg-3",
+            "label": "Customer Analytics"
+          },
+          {
+            "pageId": "pg-4",
+            "label": "Store Operations"
+          },
+          {
+            "pageId": "pg-5",
+            "label": "Promotions & Channel"
+          }
+        ]
       },
       {
         "id": "el-cuk1",
@@ -1469,13 +1514,28 @@
         "id": "nav-pg-4",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "pg-1": "Retail Orders \u2014 Overview",
-          "pg-2": "Product Performance",
-          "pg-3": "Customer Analytics",
-          "pg-4": "Store Operations",
-          "pg-5": "Promotions & Channel"
-        }
+        "pageLabels": [
+          {
+            "pageId": "pg-1",
+            "label": "Retail Orders \u2014 Overview"
+          },
+          {
+            "pageId": "pg-2",
+            "label": "Product Performance"
+          },
+          {
+            "pageId": "pg-3",
+            "label": "Customer Analytics"
+          },
+          {
+            "pageId": "pg-4",
+            "label": "Store Operations"
+          },
+          {
+            "pageId": "pg-5",
+            "label": "Promotions & Channel"
+          }
+        ]
       },
       {
         "id": "el-sk1",
@@ -1799,13 +1859,28 @@
         "id": "nav-pg-5",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "pg-1": "Retail Orders \u2014 Overview",
-          "pg-2": "Product Performance",
-          "pg-3": "Customer Analytics",
-          "pg-4": "Store Operations",
-          "pg-5": "Promotions & Channel"
-        }
+        "pageLabels": [
+          {
+            "pageId": "pg-1",
+            "label": "Retail Orders \u2014 Overview"
+          },
+          {
+            "pageId": "pg-2",
+            "label": "Product Performance"
+          },
+          {
+            "pageId": "pg-3",
+            "label": "Customer Analytics"
+          },
+          {
+            "pageId": "pg-4",
+            "label": "Store Operations"
+          },
+          {
+            "pageId": "pg-5",
+            "label": "Promotions & Channel"
+          }
+        ]
       },
       {
         "id": "el-prk1",

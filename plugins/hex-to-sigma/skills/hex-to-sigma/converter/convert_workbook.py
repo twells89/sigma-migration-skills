@@ -291,12 +291,12 @@ def build_explore_element(cell: dict, dm_id: str, element_id: str,
         value_id = add_column(value_fields[0])
         if not color_id or not value_id:
             return None
-        color_spec = {"id": color_id}
+        color_spec = {"columnId": color_id}
         sort_obj = _axis_sort(color_fields[0], color_id, value_id)
         if sort_obj:
             color_spec["sort"] = sort_obj
         element["color"] = color_spec
-        element["value"] = {"id": value_id}
+        element["value"] = {"columnId": value_id}
         top_n = _top_n_filter(color_fields[0], value_id, warnings, label)
         if top_n:
             filters.append(top_n)

@@ -113,9 +113,10 @@ def main():
     assert "filters_location_top:false" in run.stdout
     assert len([el for el in elements if el.get("kind") == "navigation"]) == 2
     assert doc["settings"]["navigation"]["pageTabsInViewMode"] == "shown"
-    assert doc["settings"]["theme"]["overrides"]["colorOverrides"][
-        "backgroundCanvas"
-    ] == "#EEF2F7"
+    assert any(
+        entry.get("name") == "backgroundCanvas" and entry.get("color") == "#EEF2F7"
+        for entry in doc["settings"]["theme"]["overrides"]["colorOverrides"]
+    )
 
     rows = {
         row["source"]: row

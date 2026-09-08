@@ -21,7 +21,7 @@
 module PbiPivotSort
   BLANK_LABEL = '(Blank)'
 
-  # Mutates `rows_by` (array of {"id"=>..}) and `cols` (array of {"id","formula"..})
+  # Mutates `rows_by` (array of {"columnId"=>..}) and `cols` (array of {"id","formula"..})
   # in place. Returns true when a sort was applied, false when it couldn't be.
   #   rows_by : the pivot's rowsBy array (outer grouping is index 0)
   #   cols    : the element's built columns (for the coalesce rewrite)
@@ -33,7 +33,8 @@ module PbiPivotSort
     rows_by[0] = (rows_by[0] || {}).merge('sort' => { 'by' => cid, 'direction' => dir })
 
     # blank-first reproduction: only when sorting BY THE ROW DIM ITSELF, ascending
-    if cols.is_a?(Array) && dir == 'ascending' && cid == rows_by[0]['id']
+    row_cid = rows_by[0]['columnId'] || rows_by[0]['id']
+    if cols.is_a?(Array) && dir == 'ascending' && cid == row_cid
       dcol = cols.find { |c| c.is_a?(Hash) && c['id'] == cid }
       f = dcol && dcol['formula']
       if f.is_a?(String) && !f.strip.downcase.start_with?('coalesce(')

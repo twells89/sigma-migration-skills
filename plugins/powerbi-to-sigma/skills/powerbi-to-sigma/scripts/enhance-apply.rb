@@ -759,8 +759,8 @@ def apply_patch!(spec, cand)
         { 'id' => 'map-phasee-val', 'formula' => patch['value_formula'],
           'name' => patch['value_name'] || 'Value' }
       ],
-      'latitude' => { 'id' => 'map-phasee-lat' }, 'longitude' => { 'id' => 'map-phasee-lng' },
-      'size' => { 'id' => 'map-phasee-val' },
+      'latitude' => { 'columnId' => 'map-phasee-lat' }, 'longitude' => { 'columnId' => 'map-phasee-lng' },
+      'size' => { 'columnId' => 'map-phasee-val' },
       'color' => { 'by' => 'category', 'column' => 'map-phasee-geo' },
       'name' => "#{el['name']} (map restored)"
     }

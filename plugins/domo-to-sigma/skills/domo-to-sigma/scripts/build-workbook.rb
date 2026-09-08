@@ -709,7 +709,7 @@ def build_scatter_chart(card, dims, meas)
     'columns' => ordered,
     'xAxis' => xcol ? { 'columnId' => xcol['id'], 'format' => AXIS_OFF } : nil,
     'yAxis' => ycol ? { 'columnIds' => [ycol['id']], 'format' => AXIS_OFF } : nil,
-    'size' => size_col ? { 'id' => size_col['id'] } : nil,
+    'size' => size_col ? { 'columnId' => size_col['id'] } : nil,
     'color' => identity_col ? { 'by' => 'category', 'column' => identity_col['id'] } : nil,
     '_scatterHelper' => helper,
   }.compact
@@ -862,9 +862,9 @@ def build_pie_or_donut(card, kind)
     'id' => eid(card), 'kind' => kind, 'name' => card['title'],
     'source' => { 'kind' => 'table', 'elementId' => 'master' },
     'columns' => [dcol, mcol].compact,
-    'value' => mcol ? { 'id' => mcol['id'] } : nil,   # ⚠ donut/pie use value.id, NOT columnId
+    'value' => mcol ? { 'columnId' => mcol['id'] } : nil,
     'color' => dcol ? {
-      'id' => dcol['id'],
+      'columnId' => dcol['id'],
       'sort' => (mcol ? { 'by' => mcol['id'], 'direction' => 'descending' } :
                          { 'direction' => 'ascending' })
     } : nil,
@@ -985,7 +985,7 @@ def build_map(card)
     'id' => eid(card), 'kind' => 'region-map', 'name' => card['title'],
     'source' => { 'kind' => 'table', 'elementId' => 'master' },
     'columns' => [gcol, mcol].compact,
-    'region' => { 'id' => gcol['id'], 'regionType' => region_type },
+    'region' => { 'columnId' => gcol['id'], 'regionType' => region_type },
     'color' => mcol ? { 'by' => 'scale', 'column' => mcol['id'] } : nil,
   }.compact
 end
@@ -1104,8 +1104,8 @@ def build_pivot(card)
     'id' => eid(card), 'kind' => 'pivot-table', 'name' => card['title'],
     'source' => { 'kind' => 'table', 'elementId' => 'master' },
     'columns' => (dims + meas).map { |c| meas.include?(c) ? measure_col(c, card) : dim_col(c, card) },
-    'rowsBy' => dims.first(1).map { |d| dim_col(d, card)['id'] },
-    'columnsBy' => dims.drop(1).map { |d| dim_col(d, card)['id'] },   # pivot REQUIRES both (feedback_sigma_pivot_rowsby_columnsby)
+    'rowsBy' => dims.first(1).map { |d| { 'columnId' => dim_col(d, card)['id'] } },
+    'columnsBy' => dims.drop(1).map { |d| { 'columnId' => dim_col(d, card)['id'] } },
     'values' => meas.map { |m| measure_col(m, card)['id'] },
   }
 end

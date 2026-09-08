@@ -3,7 +3,7 @@
   "source_commit": "21f3167",
   "source_commit_date": "2026-08-07",
   "freshness_check": {
-    "checked_at": "2026-08-24",
+    "checked_at": "2026-09-08",
     "upstream_head": "21f3167",
     "result": "no-module-drift"
   },

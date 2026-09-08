@@ -1833,8 +1833,8 @@ def enrich_window_calcs!(records, elements, ds_plan)
     cols_by_id = (el['columns'] || []).each_with_object({}) { |c, h| h[c['id']] = c }
     dim_ids = []
     dim_ids << el.dig('xAxis', 'columnId') if el.dig('xAxis', 'columnId')
-    dim_ids.concat(Array(el['rowsBy']).map { |x| x.is_a?(Hash) ? x['id'] : x })
-    dim_ids.concat(Array(el['columnsBy']).map { |x| x.is_a?(Hash) ? x['id'] : x })
+    dim_ids.concat(Array(el['rowsBy']).map { |x| x.is_a?(Hash) ? (x['columnId'] || x['id']) : x })
+    dim_ids.concat(Array(el['columnsBy']).map { |x| x.is_a?(Hash) ? (x['columnId'] || x['id']) : x })
     r['dims'] = dim_ids.compact.uniq.map { |cid| cols_by_id[cid] }.compact
                        .reject { |c| c['id'] == r['column_id'] }
                        .map { |c| { 'caption' => c['name'] } }
@@ -2823,8 +2823,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
                    'raw' => (field['column'] || field['raw']).to_s,
                    'shelf' => shelf } if target == :value && %w[usr user].include?(deriv)
     case target
-    when :row   then rows_by    << { 'id' => col_id }
-    when :col   then cols_by    << { 'id' => col_id }
+    when :row   then rows_by    << { 'columnId' => col_id }
+    when :col   then cols_by    << { 'columnId' => col_id }
     when :value then values_arr << col_id
     end
   end
@@ -2992,7 +2992,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
       addr = ws_calc['ordering_field']
       axis_has_addr = lambda do |entries|
         entries.any? do |e|
-          c = cols_array.find { |x| x['id'] == e['id'] }
+          c = cols_array.find { |x| x['id'] == (e['columnId'] || e['id']) }
           c && addr && nqs.call(c['name']) == nqs.call(addr)
         end
       end
@@ -3048,8 +3048,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     inner_formulas = win_stage.map { |w| w['plan']['value_formula'] }.uniq
     non_window_vals = values_arr.reject { |vid| win_stage.any? { |w| w['col']['id'] == vid } }
     if inner_formulas.size == 1 && non_window_vals.empty?
-      row_dims = cols_array.select { |c| rows_by.any? { |r| r['id'] == c['id'] } }
-      col_dims = cols_array.select { |c| cols_by.any? { |r| r['id'] == c['id'] } }
+      row_dims = cols_array.select { |c| rows_by.any? { |r| (r['columnId'] || r['id']) == c['id'] } }
+      col_dims = cols_array.select { |c| cols_by.any? { |r| (r['columnId'] || r['id']) == c['id'] } }
       value_name = "#{inner_formulas.first[/\[Master\/([^\]]+)\]/, 1] || header_base(win_stage.first['col']['name'])} Window Base"
       helper, src_name = build_window_helper(
         el_id: el_id, master_id: opts[:master_id],
@@ -3116,7 +3116,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     addr_cap = (meta['columns_by_guid'] || {}).dig(qc['addressing'].to_s, 'caption') || qc['addressing']
     axis_of = lambda do |entries|
       entries.any? do |e|
-        c = cols_array.find { |x| x['id'] == e['id'] }
+        c = cols_array.find { |x| x['id'] == (e['columnId'] || e['id']) }
         c && addr_cap && nq.call(c['name']) == nq.call(addr_cap)
       end
     end
@@ -3147,7 +3147,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     norm = ->(s) { s.to_s.downcase.gsub(/[^a-z0-9]/, '') }
     axis = ss['shelf'].to_s == 'columns' ? cols_by : rows_by
     entry = axis.find do |e|
-      col = cols_array.find { |c| c['id'] == e['id'] }
+      col = cols_array.find { |c| c['id'] == (e['columnId'] || e['id']) }
       col && norm.call(col['name']) == norm.call(ss['dimension'])
     end
     next unless entry
@@ -3423,8 +3423,8 @@ def apply_topn_prefilter!(tp, element:, cap:, z:, opts:, warnings:, data_element
     hint = (meta['columns_by_guid'] || {}).dig(tp['entity_ref'], 'caption') || tp['entity_ref']
     entity_col = (element['columns'] || []).find { |c| norm.call(c['name']) == norm.call(hint) }
   end
-  entity_col ||= (element['rowsBy'] || []).map { |r| (element['columns'] || []).find { |c| c['id'] == r['id'] } }.compact.first ||
-                 (element['columnsBy'] || []).map { |r| (element['columns'] || []).find { |c| c['id'] == r['id'] } }.compact
+  entity_col ||= (element['rowsBy'] || []).map { |r| (element['columns'] || []).find { |c| c['id'] == (r['columnId'] || r['id']) } }.compact.first ||
+                 (element['columnsBy'] || []).map { |r| (element['columns'] || []).find { |c| c['id'] == (r['columnId'] || r['id']) } }.compact
                    .reject { |c| c['formula'].to_s =~ /\A\[Master\/Rank/i }.last
   members = topn_members_for(label, entity_col && entity_col['name'], opts, z,
                              element_cols: element['columns'] || [], own_view_id: own_view_id)
@@ -3484,7 +3484,7 @@ def apply_topn_prefilter!(tp, element:, cap:, z:, opts:, warnings:, data_element
     is_pivot = element['kind'] == 'pivot-table'
     shelf_ss = Array(z['shelf_sorts']).find { |ss| norm.call(ss['dimension']) == norm.call(entity_col['name']) }
     so_id = "p-#{element['id']}-sortord"
-    axis_entry = ((element['rowsBy'] || []) + (element['columnsBy'] || [])).find { |r| r['id'] == entity_col['id'] }
+    axis_entry = ((element['rowsBy'] || []) + (element['columnsBy'] || [])).find { |r| (r['columnId'] || r['id']) == entity_col['id'] }
     ordered = nil
     add_sortord = lambda do
       unless (element['columns'] || []).any? { |c| c['id'] == so_id }
@@ -3518,7 +3518,7 @@ def apply_topn_prefilter!(tp, element:, cap:, z:, opts:, warnings:, data_element
     # shares compute over the FULL domain, then marks hide. A share whose scope
     # spans the pruned axis (or the grand total) re-computes over only the kept
     # members here and INFLATES. Scope orthogonal to the entity axis is exact.
-    ent_on_cols = (element['columnsBy'] || []).any? { |r| r['id'] == entity_col['id'] }
+    ent_on_cols = (element['columnsBy'] || []).any? { |r| (r['columnId'] || r['id']) == entity_col['id'] }
     bad_scope = ent_on_cols ? 'row' : 'column'
     value_ids = element['values'] || element.dig('yAxis', 'columnIds') ||
                 # TABLE-kind elements carry values as plain columns (review-
@@ -5481,8 +5481,8 @@ layout.each do |dash|
         element['columns'] << { 'id' => "sz-#{el_id}", 'name' => size_field['name'],
                                 'formula' => "[#{src_name}/#{size_field['name']}]",
                                 'format' => num_fmt.call(size_field['name']) }
-        element['size'] = { 'id' => "sz-#{el_id}" }
-        warnings << "'#{cap}' scatter size shelf carries measure '#{size_field['name']}' — emitted size:{id} " \
+        element['size'] = { 'columnId' => "sz-#{el_id}" }
+        warnings << "'#{cap}' scatter size shelf carries measure '#{size_field['name']}' — emitted size:{columnId} " \
                     'over a grouped calculation on the hidden source (one value per point)'
       end
       unless rows.any? { |r| r[0].nil? || r[0].to_s.strip.empty? }
@@ -5858,8 +5858,8 @@ layout.each do |dash|
       end
       element['groupings'] = [grouping]
     elsif kind == 'pie-chart' || kind == 'donut-chart'
-      element['color'] = { 'id' => dim_col_obj['id'] }
-      element['value'] = { 'id' => meas_col_obj['id'] }
+      element['color'] = { 'columnId' => dim_col_obj['id'] }
+      element['value'] = { 'columnId' => meas_col_obj['id'] }
       # PR-12: per-element color.scheme is SILENTLY DROPPED on pie/donut — the
       # only slice-color path is themeOverrides.categoricalScheme, applied
       # positionally in category-sort order. ThemeDerive orders the theme from

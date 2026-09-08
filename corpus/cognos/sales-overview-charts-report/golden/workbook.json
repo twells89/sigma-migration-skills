@@ -19,10 +19,16 @@
           "id": "bIzdpyWKNo",
           "kind": "navigation",
           "mode": "auto",
-          "pageLabels": {
-            "ZvjTJOMjdd": "Retailer Page",
-            "urNQFo7k7z": "Product Page"
-          }
+          "pageLabels": [
+            {
+              "pageId": "ZvjTJOMjdd",
+              "label": "Retailer Page"
+            },
+            {
+              "pageId": "urNQFo7k7z",
+              "label": "Product Page"
+            }
+          ]
         },
         {
           "id": "rFPFJOtvuM",
@@ -135,7 +141,7 @@
         {
           "id": "3uvQi4HgPo",
           "kind": "table",
-          "name": "Retailers Sales — Top 10 Country for Sales",
+          "name": "Retailers Sales \u2014 Top 10 Country for Sales",
           "source": {
             "kind": "data-model",
             "dataModelId": "<DM_ID>",
@@ -199,8 +205,8 @@
             "ff0WuzbWyB"
           ],
           "region": {
-            "id": "aJck4d6HCi",
-            "regionType": "country"
+            "regionType": "country",
+            "columnId": "aJck4d6HCi"
           },
           "legend": {
             "position": "bottom"
@@ -320,20 +326,26 @@
             "position": "bottom"
           },
           "color": {
-            "id": "sqq36KzEx9"
+            "columnId": "sqq36KzEx9"
           },
           "value": {
-            "id": "Hm56xNy2BU"
+            "columnId": "Hm56xNy2BU"
           }
         },
         {
           "id": "zc7OYMnjUT",
           "kind": "navigation",
           "mode": "auto",
-          "pageLabels": {
-            "ZvjTJOMjdd": "Retailer Page",
-            "urNQFo7k7z": "Product Page"
-          }
+          "pageLabels": [
+            {
+              "pageId": "ZvjTJOMjdd",
+              "label": "Retailer Page"
+            },
+            {
+              "pageId": "urNQFo7k7z",
+              "label": "Product Page"
+            }
+          ]
         },
         {
           "id": "Erb92pxTDu",
@@ -444,7 +456,7 @@
         {
           "id": "jLNiTqnVe1",
           "kind": "table",
-          "name": "Products Sales — Top 10 Product Table",
+          "name": "Products Sales \u2014 Top 10 Product Table",
           "source": {
             "kind": "data-model",
             "dataModelId": "<DM_ID>",
@@ -607,48 +619,48 @@
     }
   },
   "warnings": [
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "list \"Top 10 Country for Sales\" sorts by \"Revenue\" (descending) — table sort isn't part of the Sigma workbook spec; apply the sort in the UI.",
-    "filter \"[Rank] < 10\" on query \"Top 10 Country for Sales\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"Top 10 Country for Sales\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "list \"Top 10 Product Table\" sorts by \"Revenue\" (descending) — table sort isn't part of the Sigma workbook spec; apply the sort in the UI.",
-    "list \"Top 10 Product Table\" sorts by \"Rank_Product\" (descending) — table sort isn't part of the Sigma workbook spec; apply the sort in the UI.",
-    "filter \"[Rank_Product] <= 10\" on query \"Top 10 Product Table\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"Top 10 Product Table\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_] = ?Year?\" on query \"Top 10 Product Table\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "chart \"Map1\" → region-map: defaulted regionType to \"country\" — set it to match your data (country / us-state / us-county / us-zipcode / us-cbsa / us-postal-place / ca-province).",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "chart \"Clustered combination2\": Cognos used 2 category levels; Sigma x-axis takes one — bound the first, kept the rest as columns.",
-    "chart \"Clustered combination2\" (combo-chart) resolved no measure for the value axis — add a measure in the workbook.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "⛔ WORKBOOK FEATURE GAP [visual com.ibm.vis.treemap]: chart \"Tree map\" is a Cognos treemap; no grounded Sigma mapping is cataloged. Its data was preserved as a table.",
-    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter.",
-    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter — re-create as a Sigma element/page filter."
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "list \"Top 10 Country for Sales\" sorts by \"Revenue\" (descending) \u2014 table sort isn't part of the Sigma workbook spec; apply the sort in the UI.",
+    "filter \"[Rank] < 10\" on query \"Top 10 Country for Sales\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"Top 10 Country for Sales\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "list \"Top 10 Product Table\" sorts by \"Revenue\" (descending) \u2014 table sort isn't part of the Sigma workbook spec; apply the sort in the UI.",
+    "list \"Top 10 Product Table\" sorts by \"Rank_Product\" (descending) \u2014 table sort isn't part of the Sigma workbook spec; apply the sort in the UI.",
+    "filter \"[Rank_Product] <= 10\" on query \"Top 10 Product Table\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"Top 10 Product Table\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_] = ?Year?\" on query \"Top 10 Product Table\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "chart \"Map1\" \u2192 region-map: defaulted regionType to \"country\" \u2014 set it to match your data (country / us-state / us-county / us-zipcode / us-cbsa / us-postal-place / ca-province).",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "chart \"Clustered combination2\": Cognos used 2 category levels; Sigma x-axis takes one \u2014 bound the first, kept the rest as columns.",
+    "chart \"Clustered combination2\" (combo-chart) resolved no measure for the value axis \u2014 add a measure in the workbook.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qRetailerPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "\u26d4 WORKBOOK FEATURE GAP [visual com.ibm.vis.treemap]: chart \"Tree map\" is a Cognos treemap; no grounded Sigma mapping is cataloged. Its data was preserved as a table.",
+    "filter \"[C].[C_Fred_Data_Module].[Retailers_Sales].[Retailer_country] = ?Store?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter.",
+    "filter \"[C].[C_Fred_Data_Module].[Time_Sales_Targets].[Year_]  = ?Year?\" on query \"qProductPage\": not a simple =/in filter \u2014 re-create as a Sigma element/page filter."
   ],
   "stats": {
     "queries": 5,

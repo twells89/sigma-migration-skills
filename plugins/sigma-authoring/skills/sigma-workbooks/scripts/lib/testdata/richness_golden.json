@@ -83,9 +83,7 @@
           "kind": "table"
         }
       },
-      "values": [
-
-      ]
+      "values": []
     },
     {
       "controlId": "CategoryCtl",
@@ -119,9 +117,7 @@
           "kind": "table"
         }
       },
-      "values": [
-
-      ]
+      "values": []
     }
   ],
   "grain_control": {
@@ -171,17 +167,15 @@
         "name": "Margin"
       }
     ],
-    "columnsBy": [
-
-    ],
+    "columnsBy": [],
     "id": "piv-1",
     "kind": "pivot-table",
     "rowsBy": [
       {
-        "id": "piv-region"
+        "columnId": "piv-region"
       },
       {
-        "id": "piv-category"
+        "columnId": "piv-category"
       }
     ],
     "source": {

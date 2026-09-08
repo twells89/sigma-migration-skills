@@ -37,7 +37,7 @@ fix that introduces an `error` column or a dead zone fails the pass instead of s
 Each row: **the visible delta** · the spec path · notes/gotcha.
 
 ### Canvas, theme & palette
-- **Page/canvas background wrong color** → `settings.theme.overrides.colorOverrides.backgroundCanvas: "#RRGGBB"` (`document.settings.theme`).
+- **Page/canvas background wrong color** → `settings.theme.overrides.colorOverrides: [{ name: "backgroundCanvas", color: "#RRGGBB" }]` (`document.settings.theme`).
 - **Chart series / donut-pie slice colors are generic** → `settings.theme.overrides.categoricalScheme: [...]` — a **positional** array applied in category-sort order. This is the **only** spec path to donut/pie slice colors (per-element `color.scheme` is silently dropped on donut/pie). Extract the source hexes from the `.twb` (`composition-recipe.md` §"Extract brand colors").
 - **Series colors INVERTED / swapped across members** (Top-500 gold on the Bottom-500 series) → the scheme must be **ordered ascending by member** so `scheme[i]` binds to the i-th category in Sigma's sort order. Where the `.twb` carries an explicit member→color map (`<encoding attr='color' type='palette'><map to='#hex'><bucket>…`), the builder now pins per-chart `color.scheme` AND orders `settings.theme.overrides.categoricalScheme` mechanically (PR-12, `scripts/lib/series_colors.rb`); check `formats-emitted.json` → `series_color_maps` (`pinned|theme|unpinned`) before hand-fixing a `palette_match` delta. Frequency-ranked palettes only apply when no explicit map exists.
 - **Fonts don't match the source** → `settings.theme.overrides.fonts.{textFont, dataFont}`. Map the Tableau family to a web-safe family (Tableau "Tableau Book"/"Benton"→`Inter`/`Helvetica Neue`; a serif → `Georgia`). Only families Sigma ships round-trip.
@@ -156,7 +156,7 @@ candle low / gantt start); visible series = the span. Base color = the card back
 
 ```json
 { "kind": "pivot-table", "values": ["c-filled"],
-  "rowsBy": [{"id": "c-row"}], "columnsBy": [{"id": "c-col"}],
+  "rowsBy": [{"columnId": "c-row"}], "columnsBy": [{"columnId": "c-col"}],
   "conditionalFormats": [{ "type": "backgroundScale", "columnIds": ["c-filled"],
     "scheme": ["#e8eaed", "#0e7c7b"], "includeValues": true }] }
 ```
@@ -186,7 +186,7 @@ value exactly; for sankey add normalized stacked bars per stage for the stage sh
 
 ```json
 { "kind": "pivot-table", "values": ["c-flow"],
-  "rowsBy": [{"id": "c-origin"}], "columnsBy": [{"id": "c-dest"}],
+  "rowsBy": [{"columnId": "c-origin"}], "columnsBy": [{"columnId": "c-dest"}],
   "conditionalFormats": [{ "type": "backgroundScale", "columnIds": ["c-flow"],
     "scheme": ["#FFFFFF", "#6a51a3"], "includeValues": true }] }
 ```
@@ -197,11 +197,11 @@ Tableau hex-tile maps (custom polygon grids) have no Sigma geometry; ship a `reg
 `regionType: "us-state"` choropleth. Sequential value fill **is spec-supported**:
 
 ```json
-{ "kind": "region-map", "region": {"id": "c-state", "regionType": "us-state"},
+{ "kind": "region-map", "region": {"columnId": "c-state", "regionType": "us-state"},
   "color": {"by": "scale", "column": "c-sales"} }
 ```
 `by: "scale"` rendered a white→navy fill and round-tripped (49/49 state values exact);
-`by: "value"` remains rejected (HTTP 400). `color.column` must differ from `region.id`.
+`by: "value"` remains rejected (HTTP 400). `color.column` must differ from `region.columnId`.
 
 ### `{{formula | d3-format}}` text templating — delta badges, dynamic sentences, alerts
 Text elements template live values: `{{Max([OD Rollup/Order Year Text])}}`,

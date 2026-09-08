@@ -14,7 +14,7 @@
 # The correct Sigma shape is ONE viz element with the facet dimension as a column
 # and `trellis: { rowsBy | columnsBy: [{ columnId }] }` (a 2-D grid points rowsBy
 # and columnsBy at two DIFFERENT columns). This is distinct from the pivot-table's
-# own `rowsBy`/`columnsBy` cross-tab shelves (keyed on `id`, a separate mechanism).
+# own `rowsBy`/`columnsBy` cross-tab shelves (keyed on `columnId`, a separate mechanism).
 #
 # Interface (converter-agnostic; mutates the element hash in place):
 #   TrellisEmit.apply(element, facet_column_id:, orientation:)

@@ -804,7 +804,7 @@ def _apply_series_colors(el, spec):
     if sc.get("solid") and kind in ("bar-chart", "line-chart", "area-chart"):
         el["color"] = {"by": "single", "value": sc["solid"]}
     elif sc.get("geo_scheme") and kind == "region-map":
-        region_id = (el.get("region") or {}).get("id")
+        region_id = (el.get("region") or {}).get("columnId") or (el.get("region") or {}).get("id")
         meas_col = next((c for c in el.get("columns", []) if c.get("id") != region_id), None)
         if meas_col:
             el["color"] = {"by": "scale", "column": meas_col["id"], "scheme": list(sc["geo_scheme"])}
@@ -991,7 +991,7 @@ def _element_core(spec, resolver, master="OFV"):
         # ThoughtSpot renders pies as donuts → use the donut-chart kind (the hole is
         # inherent to the kind; holeValue is only an optional center-label column ref).
         return {"id": nid(), "kind": "donut-chart", "name": name, "source": src, "columns": cols,
-                "value": {"id": vid}, "color": {"id": cid}}
+                "value": {"columnId": vid}, "color": {"columnId": cid}}
     if chart in ("PIVOT_TABLE", "PIVOT") and len(dims) >= 2:
         rid = nid("r"); cidd = nid("k")
         cols = [{"id": rid, "formula": dref(dims[0]), "name": dims[0]},
@@ -1000,7 +1000,7 @@ def _element_core(spec, resolver, master="OFV"):
         for m in meas:
             mid = nid("m"); cols.append({"id": mid, "formula": mref(m), "name": m, "format": mfmt(m)}); mids.append(mid)
         return {"id": nid(), "kind": "pivot-table", "name": name, "source": src, "columns": cols,
-                "rowsBy": [{"id": rid}], "columnsBy": [{"id": cidd}], "values": mids}
+                "rowsBy": [{"columnId": rid}], "columnsBy": [{"columnId": cidd}], "values": mids}
     if chart in ("TABLE", "ADVANCED_COLUMN"):
         dids, cols, mids, midbyname = [], [], [], {}
         for d in dims:
@@ -1019,7 +1019,7 @@ def _element_core(spec, resolver, master="OFV"):
                              "value": r["value"], "style": {"backgroundColor": r["color"]}})
             if cfmt:
                 return {"id": nid(), "kind": "pivot-table", "name": name, "source": src, "columns": cols,
-                        "rowsBy": [{"id": d} for d in dids], "values": mids, "conditionalFormats": cfmt}
+                        "rowsBy": [{"columnId": d} for d in dids], "values": mids, "conditionalFormats": cfmt}
         return {"id": nid(), "kind": "table", "name": name, "source": src, "columns": cols,
                 "groupings": [{"id": nid(), "groupBy": dids, "calculations": mids}]}
     # Scatter / bubble — measure-vs-measure with the dimension as the POINT
@@ -1030,7 +1030,7 @@ def _element_core(spec, resolver, master="OFV"):
     # grouped SOURCE table (one row per point dim) sourced off the shared master,
     # reference the grouped columns with RAW refs, and keep the dim on
     # color:{by:category} so distinct points don't merge. BUBBLE's 3rd measure →
-    # size:{id}. With no point dim, fall through to the plain axis scatter.
+    # size:{columnId}. With no point dim, fall through to the plain axis scatter.
     if chart in ("SCATTER", "BUBBLE") and len(meas) >= 2 and dims:
         eid = nid()
         src_name = "Scatter Source " + re.sub(r'[^A-Za-z0-9]', '', eid)[-6:]
@@ -1060,7 +1060,7 @@ def _element_core(spec, resolver, master="OFV"):
               "columns": cols, "xAxis": {"columnId": r_x["id"]}, "yAxis": {"columnIds": [r_y["id"]]},
               "color": {"by": "category", "column": r_dim["id"]}}
         if size_meas is not None:
-            r_sz = _raw(scols[3]); cols.append(r_sz); el["size"] = {"id": r_sz["id"]}
+            r_sz = _raw(scols[3]); cols.append(r_sz); el["size"] = {"columnId": r_sz["id"]}
         return el
     if chart in ("SCATTER", "BUBBLE") and len(meas) >= 2:
         # no point dimension: plain measure-vs-measure cartesian off the master
@@ -1084,7 +1084,7 @@ def _element_core(spec, resolver, master="OFV"):
         cols = [{"id": gid, "formula": dref(dims[0]), "name": dims[0]},
                 {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": mfmt(meas[0])}]
         return {"id": nid(), "kind": "region-map", "name": name, "source": src, "columns": cols,
-                "region": {"id": gid, "regionType": _region_type(dims[0])}}
+                "region": {"columnId": gid, "regionType": _region_type(dims[0])}}
     # ThoughtSpot chart types with NO faithful Sigma equivalent (Sigma has no
     # treemap/gauge/funnel/sankey/histogram/candlestick/radar/box plot — verified
     # against sigma-workbooks/reference/specification/charts.md). Silently coercing

@@ -251,16 +251,16 @@ plain_map = els5.find { |e| e['name'] == 'Coordinate Map' }
 sized_map = els5.find { |e| e['name'] == 'Sized Coordinate Map' }
 check(plain_map && sized_map && [plain_map, sized_map].all? { |e| e['kind'] == 'point-map' },
       'raw legacy azureMap X/Y signals build native Sigma point maps', fails)
-check(plain_map && plain_map.dig('latitude', 'id') && plain_map.dig('longitude', 'id'),
+check(plain_map && plain_map.dig('latitude', 'columnId') && plain_map.dig('longitude', 'columnId'),
       'Azure Y binds latitude and X binds longitude', fails)
-plain_lat = plain_map && plain_map['columns'].find { |c| c['id'] == plain_map.dig('latitude', 'id') }
-plain_lng = plain_map && plain_map['columns'].find { |c| c['id'] == plain_map.dig('longitude', 'id') }
+plain_lat = plain_map && plain_map['columns'].find { |c| c['id'] == plain_map.dig('latitude', 'columnId') }
+plain_lng = plain_map && plain_map['columns'].find { |c| c['id'] == plain_map.dig('longitude', 'columnId') }
 check(plain_lat && plain_lat['formula'] == '[master-geo/Coordinate B]' &&
       plain_lng && plain_lng['formula'] == '[master-geo/Coordinate A]',
       'coordinate role normalization is semantic and independent of column naming', fails)
 check(plain_map && !plain_map.key?('size'),
       'latitude Y is never reused as bubble size when no Size role exists', fails)
-size_col = sized_map && sized_map['columns'].find { |c| c['id'] == sized_map.dig('size', 'id') }
+size_col = sized_map && sized_map['columns'].find { |c| c['id'] == sized_map.dig('size', 'columnId') }
 check(size_col && size_col['formula'] == 'Sum([master-geo/Metric])',
       'an explicit Azure Size role independently drives bubble size', fails)
 color_col = plain_map && plain_map['columns'].find { |c| c['id'] == plain_map.dig('color', 'column') }

@@ -50,8 +50,9 @@ converter) and synthesize into the status matrix. Re-run after any builder chang
    returns YAML), passing `SIGMA_API_TOKEN` explicitly to the render child, and always
    printing the rendered N/total count (never a silent zero). The review is the gate.
 
-7. **Spec-shape correctness.** `kpi-chart` uses `value.columnId`; `donut`/`pie` use
-   `value.id` + `color.id` (NOT `value.columnId`); control value fields are FLAT
+7. **Spec-shape correctness.** Channel pointers (`kpi-chart` `value`, `donut`/`pie`
+   `value`/`color`/`holeValue`, scatter `size`, map lat/lng/size/region, pivot
+   shelves) use `{ columnId }`, not `{ id }`. Control value fields are FLAT
    top-level (not a nested `value` object); `refMarks` value is wrapped (see #3).
    Canonical reference: `sigma-workbooks/reference/specification/charts.md` + `controls.md`.
 

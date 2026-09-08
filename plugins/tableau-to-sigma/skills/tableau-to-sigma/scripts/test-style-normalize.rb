@@ -216,7 +216,7 @@ mini = {
         { 'id' => 'c-room', 'formula' => '[Master/Room]', 'name' => 'Room' },
         numcol('c-share', '0.0%', 'PercentOfTotal(CountDistinct([Master/Seed]))')
       ],
-      'values' => %w[c-share], 'rowsBy' => [{ 'id' => 'c-room' }],
+      'values' => %w[c-share], 'rowsBy' => [{ 'columnId' => 'c-room' }],
       'conditionalFormats' => [{ 'type' => 'backgroundScale',
                                  'columnIds' => %w[c-share],
                                  'scheme' => ['#eaf2ff', '#1a70f1'],

@@ -148,7 +148,7 @@ works exactly (verified: 3,314.99 == Snowflake). Put the flag column on the same
 `{<Field={v}>}` → `SumIf(measure, [Field] = v)` / `CountIf(...)`.
 
 ## Varied chart-type shapes (all verified to persist + render)
-- **pie-chart / donut-chart**: `value:{id:<measureCol>}` + `color:{id:<dimCol>}` (NOT xAxis/yAxis). Donut `holeValue:{id:<a DIFFERENT col>}` (e.g. an Orders count) — if holeValue.id == value.id the element is silently dropped on readback.
+- **pie-chart / donut-chart**: `value:{columnId:<measureCol>}` + `color:{columnId:<dimCol>}` (NOT xAxis/yAxis). Donut `holeValue:{columnId:<a DIFFERENT col>}` (e.g. an Orders count) — if holeValue.columnId == value.columnId the API rejects the collision. `{ id }` on these channels is a 400.
 - **combo-chart**: `xAxis:{columnId}` + `yAxis:{columnIds:[<barColId>, {columnId:<lineColId>, type:"line"}]}` — bare string = left/bar, object = right/line.
 - bar/line/area/scatter: xAxis + yAxis.columnIds.
 Qlik source charts are `auto-chart` (only thing that renders via API); the Sigma target

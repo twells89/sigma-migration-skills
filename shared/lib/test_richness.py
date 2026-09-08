@@ -160,16 +160,23 @@ class WidePivotTest(unittest.TestCase):
     def test_pivot_table_with_columns_rowsby_columnsby_empty_values(self):
         piv = richness.wide_pivot(id="piv-1", source_element_id="src",
                                    columns=PIVOT_COLUMNS,
-                                   rows_by=[{"id": "piv-region"}, {"id": "piv-category"}],
+                                   rows_by=[{"columnId": "piv-region"}, {"columnId": "piv-category"}],
                                    values=["piv-revenue", "piv-orders", "piv-margin"])
         self.assertEqual(piv, {
             "id": "piv-1", "kind": "pivot-table",
             "source": {"kind": "table", "elementId": "src"},
             "columns": PIVOT_COLUMNS,
-            "rowsBy": [{"id": "piv-region"}, {"id": "piv-category"}],
+            "rowsBy": [{"columnId": "piv-region"}, {"columnId": "piv-category"}],
             "columnsBy": [],
             "values": ["piv-revenue", "piv-orders", "piv-margin"],
         })
+
+    def test_rewrites_legacy_id_shelf_pointers_to_column_id(self):
+        piv = richness.wide_pivot(id="piv-legacy", source_element_id="src",
+                                   columns=PIVOT_COLUMNS,
+                                   rows_by=[{"id": "piv-region"}],
+                                   values=["piv-revenue"])
+        self.assertEqual(piv["rowsBy"], [{"columnId": "piv-region"}])
 
     def test_columns_is_a_non_empty_array(self):
         piv = richness.wide_pivot(id="piv-1", source_element_id="src", columns=PIVOT_COLUMNS,

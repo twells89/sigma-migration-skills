@@ -69,9 +69,7 @@
             "groupBy": [
               "repeat-col-1a5f7cbf55"
             ],
-            "calculations": [
-
-            ]
+            "calculations": []
           }
         ]
       },
@@ -79,10 +77,16 @@
         "id": "nav-ed6ea16c58",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "page-dash": "Overview",
-          "page-sheet-1": "Detail"
-        }
+        "pageLabels": [
+          {
+            "pageId": "page-dash",
+            "label": "Overview"
+          },
+          {
+            "pageId": "page-sheet-1",
+            "label": "Detail"
+          }
+        ]
       },
       {
         "id": "el-16bbf314d6",
@@ -124,7 +128,7 @@
           ]
         },
         "splitBy": {
-          "id": "d-aba1836eea"
+          "columnId": "d-aba1836eea"
         },
         "waterfallShape": {
           "calculation": "sum",
@@ -240,10 +244,16 @@
         "id": "nav-662cd74d9a",
         "kind": "navigation",
         "mode": "auto",
-        "pageLabels": {
-          "page-dash": "Overview",
-          "page-sheet-1": "Detail"
-        }
+        "pageLabels": [
+          {
+            "pageId": "page-dash",
+            "label": "Overview"
+          },
+          {
+            "pageId": "page-sheet-1",
+            "label": "Detail"
+          }
+        ]
       },
       {
         "id": "el-ecd9f1b859",
@@ -297,12 +307,8 @@
       }
     ],
     "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-data\">\n  <Element elementId=\"master\" gridColumn=\"1 / 25\" gridRow=\"1 / 11\"/>\n  <Element elementId=\"repeat-src-e9b01df198\" gridColumn=\"1 / 25\" gridRow=\"13 / 23\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dash\">\n  <Element elementId=\"nav-ed6ea16c58\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n  <Element elementId=\"el-16bbf314d6\" gridColumn=\"1 / 25\" gridRow=\"4 / 14\"/>\n  <Element elementId=\"ctl-drill-8d56087627\" gridColumn=\"1 / 25\" gridRow=\"14 / 17\"/>\n  <Element elementId=\"el-25022c7942\" gridColumn=\"1 / 25\" gridRow=\"17 / 20\"/>\n  <Element elementId=\"el-6382608e0b\" gridColumn=\"1 / 25\" gridRow=\"20 / 32\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-sheet-1\">\n  <Element elementId=\"nav-662cd74d9a\" gridColumn=\"1 / 25\" gridRow=\"1 / 4\"/>\n<Container elementId=\"repeat-73b04b0d33\" type=\"grid\" gridColumn=\"1 / 25\" gridRow=\"4 / 18\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\">\n  <Element elementId=\"el-ecd9f1b859\" gridColumn=\"1 / 13\" gridRow=\"1 / 13\"/>\n  <Element elementId=\"page-break-repeat-a51b1e60ec\" gridColumn=\"1 / 13\" gridRow=\"13 / 14\"/>\n</Container>\n  <Element elementId=\"page-break-939bf3ae0e\" gridColumn=\"1 / 25\" gridRow=\"18 / 19\"/>\n</Page>",
-    "panels": [
-
-    ],
-    "overlays": [
-
-    ],
+    "panels": [],
+    "overlays": [],
     "settings": {
       "navigation": {
         "pageTabsInViewMode": "shown"

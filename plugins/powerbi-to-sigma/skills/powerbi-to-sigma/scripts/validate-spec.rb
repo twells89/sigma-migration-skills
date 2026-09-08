@@ -308,7 +308,7 @@ elements.each do |el|
       # columnsBy column. Suggest Month(...) (returns 1-12) or a pre-computed
       # Month Num column.
       pivot_dim_ids = (el['rowsBy'].to_a + el['columnsBy'].to_a)
-                      .select { |x| x.is_a?(Hash) }.map { |x| x['id'] }.compact.to_set
+                      .select { |x| x.is_a?(Hash) }.map { |x| x['columnId'] || x['id'] }.compact.to_set
       cols.each do |col|
         next unless pivot_dim_ids.include?(col['id'])
         f = col['formula'].to_s
@@ -316,7 +316,7 @@ elements.each do |el|
           errors << "#{name}.#{col['name']}: pivot-table dim uses MonthName/DayName (string) — sorts alphabetically (Apr/Aug/Dec/Feb...). Use Month(...) (1-12) / Weekday(...) (1-7) for chronological order, then format the label downstream."
         end
       end
-      # Shape: values is a flat string-array of column IDs; rowsBy/columnsBy are {id: "..."} object arrays.
+      # Shape: values is a flat string-array of column IDs; rowsBy/columnsBy are {columnId: "..."} object arrays.
       # Mixing these up costs multiple POST iterations because the API rejects with a generic Invalid array message.
       if (vals = el['values']).is_a?(Array)
         bad_val = vals.find { |v| v.is_a?(Hash) }
@@ -324,13 +324,13 @@ elements.each do |el|
       end
       %w[rowsBy columnsBy].each do |key|
         next unless (entries = el[key]).is_a?(Array)
-        bad = entries.find { |e| e.is_a?(String) || (e.is_a?(Hash) && !e['id']) }
+        bad = entries.find { |e| e.is_a?(String) || !e.is_a?(Hash) || e['columnId'].to_s.empty? }
         if bad.is_a?(String)
-          errors << "#{name}: pivot-table #{key} must be objects like [{id: \"col-id\"}], not bare strings (got #{bad.inspect})"
-        elsif bad.is_a?(Hash) && bad['columnId']
-          errors << "#{name}: pivot-table #{key} entries use {id: ...}, not {columnId: ...} (got #{bad.inspect})"
+          errors << "#{name}: pivot-table #{key} must be objects like [{columnId: \"col-id\"}], not bare strings (got #{bad.inspect})"
+        elsif bad.is_a?(Hash) && bad['id'] && !bad['columnId']
+          errors << "#{name}: pivot-table #{key} entries use {columnId: ...}, not {id: ...} (got #{bad.inspect})"
         elsif bad
-          errors << "#{name}: pivot-table #{key} entry missing id key (got #{bad.inspect})"
+          errors << "#{name}: pivot-table #{key} entry missing columnId key (got #{bad.inspect})"
         end
       end
     end

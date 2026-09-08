@@ -737,7 +737,7 @@ def convert_dashboard(dashboards, model, dm_info, dm_metrics=None):
     dashboard_colors.discard(None)
     if len(dashboard_colors) == 1:
         code_rep.set_theme(doc, overrides={
-            "colorOverrides": {"backgroundCanvas": next(iter(dashboard_colors))}
+            "colorOverrides": [{"name": "backgroundCanvas", "color": next(iter(dashboard_colors))}]
         })
     elif len(dashboard_colors) > 1:
         flags.append({"feature": "styling",
@@ -820,9 +820,9 @@ def _emit_viz(kind, title, dims, meas, widget=None, flags=None,
         if kind == "waterfall-chart":
             e["waterfallShape"] = {"calculation": "sum",
                                    "connectorLine": "shown"}
-    elif kind == "pie-chart":  # this org's API uses pie-chart with {id} refs
-        e["value"] = {"id": meas_ids[0]} if meas_ids else None
-        e["color"] = {"id": dim_ids[0]} if dim_ids else None
+    elif kind == "pie-chart":
+        e["value"] = {"columnId": meas_ids[0]} if meas_ids else None
+        e["color"] = {"columnId": dim_ids[0]} if dim_ids else None
     elif kind == "scatter-chart":
         e["xAxis"] = {"columnId": meas_ids[0]} if meas_ids else None
         e["yAxis"] = {"columnIds": meas_ids[1:2]}

@@ -110,7 +110,7 @@ def test_every_mapping_emits_its_contract_shape():
         if source in ("barchart", "linechart", "waterfallchart"):
             assert element["xAxis"]["columnId"] and element["yAxis"]["columnIds"]
         elif source in ("boxplot", "distributionplot"):
-            assert element["splitBy"]["id"] and element["yAxis"]["columnIds"]
+            assert element["splitBy"]["columnId"] and element["yAxis"]["columnIds"]
             if source == "distributionplot":
                 assert element["boxShape"] == {"points": "all-points"}
         elif source in ("bulletchart", "gauge"):
@@ -122,16 +122,16 @@ def test_every_mapping_emits_its_contract_shape():
         elif source == "kpi":
             assert element["value"]["columnId"]
         elif source == "map":
-            assert element["region"]["regionType"] == "us-state"
+            assert element["region"]["columnId"] and element["region"]["regionType"] == "us-state"
         elif source in ("mekkochart", "treemap"):
             assert element["color"]["by"] == "category"
             assert element["stacking"] == ("normalized" if source == "mekkochart" else "stacked")
         elif source == "piechart":
-            assert element["value"]["id"] and element["color"]["id"]
+            assert element["value"]["columnId"] and element["color"]["columnId"]
         elif source == "pivot-table":
             assert element["rowsBy"] and element["columnsBy"] and element["values"]
         elif source == "scatterplot":
-            assert element["source"]["groupingId"] and element["size"]["id"]
+            assert element["source"]["groupingId"] and element["size"]["columnId"]
             assert len(builder._SCATTER_SRC) == 1
         elif source == "table":
             assert element["groupings"][0]["groupBy"] and element["groupings"][0]["calculations"]

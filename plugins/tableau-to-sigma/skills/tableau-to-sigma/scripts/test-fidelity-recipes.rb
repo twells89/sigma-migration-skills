@@ -41,7 +41,7 @@ end
 
 # Canonical recipe spec-shapes — the exact patch an agent authors per catalog row.
 RECIPE_PATCHES = {
-  'canvas background'      => { 'settings' => { 'theme' => { 'overrides' => { 'colorOverrides' => { 'backgroundCanvas' => '#0F172A' } } } } },
+  'canvas background'      => { 'settings' => { 'theme' => { 'overrides' => { 'colorOverrides' => [{ 'name' => 'backgroundCanvas', 'color' => '#0F172A' }] } } } },
   'workbook palette'       => { 'settings' => { 'theme' => { 'overrides' => { 'categoricalScheme' => %w[#0e7c7b #14b8a6 #f2a900] } } } },
   'fonts'                  => { 'settings' => { 'theme' => { 'overrides' => { 'fonts' => { 'textFont' => 'Inter', 'dataFont' => 'Inter' } } } } },
   'chart-over-tint'        => { 'pages' => [{ 'id' => 'p1', 'elements' => [{ 'elementId' => 'b1', 'style' => { 'backgroundColor' => '#00000000' } }] }] },

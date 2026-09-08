@@ -72,7 +72,7 @@
         },
         "grouping": "stacked",
         "splitBy": {
-          "id": "el-erfall67f0ae-c"
+          "columnId": "el-erfall67f0ae-c"
         },
         "legend": {
           "visibility": "hidden"
@@ -348,9 +348,12 @@
             "unit": "small",
             "showElementPadding": "hidden"
           },
-          "colorOverrides": {
-            "backgroundCanvas": "#EEF2F7"
-          }
+          "colorOverrides": [
+            {
+              "name": "backgroundCanvas",
+              "color": "#EEF2F7"
+            }
+          ]
         }
       }
     }

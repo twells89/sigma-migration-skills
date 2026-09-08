@@ -193,7 +193,7 @@ choice as one with both.
 `pivot-table` biased wide rather than crosstabbed: `columns` is the pivot's own column
 definitions (required — see the tables.md pivot recipe), `rowsBy` takes the row shelves,
 `columnsBy` is always `[]`, and `values` is a plain list of metric column-id strings (not
-`{id: ...}` objects — matching the existing pivot precedent). Grand totals are a UI-only
+`{columnId: ...}` objects — matching the existing pivot shelf precedent). Grand totals are a UI-only
 setting, not a spec field, so this helper doesn't emit or guess one. Reach for this when
 the request wants a wide detail table rather than a small-multiple crosstab; a regular
 table, or a pivot with `columnsBy` populated, are equally valid alternatives depending on

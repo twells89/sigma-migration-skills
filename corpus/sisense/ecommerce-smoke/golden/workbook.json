@@ -301,10 +301,10 @@
         ],
         "name": "Quantity by Category",
         "value": {
-          "id": "id0033"
+          "columnId": "id0033"
         },
         "color": {
-          "id": "id0032"
+          "columnId": "id0032"
         }
       },
       {
@@ -568,10 +568,10 @@
         ],
         "name": "Quantity by Category (Pie)",
         "value": {
-          "id": "id0061"
+          "columnId": "id0061"
         },
         "color": {
-          "id": "id0060"
+          "columnId": "id0060"
         }
       },
       {

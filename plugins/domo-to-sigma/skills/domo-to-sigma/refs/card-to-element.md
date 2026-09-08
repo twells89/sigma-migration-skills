@@ -83,8 +83,8 @@ off the render, and infer the aggregate from the label ("Total …" → Sum,
 
 Load-bearing details (each has burned a prior build):
 - **`value` takes `{"columnId": …}`, not `{"id": …}`.** Posting `value.id` is
-  rejected at POST (`value.columnId: Invalid string: undefined`). Donut/pie use
-  `value.id`; KPI is the exception. See `feedback_sigma_kpi_value_columnid`.
+  rejected at POST (`value.columnId: Invalid string: undefined`). Donut/pie
+  channel pointers now use `columnId` too. See `feedback_sigma_kpi_value_columnid`.
 - **Hide the title** when the Domo tile has no label (or you want the number to
   dominate): set `"name": " "` — a single space. `""` re-derives a title from
   the column. See `feedback_sigma_kpi_hide_title`.
@@ -270,7 +270,7 @@ instance (2026-07-30 validation, 48 cards / 22 distinct chartTypes). Sigma
 | `badge_two_trendline` | `line-chart` | ✅ kind verified | two series on one line chart. |
 | `badge_xyscatterplot` | `scatter-chart` | ✅ kind verified, **confirmed live by card creation** | both axes are measures; see `sigma-workbooks/reference/specification/charts.md` — a scatter must bind to a **grouping**, or every point collapses to one x. |
 | `badge_bubble` | `scatter-chart` | ✅ kind verified | scatter + `size` channel; bind the `BUBBLESIZE`-mapped column to `size`. |
-| `badge_pie` | `pie-chart` | ✅ kind verified | Sigma has a **distinct** `pie-chart` kind (not just `donut-chart`) — `value`+`color`, no hole/holeValue/innerRadius. `value` uses `value.id` (NOT `columnId`) — opposite of a KPI. `pie-chart` does **not** support native `trellis` (silently stripped) — emit `donut-chart` if faceting is required. |
+| `badge_pie` | `pie-chart` | ✅ kind verified | Sigma has a **distinct** `pie-chart` kind (not just `donut-chart`) — `value`+`color`, no hole/holeValue/innerRadius. `value`/`color` use `{ columnId }` (same pointer key as KPI). `pie-chart` does **not** support native `trellis` (silently stripped) — emit `donut-chart` if faceting is required. |
 | `badge_donut` | `donut-chart` | ✅ kind verified, **confirmed live by card creation** | same `value`/`color` shape as pie, plus optional `holeValue`/`innerRadius`. Supports native `trellis`. |
 | `badge_singlevalue` | `kpi-chart` | ✅ kind verified, **confirmed live by card creation** | Rule 0. |
 | `badge_table` | `table` | ✅ kind verified, **confirmed live by card creation** | the REAL table token — `badge_datagrid` does not exist. |

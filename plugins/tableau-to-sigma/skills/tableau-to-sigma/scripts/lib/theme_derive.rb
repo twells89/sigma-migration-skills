@@ -141,7 +141,7 @@ module ThemeDerive
       overrides['pageWidth'] = theme['pageWidth']
       overrides['maxPageWidth'] = theme['maxPageWidth'] if theme['maxPageWidth']
     end
-    overrides['colorOverrides'] = { 'backgroundCanvas' => theme['backgroundCanvas'] } if theme['backgroundCanvas']
+    overrides['colorOverrides'] = [{ 'name' => 'backgroundCanvas', 'color' => theme['backgroundCanvas'] }] if theme['backgroundCanvas']
     overrides['categoricalScheme'] = theme['categoricalScheme'] if theme['categoricalScheme']
     unless overrides.empty?
       # Live since 2026-08: themeName/themeOverrides moved to

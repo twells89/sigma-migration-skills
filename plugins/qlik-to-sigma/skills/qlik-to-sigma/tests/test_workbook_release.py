@@ -126,8 +126,10 @@ def main():
 
     navs = [element for element in doc["elements"] if element["kind"] == "navigation"]
     assert len(navs) == 2
-    assert all(nav["mode"] == "auto" and nav["pageLabels"] == {
-        "pg-1": "Overview", "pg-2": "Details"} for nav in navs)
+    assert all(nav["mode"] == "auto" and nav["pageLabels"] == [
+        {"pageId": "pg-1", "label": "Overview"},
+        {"pageId": "pg-2", "label": "Details"},
+    ] for nav in navs)
 
     tabs = elements["el-tabs"]
     assert tabs == {"id": "el-tabs", "kind": "tabbed-container",

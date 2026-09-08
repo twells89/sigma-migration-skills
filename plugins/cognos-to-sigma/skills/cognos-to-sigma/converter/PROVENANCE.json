@@ -2,8 +2,7 @@
   "source": "in-skill converter/cli.ts (cli.ts + cognos-report.ts + cognos.ts + metric-binding.ts + sigma-ids.ts + workbook-features.ts)",
   "bundler": "esbuild --bundle --format=esm --platform=node",
   "vendored_modules": "cli.mjs",
-  "runtime_deps": "fast-xml-parser@5.10.1 (MIT) inlined into cli.mjs, with its MIT transitive deps strnum@2.4.2, @nodable/entities@3.0.0, is-unsafe@2.0.0, path-expression-matcher@1.6.2, xml-naming@0.3.0, anynum@1.0.1. Bumped from ^4.5.0 to clear GHSA-gh4j-gqv2-49f6 (XMLBuilder <5.7.0; unused here — only XMLParser).",
-  "source_sha256": "8be3266e7b3674cfd64fd411d04f8e078e7b998fd26a7a33db71c49b85b8ab62",
+  "source_sha256": "71c76ff98bbf60bdfb1bd49d4746fe26a0bb9c979cfd3d092b64f28afc47bab4",
   "sources": [
     "cli.ts",
     "cognos-report.ts",

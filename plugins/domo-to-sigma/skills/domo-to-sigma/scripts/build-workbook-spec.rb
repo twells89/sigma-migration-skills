@@ -318,7 +318,7 @@ wb['description'] = opts[:description] if opts[:description]
 # layout is the sole authority for page membership. Add released auto
 # navigation only when the Domo source really has multiple pages.
 if visible_pages.size > 1
-  page_labels = visible_pages.each_with_object({}) { |page, labels| labels[page['id']] = page['name'] }
+  page_labels = visible_pages.map { |page| { 'pageId' => page['id'], 'label' => page['name'] } }
   visible_pages.each do |page|
     page['elements'].unshift(
       'id' => "nav-#{page['id']}",

@@ -425,8 +425,8 @@ def main():
             if colshelf:                      # pivot
                 emitted.append({"id": iid, "kind": "pivot-table", "name": title, "source": SRC_M,
                     "columns": dcols + mcols, "values": [c["id"] for c in mcols],
-                    "rowsBy": [{"id": cid(attr[a_]["title"])} for a_ in rows],
-                    "columnsBy": [{"id": cid(attr[a_]["title"])} for a_ in colshelf]})
+                    "rowsBy": [{"columnId": cid(attr[a_]["title"])} for a_ in rows],
+                    "columnsBy": [{"columnId": cid(attr[a_]["title"])} for a_ in colshelf]})
             else:                             # flat aggregated table
                 emitted.append({"id": iid, "kind": "table", "name": title, "source": SRC_M,
                     "columns": dcols + mcols,
@@ -509,8 +509,8 @@ def main():
                     flags.append({"insight": iid, "url": url,
                                   "reason": f"{url} has no resolvable measure"})
                     continue
-                el["value"] = {"id": mcols[0]["id"]}
-                if dcols: el["color"] = {"id": dcols[0]["id"]}
+                el["value"] = {"columnId": mcols[0]["id"]}
+                if dcols: el["color"] = {"columnId": dcols[0]["id"]}
             else:
                 if not dcols or not mcols:
                     flags.append({"insight": iid, "url": url,
@@ -767,7 +767,7 @@ def main():
         return placed
 
     pages = [{"id": page["id"], "name": page["name"]} for page in page_defs]
-    page_labels = {page["id"]: page["name"] for page in page_defs}
+    page_labels = [{"pageId": page["id"], "label": page["name"]} for page in page_defs]
     seen_source = {}
     for page in page_defs:
         id_map = {}

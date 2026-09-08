@@ -204,7 +204,7 @@ Dir.mktmpdir('qs-workbook-release') do |dir|
   ok('waterfall uses native released channels',
      native_waterfall && native_waterfall.dig('xAxis', 'columnId') &&
        native_waterfall.dig('yAxis', 'columnIds')&.one? &&
-       native_waterfall.dig('splitBy', 'id') &&
+       native_waterfall.dig('splitBy', 'columnId') &&
        native_waterfall.dig('waterfallShape', 'connectorLine') == 'shown')
   ok('QuickSight legend visibility and position survive',
      native_waterfall && native_waterfall['legend'] == {

@@ -306,7 +306,7 @@ def build_spec(home, schema_version)
                   { 'id' => 'cp-rev', 'name' => 'Actual Revenue', 'formula' => 'Sum([Src/Revenue])',
                     'format' => Styling.format_for(:currency) }
                 ],
-                'rowsBy' => [{ 'id' => 'cp-cat' }], 'columnsBy' => [], 'values' => ['cp-rev'] }
+                'rowsBy' => [{ 'columnId' => 'cp-cat' }], 'columnsBy' => [], 'values' => ['cp-rev'] }
 
   # ==== SURFACE: Styling.gradient_header — hero (glow motif) ===============
   hdr_main = Styling.gradient_header(id: 'hdr-main', title: 'WS4 Surfaces — Live Probe',

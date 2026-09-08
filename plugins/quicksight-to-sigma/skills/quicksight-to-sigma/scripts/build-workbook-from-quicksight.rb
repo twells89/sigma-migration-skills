@@ -1506,7 +1506,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         if breakdowns.any?
           split_col, split_id = dim_col(breakdowns[0], calc, mc_, dmel_, m_)
           el['columns'] << split_col
-          el['splitBy'] = { 'id' => split_id }
+          el['splitBy'] = { 'columnId' => split_id }
         end
         el['waterfallShape'] = { 'calculation' => 'sum', 'connectorLine' => 'shown' }
         el['startPoint'] = {
@@ -1530,7 +1530,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     when 'pie-chart', 'donut-chart'
       dims = rol.('Category'); vals = rol.('Values'); (next if dims.empty? || vals.empty?)
       dc, did = dim_col(dims[0], calc, mc_, dmel_, m_); mc2, mid = meas_col(vals[0], calc, mc_, dmel_, m_)
-      el = base.merge('columns' => [dc, mc2], 'color' => { 'id' => did }, 'value' => { 'id' => mid })
+      el = base.merge('columns' => [dc, mc2], 'color' => { 'columnId' => did }, 'value' => { 'columnId' => mid })
     when 'combo-chart'
       dims = rol.('Category'); bars = rol.('BarValues'); lines = rol.('LineValues')
       [bars, lines].each do |arr|
@@ -1596,9 +1596,9 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
                         'xAxis' => { 'columnId' => s_x['id'] }, 'yAxis' => { 'columnIds' => [s_y['id']] },
                         'color' => { 'by' => 'category', 'column' => s_dim['id'] })
         # D8 (now a real channel): QuickSight scatter Size becomes a Sigma scatter
-        # size:{id} channel over the grouped source's size aggregate.
+        # size:{columnId} channel over the grouped source's size aggregate.
         if szc
-          s_sz = raw.(szc); scols << s_sz; el['size'] = { 'id' => s_sz['id'] }
+          s_sz = raw.(szc); scols << s_sz; el['size'] = { 'columnId' => s_sz['id'] }
         end
         el['columns'] = scols
       else
@@ -1658,8 +1658,8 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
       pcols.each { |d| c, id = dim_col(d, calc, mc_, dmel_, m_); cols << c; coids << id }
       vals.each  { |mv| c, id = meas_col(mv, calc, mc_, dmel_, m_); cols << c; vids << id }
       (next if rids.empty? || vids.empty?)
-      el = base.merge('columns' => cols, 'rowsBy' => rids.map { |i| { 'id' => i } }, 'values' => vids)
-      el['columnsBy'] = coids.map { |i| { 'id' => i } } unless coids.empty?
+      el = base.merge('columns' => cols, 'rowsBy' => rids.map { |i| { 'columnId' => i } }, 'values' => vids)
+      el['columnsBy'] = coids.map { |i| { 'columnId' => i } } unless coids.empty?
     when 'region-map', 'point-map'
       # QuickSight FilledMap/GeospatialMap: Geospatial holds the geo field(s),
       # Values holds the measure that fills/sizes the map. (Colors is optional and
@@ -1679,13 +1679,13 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         cols << latc << lonc
         vals.each { |mv| c, _ = meas_col(mv, calc, mc_, dmel_, m_); cols << c }
         el = base.merge('kind' => 'point-map', 'columns' => cols,
-                        'latitude' => { 'id' => latid }, 'longitude' => { 'id' => lonid })
+                        'latitude' => { 'columnId' => latid }, 'longitude' => { 'columnId' => lonid })
       else
         # geo NAME (state/city/country/zip) -> region-map
         dc, did = dim_col(geo[0], calc, mc_, dmel_, m_); cols << dc
         vals.each { |mv| c, _ = meas_col(mv, calc, mc_, dmel_, m_); cols << c }
         el = base.merge('kind' => 'region-map', 'columns' => cols,
-                        'region' => { 'id' => did, 'regionType' => region_type_for(geo[0][1]) })
+                        'region' => { 'columnId' => did, 'regionType' => region_type_for(geo[0][1]) })
       end
     end
     # Released chart-local legend visibility/position, only when QuickSight
@@ -1731,9 +1731,9 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
     n_textboxes += 1
   end
   if defn['Sheets'].length > 1
-    page_labels = defn['Sheets'].each_with_index.each_with_object({}) do |(source_sheet, index), labels|
+    page_labels = defn['Sheets'].each_with_index.map do |source_sheet, index|
       target_page = index.zero? ? 'page-dash' : "page-sheet-#{index}"
-      labels[target_page] = source_sheet['Name'] || "Sheet #{index + 1}"
+      { 'pageId' => target_page, 'label' => source_sheet['Name'] || "Sheet #{index + 1}" }
     end
     elements.unshift(
       'id' => did('nav', sh['SheetId'] || sheet_idx),

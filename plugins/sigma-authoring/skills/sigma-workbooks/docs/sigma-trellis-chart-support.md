@@ -21,8 +21,8 @@ viz element:
 - `columnsBy` alone → horizontal small-multiples.
 - both, referencing **two different** columns → a 2-D grid (rows × columns).
 - The facet reference key is **`columnId`** (a `columns[]` id on the element).
-  Note this differs from the `pivot-table` element's *own* `rowsBy`/`columnsBy`
-  cross-tab shelves, which key on `id` and are a separate mechanism (see below).
+  Pivot-table `rowsBy`/`columnsBy` shelves use the same `columnId` key; they are
+  a separate mechanism (cross-tab shelves, not small-multiples — see below).
 
 > This is distinct from the legacy `trellis: { column, row, share?, tileSize? }`
 > *styling* object, which only styles a UI-configured trellis and whose facet
@@ -56,7 +56,7 @@ appear) and on a stripped case (pie renders flat).
 | **donut-chart**   | 200 / **preserved** / facets render | (circular — same as rowsBy) | (same) | **Supported** — one donut per facet member renders. |
 | **pie-chart**     | 200 / **STRIPPED** / renders flat   | **STRIPPED** (200) | **STRIPPED** (200) | **NOT supported.** POST succeeds, key is dropped on readback, render is a single un-faceted pie. Use `donut-chart` if a trellis is required. |
 | **kpi-chart**     | 200 / **STRIPPED**                  | —           | —        | **NOT supported.** Key dropped on readback. |
-| **pivot-table**   | 200 / **STRIPPED**                  | —           | —        | **NOT supported** as a `trellis` key. The pivot's *own* element-level `rowsBy`/`columnsBy` shelves (keyed on `id`) are the native cross-tab faceting — use those instead. |
+| **pivot-table**   | 200 / **STRIPPED**                  | —           | —        | **NOT supported** as a `trellis` key. The pivot's *own* element-level `rowsBy`/`columnsBy` shelves (keyed on `columnId`) are the native cross-tab faceting — use those instead. |
 | **table**         | 200 / **STRIPPED**                  | —           | —        | **NOT supported.** Key dropped on readback. |
 
 Invalid element kinds (rejected `400 "Invalid kind"` — not part of the workbook
@@ -102,7 +102,7 @@ two distinct columns.
 |------|--------------------|
 | `pie-chart` | Prefer emitting a **`donut-chart`** when the source is a faceted pie (donut trellises natively). If a pie is mandatory, **keep it flat** and route the faceting to a **post-publish** step (build the small-multiples in the editor), or replicate one element per member in layout. |
 | `kpi-chart` | Keep flat. For "one KPI per category," fan out to **N sibling KPI elements** (one per member) in the layout instead of a single trellised KPI — there is no native KPI trellis. |
-| `pivot-table` | Use the pivot's **own** `rowsBy`/`columnsBy` cross-tab shelves (keyed on `id`) — that is the native equivalent; do not add a separate `trellis` key. |
+| `pivot-table` | Use the pivot's **own** `rowsBy`/`columnsBy` cross-tab shelves (keyed on `columnId`) — that is the native equivalent; do not add a separate `trellis` key. |
 | `table` | Keep flat, or model the facet as an extra grouping/row dimension. No native table trellis. |
 
 **Always confirm the round-trip.** Because unsupported kinds return `200` and

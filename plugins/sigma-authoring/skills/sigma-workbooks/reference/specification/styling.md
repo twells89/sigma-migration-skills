@@ -92,7 +92,7 @@ Every field below **round-trips and renders** — verified live 2026-06-26 (POST
 | Field | Type / values | Notes |
 |---|---|---|
 | `colors` | `{ text, highlight, surface, success, warning, danger, darkMode }` | hex; `highlight` maps to theme `$primary`. `darkMode: shown\|hidden`. |
-| `colorOverrides` | `{ <token>: "#hex" }` | per-token layout colors; keys match the theme color inspector (`backgroundCanvas`, `elementBackground`, …). |
+| `colorOverrides` | `[{ name, color }]` | per-token layout colors as a **list** (not a map). `name` matches the theme color inspector (`backgroundCanvas`, `elementBackground`, …). Duplicate `name`s are rejected. A map `{ backgroundCanvas: "#hex" }` is a 400 (`Invalid ColorOverrides: object`). |
 | `fonts` | `{ textFont, dataFont }` | **font family names.** `textFont` = format-panel "Text font"; `dataFont` = "Data font" (values/numbers). |
 | `titleFont` | `{ color, fontSize (6–96), fontWeight: bold\|normal }` | element **title** font. |
 | `borderRadius` | `square \| round \| pill` | corner rounding. |

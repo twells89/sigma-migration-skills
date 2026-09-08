@@ -147,7 +147,7 @@ def test_build_explore_element_pie_chart():
                        {"channel": "cross-axis", "value": "Revenue", "aggregation": "Sum"}]}
     el = convert_workbook.build_explore_element(cell, DM_ID, DM_ELEMENT_ID, COLUMNS_BY_VARIABLE, [])
     assert el["kind"] == "pie-chart"
-    assert "id" in el["color"] and "id" in el["value"]
+    assert "columnId" in el["color"] and "columnId" in el["value"]
     assert "xAxis" not in el and "yAxis" not in el
 
 

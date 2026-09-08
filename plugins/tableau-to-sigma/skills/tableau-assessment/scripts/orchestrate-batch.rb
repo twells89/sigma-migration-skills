@@ -390,8 +390,8 @@ def agent_brief(sub, cluster, batch_results_path, leader_dm_id_path, out_dir, ov
       `[BaseElement/REL_NAME/Field]`.
     - pivot-table value/dim shapes are NOT symmetric:
         values:    [<bare-id-string>, ...]          # array of strings
-        rowsBy:    [{ id: <col-id> }, ...]          # array of objects
-        columnsBy: [{ id: <col-id> }, ...]          # array of objects
+        rowsBy:    [{ columnId: <col-id> }, ...]          # array of objects
+        columnsBy: [{ columnId: <col-id> }, ...]    # array of objects
       Mixing these (`values: [{id: ...}]` or `rowsBy: ["..."]`) silently
       renders an empty pivot. Verified 2026-05-24.
     - pivot-table / table `conditionalFormats[].columnIds` — NOT `columns`.

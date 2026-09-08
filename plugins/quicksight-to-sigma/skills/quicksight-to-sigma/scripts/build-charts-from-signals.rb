@@ -592,8 +592,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings)
     end
     cols_array << col_obj
     case target
-    when :row   then rows_by    << { 'id' => col_id }
-    when :col   then cols_by    << { 'id' => col_id }
+    when :row   then rows_by    << { 'columnId' => col_id }
+    when :col   then cols_by    << { 'columnId' => col_id }
     when :value then values_arr << col_id
     end
   end
@@ -1010,8 +1010,8 @@ layout.each do |dash|
     end
 
     if kind == 'pie-chart' || kind == 'donut-chart'
-      element['color'] = { 'id' => dim_col_obj['id'] }
-      element['value'] = { 'id' => meas_col_obj['id'] }
+      element['color'] = { 'columnId' => dim_col_obj['id'] }
+      element['value'] = { 'columnId' => meas_col_obj['id'] }
     else
       # Breaking-change-2026-05-21: xAxis takes singular `columnId` (string),
       # yAxis takes plural `columnIds` (array on the object — NOT array of

@@ -150,16 +150,23 @@ PIVOT_COLUMNS = [
 check('wide_pivot: pivot-table with columns, rowsBy, columnsBy:[], values (metric id strings)') do
   piv = Richness.wide_pivot(id: 'piv-1', source_element_id: 'src',
                              columns: PIVOT_COLUMNS,
-                             rows_by: [{ 'id' => 'piv-region' }, { 'id' => 'piv-category' }],
+                             rows_by: [{ 'columnId' => 'piv-region' }, { 'columnId' => 'piv-category' }],
                              values: %w[piv-revenue piv-orders piv-margin])
   piv == {
     'id' => 'piv-1', 'kind' => 'pivot-table',
     'source' => { 'kind' => 'table', 'elementId' => 'src' },
     'columns' => PIVOT_COLUMNS,
-    'rowsBy' => [{ 'id' => 'piv-region' }, { 'id' => 'piv-category' }],
+    'rowsBy' => [{ 'columnId' => 'piv-region' }, { 'columnId' => 'piv-category' }],
     'columnsBy' => [],
     'values' => %w[piv-revenue piv-orders piv-margin]
   }
+end
+check('wide_pivot: rewrites legacy {id} shelf pointers to {columnId}') do
+  piv = Richness.wide_pivot(id: 'piv-legacy', source_element_id: 'src',
+                             columns: PIVOT_COLUMNS,
+                             rows_by: [{ 'id' => 'piv-region' }],
+                             values: %w[piv-revenue])
+  piv['rowsBy'] == [{ 'columnId' => 'piv-region' }]
 end
 check('wide_pivot: columns is a non-empty array (Invalid-kind 400 fix)') do
   piv = Richness.wide_pivot(id: 'piv-1', source_element_id: 'src', columns: PIVOT_COLUMNS,

@@ -121,10 +121,10 @@ Every column can carry an optional `format` object. Common patterns:
 Use `rowsBy`, `columnsBy`, and `values`. **Do NOT use `rows` or `columnGroups`** — the API accepts them silently but the pivot does not render correctly.
 
 - `values`: array of **string** column IDs
-- `rowsBy`: array of **objects** `{"id": "col-id"}` — row groupings (left axis)
-- `columnsBy`: array of **objects** `{"id": "col-id"}` — column pivots (top axis)
+- `rowsBy`: array of **objects** `{"columnId": "col-id"}` — row groupings (left axis)
+- `columnsBy`: array of **objects** `{"columnId": "col-id"}` — column pivots (top axis)
 
-> **`columnsBy[].sort` WORKS** (live-verified 2026-07-07 on the live-migration run — POST + PUT round-trip cleanly and the pivot honors the sort). An earlier version of this file claimed PUT returned HTTP 400 `sort shape not supported on columnsBy`; that claim is stale — do not burn a round-trip re-verifying it. Shape: `columnsBy: [{"id": "col-id", "sort": {...}}]` (same sort object as `rowsBy`). Without a `sort`, Sigma orders pivot columns by the natural order of the underlying column values: alphabetical for strings, numeric for numbers, chronological for dates. **Integer-sort-key tip (still useful as an alternative for value-order control):** pre-compute an integer sort key column (e.g. `Month([Master/Order Date])` returns 1-12 and sorts chronologically) and use that as the `columnsBy` field instead of a string — `MonthName()` (string) sorts alphabetically (April, August, December, …); `Month()` (integer) sorts Jan→Dec.
+> **`columnsBy[].sort` WORKS** (live-verified 2026-07-07 on the live-migration run — POST + PUT round-trip cleanly and the pivot honors the sort). An earlier version of this file claimed PUT returned HTTP 400 `sort shape not supported on columnsBy`; that claim is stale — do not burn a round-trip re-verifying it. Shape: `columnsBy: [{"columnId": "col-id", "sort": {...}}]` (same sort object as `rowsBy`). **Do not use `{id}` on these shelves** — that shape is a 400. Without a `sort`, Sigma orders pivot columns by the natural order of the underlying column values: alphabetical for strings, numeric for numbers, chronological for dates. **Integer-sort-key tip (still useful as an alternative for value-order control):** pre-compute an integer sort key column (e.g. `Month([Master/Order Date])` returns 1-12 and sorts chronologically) and use that as the `columnsBy` field instead of a string — `MonthName()` (string) sorts alphabetically (April, August, December, …); `Month()` (integer) sorts Jan→Dec.
 
 ```json
 {
@@ -136,8 +136,8 @@ Use `rowsBy`, `columnsBy`, and `values`. **Do NOT use `rows` or `columnGroups`**
     {"id": "pcy-sales", "formula": "Sum([Master/Sales])",                       "name": "Sales"}
   ],
   "values":    ["pcy-sales"],
-  "rowsBy":    [{"id": "pcy-cat"}, {"id": "pcy-year"}],
-  "columnsBy": [{"id": "pcy-month"}]
+  "rowsBy":    [{"columnId": "pcy-cat"}, {"columnId": "pcy-year"}],
+  "columnsBy": [{"columnId": "pcy-month"}]
 }
 ```
 
@@ -248,8 +248,8 @@ Both use `color` for the dimension (slice category) and `value` for the measure.
     {"id": "dim-region", "formula": "[Master/Region]", "name": "Region"},
     {"id": "mea-sales",  "formula": "Sum([Master/Sales])", "name": "Sales"}
   ],
-  "color": {"id": "dim-region"},
-  "value": {"id": "mea-sales"}
+  "color": {"columnId": "dim-region"},
+  "value": {"columnId": "mea-sales"}
 }
 ```
 
@@ -261,15 +261,15 @@ Both use `color` for the dimension (slice category) and `value` for the measure.
     {"id": "mea-sales",  "formula": "Sum([Master/Sales])", "name": "Sales"},
     {"id": "mea-sales2", "formula": "Sum([Master/Sales])", "name": "Sales Total"}
   ],
-  "color":     {"id": "dim-seg"},
-  "value":     {"id": "mea-sales"},
-  "holeValue": {"id": "mea-sales2"}
+  "color":     {"columnId": "dim-seg"},
+  "value":     {"columnId": "mea-sales"},
+  "holeValue": {"columnId": "mea-sales2"}
 }
 ```
 
 `holeValue` is optional — donuts render fine without it. When set, it must reference a column ID, not a literal float (`"holeValue": 0.5` is rejected with `Invalid object: number`).
 
-> **`holeValue.id` must NOT equal `value.id`.** If both point at the same column ID, POST returns success but the entire donut element is silently dropped from the saved spec (verified May 2026). Define a second column with a distinct ID — same formula is fine — as `mea-sales2` above.
+> **`holeValue.columnId` must NOT equal `value.columnId`.** If both point at the same column ID, the API rejects the collision. Define a second column with a distinct ID — same formula is fine — as `mea-sales2` above. Channel pointers use `{ columnId }`, not `{ id }`.
 
 ### Text element
 

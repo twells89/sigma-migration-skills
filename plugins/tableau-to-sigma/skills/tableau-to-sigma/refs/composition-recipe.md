@@ -103,7 +103,7 @@ Migrations commonly drop the interactive layer. Rebuild from the source's parame
   `<p style="text-align: center|right">`; **`text-align: left` is rejected** (default) — use a plain
   span/heading. A full-width colored bar is only achievable via a `container` `style.backgroundColor`.
 - **Donut/pie:** `color.scheme` is silently stripped (use `settings.theme.overrides.categoricalScheme`);
-  `holeValue.id == value.id` silently drops the element (use a distinct column).
+  `holeValue.columnId == value.columnId` is a 400 (use a distinct column; pointers use `{ columnId }`).
 - **KPI title suppression:** only `name: ' '` (single space) works; omitting re-derives the title.
 - **Bar/line `color`** = `{by, column, scheme}`, not a bare `{scheme}`. Single-series charts omit it.
 - **Never bulk-rename a live column's display name** — formulas reference columns by `[Element/Name]`,

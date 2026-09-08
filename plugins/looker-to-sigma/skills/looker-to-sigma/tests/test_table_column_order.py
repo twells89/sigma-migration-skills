@@ -157,9 +157,9 @@ def test_pivot_reorder_rows():
     el["columnOrder"] = ["product_dim.category", "customer_dim.region", "order_fact.total_net_revenue"]
     p = _element(build(c)[0], "pivot-table")
     idname = {col["id"]: col.get("name") for col in p["columns"]}
-    rows = [idname.get(r["id"]) for r in p.get("rowsBy", [])]
+    rows = [idname.get(r.get("columnId") or r.get("id")) for r in p.get("rowsBy", [])]
     vals = [idname.get(v) for v in p.get("values", [])]
-    cols_shelf = [idname.get(cb["id"]) for cb in p.get("columnsBy", [])]
+    cols_shelf = [idname.get(cb.get("columnId") or cb.get("id")) for cb in p.get("columnsBy", [])]
     assert rows == [CATEGORY, REGION], rows          # rowsBy follows columnOrder
     assert vals == [TNR], vals                       # measure on the value shelf
     assert cols_shelf == ["Order Channel"], cols_shelf  # pivot stays on the column shelf
