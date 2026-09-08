@@ -216,7 +216,9 @@
             "columnId": "el-dchart257421-c"
           }
         ],
-        "values": [],
+        "values": [
+
+        ],
         "filters": [
           {
             "source": {
@@ -260,7 +262,9 @@
         "controlType": "list",
         "mode": "include",
         "selectionMode": "multiple",
-        "values": [],
+        "values": [
+
+        ],
         "filters": [
           {
             "source": {
@@ -311,8 +315,12 @@
       }
     ],
     "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-data\">\n  <Element elementId=\"master-sales\" gridColumn=\"1 / 25\" gridRow=\"1 / 11\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-overview\">\n  <Element elementId=\"el-erfall67f0ae\" gridColumn=\"1 / 10\" gridRow=\"1 / 10\"/>\n  <Element elementId=\"el-dchart257421\" gridColumn=\"10 / 20\" gridRow=\"1 / 10\"/>\n  <Element elementId=\"el-gauge7e0e01\" gridColumn=\"1 / 7\" gridRow=\"10 / 18\"/>\n  <Element elementId=\"el-gationad8317\" gridColumn=\"7 / 13\" gridRow=\"10 / 14\"/>\n  <Element elementId=\"el-slicere71ff0\" gridColumn=\"13 / 18\" gridRow=\"10 / 18\"/>\n  <Element elementId=\"el-etailse97116\" gridColumn=\"1 / 20\" gridRow=\"18 / 33\"/>\n  <Element elementId=\"el-erfall67f0ae-drill\" gridColumn=\"1 / 25\" gridRow=\"33 / 37\"/>\n  <Element elementId=\"el-dchart257421-legend\" gridColumn=\"1 / 25\" gridRow=\"37 / 41\"/>\n</Page>\n",
-    "panels": [],
-    "overlays": [],
+    "panels": [
+
+    ],
+    "overlays": [
+
+    ],
     "settings": {
       "theme": {
         "name": "Light",

@@ -23,7 +23,7 @@ assert sorted(ids) == sorted(placed)
 assert len(ids) == len(set(ids)) == len(set(placed))
 
 waterfall = next(element for element in elements if element["kind"] == "waterfall-chart")
-assert waterfall["splitBy"]["id"]
+assert waterfall["splitBy"]["columnId"]
 assert waterfall["waterfallShape"] == {"calculation": "sum", "connectorLine": "shown"}
 assert waterfall["legend"] == {"visibility": "hidden"}
 

@@ -25,7 +25,7 @@ for element in elements:
     by_kind.setdefault(element["kind"], []).append(element)
 
 waterfall = by_kind["waterfall-chart"][0]
-assert waterfall["splitBy"]["id"]
+assert waterfall["splitBy"]["columnId"]
 assert waterfall["waterfallShape"]["connectorLine"] == "shown"
 assert waterfall["legend"] == {"visibility": "hidden"}  # live API: cannot mix
 # visibility:'hidden' with legend content (position) -- oneOf branch is either
