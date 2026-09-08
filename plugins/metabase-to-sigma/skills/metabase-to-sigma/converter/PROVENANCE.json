@@ -1,0 +1,5 @@
+{
+  "source": "in-skill converter sources (cli.ts + metabase.ts + metabase-dashboard.ts + sigma-ids.ts + pmbql-normalize.mjs)",
+  "vendored_modules": "pmbql-normalize.mjs",
+  "note": "This converter is maintained as source inside the plugin. pmbql-normalize.mjs is authored source, not a generated or upstream-vendored bundle."
+}
