@@ -327,17 +327,17 @@ Sigma supports two map kinds via spec: **`region-map`** (choropleth — fills na
     {"id": "rm-state", "formula": "[Master/State]",              "name": "State"},
     {"id": "rm-count", "formula": "Count([Master/Employee ID])", "name": "Employees"}
   ],
-  "region": {"id": "rm-state", "regionType": "us-state"},
-  "label":  [{"id": "rm-count"}]
+  "region": {"columnId": "rm-state", "regionType": "us-state"},
+  "label":  [{"columnId": "rm-count"}]
 }
 ```
 
 | Field | Required | Shape | Notes |
 |---|---|---|---|
-| `region` | yes | `{id, regionType}` | `id` is the column ID holding the region key |
-| `label` | optional | array `[{id}, ...]` | Values rendered on each region; usually the measure |
-| `tooltip` | optional | array `[{id}, ...]` | Extra columns shown on hover (e.g., active count, avg salary) |
-| `color` | optional | `{by: "category", column: <colId>}` or `{by: "scale", column: <colId>}` | Two spec-supported modes. **`by: "category"`** — categorical fill, one color per category; column must be a **different** column from `region.id` (the API rejects reuse with "Column X is referenced from both 'region' and 'color'"). **`by: "scale"`** — sequential value-gradient fill (Tableau-style choropleth heat scale) **IS spec-supported** (live-verified 2026-07-07: a us-state choropleth with a white→navy sequential fill rendered correctly and round-tripped through GET; 49/49 state values exact). An earlier version of this file claimed gradients were UI-only — that claim is stale. **`by: "value"` remains rejected** with HTTP 400 — use `by: "scale"` for value-driven fills. With `color` omitted the map renders a uniform fill (NOT auto value-based heat). |
+| `region` | yes | `{columnId, regionType}` | `columnId` is the column ID holding the region key |
+| `label` | optional | array `[{columnId}, ...]` | Values rendered on each region; usually the measure |
+| `tooltip` | optional | array `[{columnId}, ...]` | Extra columns shown on hover (e.g., active count, avg salary) |
+| `color` | optional | `{by: "category", column: <colId>}` or `{by: "scale", column: <colId>}` | Two spec-supported modes. **`by: "category"`** — categorical fill, one color per category; column must be a **different** column from `region.columnId` (the API rejects reuse with "Column X is referenced from both 'region' and 'color'"). **`by: "scale"`** — sequential value-gradient fill (Tableau-style choropleth heat scale) **IS spec-supported** (live-verified 2026-07-07: a us-state choropleth with a white→navy sequential fill rendered correctly and round-tripped through GET; 49/49 state values exact). An earlier version of this file claimed gradients were UI-only — that claim is stale. **`by: "value"` remains rejected** with HTTP 400 — use `by: "scale"` for value-driven fills. With `color` omitted the map renders a uniform fill (NOT auto value-based heat). |
 | `size` | — | silently dropped | Choropleths don't size; the API accepts and drops it |
 
 **Valid `regionType` values (verified May 2026 — POST round-trips them):**
@@ -383,21 +383,21 @@ is set. Translate to a Sigma `regionType` like this:
     {"id": "p-sz",   "formula": "Sum([Master/Revenue])",   "name": "Revenue"},
     {"id": "p-cat",  "formula": "[Master/Region]",         "name": "Region"}
   ],
-  "latitude":  {"id": "p-lat"},
-  "longitude": {"id": "p-lng"},
-  "size":      {"id": "p-sz"},
+  "latitude":  {"columnId": "p-lat"},
+  "longitude": {"columnId": "p-lng"},
+  "size":      {"columnId": "p-sz"},
   "color":     {"by": "category", "column": "p-cat"},
-  "label":     [{"id": "p-sz"}]
+  "label":     [{"columnId": "p-sz"}]
 }
 ```
 
 | Field | Required | Shape |
 |---|---|---|
-| `latitude` | yes | `{id}` — object, not array |
-| `longitude` | yes | `{id}` |
-| `size` | optional | `{id}` — bubble size encodes a measure |
+| `latitude` | yes | `{columnId}` — object, not array |
+| `longitude` | yes | `{columnId}` |
+| `size` | optional | `{columnId}` — bubble size encodes a measure |
 | `color` | optional | `{by: "category", column: <colId>}` — same shape as bar/line color (`by: "value"` is **rejected** on `point-map`; only category coloring is wired up via spec) |
-| `label` | optional | array `[{id}, ...]` |
+| `label` | optional | array `[{columnId}, ...]` |
 
 > **Invalid map kinds.** The API rejects `bubble-map`, `geo-map`, `heat-map`, `choropleth-map`, `us-map`, and `map` with `Invalid kind`. Use `region-map` or `point-map` only.
 

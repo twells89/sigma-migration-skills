@@ -22,7 +22,7 @@ def cols_fixture
 end
 
 # 1. Default first-column-ascending (by the dim): sort applied + blank-first coalesce.
-rb = [{ 'id' => DIM }]; cols = cols_fixture
+rb = [{ 'columnId' => DIM }]; cols = cols_fixture
 res = PbiPivotSort.apply!(rows_by: rb, cols: cols, cid: DIM, dir: 'ascending')
 ok('returns true when applied',            res == true)
 ok('rowsBy[0].sort is set by+direction',   rb[0]['sort'] == { 'by' => DIM, 'direction' => 'ascending' })
@@ -31,25 +31,25 @@ ok('measure col NOT coalesced',            cols[1]['formula'] == 'Sum([V/Net Rev
 
 # 2. Sort by a MEASURE ascending: sort applied, but the dim must NOT be coalesced
 #    (a measure sort orders the blank by its value, not first).
-rb = [{ 'id' => DIM }]; cols = cols_fixture
+rb = [{ 'columnId' => DIM }]; cols = cols_fixture
 PbiPivotSort.apply!(rows_by: rb, cols: cols, cid: MEA, dir: 'ascending')
 ok('measure sort sets rowsBy sort',        rb[0]['sort'] == { 'by' => MEA, 'direction' => 'ascending' })
 ok('measure sort does NOT coalesce dim',   cols[0]['formula'] == '[V/Region]')
 
 # 3. DESCENDING sort by the dim: no coalesce (blank-first is an ascending concern).
-rb = [{ 'id' => DIM }]; cols = cols_fixture
+rb = [{ 'columnId' => DIM }]; cols = cols_fixture
 PbiPivotSort.apply!(rows_by: rb, cols: cols, cid: DIM, dir: 'descending')
 ok('descending dim sort does NOT coalesce', cols[0]['formula'] == '[V/Region]')
 
 # 4. Idempotent: an already-coalesced dim is not double-wrapped.
-rb = [{ 'id' => DIM }]
+rb = [{ 'columnId' => DIM }]
 cols = [{ 'id' => DIM, 'formula' => 'Coalesce([V/Region], "(Blank)")' }]
 PbiPivotSort.apply!(rows_by: rb, cols: cols, cid: DIM, dir: 'ascending')
 ok('no double-coalesce',                   cols[0]['formula'] == 'Coalesce([V/Region], "(Blank)")')
 
 # 5. Guards: empty rowsBy / nil cid -> false, no mutation, no crash.
 ok('empty rowsBy -> false',                PbiPivotSort.apply!(rows_by: [], cols: cols_fixture, cid: DIM, dir: 'ascending') == false)
-ok('nil cid -> false',                     PbiPivotSort.apply!(rows_by: [{ 'id' => DIM }], cols: cols_fixture, cid: nil, dir: 'ascending') == false)
+ok('nil cid -> false',                     PbiPivotSort.apply!(rows_by: [{ 'columnId' => DIM }], cols: cols_fixture, cid: nil, dir: 'ascending') == false)
 
 puts($fail.zero? ? "\nall pbi-pivot-sort tests passed" : "\n#{$fail} FAILED")
 exit($fail.zero? ? 0 : 1)

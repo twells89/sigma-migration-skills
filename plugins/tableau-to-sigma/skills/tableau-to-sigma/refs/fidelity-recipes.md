@@ -197,11 +197,11 @@ Tableau hex-tile maps (custom polygon grids) have no Sigma geometry; ship a `reg
 `regionType: "us-state"` choropleth. Sequential value fill **is spec-supported**:
 
 ```json
-{ "kind": "region-map", "region": {"id": "c-state", "regionType": "us-state"},
+{ "kind": "region-map", "region": {"columnId": "c-state", "regionType": "us-state"},
   "color": {"by": "scale", "column": "c-sales"} }
 ```
 `by: "scale"` rendered a white→navy fill and round-tripped (49/49 state values exact);
-`by: "value"` remains rejected (HTTP 400). `color.column` must differ from `region.id`.
+`by: "value"` remains rejected (HTTP 400). `color.column` must differ from `region.columnId`.
 
 ### `{{formula | d3-format}}` text templating — delta badges, dynamic sentences, alerts
 Text elements template live values: `{{Max([OD Rollup/Order Year Text])}}`,

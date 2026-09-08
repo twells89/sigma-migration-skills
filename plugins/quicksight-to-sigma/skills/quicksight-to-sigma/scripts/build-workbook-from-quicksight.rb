@@ -1506,7 +1506,7 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
         if breakdowns.any?
           split_col, split_id = dim_col(breakdowns[0], calc, mc_, dmel_, m_)
           el['columns'] << split_col
-          el['splitBy'] = { 'id' => split_id }
+          el['splitBy'] = { 'columnId' => split_id }
         end
         el['waterfallShape'] = { 'calculation' => 'sum', 'connectorLine' => 'shown' }
         el['startPoint'] = {
@@ -1596,9 +1596,9 @@ defn['Sheets'].each_with_index do |sh, sheet_idx|
                         'xAxis' => { 'columnId' => s_x['id'] }, 'yAxis' => { 'columnIds' => [s_y['id']] },
                         'color' => { 'by' => 'category', 'column' => s_dim['id'] })
         # D8 (now a real channel): QuickSight scatter Size becomes a Sigma scatter
-        # size:{id} channel over the grouped source's size aggregate.
+        # size:{columnId} channel over the grouped source's size aggregate.
         if szc
-          s_sz = raw.(szc); scols << s_sz; el['size'] = { 'id' => s_sz['id'] }
+          s_sz = raw.(szc); scols << s_sz; el['size'] = { 'columnId' => s_sz['id'] }
         end
         el['columns'] = scols
       else

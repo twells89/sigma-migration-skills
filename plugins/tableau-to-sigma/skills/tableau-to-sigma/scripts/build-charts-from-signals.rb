@@ -5481,8 +5481,8 @@ layout.each do |dash|
         element['columns'] << { 'id' => "sz-#{el_id}", 'name' => size_field['name'],
                                 'formula' => "[#{src_name}/#{size_field['name']}]",
                                 'format' => num_fmt.call(size_field['name']) }
-        element['size'] = { 'id' => "sz-#{el_id}" }
-        warnings << "'#{cap}' scatter size shelf carries measure '#{size_field['name']}' — emitted size:{id} " \
+        element['size'] = { 'columnId' => "sz-#{el_id}" }
+        warnings << "'#{cap}' scatter size shelf carries measure '#{size_field['name']}' — emitted size:{columnId} " \
                     'over a grouped calculation on the hidden source (one value per point)'
       end
       unless rows.any? { |r| r[0].nil? || r[0].to_s.strip.empty? }

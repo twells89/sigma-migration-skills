@@ -162,7 +162,9 @@ end
 
 # The categorical/x column of a viz element.
 def x_col(el)
-  cid = el.dig('xAxis', 'columnId') || el.dig('color', 'id') || el.dig('category', 'id')
+  cid = el.dig('xAxis', 'columnId') || el.dig('color', 'columnId') ||
+        el.dig('color', 'column') || el.dig('category', 'columnId') ||
+        el.dig('color', 'id') || el.dig('category', 'id')
   cid && col_by_id(el, cid)
 end
 

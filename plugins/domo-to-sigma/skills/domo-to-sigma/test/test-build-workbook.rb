@@ -1073,7 +1073,7 @@ eq(scatter['columns'].map { |c| c['id'] },
    'each source role appears once, in source order')
 eq(scatter.dig('xAxis', 'columnId'), 's-delivered', 'XTIME measure binds x')
 eq(scatter.dig('yAxis', 'columnIds'), ['s-opens'], 'VALUE measure binds y')
-eq(scatter.dig('size', 'id'), 's-clicks', 'BUBBLESIZE binds size without a duplicate export column')
+eq(scatter.dig('size', 'columnId'), 's-clicks', 'BUBBLESIZE binds size without a duplicate export column')
 eq(scatter['color'], { 'by' => 'category', 'column' => 's-subject' }, 'SERIES identifies each point')
 helper = $chart_helpers.last
 eq(scatter['source'], { 'kind' => 'table', 'elementId' => helper['id'],

@@ -261,9 +261,9 @@ Both use `color` for the dimension (slice category) and `value` for the measure.
     {"id": "mea-sales",  "formula": "Sum([Master/Sales])", "name": "Sales"},
     {"id": "mea-sales2", "formula": "Sum([Master/Sales])", "name": "Sales Total"}
   ],
-  "color":     {"id": "dim-seg"},
-  "value":     {"id": "mea-sales"},
-  "holeValue": {"id": "mea-sales2"}
+  "color":     {"columnId": "dim-seg"},
+  "value":     {"columnId": "mea-sales"},
+  "holeValue": {"columnId": "mea-sales2"}
 }
 ```
 

@@ -1952,7 +1952,7 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
     dcid = "#{eid}-r"
     cols << { 'id' => dcid, 'formula' => dfs['ref'], 'name' => qr_leaf(loc, 'Region') }
     qr_cids[loc] = dcid
-    el['region'] = { 'id' => dcid, 'regionType' => rec['_region_type'] }
+    el['region'] = { 'columnId' => dcid, 'regionType' => rec['_region_type'] }
     if meas
       fs = field_spec(meas, fields, master)
       vcid = "#{eid}-v"
@@ -1977,8 +1977,8 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
     lcid = "#{eid}-lat"; gcid = "#{eid}-lng"
     cols << { 'id' => lcid, 'formula' => lfs['ref'], 'name' => qr_leaf(latq, 'Latitude') }
     cols << { 'id' => gcid, 'formula' => gfs['ref'], 'name' => qr_leaf(lngq, 'Longitude') }
-    el['latitude'] = { 'id' => lcid }
-    el['longitude'] = { 'id' => gcid }
+    el['latitude'] = { 'columnId' => lcid }
+    el['longitude'] = { 'columnId' => gcid }
     # Azure Maps Y is latitude, never bubble size. The normalization above
     # removes it, and this visual-type guard keeps the invariant explicit.
     size_bindings = if rec['visual_type'].to_s.casecmp('azureMap').zero?
@@ -1992,7 +1992,7 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
       col = { 'id' => scid, 'formula' => measure_formula(fs), 'name' => qr_leaf(szq, 'Size') }
       apply_fmt(col, szq, fields, vfmts)
       cols << col
-      el['size'] = { 'id' => scid }
+      el['size'] = { 'columnId' => scid }
     end
     if (srs = (b['Series'] || b['Legend'] || []).first)
       fs = field_spec(srs, fields, master)
@@ -2094,7 +2094,7 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
       cols << { 'id' => scid, 'formula' => sfs['ref'], 'name' => qr_leaf(series, 'Series') }
       qr_cids[series] = scid
       if kind == 'waterfall-chart'
-        el['splitBy'] = { 'id' => scid }
+        el['splitBy'] = { 'columnId' => scid }
       else
         el['color'] = { 'by' => 'category', 'column' => scid }
         prepare_legend_control!(el, rec, fields, masters, master, series, scid)
@@ -2228,7 +2228,7 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
       if szname
         szcid = "#{eid}-s"
         cols << apply_fmt({ 'id' => szcid, 'formula' => "[#{src_name}/#{szname}]", 'name' => szname }, sizeqr, fields, vfmts)
-        el['size'] = { 'id' => szcid }
+        el['size'] = { 'columnId' => szcid }
       end
     else
       warn "[build-workbook] WARN scatter '#{name}': measure X with no Details/Category dim — " \

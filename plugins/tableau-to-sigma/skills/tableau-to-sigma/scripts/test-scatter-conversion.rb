@@ -155,7 +155,7 @@ Dir.mktmpdir do |work|
           'by' => 'category', 'column' => 'c-el-customer-profitability',
           'scheme' => ['#112233', '#445566']
         }, 'Customer detail stays bound as category color with the explicit Tableau scheme', fails)
-  check(scatter&.dig('size', 'id') == 'sz-el-customer-profitability',
+  check(scatter&.dig('size', 'columnId') == 'sz-el-customer-profitability',
         'Tableau Size measure maps to Sigma bubble size', fails)
   check(scatter&.dig('columns', 4, 'formula') == 'Text(IsNotNull([Customer Profitability Source/Customer]))' &&
         scatter&.dig('filters', 0, 'values') == ['true'],

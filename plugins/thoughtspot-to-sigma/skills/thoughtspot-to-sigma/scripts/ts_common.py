@@ -804,7 +804,7 @@ def _apply_series_colors(el, spec):
     if sc.get("solid") and kind in ("bar-chart", "line-chart", "area-chart"):
         el["color"] = {"by": "single", "value": sc["solid"]}
     elif sc.get("geo_scheme") and kind == "region-map":
-        region_id = (el.get("region") or {}).get("id")
+        region_id = (el.get("region") or {}).get("columnId") or (el.get("region") or {}).get("id")
         meas_col = next((c for c in el.get("columns", []) if c.get("id") != region_id), None)
         if meas_col:
             el["color"] = {"by": "scale", "column": meas_col["id"], "scheme": list(sc["geo_scheme"])}
@@ -1084,7 +1084,7 @@ def _element_core(spec, resolver, master="OFV"):
         cols = [{"id": gid, "formula": dref(dims[0]), "name": dims[0]},
                 {"id": vid, "formula": mref(meas[0]), "name": meas[0], "format": mfmt(meas[0])}]
         return {"id": nid(), "kind": "region-map", "name": name, "source": src, "columns": cols,
-                "region": {"id": gid, "regionType": _region_type(dims[0])}}
+                "region": {"columnId": gid, "regionType": _region_type(dims[0])}}
     # ThoughtSpot chart types with NO faithful Sigma equivalent (Sigma has no
     # treemap/gauge/funnel/sankey/histogram/candlestick/radar/box plot — verified
     # against sigma-workbooks/reference/specification/charts.md). Silently coercing
