@@ -66,7 +66,7 @@ interface WbElement {
   legend?: { visibility?: 'shown' | 'hidden'; position?: 'top' | 'bottom' | 'left' | 'right' };
   style?: Record<string, any>;
   body?: string;
-  mode?: string; options?: any[]; pageLabels?: Record<string, string>;
+  mode?: string; options?: any[]; pageLabels?: Array<{ pageId: string; label: string }>;
   tabs?: Array<{ name: string }>;
   min?: string; max?: string; shape?: string;
   arrangement?: string; cardSize?: string; cardStyle?: Record<string, any>; noDataText?: string;
@@ -1119,7 +1119,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   // Cognos' report-page tab mode maps directly to Sigma's released auto
   // navigation element. Place one at the start of every page.
   if (pages.length > 1 && report['@_viewPagesAsTabs']) {
-    const pageLabels = Object.fromEntries(pages.map((p) => [p.id, p.name]));
+    const pageLabels = pages.map((p) => ({ pageId: p.id, label: p.name }));
     for (const page of pages) {
       const nav: WbElement = {
         id: sigmaShortId(), kind: 'navigation', mode: 'auto', pageLabels,

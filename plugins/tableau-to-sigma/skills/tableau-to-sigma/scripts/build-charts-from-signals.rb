@@ -2992,7 +2992,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
       addr = ws_calc['ordering_field']
       axis_has_addr = lambda do |entries|
         entries.any? do |e|
-          c = cols_array.find { |x| x['id'] == e['id'] }
+          c = cols_array.find { |x| x['id'] == (e['columnId'] || e['id']) }
           c && addr && nqs.call(c['name']) == nqs.call(addr)
         end
       end
@@ -3048,8 +3048,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     inner_formulas = win_stage.map { |w| w['plan']['value_formula'] }.uniq
     non_window_vals = values_arr.reject { |vid| win_stage.any? { |w| w['col']['id'] == vid } }
     if inner_formulas.size == 1 && non_window_vals.empty?
-      row_dims = cols_array.select { |c| rows_by.any? { |r| r['id'] == c['id'] } }
-      col_dims = cols_array.select { |c| cols_by.any? { |r| r['id'] == c['id'] } }
+      row_dims = cols_array.select { |c| rows_by.any? { |r| (r['columnId'] || r['id']) == c['id'] } }
+      col_dims = cols_array.select { |c| cols_by.any? { |r| (r['columnId'] || r['id']) == c['id'] } }
       value_name = "#{inner_formulas.first[/\[Master\/([^\]]+)\]/, 1] || header_base(win_stage.first['col']['name'])} Window Base"
       helper, src_name = build_window_helper(
         el_id: el_id, master_id: opts[:master_id],
@@ -3116,7 +3116,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     addr_cap = (meta['columns_by_guid'] || {}).dig(qc['addressing'].to_s, 'caption') || qc['addressing']
     axis_of = lambda do |entries|
       entries.any? do |e|
-        c = cols_array.find { |x| x['id'] == e['id'] }
+        c = cols_array.find { |x| x['id'] == (e['columnId'] || e['id']) }
         c && addr_cap && nq.call(c['name']) == nq.call(addr_cap)
       end
     end
@@ -3147,7 +3147,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     norm = ->(s) { s.to_s.downcase.gsub(/[^a-z0-9]/, '') }
     axis = ss['shelf'].to_s == 'columns' ? cols_by : rows_by
     entry = axis.find do |e|
-      col = cols_array.find { |c| c['id'] == e['id'] }
+      col = cols_array.find { |c| c['id'] == (e['columnId'] || e['id']) }
       col && norm.call(col['name']) == norm.call(ss['dimension'])
     end
     next unless entry
@@ -3518,7 +3518,7 @@ def apply_topn_prefilter!(tp, element:, cap:, z:, opts:, warnings:, data_element
     # shares compute over the FULL domain, then marks hide. A share whose scope
     # spans the pruned axis (or the grand total) re-computes over only the kept
     # members here and INFLATES. Scope orthogonal to the entity axis is exact.
-    ent_on_cols = (element['columnsBy'] || []).any? { |r| r['id'] == entity_col['id'] }
+    ent_on_cols = (element['columnsBy'] || []).any? { |r| (r['columnId'] || r['id']) == entity_col['id'] }
     bad_scope = ent_on_cols ? 'row' : 'column'
     value_ids = element['values'] || element.dig('yAxis', 'columnIds') ||
                 # TABLE-kind elements carry values as plain columns (review-
