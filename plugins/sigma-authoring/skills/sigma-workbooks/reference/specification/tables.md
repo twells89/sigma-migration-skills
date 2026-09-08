@@ -142,14 +142,14 @@ columns:
       formatString: ",.0f"
 values: [piv-count]
 rowsBy:
-  - id: piv-cloud
+  - columnId: piv-cloud
 columnsBy:
-  - id: piv-env
+  - columnId: piv-env
     sort:
       direction: descending
 ```
 
-`values` (required) is the measure column array — the cells of the pivot. `rowsBy` and `columnsBy` place dimension columns explicitly on the row and column shelves; each item is `{ id, sort? }`, where `sort` is `{ direction: ascending | descending, by?, aggregation? }` (`by` can be a column ID or `"row-count"`). Columns not listed on either shelf still render as available dimensions.
+`values` (required) is the measure column array — the cells of the pivot. `rowsBy` and `columnsBy` place dimension columns explicitly on the row and column shelves; each item is `{ columnId, sort? }`, where `sort` is `{ direction: ascending | descending, by?, aggregation? }` (`by` can be a column ID or `"row-count"`). **Do not use `{ id }` on these shelves** — that shape is a 400 (`Invalid kind: "pivot-table"`). Columns not listed on either shelf still render as available dimensions.
 
 ## `conditionalFormats` — threshold coloring on cells
 

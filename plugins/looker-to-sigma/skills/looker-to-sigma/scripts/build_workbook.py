@@ -1310,7 +1310,7 @@ def main():
                 base["xAxis"] = {"columnId": r_x["id"]}; base["yAxis"] = {"columnIds": [r_y["id"]]}
                 base["color"] = {"by": "category", "column": r_dim["id"]}
                 if src_sz is not None:
-                    r_sz = _raw(src_sz); scols.append(r_sz); base["size"] = {"id": r_sz["id"]}
+                    r_sz = _raw(src_sz); scols.append(r_sz); base["size"] = {"columnId": r_sz["id"]}
                 base["columns"] = scols
                 for mf in [m for m in (xf, yf, sf) if m]: _warn_count(mf, el)
             else:
@@ -1372,7 +1372,7 @@ def main():
                 pcid = sid("clr")
                 cols.append({"id": pcid, "formula": formula_for(pf, ex), "name": col_display(pf, ex)})
                 if kind == "waterfall-chart":
-                    base["splitBy"] = {"id": pcid}
+                    base["splitBy"] = {"columnId": pcid}
                 else:
                     base["color"] = {"by": "category", "column": pcid}
                 pal = looker_cat_palette(el.get("color"))
@@ -1410,8 +1410,8 @@ def main():
                  "name": (col_display(catf, ex) if catf else None) or "Category"},
                 valcol,
             ]
-            base["value"] = {"id": valid}      # donut/pie use value.id (KPI uses value.columnId)
-            base["color"] = {"id": catid}
+            base["value"] = {"columnId": valid}  # donut/pie channel pointers use columnId
+            base["color"] = {"columnId": catid}
             pal = looker_cat_palette(el.get("color"))
             if pal: base["color"]["colors"] = pal
             if catf: field2cid[catf] = catid
@@ -1513,8 +1513,8 @@ def main():
                     f"({', '.join(sorted(leaf(h) for h in hidden))}) hidden in Sigma but "
                     "KEPT in the query so the pivot grain is preserved.")
             base["values"] = val_ids
-            base["rowsBy"] = [{"id": i} for i in row_ids]
-            base["columnsBy"] = [{"id": i} for i in col_ids]
+            base["rowsBy"] = [{"columnId": i} for i in row_ids]
+            base["columnsBy"] = [{"columnId": i} for i in col_ids]
 
         # merged-results auto-join (Looker merge_result_id) — adds the secondary
         # explore's measure(s) as Max(Lookup(...)) columns now that base is built.
@@ -2099,9 +2099,10 @@ def main():
     if dashboard_style:
         code_rep.set_theme(
             doc, name="Light",
-            overrides={"colorOverrides": {
-                "backgroundCanvas": dashboard_style["backgroundColor"],
-            }},
+            overrides={"colorOverrides": [{
+                "name": "backgroundCanvas",
+                "color": dashboard_style["backgroundColor"],
+            }]},
         )
     doc.setdefault("settings", {}).setdefault("navigation", {})[
         "pageTabsInViewMode"

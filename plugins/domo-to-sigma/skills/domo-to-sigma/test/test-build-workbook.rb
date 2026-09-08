@@ -232,7 +232,7 @@ eq(pct['stacking'], 'normalized', 'badge_horiz_100pct is the percent-stacked var
 donut = build_element({ 'id' => 'c16', 'title' => 'Mix', 'chartType' => 'badge_donut',
                         'columns' => [ { 'column' => 'family' }, { 'column' => 'sales', 'aggregation' => 'SUM' } ] }, {})
 eq(donut['kind'], 'donut-chart', 'badge_donut → donut-chart')
-eq(donut['value'], { 'id' => donut['columns'].last['id'] }, 'donut value uses value.id (opposite of KPI columnId)')
+eq(donut['value'], { 'columnId' => donut['columns'].last['id'] }, 'donut value uses value.columnId')
 ok(!donut.key?('xAxis') && !donut.key?('yAxis'), 'donut/pie carry value/color, NOT xAxis/yAxis (fixes the old broken shape)')
 eq(donut['legend'], { 'position' => 'left', 'fontSize' => 9 },
    'donut legend preserves Domo left-side placement')

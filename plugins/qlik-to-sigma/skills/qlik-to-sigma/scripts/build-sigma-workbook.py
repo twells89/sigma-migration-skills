@@ -664,19 +664,19 @@ def build_element(c, resolve, warnings, metrics=None):
         if rtype is None:
             warnings.append(f"skip '{title}' (map): region grain '{dims_raw[0]}' not recognized (us-state/country)")
             return None
-        el["region"] = {"id": dim_ids[0], "regionType": rtype}
+        el["region"] = {"columnId": dim_ids[0], "regionType": rtype}
         el["color"] = {"by": "scale", "column": mids[0]}
         return apply_presentation(el, c)
     if kind == "pivot-table":
         # cross-tab: first dim -> rowsBy, remaining dims -> columnsBy,
-        # measures -> values (bare column-id strings; rowsBy/columnsBy = {id})
+        # measures -> values (bare column-id strings; shelves use {columnId})
         el["values"] = mids
-        el["rowsBy"] = [{"id": dim_ids[0]}]
+        el["rowsBy"] = [{"columnId": dim_ids[0]}]
         if len(dim_ids) > 1:
-            el["columnsBy"] = [{"id": d} for d in dim_ids[1:]]
+            el["columnsBy"] = [{"columnId": d} for d in dim_ids[1:]]
         return apply_presentation(el, c)
     if kind in ("pie-chart", "donut-chart"):
-        el["value"] = {"id": mids[0]}; el["color"] = {"id": dim_ids[0]}
+        el["value"] = {"columnId": mids[0]}; el["color"] = {"columnId": dim_ids[0]}
         el["dataLabel"] = {"labels": "shown"}
         return apply_presentation(el, c)
     if kind == "combo-chart":
@@ -690,7 +690,7 @@ def build_element(c, resolve, warnings, metrics=None):
         el["xAxis"] = {"columnId": dim_ids[0]}
         el["yAxis"] = {"columnIds": mids}
         if len(dim_ids) > 1:
-            el["splitBy"] = {"id": dim_ids[1]}
+            el["splitBy"] = {"columnId": dim_ids[1]}
         if vt == "distributionplot":
             el["boxShape"] = {"points": "all-points"}
         return apply_presentation(el, c)
@@ -725,7 +725,7 @@ def build_element(c, resolve, warnings, metrics=None):
                   "xAxis": {"columnId": s_x["id"]}, "yAxis": {"columnIds": [s_y["id"]]},
                   "color": {"by": "category", "column": s_dim["id"]}}
             if len(mids) >= 3:
-                s_sz = _raw(mids[2]); scols.append(s_sz); sc["size"] = {"id": s_sz["id"]}
+                s_sz = _raw(mids[2]); scols.append(s_sz); sc["size"] = {"columnId": s_sz["id"]}
             sc["columns"] = scols
             cc = qlik_color(c.get("color"), [s_dim["id"]], [s_x["id"], s_y["id"]], sc)
             if cc: sc["color"] = cc
@@ -1272,7 +1272,7 @@ def main():
             nav = None
             if len(sheets) > 1:
                 nav = {"id": f"nav-{pid}", "kind": "navigation", "mode": "auto",
-                       "pageLabels": {}}
+                       "pageLabels": []}
                 elems.insert(0, nav)
                 nav_elements.append(nav)
             xml, extra = grid_layout(pid, sheet, placed,
@@ -1330,8 +1330,8 @@ def main():
         page_elements[pid] = page_els
         layout_pages.append(xml)
 
-    page_labels = {page["id"]: page["name"] for page in pages
-                   if page["id"] != "page-data"}
+    page_labels = [{"pageId": page["id"], "label": page["name"]} for page in pages
+                   if page["id"] != "page-data"]
     for nav in nav_elements:
         nav["pageLabels"] = page_labels
 

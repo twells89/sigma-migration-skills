@@ -789,12 +789,11 @@ Newspaper layout math (a single arithmetic transform, no spatial heuristic):
 - **`/v2/workbooks/spec` returns YAML** — don't `json.load` the response.
 - **control elements** live in flat `document.elements[]` with `kind: control` but REQUIRE an `id`
   (separate from `controlId`); a missing `id` → `Invalid kind: "control"`.
-- **KPI `value` uses `value.columnId`** on the live API (the `sigma-workbooks`
-  `example-full.yaml` shows `value.id` — the API wants `columnId`). **BUT donut/pie `value`
-  uses `value.id`** (not columnId) — the two element types genuinely differ; verified by POST
-  400s both ways.
+- **KPI `value` uses `value.columnId`** on the live API. Donut/pie channel pointers
+  (`value`/`color`/`holeValue`) now use **`columnId` too** — `{ id }` is a 400
+  (`Invalid kind: "donut-chart"` / `"pie-chart"`).
 - **Chart `color` channel differs by type:** bar/area/line series = `{by: "category", column:
-  <id>}`; donut/pie slice = `{id: <id>, sort?}`. (A Looker pivot maps to this color channel.)
+  <id>}`; donut/pie slice = `{columnId: <id>, sort?}`. (A Looker pivot maps to this color channel.)
 - **donut/pie use `value` + `color`, NOT `xAxis`/`yAxis`.**
 - **KPI comparison (`show_comparison`) has NO spec slot** — warn, don't build. (Recommend a 2nd
   KPI tile or a UI delta post-publish.) Looker `donut_multiples` per-multiple dim is also dropped → warned.
@@ -1032,7 +1031,7 @@ declaring Phase 4 green.
 | `Source not found: warehouse table …` on DM POST | (a) connection catalog hasn't indexed the schema yet, OR (b) the LookML `sql_table_name` DB.SCHEMA differs from what the connection serves, OR (c) short connectionId | `post_dm.py` now AUTO-SYNCs the named schema (`POST /v2/connections/{id}/sync`) and retries once — (a) self-heals. For (b) pass `--source-swap FROM_DB.FROM_SCHEMA=TO_DB.TO_SCHEMA`. For (c) use the FULL connection UUID. Last resort: a Custom SQL DM element (`kind: "sql"`) |
 | `jq: parse error: Invalid numeric literal` | Sigma spec endpoints return YAML | Never pipe spec responses to `jq` / `json.load` |
 | `Invalid kind: "control"` on workbook POST | Control element missing its own `id` (separate from `controlId`) | Add a distinct `id` |
-| KPI POSTs 400 with `value.id` / donut POSTs 400 with `value.columnId` | The two element types use different value keys | KPI → `value.columnId`; donut/pie → `value.id` |
+| KPI or donut POSTs 400 with `value.id` | Channel pointers now require `columnId` | KPI and donut/pie both use `value.columnId` (and donut `color.columnId`) |
 | Tile shows the wrong chart kind | Read `element.type` (always `"vis"`) instead of `query.vis_config.type` | `fetch_looker_dashboard.py` already reads `vis_config.type` — re-fetch the contract |
 | Looker LookML deploy fails "Invalid lookml syntax" | Compact `{ a: yes; b: yes; }` params | Use multi-line blocks; only `;;` terminates a `sql` |
 | LookML model 404s on query right after deploy | Model not registered | `POST /lookml_models {name, project_name, allowed_db_connection_names}` |

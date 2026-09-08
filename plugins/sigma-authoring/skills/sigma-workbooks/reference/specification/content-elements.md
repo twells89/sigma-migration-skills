@@ -160,15 +160,17 @@ options:
     destination: { type: link, url: https://example.com }
 ```
 
-**Auto** (`mode: auto`) has no other required fields; optional `pageLabels` — per-page label overrides keyed by page id.
+**Auto** (`mode: auto`) has no other required fields; optional `pageLabels` — a **list** of `{ pageId, label }` overrides (not a map keyed by page id). Duplicate `pageId`s are rejected.
 
 ```yaml
 id: page-nav-auto
 kind: navigation
 mode: auto
 pageLabels:
-  page-1: Overview
-  page-2: Details
+  - pageId: page-1
+    label: Overview
+  - pageId: page-2
+    label: Details
 ```
 
 **Live-verified 2026-08-03** (real create + readback + screenshot): both variants round-tripped verbatim. Visually, `navigation` renders as a horizontal **tab bar** (underlined label per option, not a sidebar or breadcrumb — expect tabs if you pictured otherwise from the name). `manual` mode showed exactly the `options[].label` strings as tabs, in the given order. `auto` mode showed one tab per workbook page, using `pageLabels` to override the tab text where provided — and, confirmed by adding two more pages after the fact and re-screenshotting, a page with **no** `pageLabels` entry falls back to that page's own `name` as its tab text, and once there are more pages than fit the element's width, the overflow collapses into a trailing **"More ▾"** dropdown rather than wrapping or truncating.

@@ -36,7 +36,7 @@ cell, KPI fails validation only at POST, sorts dropped).
 
 - **KPI**: `"value": {"columnId": cid}` (kpis.md docs are stale; `{id}` fails at POST,
   validate-spec misses it).
-- **Donut/pie**: `"value": {"id": vid}, "color": {"id": cid}` (the opposite convention).
+- **Donut/pie**: `"value": {"columnId": vid}, "color": {"columnId": cid}` (same pointer key as KPI).
 - **Pivot**: `rowsBy`/`columnsBy` are arrays of **`{id}` objects**, `values` is an
   array of **bare column-id strings**. Omitting rowsBy/columnsBy silently collapses
   the pivot to a single grand-total cell.

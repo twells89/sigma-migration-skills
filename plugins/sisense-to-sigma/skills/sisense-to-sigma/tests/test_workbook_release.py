@@ -90,8 +90,10 @@ def main():
     assert any(f.get("type") == "chart/boxplot" and "workspace-gated" in f["reason"]
                for f in flags)
     assert any(f.get("feature") == "drill" for f in flags)
-    assert doc["settings"]["theme"]["overrides"]["colorOverrides"][
-        "backgroundCanvas"] == "#FFFFFF"
+    assert any(
+        entry.get("name") == "backgroundCanvas" and entry.get("color") == "#FFFFFF"
+        for entry in doc["settings"]["theme"]["overrides"]["colorOverrides"]
+    )
 
     placed = [
         element_id

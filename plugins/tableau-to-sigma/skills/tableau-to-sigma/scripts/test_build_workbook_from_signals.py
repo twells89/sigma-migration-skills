@@ -1024,10 +1024,10 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
                     if element["kind"] == f"{source_kind}-chart"
                 )
                 self.assertEqual(
-                    chart["columns"][1]["id"], chart["value"]["id"]
+                    chart["columns"][1]["id"], chart["value"]["columnId"]
                 )
                 self.assertEqual(
-                    chart["columns"][0]["id"], chart["color"]["id"]
+                    chart["columns"][0]["id"], chart["color"]["columnId"]
                 )
                 self.assertNotIn("xAxis", chart)
 
@@ -1090,8 +1090,8 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             if element["kind"] == "pivot-table"
         )
         by_name = {column["name"]: column["id"] for column in pivot["columns"]}
-        self.assertEqual([{"id": by_name["Region"]}], pivot["rowsBy"])
-        self.assertEqual([{"id": by_name["Order Date"]}], pivot["columnsBy"])
+        self.assertEqual([{"columnId": by_name["Region"]}], pivot["rowsBy"])
+        self.assertEqual([{"columnId": by_name["Order Date"]}], pivot["columnsBy"])
         self.assertEqual([by_name["Sales"]], pivot["values"])
 
         table_spec, table_report = self.build_zone(
@@ -1204,7 +1204,7 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
         )
         self.assertEqual("us-state", region_map["region"]["regionType"])
         self.assertEqual(
-            region_map["columns"][0]["id"], region_map["region"]["id"]
+            region_map["columns"][0]["id"], region_map["region"]["columnId"]
         )
         self.assertEqual(
             region_map["columns"][1]["id"], region_map["color"]["column"]
@@ -1257,10 +1257,10 @@ class BuildWorkbookFromSignalsTest(unittest.TestCase):
             if element["kind"] == "point-map"
         )
         self.assertEqual(
-            point_map["columns"][0]["id"], point_map["latitude"]["id"]
+            point_map["columns"][0]["id"], point_map["latitude"]["columnId"]
         )
         self.assertEqual(
-            point_map["columns"][1]["id"], point_map["longitude"]["id"]
+            point_map["columns"][1]["id"], point_map["longitude"]["columnId"]
         )
         _spec, blocked = self.build_zone(
             {

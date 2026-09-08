@@ -5645,7 +5645,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
   const controlEls = [...controls.values()];
   controlEls.forEach((control) => addToPage(pages[0].id, control));
   if (pages.length > 1 && report["@_viewPagesAsTabs"]) {
-    const pageLabels = Object.fromEntries(pages.map((p) => [p.id, p.name]));
+    const pageLabels = pages.map((p) => ({ pageId: p.id, label: p.name }));
     for (const page of pages) {
       const nav = {
         id: sigmaShortId(),

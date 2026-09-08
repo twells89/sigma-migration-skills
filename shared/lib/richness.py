@@ -31,7 +31,7 @@ GO/NO-GO provenance (.superpowers/sdd/richness-task-1-report.md, workbook
     shape (verify-master-detail-e2e.rb), not a new Task-1 richness surface.
   - wide_pivot reuses the already-GO general pivot-table rowsBy/columnsBy/
     values shape (sigma-workbooks tables.md; build_workbook.py precedent:
-    rowsBy/columnsBy are [{"id":...}] shelves, values is a plain id-string
+    rowsBy/columnsBy are [{"columnId":...}] shelves, values is a plain id-string
     list) -- also not a new Task-1 richness surface.
 All four are gated through SURFACES below anyway (not just the two actual
 Task-1 richness surfaces) so a future regression/deprecation on ANY of them
@@ -201,7 +201,8 @@ def wide_pivot(id, source_element_id, rows_by, values, columns, surfaces=None):
     passed through verbatim, same convention as kpi_card.build's `columns`).
     rowsBy=rows_by and values=values then reference these columns' OWN ids
     (NOT the source element's column ids) -- rows_by is already-shaped
-    [{"id":...}, ...] shelf entries, values is a plain metric id-string
+    [{"columnId":...}, ...] shelf entries (`id` is rewritten to `columnId`),
+    values is a plain metric id-string
     list. columnsBy=[] (must be empty -- a non-crosstab pivot). Omitting
     `columns` (or passing an empty list) 400s live ("Invalid kind:
     \\"pivot-table\\"" -- a misleading message; the real cause is the
@@ -224,7 +225,7 @@ def wide_pivot(id, source_element_id, rows_by, values, columns, surfaces=None):
         "kind": "pivot-table",
         "source": {"kind": "table", "elementId": source_element_id},
         "columns": columns,
-        "rowsBy": rows_by,
+        "rowsBy": _normalize_pivot_shelves(rows_by),
         "columnsBy": [],
         "values": values,
     }
@@ -288,3 +289,16 @@ def chat(id, agent_id, surfaces=None):
     if not s["agent"]:
         return {"opt_in": True, "id": id}
     return {"id": id, "kind": "chat", "agentId": agent_id}
+
+
+def _normalize_pivot_shelves(entries):
+    """Rewrite legacy {id} shelf pointers to the live {columnId} shape."""
+    out = []
+    for entry in entries or []:
+        if not isinstance(entry, dict) or entry.get("columnId") or not entry.get("id"):
+            out.append(entry)
+            continue
+        rewritten = dict(entry)
+        rewritten["columnId"] = rewritten.pop("id")
+        out.append(rewritten)
+    return out

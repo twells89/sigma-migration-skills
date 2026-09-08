@@ -303,12 +303,12 @@
           ],
           "rowsBy": [
             {
-              "id": "p-el-win-window-maxmin-row-region"
+              "columnId": "p-el-win-window-maxmin-row-region"
             }
           ],
           "columnsBy": [
             {
-              "id": "p-el-win-window-maxmin-col-order-date"
+              "columnId": "p-el-win-window-maxmin-col-order-date"
             }
           ]
         }

@@ -343,7 +343,7 @@ def offline_build_workbook_spec!(chart_specs_path, name:, description:, folder_i
   end
 
   if visible_pages.size > 1
-    page_labels = visible_pages.each_with_object({}) { |page, labels| labels[page['id']] = page['name'] }
+    page_labels = visible_pages.map { |page| { 'pageId' => page['id'], 'label' => page['name'] } }
     visible_pages.each do |page|
       page['elements'].unshift(
         'id' => "nav-#{page['id']}",

@@ -66,7 +66,7 @@ Dir.mktmpdir do |d|
   # theme via the pages-mode 'theme' key of chart-specs.json
   File.write(File.join(d, 'chart-specs.json'), JSON.generate('pages' => [], 'theme' => THEME))
   out = ensure_theme!(JSON.generate(SPEC), d)
-  check(JSON.parse(out).dig('document', 'settings', 'theme', 'overrides', 'colorOverrides', 'backgroundCanvas') == '#FFFFFF',
+  check(Array(JSON.parse(out).dig('document', 'settings', 'theme', 'overrides', 'colorOverrides')).any? { |e| e.is_a?(Hash) && e['name'] == 'backgroundCanvas' && e['color'] == '#FFFFFF' },
         "builder-output 'theme' key applied", fails)
 end
 

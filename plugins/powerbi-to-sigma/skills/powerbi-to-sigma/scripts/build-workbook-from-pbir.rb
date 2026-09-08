@@ -2310,7 +2310,7 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
       'id' => dcid,
       'sort' => { 'by' => dcid, 'direction' => 'ascending' }
     }
-    el['value'] = { 'id' => vcid }
+    el['value'] = { 'columnId' => vcid }
     prepare_drill_control!(el, rec, fields, masters, master, dim, dcid, cols)
     prepare_legend_control!(el, rec, fields, masters, master, dim, dcid,
                             blank_safe_source_id)
@@ -2388,7 +2388,7 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
       if rec['show_totals']
         el['kind'] = 'pivot-table'
         el.delete('groupings')
-        el['rowsBy'] = group_ids.map { |id| { 'id' => id } }
+        el['rowsBy'] = group_ids.map { |id| { 'columnId' => id } }
         el['columnsBy'] = []
         el['values'] = calc_ids
         el['totals'] = pbi_totals_block
@@ -2421,8 +2421,8 @@ def build_element(rec, fields, masters, extra_data = [], forced_master = nil)
     # rowsBy + values REQUIRED or the pivot collapses to one grand-total cell
     # (memory: feedback_sigma_pivot_rowsby_columnsby). columnsBy is the PBI
     # Columns role (bead 14w(d)) — without it a Rows×Columns matrix flattens.
-    el['rowsBy'] = rowids.map { |id| { 'id' => id } }
-    el['columnsBy'] = colids.map { |id| { 'id' => id } } unless colids.empty?
+    el['rowsBy'] = rowids.map { |id| { 'columnId' => id } }
+    el['columnsBy'] = colids.map { |id| { 'columnId' => id } } unless colids.empty?
     el['values'] = valids
     # Style fidelity: PBI matrices show a Grand Total row/column by default.
     # Reproduce it (bold, last) unless the source explicitly turned totals off.
@@ -3229,8 +3229,10 @@ theme_overrides = PbiTheme.overrides($pbi_theme).merge(
   'space' => { 'unit' => 'small', 'showElementPadding' => 'hidden' }
 )
 if page_background && page_background != 'transparent'
+  existing = Array(theme_overrides['colorOverrides'])
+  existing = existing.reject { |entry| entry.is_a?(Hash) && entry['name'] == 'backgroundCanvas' }
   theme_overrides['colorOverrides'] =
-    (theme_overrides['colorOverrides'] || {}).merge('backgroundCanvas' => page_background)
+    existing + [{ 'name' => 'backgroundCanvas', 'color' => page_background }]
 end
 
 document = {

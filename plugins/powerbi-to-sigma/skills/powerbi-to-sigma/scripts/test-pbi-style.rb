@@ -31,10 +31,10 @@ ok('compact percent -> nil (never abbreviate a ratio)', S.compact_format({ 'form
 ok('compact unformatted + currency sibling -> $,.2s', S.compact_format(nil, 2, true) == { 'kind' => 'number', 'formatString' => '$,.2s' })
 ok('compact unformatted + no currency clue -> nil', S.compact_format(nil, 2, false).nil?)
 
-# --- measure_col_ids : value.columnId (kpi) / value.id (donut) / yAxis ---------
+# --- measure_col_ids : value.columnId (kpi and donut) / yAxis ---------
 kpi  = { 'kind' => 'kpi-chart', 'value' => { 'columnId' => 'v' } }
 bar  = { 'kind' => 'bar-chart', 'yAxis' => { 'columnIds' => ['y0', { 'columnId' => 'y1', 'type' => 'line' }] } }
-donut = { 'kind' => 'donut-chart', 'value' => { 'id' => 'dv' } }
+donut = { 'kind' => 'donut-chart', 'value' => { 'columnId' => 'dv' } }
 ok('measure_col_ids kpi',   S.measure_col_ids(kpi) == ['v'])
 ok('measure_col_ids bar (string + hash)', S.measure_col_ids(bar) == %w[y0 y1])
 ok('measure_col_ids donut', S.measure_col_ids(donut) == ['dv'])

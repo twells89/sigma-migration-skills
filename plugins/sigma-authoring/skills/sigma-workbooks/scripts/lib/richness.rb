@@ -37,7 +37,7 @@
 #     not a new richness-specific surface.
 #   - wide_pivot reuses the already-GO general pivot-table rowsBy/columnsBy/
 #     values shape documented in reference/specification/tables.md's pivot
-#     recipe: rowsBy/columnsBy are [{"id":...}] shelves, values is a plain
+#     recipe: rowsBy/columnsBy are [{"columnId":...}] shelves, values is a plain
 #     metric id-string list — also not a new richness-specific surface.
 # All four are gated through SURFACES below anyway (not just the two surfaces
 # with their own dedicated verification pass), so a future regression/
@@ -186,7 +186,8 @@ module Richness
   # through verbatim, same convention as KpiCard.build's `columns:`).
   # rowsBy: rows_by and values: values then reference these columns' OWN
   # ids (NOT the source element's column ids) — rows_by is already-shaped
-  # [{"id"=>...}, ...] shelf entries, values is a plain metric id-string
+  # [{"columnId"=>...}, ...] shelf entries (`id` is rewritten to `columnId`),
+  # values is a plain metric id-string
   # list. columnsBy: [] (must be empty — a non-crosstab pivot). Omitting
   # `columns` (or passing an empty array) 400s live ("Invalid kind:
   # \"pivot-table\"" — a misleading message; the real cause is the missing
@@ -205,7 +206,7 @@ module Richness
       'kind' => 'pivot-table',
       'source' => { 'kind' => 'table', 'elementId' => source_element_id },
       'columns' => columns,
-      'rowsBy' => rows_by,
+      'rowsBy' => normalize_pivot_shelves(rows_by),
       'columnsBy' => [],
       'values' => values
     }
@@ -261,4 +262,19 @@ module Richness
 
     { 'id' => id, 'kind' => 'chat', 'agentId' => agent_id }
   end
+
+  # Pivot shelf pointers are `{ columnId }`, not `{ id }`. Accept the old
+  # key so existing callers keep working, then emit the live shape.
+  def self.normalize_pivot_shelves(entries)
+    Array(entries).map do |entry|
+      next entry unless entry.is_a?(Hash)
+      next entry if entry['columnId']
+      next entry unless entry['id']
+
+      rewritten = entry.dup
+      rewritten['columnId'] = rewritten.delete('id')
+      rewritten
+    end
+  end
+  private_class_method :normalize_pivot_shelves
 end

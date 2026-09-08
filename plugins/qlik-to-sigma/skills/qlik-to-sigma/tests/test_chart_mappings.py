@@ -127,11 +127,11 @@ def test_every_mapping_emits_its_contract_shape():
             assert element["color"]["by"] == "category"
             assert element["stacking"] == ("normalized" if source == "mekkochart" else "stacked")
         elif source == "piechart":
-            assert element["value"]["id"] and element["color"]["id"]
+            assert element["value"]["columnId"] and element["color"]["columnId"]
         elif source == "pivot-table":
             assert element["rowsBy"] and element["columnsBy"] and element["values"]
         elif source == "scatterplot":
-            assert element["source"]["groupingId"] and element["size"]["id"]
+            assert element["source"]["groupingId"] and element["size"]["columnId"]
             assert len(builder._SCATTER_SRC) == 1
         elif source == "table":
             assert element["groupings"][0]["groupBy"] and element["groupings"][0]["calculations"]

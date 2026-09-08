@@ -58,7 +58,7 @@ def dangling_ids(el)
   refs << el.dig('xAxis', 'sort', 'by')
   %w[yAxis yAxis2].each { |a| Array(el.dig(a, 'columnIds')).each { |x| refs << (x.is_a?(Hash) ? (x['columnId'] || x['id']) : x) } }
   Array(el['groupings']).each { |g| refs.concat(Array(g['groupBy'])); refs.concat(Array(g['calculations'])) }
-  %w[rowsBy columnsBy].each { |k| Array(el[k]).each { |x| refs << (x.is_a?(Hash) ? x['id'] : x) } }
+  %w[rowsBy columnsBy].each { |k| Array(el[k]).each { |x| refs << (x.is_a?(Hash) ? (x['columnId'] || x['id']) : x) } }
   Array(el['values']).each { |x| refs << (x.is_a?(Hash) ? (x['columnId'] || x['id']) : x) }
   refs.compact.uniq.reject { |id| own.include?(id) }
 end

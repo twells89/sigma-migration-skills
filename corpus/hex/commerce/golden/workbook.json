@@ -121,14 +121,14 @@
             "elementId": "id0004"
           },
           "color": {
-            "id": "id0013",
             "sort": {
               "by": "id0014",
               "direction": "descending"
-            }
+            },
+            "columnId": "id0013"
           },
           "value": {
-            "id": "id0014"
+            "columnId": "id0014"
           },
           "legend": {
             "visibility": "hidden"

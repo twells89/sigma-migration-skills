@@ -158,7 +158,7 @@ GREEN only when all three match (the validated run tied out to the cent) AND
 - **UDD is the primary path** — `GET /dashboards/{id}` returns user-defined and LookML dashboards
   identically; the converter is source-agnostic via the contract.
 - **Spec endpoints return YAML** — never `json.load` / `jq` the response.
-- **KPI `value.columnId`** vs **donut/pie `value.id`**; **control elements need their own `id`**.
+- **KPI and donut/pie channel pointers use `columnId`** (not `id`); **control elements need their own `id`**.
 - **Lossy + warned:** Liquid `{% %}` measures, manifest constants, `link:`/`html:` styling, pivot
   cross-tab (flattened → rebuild as Sigma pivot-table in UI), table-calc window grain, cross-
   filtering / tooltips (Sigma UI-only). Wire these in Phase 5 post-publish. (`looker_donut_multiples`

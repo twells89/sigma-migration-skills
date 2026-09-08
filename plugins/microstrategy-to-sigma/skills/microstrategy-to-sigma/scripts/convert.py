@@ -1791,7 +1791,7 @@ def build_workbook_spec(b: Bundle, args, ae_winners=None, dm_element_ids=None, d
     # with the released auto-navigation element on every page.
     if len(pages) > 1:
         feature("chapter-tabs", "dossier %r" % b.dossier.get("name", "MicroStrategy"))
-        labels = {page["id"]: page["name"] for page in pages}
+        labels = [{"pageId": page["id"], "label": page["name"]} for page in pages]
         for page in pages:
             page["elements"].append({
                 "id": f"nav-{slug(page['name'])}",
