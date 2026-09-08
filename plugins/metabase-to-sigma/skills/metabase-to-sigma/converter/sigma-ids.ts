@@ -5,6 +5,7 @@
 
 const SIGMA_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const _usedIds = new Set<string>();
+let _idCounter = 0;
 
 /** Small words that Sigma keeps lowercase in display names (unless first word) */
 const SIGMA_LOWERCASE_WORDS = new Set([
@@ -15,10 +16,19 @@ const SIGMA_LOWERCASE_WORDS = new Set([
 /** Reset the ID registry — call at the start of each conversion run */
 export function resetIds(): void {
   _usedIds.clear();
+  _idCounter = 0;
 }
 
 /** Generate a unique short random ID (base62) */
 export function sigmaShortId(len = 10): string {
+  // Corpus-only deterministic mode keeps ids inside the authoritative layout
+  // XML byte-stable as well as in JSON id fields. Production remains random.
+  if (typeof process !== 'undefined' && process.env.SIGMA_DETERMINISTIC_IDS === '1') {
+    _idCounter += 1;
+    const id = `M${_idCounter.toString(36).padStart(Math.max(len - 1, 1), '0')}`.slice(-len);
+    _usedIds.add(id);
+    return id;
+  }
   let id: string;
   do {
     id = Array.from({ length: len }, () =>

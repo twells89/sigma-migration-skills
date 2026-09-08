@@ -10,11 +10,11 @@ the released wrapped/flat workbook code representation.
 ```bash
 cd plugins/metabase-to-sigma/skills/metabase-to-sigma/converter
 npm ci
-node --import tsx/esm cli.ts ../fixtures/orders-model.card.json \
+SIGMA_DETERMINISTIC_IDS=1 node --import tsx/esm cli.ts ../fixtures/orders-model.card.json \
   --metadata ../fixtures/metadata.json \
   --connection PLACEHOLDER-CONNECTION-ID --database DEMO_DB --schema DEMO \
   --envelope > /tmp/metabase-dm.json
-node --import tsx/esm cli.ts ../fixtures/exec-overview.dashboard.json \
+SIGMA_DETERMINISTIC_IDS=1 node --import tsx/esm cli.ts ../fixtures/exec-overview.dashboard.json \
   --metadata ../fixtures/metadata.json --dm PLACEHOLDER-DM-ID \
   --envelope > /tmp/metabase-workbook.json
 cd ../../../../..

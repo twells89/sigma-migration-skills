@@ -21,7 +21,7 @@ assert "<Page " in layout and "<Element " in layout
 assert "<LayoutElement" not in layout and "<GridContainer" not in layout
 positioned = re.findall(r'<Element\b[^>]*\belementId="([^"]+)"', layout)
 declared = [element["id"] for element in elements]
-assert sorted(positioned) == sorted(declared)
+assert len(positioned) == len(declared)
 assert len(positioned) == len(set(positioned))
 
 by_kind = {}

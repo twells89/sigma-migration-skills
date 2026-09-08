@@ -39,7 +39,7 @@
             {
               "id": "id0008",
               "name": "Sum of Sales Amount",
-              "formula": "Sum([id0006/Sales Amount])",
+              "formula": "Sum([Order Fact/Sales Amount])",
               "format": {
                 "kind": "number",
                 "formatString": "$,.0f",
@@ -133,7 +133,7 @@
             {
               "id": "id0019",
               "name": "Loyalty Tier",
-              "formula": "[id0018/Loyalty Tier]"
+              "formula": "[Customer Dim/Loyalty Tier]"
             },
             {
               "id": "id0020",
@@ -168,7 +168,7 @@
             {
               "id": "id0023",
               "name": "State",
-              "formula": "[id0022/State]"
+              "formula": "[Store Dim/State]"
             },
             {
               "id": "id0024",
@@ -200,17 +200,17 @@
             {
               "id": "id0027",
               "name": "Region",
-              "formula": "[id0026/Region]"
+              "formula": "[Revenue by Region and Tier/Region]"
             },
             {
               "id": "id0028",
               "name": "Loyalty Tier",
-              "formula": "[id0026/Loyalty Tier]"
+              "formula": "[Revenue by Region and Tier/Loyalty Tier]"
             },
             {
               "id": "id0029",
               "name": "Sum of Sales Amount",
-              "formula": "Sum([id0026/Sales Amount])"
+              "formula": "Sum([Revenue by Region and Tier/Sales Amount])"
             }
           ],
           "order": [
@@ -245,7 +245,7 @@
             {
               "id": "id0031",
               "name": "Loyalty Tier",
-              "formula": "[id0018/Loyalty Tier]"
+              "formula": "[Customer Dim/Loyalty Tier]"
             },
             {
               "id": "id0032",
@@ -277,27 +277,27 @@
             {
               "id": "id0035",
               "name": "Order Number",
-              "formula": "[id0034/Order Number]"
+              "formula": "[Premium Orders/Order Number]"
             },
             {
               "id": "id0036",
               "name": "Sales Amount",
-              "formula": "[id0034/Sales Amount]"
+              "formula": "[Premium Orders/Sales Amount]"
             },
             {
               "id": "id0037",
               "name": "Net Amount",
-              "formula": "[id0034/Net Amount]"
+              "formula": "[Premium Orders/Net Amount]"
             },
             {
               "id": "id0038",
               "name": "Tier Bucket",
-              "formula": "[id0034/Tier Bucket]"
+              "formula": "[Premium Orders/Tier Bucket]"
             },
             {
               "id": "id0039",
-              "name": "Filter: id0034",
-              "formula": "[id0034/Tier Bucket] = \"Premium\"",
+              "name": "Filter: Premium Orders",
+              "formula": "[Premium Orders/Tier Bucket] = \"Premium\"",
               "hidden": true
             }
           ],
@@ -332,12 +332,12 @@
             {
               "id": "id0041",
               "name": "Order Date",
-              "formula": "[id0006/Order Date]"
+              "formula": "[Order Fact/Order Date]"
             },
             {
               "id": "id0042",
               "name": "Sales Amount",
-              "formula": "[id0006/Sales Amount]"
+              "formula": "[Order Fact/Sales Amount]"
             }
           ],
           "order": [
@@ -358,7 +358,7 @@
             {
               "id": "id0043",
               "name": "Region",
-              "formula": "[id0018/Region]"
+              "formula": "[Customer Dim/Region]"
             }
           ],
           "order": [
@@ -399,13 +399,13 @@
           ]
         }
       ],
-      "layout": "<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"id0001\">\n  <Element elementId=\"id0044\" gridColumn=\"1 / 13\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"id0045\" gridColumn=\"13 / 25\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"id0004\" gridColumn=\"1 / 25\" gridRow=\"3 / 7\"/>\n  <Element elementId=\"id0005\" gridColumn=\"1 / 6\" gridRow=\"7 / 15\"/>\n  <Element elementId=\"id0009\" gridColumn=\"6 / 16\" gridRow=\"7 / 19\"/>\n  <Element elementId=\"id0013\" gridColumn=\"16 / 25\" gridRow=\"7 / 19\"/>\n  <Element elementId=\"id0017\" gridColumn=\"1 / 13\" gridRow=\"19 / 31\"/>\n  <Element elementId=\"id0021\" gridColumn=\"13 / 25\" gridRow=\"19 / 31\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"id0002\">\n  <Element elementId=\"id0025\" gridColumn=\"1 / 15\" gridRow=\"1 / 17\"/>\n  <Element elementId=\"id0030\" gridColumn=\"15 / 25\" gridRow=\"1 / 17\"/>\n  <Element elementId=\"id0033\" gridColumn=\"1 / 25\" gridRow=\"17 / 33\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"id0003\">\n  <Element elementId=\"id0010\" gridColumn=\"1 / 25\" gridRow=\"1 / 13\"/>\n  <Element elementId=\"id0014\" gridColumn=\"1 / 25\" gridRow=\"13 / 25\"/>\n</Page>"
+      "layout": "<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"M000000011\">\n  <Element elementId=\"M000000001\" gridColumn=\"1 / 13\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"M000000002\" gridColumn=\"13 / 25\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"M000000003\" gridColumn=\"1 / 25\" gridRow=\"3 / 7\"/>\n  <Element elementId=\"M000000005\" gridColumn=\"1 / 6\" gridRow=\"7 / 15\"/>\n  <Element elementId=\"M000000008\" gridColumn=\"6 / 16\" gridRow=\"7 / 19\"/>\n  <Element elementId=\"M00000000e\" gridColumn=\"16 / 25\" gridRow=\"7 / 19\"/>\n  <Element elementId=\"M00000000j\" gridColumn=\"1 / 13\" gridRow=\"19 / 31\"/>\n  <Element elementId=\"M00000000m\" gridColumn=\"13 / 25\" gridRow=\"19 / 31\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"M000000012\">\n  <Element elementId=\"M00000000q\" gridColumn=\"1 / 15\" gridRow=\"1 / 17\"/>\n  <Element elementId=\"M00000000t\" gridColumn=\"15 / 25\" gridRow=\"1 / 17\"/>\n  <Element elementId=\"M00000000y\" gridColumn=\"1 / 25\" gridRow=\"17 / 33\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"dataM000000013\">\n  <Element elementId=\"M00000000b\" gridColumn=\"1 / 25\" gridRow=\"1 / 13\"/>\n  <Element elementId=\"M00000000g\" gridColumn=\"1 / 25\" gridRow=\"13 / 25\"/>\n</Page>"
     }
   },
   "warnings": [
     "parameter \"Date\": range default \"past30days\" has no verified Sigma spec shape — control emitted WITHOUT a default; set it in the UI.",
     "card \"Customers by Region\": click_behavior (cross-filter / link) is not converted — re-create as a Sigma action.",
-    "card \"id0034\" sources nested card 100 — no card-name mapping; sourced its OWN DM element by card name (the DM converter creates one per nested card). Pass cardNameById to source the parent model instead."
+    "card \"Premium Orders\" sources nested card 100 — no card-name mapping; sourced its OWN DM element by card name (the DM converter creates one per nested card). Pass cardNameById to source the parent model instead."
   ],
   "stats": {
     "dashcards": 9,

@@ -66,17 +66,8 @@ def _apply_mapping(node, mapping):
         return {k: _apply_mapping(v, mapping) for k, v in node.items()}
     if isinstance(node, list):
         return [_apply_mapping(v, mapping) for v in node]
-    if isinstance(node, str):
-        if node in mapping:
-            return mapping[node]
-        # Workbook code representation embeds page/element ids inside the
-        # authoritative layout XML string. Rewrite those occurrences too or a
-        # normalized wrapped-workbook golden still changes on every conversion.
-        out = node
-        for old, new in mapping.items():
-            if old in out:
-                out = out.replace(old, new)
-        return out
+    if isinstance(node, str) and node in mapping:
+        return mapping[node]
     return node
 
 
