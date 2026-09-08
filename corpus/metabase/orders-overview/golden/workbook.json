@@ -1,0 +1,424 @@
+{
+  "workbook": {
+    "name": "Exec Overview",
+    "document": {
+      "schemaVersion": 1,
+      "kind": "workbook",
+      "pages": [
+        {
+          "id": "id0001",
+          "name": "Overview"
+        },
+        {
+          "id": "id0002",
+          "name": "Detail"
+        },
+        {
+          "id": "id0003",
+          "name": "Data",
+          "visibility": "hidden"
+        }
+      ],
+      "elements": [
+        {
+          "id": "id0004",
+          "kind": "text",
+          "name": "Text",
+          "body": "## Executive Overview\nKey order metrics for DEMO_DB. Filters apply across the page."
+        },
+        {
+          "id": "id0005",
+          "kind": "kpi-chart",
+          "name": "Total Revenue",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0006",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0008",
+              "name": "Sum of Sales Amount",
+              "formula": "Sum([id0006/Sales Amount])",
+              "format": {
+                "kind": "number",
+                "formatString": "$,.0f",
+                "currencySymbol": "$"
+              }
+            }
+          ],
+          "order": [
+            "id0008"
+          ],
+          "value": {
+            "columnId": "id0008"
+          }
+        },
+        {
+          "id": "id0009",
+          "kind": "line-chart",
+          "name": "Revenue Trend",
+          "source": {
+            "kind": "table",
+            "elementId": "id0010"
+          },
+          "columns": [
+            {
+              "id": "id0011",
+              "name": "Order Date",
+              "formula": "DateTrunc(\"month\", [Revenue Trend Base/Order Date])"
+            },
+            {
+              "id": "id0012",
+              "name": "Sum of Sales Amount",
+              "formula": "Sum([Revenue Trend Base/Sales Amount])"
+            }
+          ],
+          "order": [
+            "id0011",
+            "id0012"
+          ],
+          "xAxis": {
+            "columnId": "id0011"
+          },
+          "yAxis": {
+            "columnIds": [
+              "id0012"
+            ]
+          }
+        },
+        {
+          "id": "id0013",
+          "kind": "bar-chart",
+          "name": "Customers by Region",
+          "source": {
+            "kind": "table",
+            "elementId": "id0014"
+          },
+          "columns": [
+            {
+              "id": "id0015",
+              "name": "Region",
+              "formula": "[Customers by Region Base/Region]"
+            },
+            {
+              "id": "id0016",
+              "name": "Count",
+              "formula": "Count()"
+            }
+          ],
+          "order": [
+            "id0015",
+            "id0016"
+          ],
+          "xAxis": {
+            "columnId": "id0015"
+          },
+          "yAxis": {
+            "columnIds": [
+              "id0016"
+            ]
+          }
+        },
+        {
+          "id": "id0017",
+          "kind": "bar-chart",
+          "name": "Customers by Loyalty Tier",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0018",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0019",
+              "name": "Loyalty Tier",
+              "formula": "[id0018/Loyalty Tier]"
+            },
+            {
+              "id": "id0020",
+              "name": "Count",
+              "formula": "Count()"
+            }
+          ],
+          "order": [
+            "id0019",
+            "id0020"
+          ],
+          "xAxis": {
+            "columnId": "id0019"
+          },
+          "yAxis": {
+            "columnIds": [
+              "id0020"
+            ]
+          },
+          "orientation": "horizontal"
+        },
+        {
+          "id": "id0021",
+          "kind": "pie-chart",
+          "name": "Stores by State",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0022",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0023",
+              "name": "State",
+              "formula": "[id0022/State]"
+            },
+            {
+              "id": "id0024",
+              "name": "Count",
+              "formula": "Count()"
+            }
+          ],
+          "order": [
+            "id0023",
+            "id0024"
+          ],
+          "color": {
+            "columnId": "id0023"
+          },
+          "value": {
+            "columnId": "id0024"
+          }
+        },
+        {
+          "id": "id0025",
+          "kind": "pivot-table",
+          "name": "id0026",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0026",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0027",
+              "name": "Region",
+              "formula": "[id0026/Region]"
+            },
+            {
+              "id": "id0028",
+              "name": "Loyalty Tier",
+              "formula": "[id0026/Loyalty Tier]"
+            },
+            {
+              "id": "id0029",
+              "name": "Sum of Sales Amount",
+              "formula": "Sum([id0026/Sales Amount])"
+            }
+          ],
+          "order": [
+            "id0027",
+            "id0028",
+            "id0029"
+          ],
+          "rowsBy": [
+            {
+              "columnId": "id0027"
+            }
+          ],
+          "columnsBy": [
+            {
+              "columnId": "id0028"
+            }
+          ],
+          "values": [
+            "id0029"
+          ]
+        },
+        {
+          "id": "id0030",
+          "kind": "funnel-chart",
+          "name": "Tier Funnel",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0018",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0031",
+              "name": "Loyalty Tier",
+              "formula": "[id0018/Loyalty Tier]"
+            },
+            {
+              "id": "id0032",
+              "name": "Count",
+              "formula": "Count()"
+            }
+          ],
+          "order": [
+            "id0031",
+            "id0032"
+          ],
+          "stage": {
+            "columnId": "id0031"
+          },
+          "series": {
+            "columnId": "id0032"
+          }
+        },
+        {
+          "id": "id0033",
+          "kind": "table",
+          "name": "id0034",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0034",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0035",
+              "name": "Order Number",
+              "formula": "[id0034/Order Number]"
+            },
+            {
+              "id": "id0036",
+              "name": "Sales Amount",
+              "formula": "[id0034/Sales Amount]"
+            },
+            {
+              "id": "id0037",
+              "name": "Net Amount",
+              "formula": "[id0034/Net Amount]"
+            },
+            {
+              "id": "id0038",
+              "name": "Tier Bucket",
+              "formula": "[id0034/Tier Bucket]"
+            },
+            {
+              "id": "id0039",
+              "name": "Filter: id0034",
+              "formula": "[id0034/Tier Bucket] = \"Premium\"",
+              "hidden": true
+            }
+          ],
+          "order": [
+            "id0035",
+            "id0036",
+            "id0037",
+            "id0038"
+          ],
+          "filters": [
+            {
+              "id": "id0040",
+              "columnId": "id0039",
+              "kind": "list",
+              "mode": "include",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        {
+          "id": "id0010",
+          "kind": "table",
+          "name": "Revenue Trend Base",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0006",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0041",
+              "name": "Order Date",
+              "formula": "[id0006/Order Date]"
+            },
+            {
+              "id": "id0042",
+              "name": "Sales Amount",
+              "formula": "[id0006/Sales Amount]"
+            }
+          ],
+          "order": [
+            "id0041",
+            "id0042"
+          ]
+        },
+        {
+          "id": "id0014",
+          "kind": "table",
+          "name": "Customers by Region Base",
+          "source": {
+            "kind": "data-model",
+            "elementId": "id0018",
+            "dataModelId": "id0007"
+          },
+          "columns": [
+            {
+              "id": "id0043",
+              "name": "Region",
+              "formula": "[id0018/Region]"
+            }
+          ],
+          "order": [
+            "id0043"
+          ]
+        },
+        {
+          "id": "id0044",
+          "kind": "control",
+          "controlId": "date_range",
+          "name": "Date",
+          "controlType": "date-range",
+          "mode": "between",
+          "filters": [
+            {
+              "source": {
+                "kind": "table",
+                "elementId": "id0010"
+              },
+              "columnId": "id0041"
+            }
+          ]
+        },
+        {
+          "id": "id0045",
+          "kind": "control",
+          "controlId": "region",
+          "name": "Region",
+          "controlType": "list",
+          "filters": [
+            {
+              "source": {
+                "kind": "table",
+                "elementId": "id0014"
+              },
+              "columnId": "id0043"
+            }
+          ]
+        }
+      ],
+      "layout": "<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"id0001\">\n  <Element elementId=\"id0044\" gridColumn=\"1 / 13\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"id0045\" gridColumn=\"13 / 25\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"id0004\" gridColumn=\"1 / 25\" gridRow=\"3 / 7\"/>\n  <Element elementId=\"id0005\" gridColumn=\"1 / 6\" gridRow=\"7 / 15\"/>\n  <Element elementId=\"id0009\" gridColumn=\"6 / 16\" gridRow=\"7 / 19\"/>\n  <Element elementId=\"id0013\" gridColumn=\"16 / 25\" gridRow=\"7 / 19\"/>\n  <Element elementId=\"id0017\" gridColumn=\"1 / 13\" gridRow=\"19 / 31\"/>\n  <Element elementId=\"id0021\" gridColumn=\"13 / 25\" gridRow=\"19 / 31\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"id0002\">\n  <Element elementId=\"id0025\" gridColumn=\"1 / 15\" gridRow=\"1 / 17\"/>\n  <Element elementId=\"id0030\" gridColumn=\"15 / 25\" gridRow=\"1 / 17\"/>\n  <Element elementId=\"id0033\" gridColumn=\"1 / 25\" gridRow=\"17 / 33\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"id0003\">\n  <Element elementId=\"id0010\" gridColumn=\"1 / 25\" gridRow=\"1 / 13\"/>\n  <Element elementId=\"id0014\" gridColumn=\"1 / 25\" gridRow=\"13 / 25\"/>\n</Page>"
+    }
+  },
+  "warnings": [
+    "parameter \"Date\": range default \"past30days\" has no verified Sigma spec shape — control emitted WITHOUT a default; set it in the UI.",
+    "card \"Customers by Region\": click_behavior (cross-filter / link) is not converted — re-create as a Sigma action.",
+    "card \"id0034\" sources nested card 100 — no card-name mapping; sourced its OWN DM element by card name (the DM converter creates one per nested card). Pass cardNameById to source the parent model instead."
+  ],
+  "stats": {
+    "dashcards": 9,
+    "pages": 3,
+    "tables": 1,
+    "pivots": 1,
+    "kpis": 1,
+    "charts": 5,
+    "maps": 0,
+    "texts": 1,
+    "columns": 19,
+    "filters": 1,
+    "controls": 2,
+    "baseTables": 2
+  }
+}

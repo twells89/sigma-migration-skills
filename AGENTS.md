@@ -65,6 +65,8 @@ Maturity labels (`gold` / `live` / `foundation` / `scaffold`) are defined in
 | Author / repair Sigma data models (canonical spec) | `sigma-data-models` | live | `plugins/sigma-authoring/skills/sigma-data-models/` |
 | Convert a Streamlit source project → Sigma | `streamlit-to-sigma` | gold | `plugins/streamlit-to-sigma/skills/streamlit-to-sigma/` |
 | Scope/assess a Streamlit instance | `streamlit-assessment` | scaffold | `plugins/streamlit-to-sigma/skills/streamlit-assessment/` |
+| Convert Metabase models/questions/dashboards → Sigma | `metabase-to-sigma` | live | `plugins/metabase-to-sigma/skills/metabase-to-sigma/` |
+| Scope/assess a Metabase instance | `metabase-assessment` | live | `plugins/metabase-to-sigma/skills/metabase-assessment/` |
 
 Assessments are read-only (never write to the source or post to Sigma); run one
 to pick what to convert, then hand off to the matching converter.

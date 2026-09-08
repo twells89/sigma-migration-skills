@@ -1,0 +1,42 @@
+{
+  "id": 5,
+  "name": "Legacy Grid",
+  "description": "Old-shape dashboard (pre-v48): ordered_cards with sizeX/sizeY.",
+  "parameters": [],
+  "ordered_cards": [
+    {
+      "id": 1, "card_id": 201,
+      "row": 0, "col": 0, "sizeX": 6, "sizeY": 4,
+      "parameter_mappings": [],
+      "card": {
+        "id": 201, "name": "Total Revenue", "display": "scalar", "database_id": 2, "table_id": 45,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 45,
+          "aggregation": [["sum", ["field", 72, null]]]
+        }},
+        "result_metadata": [
+          { "name": "sum", "display_name": "Sum of Sales Amount", "base_type": "type/Float", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": {}
+      }
+    },
+    {
+      "id": 2, "card_id": 203,
+      "row": 0, "col": 6, "sizeX": 12, "sizeY": 6,
+      "parameter_mappings": [],
+      "card": {
+        "id": 203, "name": "Customers by Region", "display": "bar", "database_id": 2, "table_id": 46,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 46,
+          "aggregation": [["count"]],
+          "breakout": [["field", 85, null]]
+        }},
+        "result_metadata": [
+          { "name": "REGION", "display_name": "Region", "base_type": "type/Text",    "field_ref": ["field", 85, null] },
+          { "name": "count",  "display_name": "Count",  "base_type": "type/Integer", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": { "graph.dimensions": ["REGION"], "graph.metrics": ["count"] }
+      }
+    }
+  ]
+}

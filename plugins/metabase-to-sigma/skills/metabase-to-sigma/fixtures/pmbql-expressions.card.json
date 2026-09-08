@@ -1,0 +1,36 @@
+{
+  "id": 404,
+  "name": "Order Enrichment (pMBQL Expressions)",
+  "description": "Modern-format structured card with expressions as a pMBQL clause LIST (lib/expression-name in opts): case, datetime-diff, a date() cast, and lower(). Synthetic.",
+  "type": "question",
+  "display": "table",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "lib/type": "mbql/query",
+    "database": 2,
+    "stages": [
+      {
+        "lib/type": "mbql.stage/mbql",
+        "source-table": 45,
+        "expressions": [
+          ["case", { "lib/uuid": "00000000-0000-4000-8000-00000000e001", "lib/expression-name": "Size Bucket" },
+            [
+              [[">", { "lib/uuid": "00000000-0000-4000-8000-00000000e002" },
+                ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000e003", "base-type": "type/Float", "effective-type": "type/Float" }, 72], 1000],
+               "Large"]
+            ],
+            "Small"],
+          ["datetime-diff", { "lib/uuid": "00000000-0000-4000-8000-00000000e004", "lib/expression-name": "Days to Now" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000e005", "base-type": "type/DateTime", "effective-type": "type/DateTime" }, 71],
+            ["now", { "lib/uuid": "00000000-0000-4000-8000-00000000e006" }],
+            "day"],
+          ["date", { "lib/uuid": "00000000-0000-4000-8000-00000000e007", "lib/expression-name": "Order Day" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000e008", "base-type": "type/DateTime", "effective-type": "type/DateTime" }, 71]]
+        ]
+      }
+    ]
+  },
+  "result_metadata": [],
+  "visualization_settings": {}
+}

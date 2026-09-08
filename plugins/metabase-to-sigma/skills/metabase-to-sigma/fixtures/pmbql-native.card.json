@@ -1,0 +1,24 @@
+{
+  "id": 400,
+  "name": "Daily Revenue (pMBQL Native)",
+  "description": "Modern-format (lib/type) native card — single stage, no tags. Synthetic.",
+  "type": "question",
+  "display": "line",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "lib/type": "mbql/query",
+    "database": 2,
+    "stages": [
+      {
+        "lib/type": "mbql.stage/native",
+        "native": "SELECT ORDER_DATE, SUM(SALES_AMOUNT) AS REVENUE\nFROM DEMO_DB.DEMO.ORDER_FACT\nGROUP BY 1"
+      }
+    ]
+  },
+  "result_metadata": [
+    { "name": "ORDER_DATE", "display_name": "Order Date", "base_type": "type/DateTime" },
+    { "name": "REVENUE", "display_name": "Revenue", "base_type": "type/Float" }
+  ],
+  "visualization_settings": { "graph.dimensions": ["ORDER_DATE"], "graph.metrics": ["REVENUE"] }
+}

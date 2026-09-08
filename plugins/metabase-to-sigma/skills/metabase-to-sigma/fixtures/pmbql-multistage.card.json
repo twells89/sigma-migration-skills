@@ -1,0 +1,35 @@
+{
+  "id": 405,
+  "name": "Average Weekly Revenue (pMBQL Multi-Stage)",
+  "description": "Modern-format TWO-stage query (aggregate over an aggregation) — normalizes to legacy source-query nesting; the converter flags it (rare but real: 14 of 7,023 cards on a production estate). Synthetic.",
+  "type": "question",
+  "display": "scalar",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "lib/type": "mbql/query",
+    "database": 2,
+    "stages": [
+      {
+        "lib/type": "mbql.stage/mbql",
+        "source-table": 45,
+        "aggregation": [
+          ["sum", { "lib/uuid": "00000000-0000-4000-8000-00000000m001" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000m002", "base-type": "type/Float", "effective-type": "type/Float" }, 72]]
+        ],
+        "breakout": [
+          ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000m003", "base-type": "type/DateTime", "effective-type": "type/DateTime", "temporal-unit": "week" }, 71]
+        ]
+      },
+      {
+        "lib/type": "mbql.stage/mbql",
+        "aggregation": [
+          ["avg", { "lib/uuid": "00000000-0000-4000-8000-00000000m004" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000m005", "base-type": "type/Float", "effective-type": "type/Float" }, "sum"]]
+        ]
+      }
+    ]
+  },
+  "result_metadata": [],
+  "visualization_settings": {}
+}

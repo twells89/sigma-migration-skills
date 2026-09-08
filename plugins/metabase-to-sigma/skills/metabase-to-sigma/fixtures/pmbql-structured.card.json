@@ -1,0 +1,41 @@
+{
+  "id": 402,
+  "name": "Weekly Orders by Region (pMBQL)",
+  "description": "Modern-format structured card: named + unnamed aggregations, temporal-unit breakout, filters incl. the pMBQL-only `in` op and time-interval with opts-second clause order. Synthetic.",
+  "type": "question",
+  "display": "bar",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "lib/type": "mbql/query",
+    "database": 2,
+    "stages": [
+      {
+        "lib/type": "mbql.stage/mbql",
+        "source-table": 45,
+        "aggregation": [
+          ["count", { "lib/uuid": "00000000-0000-4000-8000-00000000a001" }],
+          ["sum", { "lib/uuid": "00000000-0000-4000-8000-00000000a002", "name": "total_revenue", "display-name": "Total Revenue" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000a003", "base-type": "type/Float", "effective-type": "type/Float" }, 72]]
+        ],
+        "breakout": [
+          ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000b001", "base-type": "type/DateTime", "effective-type": "type/DateTime", "temporal-unit": "week" }, 71]
+        ],
+        "filters": [
+          ["=", { "lib/uuid": "00000000-0000-4000-8000-00000000f001" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000f002", "base-type": "type/Integer", "effective-type": "type/Integer" }, 73], 1, 2, 3],
+          ["in", { "lib/uuid": "00000000-0000-4000-8000-00000000f003", "effective-type": "type/Boolean" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000f004", "base-type": "type/Integer", "effective-type": "type/Integer" }, 70], 100, 200],
+          ["time-interval", { "lib/uuid": "00000000-0000-4000-8000-00000000f005", "include-current": true, "effective-type": "type/Boolean" },
+            ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000f006", "base-type": "type/DateTime", "effective-type": "type/DateTime" }, 71], -6, "month"]
+        ]
+      }
+    ]
+  },
+  "result_metadata": [
+    { "name": "ORDER_DATE", "display_name": "Order Date: Week", "base_type": "type/DateTime", "field_ref": ["field", 71, { "temporal-unit": "week" }] },
+    { "name": "count", "display_name": "Count", "base_type": "type/Integer", "field_ref": ["aggregation", 0] },
+    { "name": "total_revenue", "display_name": "Total Revenue", "base_type": "type/Float", "field_ref": ["aggregation", 1] }
+  ],
+  "visualization_settings": { "graph.dimensions": ["ORDER_DATE"], "graph.metrics": ["count", "total_revenue"] }
+}

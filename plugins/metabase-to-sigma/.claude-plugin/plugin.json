@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "metabase-to-sigma",
+  "displayName": "Metabase → Sigma",
+  "version": "0.1.0",
+  "description": "Migrate Metabase models, questions, and dashboards to Sigma data models and workbooks. Translates MBQL/pMBQL, remodels compatible native SQL, preserves controls and grid layout, verifies parity, and bundles a read-only estate assessment.",
+  "author": {
+    "name": "Thomas Wells"
+  },
+  "license": "MIT",
+  "keywords": [
+    "metabase",
+    "mbql",
+    "sigma",
+    "migration",
+    "bi",
+    "converter"
+  ],
+  "skills": "./skills/"
+}

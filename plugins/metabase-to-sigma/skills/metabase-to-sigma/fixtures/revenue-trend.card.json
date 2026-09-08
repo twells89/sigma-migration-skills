@@ -1,0 +1,31 @@
+{
+  "id": 101,
+  "name": "Revenue Trend",
+  "description": "Monthly revenue, trailing 12 months.",
+  "type": "question",
+  "display": "line",
+  "database_id": 2,
+  "table_id": 45,
+  "collection_id": 5,
+  "dataset_query": {
+    "type": "query",
+    "database": 2,
+    "query": {
+      "source-table": 45,
+      "expressions": {
+        "Days Since Order": ["datetime-diff", ["field", 71, null], ["now"], "day"]
+      },
+      "aggregation": [["sum", ["field", 72, null]]],
+      "breakout": [["field", 71, { "temporal-unit": "month" }]],
+      "filter": ["time-interval", ["field", 71, null], -365, "day"]
+    }
+  },
+  "result_metadata": [
+    { "name": "ORDER_DATE", "display_name": "Order Date",          "base_type": "type/DateTime", "field_ref": ["field", 71, { "temporal-unit": "month" }] },
+    { "name": "sum",        "display_name": "Sum of Sales Amount", "base_type": "type/Float",    "field_ref": ["aggregation", 0] }
+  ],
+  "visualization_settings": {
+    "graph.dimensions": ["ORDER_DATE"],
+    "graph.metrics": ["sum"]
+  }
+}

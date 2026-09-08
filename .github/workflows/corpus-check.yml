@@ -60,6 +60,27 @@ jobs:
         # vendored bundle and only uses a local build via an explicit env/flag.
         run: ./corpus/converter-default-test.sh
 
+  metabase-typescript:
+    name: Metabase converter fixtures (TypeScript)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: plugins/metabase-to-sigma/skills/metabase-to-sigma/converter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugins/metabase-to-sigma/skills/metabase-to-sigma/converter/package-lock.json
+      - name: Install locked converter tooling
+        run: npm ci
+      - name: Run Metabase fixture and contract suite
+        run: npm test
+      - name: Reject vulnerable converter dependencies
+        run: npm audit --audit-level=low
+
   ruby-free-runtime:
     name: Tableau Python runtime (Ruby absent)
     runs-on: ubuntu-24.04

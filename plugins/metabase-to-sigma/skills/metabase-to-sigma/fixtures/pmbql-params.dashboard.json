@@ -1,0 +1,131 @@
+{
+  "id": 500,
+  "name": "Regional Ops (pMBQL)",
+  "description": "Modern-format dashboard: parameters targeting native template tags (variable + field-filter), a pMBQL dimension target, conditional formatting, series_settings renames, and an object-detail card. Synthetic.",
+  "collection_id": 5,
+  "parameters": [
+    { "id": "p1", "name": "Region", "slug": "region_param", "type": "string/=", "default": "West" },
+    { "id": "p2", "name": "Order Window", "slug": "order_window", "type": "date/range" },
+    { "id": "p3", "name": "Order Date", "slug": "order_date_param", "type": "date/all-options" }
+  ],
+  "tabs": [],
+  "dashcards": [
+    {
+      "id": 9001,
+      "card_id": 401,
+      "row": 0, "col": 0, "size_x": 12, "size_y": 6,
+      "parameter_mappings": [
+        { "parameter_id": "p1", "card_id": 401, "target": ["variable", ["template-tag", "region"]] },
+        { "parameter_id": "p3", "card_id": 401, "target": ["dimension", ["template-tag", "order_date"], { "stage-number": 0 }] }
+      ],
+      "visualization_settings": {
+        "table.column_formatting": [
+          { "columns": ["REVENUE"], "type": "single", "operator": ">", "value": 10000, "color": "#22c55e", "highlight_row": false },
+          { "columns": ["REVENUE"], "type": "range", "colors": ["#ffffff", "#509ee3"], "min_type": null, "max_type": null }
+        ]
+      },
+      "card": {
+        "id": 401,
+        "name": "Filtered Revenue (pMBQL Native + Tags)",
+        "display": "table",
+        "database_id": 2,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "lib/type": "mbql.stage/native",
+              "native": "SELECT c.REGION, SUM(o.SALES_AMOUNT) AS REVENUE FROM DEMO_DB.DEMO.ORDER_FACT o JOIN DEMO_DB.DEMO.CUSTOMER_DIM c ON c.CUSTOMER_KEY = o.CUSTOMER_KEY WHERE c.REGION = {{region}} AND {{order_date}} GROUP BY 1",
+              "template-tags": {
+                "region": { "id": "tt1", "name": "region", "display-name": "Region", "type": "text", "default": "West" },
+                "order_date": {
+                  "id": "tt3", "name": "order_date", "display-name": "Order Date", "type": "dimension",
+                  "widget-type": "date/range",
+                  "dimension": ["field", { "lib/uuid": "00000000-0000-4000-8000-000000000071", "base-type": "type/DateTime" }, 71]
+                }
+              }
+            }
+          ]
+        },
+        "result_metadata": [
+          { "name": "REGION", "display_name": "Region", "base_type": "type/Text" },
+          { "name": "REVENUE", "display_name": "Revenue", "base_type": "type/Float" }
+        ],
+        "visualization_settings": {}
+      }
+    },
+    {
+      "id": 9002,
+      "card_id": 402,
+      "row": 0, "col": 12, "size_x": 12, "size_y": 6,
+      "parameter_mappings": [
+        { "parameter_id": "p2", "card_id": 402, "target": ["dimension", ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000d001", "base-type": "type/DateTime", "temporal-unit": "week" }, 71], { "stage-number": 0 }] }
+      ],
+      "visualization_settings": {
+        "series_settings": { "total_revenue": { "title": "Revenue ($)", "color": "#88BF4D" } }
+      },
+      "card": {
+        "id": 402,
+        "name": "Weekly Orders by Region (pMBQL)",
+        "display": "bar",
+        "database_id": 2,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "lib/type": "mbql.stage/mbql",
+              "source-table": 45,
+              "aggregation": [
+                ["count", { "lib/uuid": "00000000-0000-4000-8000-00000000a001" }],
+                ["sum", { "lib/uuid": "00000000-0000-4000-8000-00000000a002", "name": "total_revenue", "display-name": "Total Revenue" },
+                  ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000a003", "base-type": "type/Float" }, 72]]
+              ],
+              "breakout": [
+                ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000b001", "base-type": "type/DateTime", "temporal-unit": "week" }, 71]
+              ]
+            }
+          ]
+        },
+        "result_metadata": [
+          { "name": "ORDER_DATE", "display_name": "Order Date: Week", "base_type": "type/DateTime", "field_ref": ["field", 71, { "temporal-unit": "week" }] },
+          { "name": "count", "display_name": "Count", "base_type": "type/Integer", "field_ref": ["aggregation", 0] },
+          { "name": "total_revenue", "display_name": "Total Revenue", "base_type": "type/Float", "field_ref": ["aggregation", 1] }
+        ],
+        "visualization_settings": {}
+      }
+    },
+    {
+      "id": 9003,
+      "card_id": 406,
+      "row": 6, "col": 0, "size_x": 8, "size_y": 4,
+      "parameter_mappings": [],
+      "visualization_settings": {},
+      "card": {
+        "id": 406,
+        "name": "Order Record",
+        "display": "object",
+        "database_id": 2,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [{ "lib/type": "mbql.stage/mbql", "source-table": 45 }]
+        },
+        "result_metadata": [
+          { "name": "ORDER_NUMBER", "display_name": "Order Number", "base_type": "type/Integer", "field_ref": ["field", 70, null] }
+        ],
+        "visualization_settings": {}
+      }
+    },
+    {
+      "id": 9004,
+      "card_id": null,
+      "row": 6, "col": 8, "size_x": 8, "size_y": 4,
+      "parameter_mappings": [],
+      "visualization_settings": {
+        "virtual_card": { "display": "text" },
+        "text": "## Ops Notes\nSynthetic markdown block."
+      }
+    }
+  ]
+}

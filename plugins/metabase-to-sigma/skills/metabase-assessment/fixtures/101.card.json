@@ -1,0 +1,32 @@
+{
+  "id": 101,
+  "name": "Revenue by Month",
+  "description": "Clean MBQL question — everything translates automatically.",
+  "collection_id": 5,
+  "database_id": 2,
+  "table_id": 45,
+  "type": "question",
+  "display": "line",
+  "dataset_query": {
+    "type": "query",
+    "database": 2,
+    "query": {
+      "source-table": 45,
+      "aggregation": [
+        ["sum", ["field", 72, null]],
+        ["count"]
+      ],
+      "breakout": [["field", 80, { "temporal-unit": "month" }]],
+      "filter": ["=", ["field", 81, null], "Widget", "Gadget"]
+    }
+  },
+  "result_metadata": [
+    { "name": "CREATED_AT", "display_name": "Created At", "base_type": "type/DateTime", "field_ref": ["field", 80, { "temporal-unit": "month" }] },
+    { "name": "sum", "display_name": "Sum of Total", "base_type": "type/Float" },
+    { "name": "count", "display_name": "Count", "base_type": "type/Integer" }
+  ],
+  "visualization_settings": {
+    "graph.dimensions": ["CREATED_AT"],
+    "graph.metrics": ["sum", "count"]
+  }
+}

@@ -1,0 +1,189 @@
+{
+  "id": 9,
+  "name": "Exec Overview",
+  "description": "Executive orders dashboard — tabs, parameters, mixed viz.",
+  "parameters": [
+    { "id": "p1", "name": "Date",   "slug": "date_range", "type": "date/range", "default": "past30days" },
+    { "id": "p2", "name": "Region", "slug": "region",     "type": "string/=",   "default": null }
+  ],
+  "tabs": [
+    { "id": 11, "name": "Overview" },
+    { "id": 12, "name": "Detail" }
+  ],
+  "dashcards": [
+    {
+      "id": 1, "card_id": null, "dashboard_tab_id": 11,
+      "row": 0, "col": 0, "size_x": 24, "size_y": 2,
+      "visualization_settings": {
+        "virtual_card": { "display": "text" },
+        "text": "## Executive Overview\nKey order metrics for DEMO_DB. Filters apply across the page."
+      }
+    },
+    {
+      "id": 2, "card_id": 201, "dashboard_tab_id": 11,
+      "row": 2, "col": 0, "size_x": 5, "size_y": 4,
+      "parameter_mappings": [],
+      "card": {
+        "id": 201, "name": "Total Revenue", "type": "question", "display": "scalar", "database_id": 2, "table_id": 45,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 45,
+          "aggregation": [["sum", ["field", 72, null]]]
+        }},
+        "result_metadata": [
+          { "name": "sum", "display_name": "Sum of Sales Amount", "base_type": "type/Float", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": {
+          "column_settings": { "[\"name\",\"sum\"]": { "number_style": "currency", "decimals": 0 } }
+        }
+      }
+    },
+    {
+      "id": 3, "card_id": 101, "dashboard_tab_id": 11,
+      "row": 2, "col": 5, "size_x": 10, "size_y": 6,
+      "parameter_mappings": [
+        { "parameter_id": "p1", "card_id": 101, "target": ["dimension", ["field", 71, null]] }
+      ],
+      "card": {
+        "id": 101, "name": "Revenue Trend", "type": "question", "display": "line", "database_id": 2, "table_id": 45,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 45,
+          "aggregation": [["sum", ["field", 72, null]]],
+          "breakout": [["field", 71, { "temporal-unit": "month" }]]
+        }},
+        "result_metadata": [
+          { "name": "ORDER_DATE", "display_name": "Order Date",          "base_type": "type/DateTime", "field_ref": ["field", 71, { "temporal-unit": "month" }] },
+          { "name": "sum",        "display_name": "Sum of Sales Amount", "base_type": "type/Float",    "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": { "graph.dimensions": ["ORDER_DATE"], "graph.metrics": ["sum"] }
+      }
+    },
+    {
+      "id": 4, "card_id": 203, "dashboard_tab_id": 11,
+      "row": 2, "col": 15, "size_x": 9, "size_y": 6,
+      "parameter_mappings": [
+        { "parameter_id": "p2", "card_id": 203, "target": ["dimension", ["field", 85, null]] }
+      ],
+      "card": {
+        "id": 203, "name": "Customers by Region", "type": "question", "display": "bar", "database_id": 2, "table_id": 46,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 46,
+          "aggregation": [["count"]],
+          "breakout": [["field", 85, null]]
+        }},
+        "result_metadata": [
+          { "name": "REGION", "display_name": "Region", "base_type": "type/Text",    "field_ref": ["field", 85, null] },
+          { "name": "count",  "display_name": "Count",  "base_type": "type/Integer", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": {
+          "graph.dimensions": ["REGION"], "graph.metrics": ["count"],
+          "click_behavior": { "type": "crossfilter" }
+        }
+      }
+    },
+    {
+      "id": 5, "card_id": 204, "dashboard_tab_id": 11,
+      "row": 8, "col": 0, "size_x": 12, "size_y": 6,
+      "parameter_mappings": [],
+      "card": {
+        "id": 204, "name": "Customers by Loyalty Tier", "type": "question", "display": "row", "database_id": 2, "table_id": 46,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 46,
+          "aggregation": [["count"]],
+          "breakout": [["field", 84, null]]
+        }},
+        "result_metadata": [
+          { "name": "LOYALTY_TIER", "display_name": "Loyalty Tier", "base_type": "type/Text",    "field_ref": ["field", 84, null] },
+          { "name": "count",        "display_name": "Count",        "base_type": "type/Integer", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": { "graph.dimensions": ["LOYALTY_TIER"], "graph.metrics": ["count"] }
+      }
+    },
+    {
+      "id": 6, "card_id": 205, "dashboard_tab_id": 11,
+      "row": 8, "col": 12, "size_x": 12, "size_y": 6,
+      "parameter_mappings": [],
+      "card": {
+        "id": 205, "name": "Stores by State", "type": "question", "display": "pie", "database_id": 2, "table_id": 47,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 47,
+          "aggregation": [["count"]],
+          "breakout": [["field", 94, null]]
+        }},
+        "result_metadata": [
+          { "name": "STATE", "display_name": "State", "base_type": "type/Text",    "field_ref": ["field", 94, null] },
+          { "name": "count", "display_name": "Count", "base_type": "type/Integer", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": { "pie.dimension": "STATE", "pie.metric": "count" }
+      }
+    },
+    {
+      "id": 7, "card_id": 206, "dashboard_tab_id": 12,
+      "row": 0, "col": 0, "size_x": 14, "size_y": 8,
+      "parameter_mappings": [],
+      "card": {
+        "id": 206, "name": "Revenue by Region and Tier", "type": "question", "display": "pivot", "database_id": 2, "table_id": 45,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 45,
+          "joins": [
+            { "source-table": 46, "alias": "Customer", "strategy": "left-join",
+              "condition": ["=", ["field", 75, null], ["field", 81, { "join-alias": "Customer" }]], "fields": "all" }
+          ],
+          "aggregation": [["sum", ["field", 72, null]]],
+          "breakout": [
+            ["field", 85, { "join-alias": "Customer" }],
+            ["field", 84, { "join-alias": "Customer" }]
+          ]
+        }},
+        "result_metadata": [
+          { "name": "REGION",       "display_name": "Region",              "base_type": "type/Text",  "field_ref": ["field", 85, { "join-alias": "Customer" }] },
+          { "name": "LOYALTY_TIER", "display_name": "Loyalty Tier",        "base_type": "type/Text",  "field_ref": ["field", 84, { "join-alias": "Customer" }] },
+          { "name": "sum",          "display_name": "Sum of Sales Amount", "base_type": "type/Float", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": {
+          "pivot_table.column_split": {
+            "rows":    [["field", 85, { "join-alias": "Customer" }]],
+            "columns": [["field", 84, { "join-alias": "Customer" }]],
+            "values":  [["aggregation", 0]]
+          }
+        }
+      }
+    },
+    {
+      "id": 8, "card_id": 207, "dashboard_tab_id": 12,
+      "row": 0, "col": 14, "size_x": 10, "size_y": 8,
+      "parameter_mappings": [],
+      "card": {
+        "id": 207, "name": "Tier Funnel", "type": "question", "display": "funnel", "database_id": 2, "table_id": 46,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": 46,
+          "aggregation": [["count"]],
+          "breakout": [["field", 84, null]]
+        }},
+        "result_metadata": [
+          { "name": "LOYALTY_TIER", "display_name": "Loyalty Tier", "base_type": "type/Text",    "field_ref": ["field", 84, null] },
+          { "name": "count",        "display_name": "Count",        "base_type": "type/Integer", "field_ref": ["aggregation", 0] }
+        ],
+        "visualization_settings": {}
+      }
+    },
+    {
+      "id": 9, "card_id": 210, "dashboard_tab_id": 12,
+      "row": 8, "col": 0, "size_x": 24, "size_y": 8,
+      "parameter_mappings": [],
+      "card": {
+        "id": 210, "name": "Premium Orders", "type": "question", "display": "table", "database_id": 2,
+        "dataset_query": { "type": "query", "database": 2, "query": {
+          "source-table": "card__100",
+          "filter": ["=", ["field", "Tier Bucket", { "base-type": "type/Text" }], "Premium"]
+        }},
+        "result_metadata": [
+          { "name": "ORDER_NUMBER", "display_name": "Order Number", "base_type": "type/Integer", "field_ref": ["field", "ORDER_NUMBER", { "base-type": "type/Integer" }] },
+          { "name": "SALES_AMOUNT", "display_name": "Sales Amount", "base_type": "type/Float",   "field_ref": ["field", "SALES_AMOUNT", { "base-type": "type/Float" }] },
+          { "name": "Net Amount",   "display_name": "Net Amount",   "base_type": "type/Float",   "field_ref": ["field", "Net Amount",   { "base-type": "type/Float" }] },
+          { "name": "Tier Bucket",  "display_name": "Tier Bucket",  "base_type": "type/Text",    "field_ref": ["field", "Tier Bucket",  { "base-type": "type/Text" }] }
+        ],
+        "visualization_settings": {}
+      }
+    }
+  ]
+}
