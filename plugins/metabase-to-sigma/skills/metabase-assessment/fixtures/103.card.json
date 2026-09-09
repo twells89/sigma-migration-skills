@@ -1,0 +1,27 @@
+{
+  "id": 103,
+  "name": "Orders Cleaned (model)",
+  "description": "Native-SQL model with one plain text tag (auto) and one dimension field-filter tag (hint).",
+  "collection_id": 5,
+  "database_id": 2,
+  "table_id": null,
+  "type": "model",
+  "display": "table",
+  "dataset_query": {
+    "type": "native",
+    "database": 2,
+    "native": {
+      "query": "SELECT * FROM ORDERS WHERE STATUS = {{status}} AND {{date_range}}",
+      "template-tags": {
+        "status": { "name": "status", "display-name": "Status", "type": "text", "default": "completed" },
+        "date_range": { "name": "date_range", "display-name": "Date Range", "type": "dimension", "widget-type": "date/range", "dimension": ["field", 80, null] }
+      }
+    }
+  },
+  "result_metadata": [
+    { "name": "ID", "display_name": "ID", "base_type": "type/BigInteger" },
+    { "name": "TOTAL", "display_name": "Total", "base_type": "type/Float" },
+    { "name": "CREATED_AT", "display_name": "Created At", "base_type": "type/DateTime" }
+  ],
+  "visualization_settings": {}
+}

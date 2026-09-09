@@ -1,0 +1,38 @@
+{
+  "id": 2,
+  "name": "DEMO_DB Snowflake",
+  "engine": "snowflake",
+  "tables": [
+    {
+      "id": 45, "name": "ORDER_FACT", "schema": "DEMO", "db_id": 2, "display_name": "Order Fact",
+      "fields": [
+        { "id": 70, "name": "ORDER_NUMBER",   "display_name": "Order Number",   "base_type": "type/Integer",  "semantic_type": "type/PK", "table_id": 45, "fk_target_field_id": null },
+        { "id": 71, "name": "ORDER_DATE",     "display_name": "Order Date",     "base_type": "type/DateTime", "semantic_type": null,       "table_id": 45, "fk_target_field_id": null },
+        { "id": 72, "name": "SALES_AMOUNT",   "display_name": "Sales Amount",   "base_type": "type/Float",    "semantic_type": null,       "table_id": 45, "fk_target_field_id": null },
+        { "id": 73, "name": "QUANTITY",       "display_name": "Quantity",       "base_type": "type/Integer",  "semantic_type": null,       "table_id": 45, "fk_target_field_id": null },
+        { "id": 74, "name": "DISCOUNT_AMOUNT","display_name": "Discount Amount","base_type": "type/Float",    "semantic_type": null,       "table_id": 45, "fk_target_field_id": null },
+        { "id": 75, "name": "CUSTOMER_KEY",   "display_name": "Customer Key",   "base_type": "type/Integer",  "semantic_type": "type/FK",  "table_id": 45, "fk_target_field_id": 81 },
+        { "id": 76, "name": "ORDER_STORE_KEY","display_name": "Order Store Key","base_type": "type/Integer",  "semantic_type": "type/FK",  "table_id": 45, "fk_target_field_id": 91 }
+      ]
+    },
+    {
+      "id": 46, "name": "CUSTOMER_DIM", "schema": "DEMO", "db_id": 2, "display_name": "Customer Dim",
+      "fields": [
+        { "id": 81, "name": "CUSTOMER_KEY", "display_name": "Customer Key", "base_type": "type/Integer", "semantic_type": "type/PK", "table_id": 46, "fk_target_field_id": null },
+        { "id": 82, "name": "FIRST_NAME",   "display_name": "First Name",   "base_type": "type/Text",    "semantic_type": null,      "table_id": 46, "fk_target_field_id": null },
+        { "id": 83, "name": "LAST_NAME",    "display_name": "Last Name",    "base_type": "type/Text",    "semantic_type": null,      "table_id": 46, "fk_target_field_id": null },
+        { "id": 84, "name": "LOYALTY_TIER", "display_name": "Loyalty Tier", "base_type": "type/Text",    "semantic_type": "type/Category", "table_id": 46, "fk_target_field_id": null },
+        { "id": 85, "name": "REGION",       "display_name": "Region",       "base_type": "type/Text",    "semantic_type": "type/Category", "table_id": 46, "fk_target_field_id": null }
+      ]
+    },
+    {
+      "id": 47, "name": "STORE_DIM", "schema": "DEMO", "db_id": 2, "display_name": "Store Dim",
+      "fields": [
+        { "id": 91, "name": "STORE_KEY",  "display_name": "Store Key",  "base_type": "type/Integer", "semantic_type": "type/PK", "table_id": 47, "fk_target_field_id": null },
+        { "id": 92, "name": "STORE_NAME", "display_name": "Store Name", "base_type": "type/Text",    "semantic_type": null,      "table_id": 47, "fk_target_field_id": null },
+        { "id": 93, "name": "CITY",       "display_name": "City",       "base_type": "type/Text",    "semantic_type": null,      "table_id": 47, "fk_target_field_id": null },
+        { "id": 94, "name": "STATE",      "display_name": "State",      "base_type": "type/Text",    "semantic_type": "type/State", "table_id": 47, "fk_target_field_id": null }
+      ]
+    }
+  ]
+}

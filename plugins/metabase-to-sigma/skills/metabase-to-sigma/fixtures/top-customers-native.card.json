@@ -1,0 +1,30 @@
+{
+  "id": 102,
+  "name": "Top Customers (Native)",
+  "description": "Hand-written SQL with a text variable and a field filter.",
+  "type": "question",
+  "display": "table",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "type": "native",
+    "database": 2,
+    "native": {
+      "query": "SELECT c.FIRST_NAME || ' ' || c.LAST_NAME AS CUSTOMER, SUM(o.SALES_AMOUNT) AS REVENUE\nFROM DEMO_DB.DEMO.ORDER_FACT o\nJOIN DEMO_DB.DEMO.CUSTOMER_DIM c ON c.CUSTOMER_KEY = o.CUSTOMER_KEY\nWHERE c.REGION = {{region}} AND {{order_date}}\nGROUP BY 1\nORDER BY 2 DESC\nLIMIT 10",
+      "template-tags": {
+        "region": {
+          "id": "t1", "name": "region", "display-name": "Region", "type": "text", "default": "West"
+        },
+        "order_date": {
+          "id": "t2", "name": "order_date", "display-name": "Order Date", "type": "dimension",
+          "widget-type": "date/range", "dimension": ["field", 71, null]
+        }
+      }
+    }
+  },
+  "result_metadata": [
+    { "name": "CUSTOMER", "display_name": "Customer", "base_type": "type/Text" },
+    { "name": "REVENUE",  "display_name": "Revenue",  "base_type": "type/Float" }
+  ],
+  "visualization_settings": {}
+}

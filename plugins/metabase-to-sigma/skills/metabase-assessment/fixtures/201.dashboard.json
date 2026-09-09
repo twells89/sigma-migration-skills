@@ -1,0 +1,42 @@
+{
+  "id": 201,
+  "name": "Executive Overview",
+  "description": "One supported line dashcard, one native funnel, a text card, a parameter, and a click behavior (manual).",
+  "collection_id": 5,
+  "view_count": 240,
+  "parameters": [
+    { "id": "abc123", "name": "Date", "slug": "date", "type": "date/range", "default": "past30days" }
+  ],
+  "tabs": [{ "id": 1, "name": "Overview" }],
+  "dashcards": [
+    {
+      "id": 1,
+      "card_id": 101,
+      "row": 0, "col": 0, "size_x": 12, "size_y": 6,
+      "dashboard_tab_id": 1,
+      "card": { "id": 101, "name": "Revenue by Month", "display": "line" },
+      "parameter_mappings": [
+        { "parameter_id": "abc123", "card_id": 101, "target": ["dimension", ["field", 80, null]] }
+      ],
+      "visualization_settings": {}
+    },
+    {
+      "id": 2,
+      "card_id": 104,
+      "row": 0, "col": 12, "size_x": 12, "size_y": 6,
+      "dashboard_tab_id": 1,
+      "card": { "id": 104, "name": "Order Funnel", "display": "funnel" },
+      "parameter_mappings": [],
+      "visualization_settings": {
+        "click_behavior": { "type": "link", "linkType": "url", "linkTemplate": "https://example.com/orders/{{ID}}" }
+      }
+    },
+    {
+      "id": 3,
+      "card_id": null,
+      "row": 6, "col": 0, "size_x": 24, "size_y": 2,
+      "dashboard_tab_id": 1,
+      "visualization_settings": { "virtual_card": { "display": "text" }, "text": "## Orders KPIs" }
+    }
+  ]
+}

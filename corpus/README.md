@@ -43,6 +43,7 @@ corpus/
 | sisense/ecommerce-smoke | existing Sample ECommerce model + dashboard fixtures | DM + workbook + structured gap report (checks.sh also verifies layout) |
 | streamlit/simple-retail | synthetic Streamlit-in-Workspaces Python project | static IR conversion → DM + wrapped workbook, byte-stable reconversion |
 | streamlit/retail-fulfillment-control-tower | synthetic four-page Streamlit-in-Workspaces project | deferred filters/actions, navigation, KPI/chart/table semantics, and byte-stable DM/workbook |
+| metabase/orders-overview | synthetic Metabase model + dashboard REST JSON | MBQL model + wrapped workbook with controls, native funnel, and authoritative layout |
 
 ## Runner
 

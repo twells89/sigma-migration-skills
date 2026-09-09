@@ -207,3 +207,20 @@ Streamlit uses local phase numbering aligned directly to the canonical arc:
 | C8 Parity hard gate | Phase 6 — warehouse/Sigma values, control flips, page/overlay PNGs, `assert-phase6-ran.rb` |
 | C9 Security/RLS | Security section — static detection always, acknowledge/apply explicitly |
 | C10 Enhance | — foundation release defers shared Phase E wiring |
+
+### metabase-to-sigma
+
+Metabase keeps the standalone skill's established local numbering:
+
+| Canonical | metabase-to-sigma |
+|---|---|
+| C1 Assess | `metabase-assessment` skill (read-only inventory, coverage scoring, and shortlist) |
+| C2 Discover | Phase 0 — Metabase REST discovery (cards/models, dashboards, database metadata, and sandbox policies) |
+| C3 Reuse-check | Phase 1.5 — DM signature + `find-or-pick-dm.rb` before creating a new model |
+| C4 Convert | Phase 1 — MBQL/pMBQL cards and models → Sigma data-model spec |
+| C5 Post-DM gate | Phase 2 — POST the data model, read back real element/column ids, and fail on error-typed columns |
+| C6 Build workbook | Phase 3 — dashboard → wrapped workbook document wired to read-back DM ids |
+| C7 Layout | within Phase 3 — complete 24-column layout on create; `apply-layout.mjs` preserves the full document as the LAST write |
+| C8 Parity hard gate | Phase 4 — live Metabase values vs Sigma/warehouse, control flip test, visual check, and `assert-phase6-ran.rb` |
+| C9 Security/RLS | Security section — detect Metabase sandboxing always; port to Sigma user attributes only after explicit review |
+| C10 Enhance | — shared Phase E is not wired in this release |

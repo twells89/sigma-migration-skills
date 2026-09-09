@@ -1,0 +1,35 @@
+{
+  "id": 403,
+  "name": "Orders with Customers (pMBQL Join)",
+  "description": "Modern-format structured card with a pMBQL join: {stages:[{source-table}], conditions:[…], alias, strategy}. Synthetic.",
+  "type": "question",
+  "display": "table",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "lib/type": "mbql/query",
+    "database": 2,
+    "stages": [
+      {
+        "lib/type": "mbql.stage/mbql",
+        "source-table": 45,
+        "joins": [
+          {
+            "lib/type": "mbql/join",
+            "alias": "Customer Dim - Customer",
+            "strategy": "left-join",
+            "fields": "all",
+            "stages": [{ "lib/type": "mbql.stage/mbql", "source-table": 46 }],
+            "conditions": [
+              ["=", { "lib/uuid": "00000000-0000-4000-8000-00000000j001" },
+                ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000j002", "base-type": "type/Integer", "effective-type": "type/Integer" }, 75],
+                ["field", { "lib/uuid": "00000000-0000-4000-8000-00000000j003", "base-type": "type/Integer", "effective-type": "type/Integer", "join-alias": "Customer Dim - Customer" }, 81]]
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "result_metadata": [],
+  "visualization_settings": {}
+}

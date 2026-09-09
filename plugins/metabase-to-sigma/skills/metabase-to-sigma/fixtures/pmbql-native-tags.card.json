@@ -1,0 +1,43 @@
+{
+  "id": 401,
+  "name": "Filtered Revenue (pMBQL Native + Tags)",
+  "description": "Modern-format native card with every template-tag kind: text + number variables, a dimension field filter (pMBQL field clause), a card ref, and an optional [[…]] block. Synthetic.",
+  "type": "question",
+  "display": "table",
+  "database_id": 2,
+  "collection_id": 5,
+  "dataset_query": {
+    "lib/type": "mbql/query",
+    "database": 2,
+    "stages": [
+      {
+        "lib/type": "mbql.stage/native",
+        "native": "SELECT c.REGION, SUM(o.SALES_AMOUNT) AS REVENUE\nFROM DEMO_DB.DEMO.ORDER_FACT o\nJOIN DEMO_DB.DEMO.CUSTOMER_DIM c ON c.CUSTOMER_KEY = o.CUSTOMER_KEY\nWHERE c.REGION = {{region}} AND {{order_date}} AND o.QUANTITY >= {{min_qty}} [[AND c.LOYALTY_TIER = {{tier}}]]\n  AND o.ORDER_NUMBER IN (SELECT ORDER_NUMBER FROM {{#400-daily-revenue}})\nGROUP BY 1",
+        "template-tags": {
+          "region": {
+            "id": "tt1", "name": "region", "display-name": "Region", "type": "text", "default": "West"
+          },
+          "min_qty": {
+            "id": "tt2", "name": "min_qty", "display-name": "Min Quantity", "type": "number", "default": 1
+          },
+          "order_date": {
+            "id": "tt3", "name": "order_date", "display-name": "Order Date", "type": "dimension",
+            "widget-type": "date/range", "required": false,
+            "dimension": ["field", { "lib/uuid": "00000000-0000-4000-8000-000000000071", "base-type": "type/DateTime", "effective-type": "type/DateTime" }, 71]
+          },
+          "tier": {
+            "id": "tt4", "name": "tier", "display-name": "Loyalty Tier", "type": "text"
+          },
+          "#400-daily-revenue": {
+            "id": "tt5", "name": "#400-daily-revenue", "display-name": "#400 Daily Revenue", "type": "card", "card-id": 400
+          }
+        }
+      }
+    ]
+  },
+  "result_metadata": [
+    { "name": "REGION", "display_name": "Region", "base_type": "type/Text" },
+    { "name": "REVENUE", "display_name": "Revenue", "base_type": "type/Float" }
+  ],
+  "visualization_settings": {}
+}

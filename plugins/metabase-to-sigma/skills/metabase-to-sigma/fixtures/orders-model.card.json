@@ -1,0 +1,45 @@
+{
+  "id": 100,
+  "name": "Orders Model",
+  "description": "Curated orders dataset joined to customers — the Metabase model.",
+  "type": "model",
+  "display": "table",
+  "database_id": 2,
+  "table_id": 45,
+  "collection_id": 5,
+  "dataset_query": {
+    "type": "query",
+    "database": 2,
+    "query": {
+      "source-table": 45,
+      "joins": [
+        {
+          "source-table": 46,
+          "alias": "Customer",
+          "strategy": "left-join",
+          "condition": ["=", ["field", 75, null], ["field", 81, { "join-alias": "Customer" }]],
+          "fields": "all"
+        }
+      ],
+      "expressions": {
+        "Net Amount": ["-", ["field", 72, null], ["field", 74, null]],
+        "Tier Bucket": ["case",
+          [[["=", ["field", 84, { "join-alias": "Customer" }], "GOLD", "PLATINUM"], "Premium"]],
+          { "default": "Standard" }
+        ]
+      },
+      "aggregation": [
+        ["aggregation-options", ["sum", ["field", 72, null]], { "name": "total_revenue", "display-name": "Total Revenue" }]
+      ]
+    }
+  },
+  "result_metadata": [
+    { "name": "ORDER_NUMBER", "display_name": "Order Number", "base_type": "type/Integer",  "field_ref": ["field", 70, null] },
+    { "name": "ORDER_DATE",   "display_name": "Order Date",   "base_type": "type/DateTime", "field_ref": ["field", 71, null] },
+    { "name": "SALES_AMOUNT", "display_name": "Sales Amount", "base_type": "type/Float",    "field_ref": ["field", 72, null] },
+    { "name": "REGION",       "display_name": "Region",       "base_type": "type/Text",     "field_ref": ["field", 85, { "join-alias": "Customer" }] },
+    { "name": "Net Amount",   "display_name": "Net Amount",   "base_type": "type/Float",    "field_ref": ["expression", "Net Amount"] },
+    { "name": "Tier Bucket",  "display_name": "Tier Bucket",  "base_type": "type/Text",     "field_ref": ["expression", "Tier Bucket"] }
+  ],
+  "visualization_settings": {}
+}

@@ -176,6 +176,13 @@
       "description": "Streamlit → Sigma static converter and assessment — SQL/dataframe lineage, controls, charts, pages, layout, gaps, and parity.",
       "category": "migration",
       "keywords": ["streamlit", "migration", "bi"]
+    },
+    {
+      "name": "metabase-to-sigma",
+      "source": "./plugins/metabase-to-sigma",
+      "description": "Metabase models, questions, and dashboards → Sigma data models + workbooks, with MBQL/pMBQL translation, native-SQL remodeling, controls, exact-grid layout, and parity verification. Bundles metabase-to-sigma + the read-only metabase-assessment.",
+      "category": "migration",
+      "keywords": ["metabase", "mbql", "migration", "bi"]
     }
   ]
 }

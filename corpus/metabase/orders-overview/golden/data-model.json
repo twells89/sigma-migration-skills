@@ -1,0 +1,324 @@
+{
+  "dataModel": {
+    "name": "DEMO_DB Snowflake",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0001",
+        "name": "Page 1",
+        "elements": [
+          {
+            "id": "id0002",
+            "kind": "table",
+            "name": "Order Fact",
+            "source": {
+              "connectionId": "PLACEHOLDER-CONNECTION-ID",
+              "kind": "warehouse-table",
+              "path": [
+                "DEMO_DB",
+                "DEMO",
+                "ORDER_FACT"
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0003/ORDER_NUMBER",
+                "formula": "[ORDER_FACT/Order Number]"
+              },
+              {
+                "id": "inode-NORM0004/ORDER_DATE",
+                "formula": "[ORDER_FACT/Order Date]"
+              },
+              {
+                "id": "inode-NORM0005/SALES_AMOUNT",
+                "formula": "[ORDER_FACT/Sales Amount]"
+              },
+              {
+                "id": "inode-NORM0006/QUANTITY",
+                "formula": "[ORDER_FACT/Quantity]"
+              },
+              {
+                "id": "inode-NORM0007/DISCOUNT_AMOUNT",
+                "formula": "[ORDER_FACT/Discount Amount]"
+              },
+              {
+                "id": "inode-NORM0008/CUSTOMER_KEY",
+                "formula": "[ORDER_FACT/Customer Key]"
+              },
+              {
+                "id": "inode-NORM0009/ORDER_STORE_KEY",
+                "formula": "[ORDER_FACT/Order Store Key]"
+              }
+            ],
+            "order": [
+              "inode-NORM0003/ORDER_NUMBER",
+              "inode-NORM0004/ORDER_DATE",
+              "inode-NORM0005/SALES_AMOUNT",
+              "inode-NORM0006/QUANTITY",
+              "inode-NORM0007/DISCOUNT_AMOUNT",
+              "inode-NORM0008/CUSTOMER_KEY",
+              "inode-NORM0009/ORDER_STORE_KEY"
+            ],
+            "relationships": [
+              {
+                "id": "id0010",
+                "name": "CUSTOMER_DIM",
+                "targetElementId": "id0011",
+                "keys": [
+                  {
+                    "sourceColumnId": "inode-NORM0008/CUSTOMER_KEY",
+                    "targetColumnId": "inode-NORM0012/CUSTOMER_KEY"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0011",
+            "kind": "table",
+            "name": "Customer Dim",
+            "source": {
+              "connectionId": "PLACEHOLDER-CONNECTION-ID",
+              "kind": "warehouse-table",
+              "path": [
+                "DEMO_DB",
+                "DEMO",
+                "CUSTOMER_DIM"
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0012/CUSTOMER_KEY",
+                "formula": "[CUSTOMER_DIM/Customer Key]"
+              },
+              {
+                "id": "inode-NORM0013/FIRST_NAME",
+                "formula": "[CUSTOMER_DIM/First Name]"
+              },
+              {
+                "id": "inode-NORM0014/LAST_NAME",
+                "formula": "[CUSTOMER_DIM/Last Name]"
+              },
+              {
+                "id": "inode-NORM0015/LOYALTY_TIER",
+                "formula": "[CUSTOMER_DIM/Loyalty Tier]"
+              },
+              {
+                "id": "inode-NORM0016/REGION",
+                "formula": "[CUSTOMER_DIM/Region]"
+              }
+            ],
+            "order": [
+              "inode-NORM0012/CUSTOMER_KEY",
+              "inode-NORM0013/FIRST_NAME",
+              "inode-NORM0014/LAST_NAME",
+              "inode-NORM0015/LOYALTY_TIER",
+              "inode-NORM0016/REGION"
+            ]
+          },
+          {
+            "id": "id0017",
+            "kind": "table",
+            "name": "Orders Model",
+            "source": {
+              "kind": "join",
+              "name": "ORDER_FACT",
+              "connectionId": "PLACEHOLDER-CONNECTION-ID",
+              "joins": [
+                {
+                  "left": {
+                    "kind": "warehouse-table",
+                    "connectionId": "PLACEHOLDER-CONNECTION-ID",
+                    "path": [
+                      "DEMO_DB",
+                      "DEMO",
+                      "ORDER_FACT"
+                    ]
+                  },
+                  "right": {
+                    "kind": "warehouse-table",
+                    "connectionId": "PLACEHOLDER-CONNECTION-ID",
+                    "path": [
+                      "DEMO_DB",
+                      "DEMO",
+                      "CUSTOMER_DIM"
+                    ]
+                  },
+                  "joinType": "left-outer",
+                  "columns": [
+                    {
+                      "left": "[Customer Key]",
+                      "right": "[Customer Key]"
+                    }
+                  ],
+                  "name": "CUSTOMER_DIM"
+                }
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0018/ORDER_NUMBER",
+                "formula": "[ORDER_FACT/Order Number]"
+              },
+              {
+                "id": "inode-NORM0019/ORDER_DATE",
+                "formula": "[ORDER_FACT/Order Date]"
+              },
+              {
+                "id": "inode-NORM0020/SALES_AMOUNT",
+                "formula": "[ORDER_FACT/Sales Amount]"
+              },
+              {
+                "id": "inode-NORM0021/QUANTITY",
+                "formula": "[ORDER_FACT/Quantity]"
+              },
+              {
+                "id": "inode-NORM0022/DISCOUNT_AMOUNT",
+                "formula": "[ORDER_FACT/Discount Amount]"
+              },
+              {
+                "id": "inode-NORM0023/CUSTOMER_KEY",
+                "formula": "[ORDER_FACT/Customer Key]"
+              },
+              {
+                "id": "inode-NORM0024/ORDER_STORE_KEY",
+                "formula": "[ORDER_FACT/Order Store Key]"
+              },
+              {
+                "id": "inode-NORM0025/FIRST_NAME",
+                "formula": "[CUSTOMER_DIM/First Name]"
+              },
+              {
+                "id": "inode-NORM0026/LAST_NAME",
+                "formula": "[CUSTOMER_DIM/Last Name]"
+              },
+              {
+                "id": "inode-NORM0027/LOYALTY_TIER",
+                "formula": "[CUSTOMER_DIM/Loyalty Tier]"
+              },
+              {
+                "id": "inode-NORM0028/REGION",
+                "formula": "[CUSTOMER_DIM/Region]"
+              },
+              {
+                "id": "id0029",
+                "name": "Net Amount",
+                "formula": "([Sales Amount] - [Discount Amount])"
+              },
+              {
+                "id": "id0030",
+                "name": "Tier Bucket",
+                "formula": "If(([Loyalty Tier] = \"GOLD\" or [Loyalty Tier] = \"PLATINUM\"), \"Premium\", \"Standard\")"
+              }
+            ],
+            "order": [
+              "inode-NORM0018/ORDER_NUMBER",
+              "inode-NORM0019/ORDER_DATE",
+              "inode-NORM0020/SALES_AMOUNT",
+              "inode-NORM0021/QUANTITY",
+              "inode-NORM0022/DISCOUNT_AMOUNT",
+              "inode-NORM0023/CUSTOMER_KEY",
+              "inode-NORM0024/ORDER_STORE_KEY",
+              "inode-NORM0025/FIRST_NAME",
+              "inode-NORM0026/LAST_NAME",
+              "inode-NORM0027/LOYALTY_TIER",
+              "inode-NORM0028/REGION",
+              "id0029",
+              "id0030"
+            ],
+            "metrics": [
+              {
+                "id": "id0031",
+                "name": "Total Revenue",
+                "formula": "Sum([Sales Amount])",
+                "format": {
+                  "kind": "number",
+                  "formatString": "$,.2f",
+                  "currencySymbol": "$"
+                }
+              }
+            ]
+          },
+          {
+            "id": "id0032",
+            "kind": "table",
+            "name": "Order Fact View",
+            "source": {
+              "kind": "table",
+              "elementId": "id0002"
+            },
+            "columns": [
+              {
+                "id": "id0033",
+                "formula": "[Order Fact/Order Number]"
+              },
+              {
+                "id": "id0034",
+                "formula": "[Order Fact/Order Date]"
+              },
+              {
+                "id": "id0035",
+                "formula": "[Order Fact/Sales Amount]"
+              },
+              {
+                "id": "id0036",
+                "formula": "[Order Fact/Quantity]"
+              },
+              {
+                "id": "id0037",
+                "formula": "[Order Fact/Discount Amount]"
+              },
+              {
+                "id": "id0038",
+                "formula": "[Order Fact/Customer Key]"
+              },
+              {
+                "id": "id0039",
+                "formula": "[Order Fact/Order Store Key]"
+              },
+              {
+                "id": "id0040",
+                "formula": "[Order Fact/CUSTOMER_DIM/First Name]"
+              },
+              {
+                "id": "id0041",
+                "formula": "[Order Fact/CUSTOMER_DIM/Last Name]"
+              },
+              {
+                "id": "id0042",
+                "formula": "[Order Fact/CUSTOMER_DIM/Loyalty Tier]"
+              },
+              {
+                "id": "id0043",
+                "formula": "[Order Fact/CUSTOMER_DIM/Region]"
+              }
+            ],
+            "order": [
+              "id0033",
+              "id0034",
+              "id0035",
+              "id0036",
+              "id0037",
+              "id0038",
+              "id0039",
+              "id0040",
+              "id0041",
+              "id0042",
+              "id0043"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [],
+  "stats": {
+    "cards": 1,
+    "elements": 4,
+    "sqlElements": 0,
+    "controls": 0,
+    "columns": 36,
+    "metrics": 1,
+    "relationships": 1
+  }
+}

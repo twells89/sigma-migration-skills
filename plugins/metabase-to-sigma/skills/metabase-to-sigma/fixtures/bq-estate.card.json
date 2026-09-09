@@ -1,0 +1,69 @@
+{
+  "metadata": {
+    "engine": "bigquery-cloud-sdk",
+    "name": "Acme BigQuery",
+    "details": { "project-id": "acme-data-lake" },
+    "tables": [
+      {
+        "id": 1,
+        "name": "data_order",
+        "schema": "dbt_prod",
+        "fields": [
+          { "id": 11, "name": "order_id", "base_type": "type/Text" },
+          { "id": 12, "name": "customer_id", "base_type": "type/Integer", "fk_target_field_id": 21 },
+          { "id": 13, "name": "order_total", "base_type": "type/Float" },
+          { "id": 14, "name": "brand", "base_type": "type/Text" }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "dim_customer",
+        "schema": "dbt_core",
+        "fields": [
+          { "id": 21, "name": "customer_id", "base_type": "type/Integer" },
+          { "id": 22, "name": "customer_region", "base_type": "type/Text" }
+        ]
+      }
+    ]
+  },
+  "cards": [
+    {
+      "id": 901,
+      "name": "Orders by Brand (BQ native)",
+      "display": "bar",
+      "dataset_query": {
+        "type": "native",
+        "database": 7,
+        "native": {
+          "query": "select brand, count(*) as n_orders, from `acme-data-lake.dbt_prod.data_order` group by brand order by n_orders desc"
+        }
+      },
+      "result_metadata": [
+        { "name": "brand", "display_name": "brand" },
+        { "name": "n_orders", "display_name": "n_orders" }
+      ]
+    },
+    {
+      "id": 902,
+      "name": "Revenue by Region (BQ join)",
+      "display": "bar",
+      "dataset_query": {
+        "type": "query",
+        "database": 7,
+        "query": {
+          "source-table": 1,
+          "joins": [
+            {
+              "source-table": 2,
+              "alias": "c",
+              "strategy": "left-join",
+              "condition": ["=", ["field", 12, null], ["field", 21, { "join-alias": "c" }]]
+            }
+          ],
+          "aggregation": [["sum", ["field", 13, null]]],
+          "breakout": [["field", 22, { "join-alias": "c" }]]
+        }
+      }
+    }
+  ]
+}

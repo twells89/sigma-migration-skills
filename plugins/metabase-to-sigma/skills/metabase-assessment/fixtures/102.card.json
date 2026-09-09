@@ -1,0 +1,30 @@
+{
+  "id": 102,
+  "name": "Cumulative Revenue",
+  "description": "Uses cum-sum — the converter flags it (window scope lives on the consuming element).",
+  "collection_id": 5,
+  "database_id": 2,
+  "table_id": 45,
+  "type": "question",
+  "display": "line",
+  "dataset_query": {
+    "type": "query",
+    "database": 2,
+    "query": {
+      "source-table": 45,
+      "expressions": {
+        "Profit": ["-", ["field", 72, null], ["field", 73, null]]
+      },
+      "aggregation": [["cum-sum", ["field", 72, null]]],
+      "breakout": [["field", 80, { "temporal-unit": "month" }]]
+    }
+  },
+  "result_metadata": [
+    { "name": "CREATED_AT", "display_name": "Created At", "base_type": "type/DateTime", "field_ref": ["field", 80, { "temporal-unit": "month" }] },
+    { "name": "cum-sum", "display_name": "Cumulative sum of Total", "base_type": "type/Float" }
+  ],
+  "visualization_settings": {
+    "graph.dimensions": ["CREATED_AT"],
+    "graph.metrics": ["cum-sum"]
+  }
+}

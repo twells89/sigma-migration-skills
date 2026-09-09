@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+__pycache__/
+workdir-*/
+**/workdir-*/
+probe-artifacts.jsonl
+posted-workbooks.jsonl
+offramps.jsonl
