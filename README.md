@@ -31,6 +31,7 @@ shared `~/.sigma-migration/env` under any agent.
 /plugin install domo-to-sigma@sigma-migration-skills
 /plugin install hex-to-sigma@sigma-migration-skills
 /plugin install mode-to-sigma@sigma-migration-skills
+/plugin install metabase-to-sigma@sigma-migration-skills
 ```
 
 **Other agents (Cursor, Cortex Code, …)** — clone the repo and point your agent at the
@@ -67,9 +68,15 @@ and the skill drives discovery → translation → build → parity.
 | [`domo-to-sigma`](plugins/domo-to-sigma/) | Domo | `domo-to-sigma`, `domo-assessment`, `domo-import-to-snowflake` |
 | [`hex-to-sigma`](plugins/hex-to-sigma/) | Hex | `hex-to-sigma`, `hex-assessment` (scaffold) |
 | [`mode-to-sigma`](plugins/mode-to-sigma/) | Mode Analytics | `mode-to-sigma` |
+| [`metabase-to-sigma`](plugins/metabase-to-sigma/) | Metabase (OSS / Pro / Enterprise) | `metabase-to-sigma`, `metabase-assessment` |
 | [`sigma-authoring`](plugins/sigma-authoring/) | (companion) | `sigma-workbooks`, `sigma-data-models`, … — install alongside every converter |
 
 In Claude Code, installed skills are namespaced — e.g. `/powerbi-to-sigma:powerbi-assessment`.
+
+The `metabase-to-sigma` plugin converts MBQL/pMBQL questions and models into a
+Sigma data model, then rebuilds dashboards as workbooks with controls and the
+original 24-column layout. Its read-only `metabase-assessment` skill inventories
+and scores an estate through the Metabase REST API before migration.
 
 The `tableau-to-sigma` plugin bundles a third skill, **`tableau-vds-to-cdw`** — a
 data-landing bridge for when a Tableau datasource's data lives only inside Tableau (a
@@ -109,8 +116,8 @@ The canonical phase arc and a per-skill phase-number mapping live in
 [`corpus/`](corpus/README.md) is a regression corpus: real (demo-data) source
 artifacts for every tool — .twb, .bim, classic + PBIR report JSON, Qlik app
 metadata, ThoughtSpot TML, QuickSight describes, Cognos modules/reports,
-LookML — with **golden converter outputs** and a runner. Smoke-test converter
-or builder changes without a live tenant:
+LookML, and Metabase card/dashboard JSON — with **golden converter outputs**
+and a runner. Smoke-test converter or builder changes without a live tenant:
 
 ```
 corpus/run-corpus.sh --check      # no creds needed; CI-safe
@@ -123,7 +130,9 @@ corpus/run-corpus.sh --check      # no creds needed; CI-safe
 - **`sigma-authoring` installed alongside** any converter (canonical workbook/DM spec).
 - **No converter binary to install** — each skill bundles its data-model converter (`convert_*_to_sigma`) and runs it **locally by default** (no network, no data egress). A [hosted converter MCP](https://github.com/twells89/sigma-data-model-mcp) is available as an **optional, opt-in fallback** that sends the source spec off-machine.
 - **Optional:** Sigma MCP for interactive read/query during parity — not required for the REST pipeline ([`docs/agent-entry.md`](docs/agent-entry.md)).
-- Per-tool source access — see each plugin's `refs/connection.md` (e.g. `qlik-cli` for Qlik; device-code / Fabric `getDefinition` for Power BI).
+- Per-tool source access — see each plugin's docs (e.g. `qlik-cli` for Qlik;
+  device-code / Fabric `getDefinition` for Power BI; an API key or session
+  token for Metabase).
 
 ## Provenance
 
