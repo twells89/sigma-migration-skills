@@ -10,7 +10,7 @@ network. Asserts the emitted model.bim shape:
   * tables carry columns [{name,dataType,...}] with PandasDataType -> TMSL
     dataType mapping, and measures [{name,expression}]
   * relationships carry from/to table+column, crossFilteringBehavior, isActive
-  * every table gets an import partition (M passthrough or honest placeholder)
+  * DAX calculated tables keep calculated partitions; regular tables keep M
 
 Also loads the vendored converter (if `node` is present) and asserts the
 emitted model.bim CONVERTS without error — the "flows through the convert
@@ -58,7 +58,7 @@ class FakePBIXRay:
         {"TableName": "SALES_FACT", "ColumnName": "AMOUNT", "PandasDataType": "Float64"},
         {"TableName": "SALES_FACT", "ColumnName": "SALE_DATE", "PandasDataType": "datetime64[ns]"},
         {"TableName": "SALES_FACT", "ColumnName": "IS_RETURN", "PandasDataType": "bool"},
-        {"TableName": "DATE_DIM", "ColumnName": "DATE_KEY", "PandasDataType": "datetime64[ns]"},
+        {"TableName": "DATE_DIM", "ColumnName": "Date", "PandasDataType": "datetime64[ns]"},
         {"TableName": "DATE_DIM", "ColumnName": "MONTH", "PandasDataType": "string"},
     ])
     dax_measures = FakeDF([
@@ -71,12 +71,17 @@ class FakePBIXRay:
         {"TableName": "SALES_FACT", "ColumnName": "Net Amount",
          "Expression": "SALES_FACT[AMOUNT] * 0.9"},
     ])
+    dax_tables = FakeDF([
+        {"TableName": "DATE_DIM",
+         "Expression": 'ADDCOLUMNS(CALENDAR(DATE(2024,1,1), DATE(2024,12,31)), '
+                       '"MONTH", FORMAT([Date], "MMM"))'},
+    ])
     relationships = FakeDF([
         {"FromTableName": "SALES_FACT", "FromColumnName": "SALE_DATE",
-         "ToTableName": "DATE_DIM", "ToColumnName": "DATE_KEY",
+         "ToTableName": "DATE_DIM", "ToColumnName": "Date",
          "IsActive": True, "CrossFilteringBehavior": "Single"},
         {"FromTableName": "SALES_FACT", "FromColumnName": "SALE_DATE",
-         "ToTableName": "DATE_DIM", "ToColumnName": "DATE_KEY",
+         "ToTableName": "DATE_DIM", "ToColumnName": "Date",
          "IsActive": False, "CrossFilteringBehavior": "Both"},
     ])
     power_query = FakeDF([
@@ -85,7 +90,7 @@ class FakePBIXRay:
                        ' Nav = Source{[Name="RAW",Kind="Database"]}[Data],'
                        ' Sch = Nav{[Name="SALES",Kind="Schema"]}[Data],'
                        ' Tbl = Sch{[Name="SALES_FACT",Kind="Table"]}[Data] in Tbl'},
-        # DATE_DIM deliberately has NO M query -> exercises the placeholder branch.
+        # DATE_DIM deliberately has no M: dax_tables must supply its partition.
     ])
 
 
@@ -117,20 +122,24 @@ def test_assembly():
     assert "description" not in meas["Sale Count"], "empty description must be omitted"
 
     # Partitions: SALES_FACT passes M through (so the WH FQN survives); DATE_DIM
-    # (no M) gets an honest placeholder partition, still mode=import.
+    # keeps its calculated-table DAX rather than becoming a fake warehouse path.
     sf_part = sf["partitions"][0]
     assert sf_part["mode"] == "import" and sf_part["source"]["type"] == "m"
     assert "Snowflake.Databases" in sf_part["source"]["expression"], sf_part
     dd_part = tbls["DATE_DIM"]["partitions"][0]
     assert dd_part["mode"] == "import"
-    assert isinstance(dd_part["source"]["expression"], list), "placeholder M is a comment list"
+    assert dd_part["source"]["type"] == "calculated", dd_part
+    assert "ADDCOLUMNS(CALENDAR" in dd_part["source"]["expression"], dd_part
+    dd_cols = {c["name"]: c for c in tbls["DATE_DIM"]["columns"]}
+    assert dd_cols["Date"]["type"] == "calculatedTableColumn", dd_cols["Date"]
+    assert dd_cols["Date"]["sourceColumn"] == "[Date]", dd_cols["Date"]
 
     # Relationships: field mapping + crossFilteringBehavior + isActive.
     rels = m["relationships"]
     assert len(rels) == 2, rels
     r0, r1 = rels
     assert (r0["fromTable"], r0["fromColumn"], r0["toTable"], r0["toColumn"]) == \
-           ("SALES_FACT", "SALE_DATE", "DATE_DIM", "DATE_KEY"), r0
+           ("SALES_FACT", "SALE_DATE", "DATE_DIM", "Date"), r0
     assert r0["crossFilteringBehavior"] == "oneDirection" and r0["isActive"] is True, r0
     assert r1["crossFilteringBehavior"] == "bothDirections" and r1["isActive"] is False, r1
     assert r0["name"] and r1["name"] and r0["name"] != r1["name"], "relationships need unique names"
@@ -140,7 +149,7 @@ def test_assembly():
         [{"TableName": "T", "ColumnName": "C", "PandasDataType": "string"}],
         [], [])
     assert direct["model"]["tables"][0]["columns"][0]["dataType"] == "string"
-    print("  ok [assembly]: columns/dataType, measures, calc cols, partitions, relationships")
+    print("  ok [assembly]: columns/dataType, measures, calc cols/tables, partitions, relationships")
     return tmsl
 
 
@@ -170,6 +179,9 @@ def test_converts(tmsl):
                 "if (!els.length) { console.error('NO ELEMENTS'); process.exit(3); }\n"
                 "const wh = els.find(e=>e.source && e.source.kind==='warehouse-table');\n"
                 "if (!wh || !(wh.source.path||[]).includes('SALES_FACT')) { console.error('NO SALES_FACT PATH'); process.exit(4); }\n"
+                "const cal = els.find(e=>e.source && e.source.kind==='sql' && /GENERATOR/.test(e.source.statement||''));\n"
+                "if (!cal || /_placeholder/.test(cal.source.statement||'')) { console.error('NO CALCULATED DATE SPINE'); process.exit(5); }\n"
+                "if (els.some(e=>(e.source&&e.source.path||[]).includes('DATE_DIM'))) { console.error('DATE_DIM BECAME WAREHOUSE TABLE'); process.exit(6); }\n"
                 "console.log('CONVERT_OK elements='+els.length);\n")
         r = subprocess.run(["node", shim], capture_output=True, text=True)
         assert r.returncode == 0 and "CONVERT_OK" in r.stdout, \

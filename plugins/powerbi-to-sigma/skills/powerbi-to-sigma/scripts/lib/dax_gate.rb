@@ -14,6 +14,35 @@
 module DaxGate
   module_function
 
+  # Calculated-table failures are data-shape failures, not ordinary measure
+  # degradations. A placeholder table or NULL-derived date attribute can still
+  # POST and return rows while making every event filter wrong, so callers must
+  # stop before DM reuse/post unless the user explicitly accepts the incomplete
+  # table. Returns stable, human-readable issue strings.
+  def calculated_table_issues(dm_model, conv_warnings)
+    issues = []
+    ((dm_model && dm_model['pages']) || []).each do |pg|
+      (pg['elements'] || []).each do |el|
+        statement = el.dig('source', 'statement').to_s
+        next unless el.dig('source', 'kind') == 'sql'
+        if el['ok'] == false || statement.include?('SELECT 1 AS _placeholder')
+          issues << 'calculated-table converter emitted placeholder SQL'
+        end
+        if statement.match?(/\bNULL\s+AS\s+"[^"]+"/i) &&
+           statement.match?(/\bGENERATOR\s*\(\s*ROWCOUNT/i)
+          issues << 'calculated date table contains NULL-derived columns'
+        end
+      end
+    end
+    (conv_warnings || []).each do |warning|
+      text = warning.to_s.gsub(/\s+/, ' ').strip
+      next unless text.match?(/\ACalculated table /i) ||
+                  text.match?(/\A[⚠⛔]\s*Calculated table /i)
+      issues << text if text.match?(/dropped column|placeholder SQL|emitted as NULL/i)
+    end
+    issues.uniq
+  end
+
   # Display-names the converter realized in the DM model (element + metric + column
   # names) — used to tell a handled restructure from a real drop.
   def realized_names(dm_model)

@@ -16,6 +16,7 @@ plugin's own
 | fixture_06_kitchen_sink | everything at once |
 | fixture_07_comp_distribution | percentiles/median distribution patterns |
 | fixture_08_safety_absence_patterns | window/time DAX on safety data |
+| fixture_10_retail_calendar | calculated retail calendar (Black Friday, Easter, Back to School, Christmas) |
 
 ## Converter
 
@@ -41,7 +42,8 @@ text). Add goldens for the other fixtures the same way (`--reconvert`).
     {"path": "../../../plugins/powerbi-to-sigma/skills/powerbi-to-sigma/fixtures/fixture_05_relationships_hard.bim", "format": "json"},
     {"path": "../../../plugins/powerbi-to-sigma/skills/powerbi-to-sigma/fixtures/fixture_06_kitchen_sink.bim", "format": "json"},
     {"path": "../../../plugins/powerbi-to-sigma/skills/powerbi-to-sigma/fixtures/fixture_07_comp_distribution.bim", "format": "json"},
-    {"path": "../../../plugins/powerbi-to-sigma/skills/powerbi-to-sigma/fixtures/fixture_08_safety_absence_patterns.bim", "format": "json"}
+    {"path": "../../../plugins/powerbi-to-sigma/skills/powerbi-to-sigma/fixtures/fixture_08_safety_absence_patterns.bim", "format": "json"},
+    {"path": "../../../plugins/powerbi-to-sigma/skills/powerbi-to-sigma/fixtures/fixture_10_retail_calendar.bim", "format": "json"}
   ],
   "goldens": {
     "fixture_01_mechanical.dm.json": {

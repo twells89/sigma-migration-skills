@@ -94,7 +94,8 @@ Notes / caveats:
 | `schema` (`TableName`,`ColumnName`,`PandasDataType`) | `table.columns[].{name,dataType,sourceColumn}` (pandas dtype → `int64`/`double`/`dateTime`/`boolean`/`binary`/`string`) |
 | `dax_measures` (`TableName`,`Name`,`Expression`) | `table.measures[].{name,expression}` |
 | `dax_columns` (`TableName`,`ColumnName`,`Expression`) | `table.columns[]` marked `type:"calculated"` |
-| `power_query` (`TableName`,`Expression`) | `table.partitions[].source` (M passthrough → warehouse FQN; tables with no M get an honest placeholder partition) |
+| `dax_tables` (`TableName`,`Expression`) | `table.partitions[].source` marked `type:"calculated"`; output columns marked `type:"calculatedTableColumn"` |
+| `power_query` (`TableName`,`Expression`) | regular-table `partitions[].source` (M passthrough → warehouse FQN; tables with neither M nor calculated-table DAX get an honest placeholder partition) |
 | `relationships` (`From*`,`To*`,`IsActive`,`CrossFilteringBehavior`) | `model.relationships[].{name,fromTable,fromColumn,toTable,toColumn,crossFilteringBehavior,isActive}` |
 
 The assembly (`assemble_tmsl` / `build_model_from_pbixray`) is a pure function of

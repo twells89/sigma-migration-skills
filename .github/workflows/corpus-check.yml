@@ -733,6 +733,7 @@ jobs:
           tests+=(
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-conditional-formats.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-dax-gate.rb
+            plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-retail-calendar.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-pbi-style.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-pbi-filter-apply.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-pbi-pivot-sort.rb
