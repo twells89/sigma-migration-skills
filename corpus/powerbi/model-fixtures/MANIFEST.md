@@ -25,10 +25,16 @@ empty connection/database/schema.
 
 ## Golden
 
-`golden/fixture_01_mechanical.dm.json` — converter output for fixture_01
-(representative regression anchor: covers measures→metrics, calc columns,
-RELATED → derived-View element move, relationships, format strings, warning
-text). Add goldens for the other fixtures the same way (`--reconvert`).
+Normalized converter outputs:
+
+- `golden/fixture_01_mechanical.dm.json` — measures→metrics, calc columns,
+  RELATED → derived-View element move, relationships, formats, warnings.
+- `golden/fixture_02_time_intelligence.dm.json` — generic calculated date
+  spine plus YTD/prior-period restructuring.
+- `golden/fixture_10_retail_calendar.dm.json` — Black Friday, Easter,
+  Back-to-School, and Christmas calculated calendar columns.
+
+Add goldens for the other fixtures the same way (`--reconvert`).
 
 ## Expectations
 
@@ -54,6 +60,26 @@ text). Add goldens for the other fixtures the same way (`--reconvert`).
       "relationships": 2,
       "warnings": 8,
       "element_names": ["EMPLOYEES", "ABSENCE_RECORDS", "SAFETY_INCIDENTS", "ABSENCE_RECORDS View", "SAFETY_INCIDENTS View"]
+    },
+    "fixture_02_time_intelligence.dm.json": {
+      "pages": 1,
+      "elements": 12,
+      "columns": 66,
+      "metrics": 3,
+      "relationships": 4,
+      "warnings": 16,
+      "metric_names": ["Headcount", "Total Absence Hours", "Incident Count"],
+      "relationship_names": ["EMPLOYEES", "DimDate", "EMPLOYEES", "DimDate"]
+    },
+    "fixture_10_retail_calendar.dm.json": {
+      "pages": 1,
+      "elements": 3,
+      "columns": 25,
+      "metrics": 1,
+      "relationships": 1,
+      "warnings": 2,
+      "metric_names": ["Total Sales"],
+      "relationship_names": ["DimRetailDate"]
     }
   }
 }

@@ -1,0 +1,810 @@
+{
+  "model": {
+    "name": "Power BI Import",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0001",
+        "name": "Page 1",
+        "elements": [
+          {
+            "id": "id0002",
+            "kind": "table",
+            "name": "EMPLOYEES",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "DEMO_DB",
+                "DEMO",
+                "EMPLOYEES"
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0003/EMPLOYEE_ID",
+                "formula": "[EMPLOYEES/Employee Id]"
+              },
+              {
+                "id": "inode-NORM0004/DEPARTMENT",
+                "formula": "[EMPLOYEES/Department]"
+              },
+              {
+                "id": "inode-NORM0005/HIRE_DATE",
+                "formula": "[EMPLOYEES/Hire Date]"
+              },
+              {
+                "id": "inode-NORM0006/STATUS",
+                "formula": "[EMPLOYEES/Status]"
+              }
+            ],
+            "order": [
+              "inode-NORM0003/EMPLOYEE_ID",
+              "inode-NORM0004/DEPARTMENT",
+              "inode-NORM0005/HIRE_DATE",
+              "inode-NORM0006/STATUS"
+            ],
+            "metrics": [
+              {
+                "id": "id0007",
+                "formula": "Count()",
+                "name": "Headcount",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.0f"
+                }
+              }
+            ]
+          },
+          {
+            "id": "id0008",
+            "kind": "table",
+            "name": "ABSENCE_RECORDS",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "DEMO_DB",
+                "DEMO",
+                "ABSENCE_RECORDS"
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0009/ABSENCE_ID",
+                "formula": "[ABSENCE_RECORDS/Absence Id]"
+              },
+              {
+                "id": "inode-NORM0010/EMPLOYEE_ID",
+                "formula": "[ABSENCE_RECORDS/Employee Id]"
+              },
+              {
+                "id": "inode-NORM0011/DATE",
+                "formula": "[ABSENCE_RECORDS/Date]"
+              },
+              {
+                "id": "inode-NORM0012/HOURS",
+                "formula": "[ABSENCE_RECORDS/Hours]"
+              }
+            ],
+            "order": [
+              "inode-NORM0009/ABSENCE_ID",
+              "inode-NORM0010/EMPLOYEE_ID",
+              "inode-NORM0011/DATE",
+              "inode-NORM0012/HOURS"
+            ],
+            "metrics": [
+              {
+                "id": "id0013",
+                "formula": "Sum([Hours])",
+                "name": "Total Absence Hours",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.1f"
+                }
+              }
+            ],
+            "relationships": [
+              {
+                "id": "id0014",
+                "targetElementId": "id0002",
+                "keys": [
+                  {
+                    "sourceColumnId": "inode-NORM0010/EMPLOYEE_ID",
+                    "targetColumnId": "inode-NORM0003/EMPLOYEE_ID"
+                  }
+                ],
+                "name": "EMPLOYEES"
+              },
+              {
+                "id": "id0015",
+                "targetElementId": "id0016",
+                "keys": [
+                  {
+                    "sourceColumnId": "inode-NORM0011/DATE",
+                    "targetColumnId": "inode-NORM0017/DATE"
+                  }
+                ],
+                "name": "DimDate"
+              }
+            ]
+          },
+          {
+            "id": "id0018",
+            "kind": "table",
+            "name": "SAFETY_INCIDENTS",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "DEMO_DB",
+                "DEMO",
+                "SAFETY_INCIDENTS"
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0019/INCIDENT_ID",
+                "formula": "[SAFETY_INCIDENTS/Incident Id]"
+              },
+              {
+                "id": "inode-NORM0020/EMPLOYEE_ID",
+                "formula": "[SAFETY_INCIDENTS/Employee Id]"
+              },
+              {
+                "id": "inode-NORM0021/DATE",
+                "formula": "[SAFETY_INCIDENTS/Date]"
+              },
+              {
+                "id": "inode-NORM0022/SEVERITY",
+                "formula": "[SAFETY_INCIDENTS/Severity]"
+              }
+            ],
+            "order": [
+              "inode-NORM0019/INCIDENT_ID",
+              "inode-NORM0020/EMPLOYEE_ID",
+              "inode-NORM0021/DATE",
+              "inode-NORM0022/SEVERITY"
+            ],
+            "metrics": [
+              {
+                "id": "id0023",
+                "formula": "CountDistinct([Incident Id])",
+                "name": "Incident Count",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.0f"
+                }
+              }
+            ],
+            "relationships": [
+              {
+                "id": "id0024",
+                "targetElementId": "id0002",
+                "keys": [
+                  {
+                    "sourceColumnId": "inode-NORM0020/EMPLOYEE_ID",
+                    "targetColumnId": "inode-NORM0003/EMPLOYEE_ID"
+                  }
+                ],
+                "name": "EMPLOYEES"
+              },
+              {
+                "id": "id0025",
+                "targetElementId": "id0016",
+                "keys": [
+                  {
+                    "sourceColumnId": "inode-NORM0021/DATE",
+                    "targetColumnId": "inode-NORM0017/DATE"
+                  }
+                ],
+                "name": "DimDate"
+              }
+            ]
+          },
+          {
+            "id": "id0016",
+            "kind": "table",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "sql",
+              "statement": "SELECT d AS \"Date\", EXTRACT(YEAR FROM d) AS \"Year\", EXTRACT(MONTH FROM d) AS \"Month No\", TO_CHAR(d, 'Mon') AS \"Month\", EXTRACT(QUARTER FROM d) AS \"Quarter No\"\nFROM (\n  SELECT DATEADD('day', SEQ4(), CAST('2018-01-01' AS DATE)) AS d\n  FROM TABLE(GENERATOR(ROWCOUNT => 3287))\n)"
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0017/DATE",
+                "formula": "[Custom SQL/Date]"
+              },
+              {
+                "id": "inode-NORM0026/YEAR",
+                "formula": "[Custom SQL/Year]"
+              },
+              {
+                "id": "inode-NORM0027/MONTH_NO",
+                "formula": "[Custom SQL/Month No]"
+              },
+              {
+                "id": "inode-NORM0028/MONTH",
+                "formula": "[Custom SQL/Month]"
+              },
+              {
+                "id": "inode-NORM0029/QUARTER_NO",
+                "formula": "[Custom SQL/Quarter No]"
+              },
+              {
+                "id": "inode-NORM0030/QUARTER",
+                "formula": "\"Q\" & Quarter([Date])",
+                "name": "Quarter"
+              }
+            ],
+            "order": [
+              "inode-NORM0017/DATE",
+              "inode-NORM0026/YEAR",
+              "inode-NORM0027/MONTH_NO",
+              "inode-NORM0028/MONTH",
+              "inode-NORM0029/QUARTER_NO",
+              "inode-NORM0030/QUARTER"
+            ]
+          },
+          {
+            "id": "id0031",
+            "kind": "table",
+            "name": "ABSENCE_RECORDS View",
+            "source": {
+              "kind": "table",
+              "elementId": "id0008"
+            },
+            "columns": [
+              {
+                "id": "id0032",
+                "formula": "[ABSENCE_RECORDS/Absence Id]"
+              },
+              {
+                "id": "id0033",
+                "formula": "[ABSENCE_RECORDS/Employee Id]"
+              },
+              {
+                "id": "id0034",
+                "formula": "[ABSENCE_RECORDS/Date]"
+              },
+              {
+                "id": "id0035",
+                "formula": "[ABSENCE_RECORDS/Hours]"
+              },
+              {
+                "id": "id0036",
+                "formula": "[ABSENCE_RECORDS/EMPLOYEES/Department]",
+                "hidden": true
+              },
+              {
+                "id": "id0037",
+                "formula": "[ABSENCE_RECORDS/EMPLOYEES/Hire Date]",
+                "hidden": true
+              },
+              {
+                "id": "id0038",
+                "formula": "[ABSENCE_RECORDS/EMPLOYEES/Status]",
+                "hidden": true
+              },
+              {
+                "id": "id0039",
+                "formula": "[ABSENCE_RECORDS/DimDate/Year]",
+                "hidden": true
+              },
+              {
+                "id": "id0040",
+                "formula": "[ABSENCE_RECORDS/DimDate/Month No]",
+                "hidden": true
+              },
+              {
+                "id": "id0041",
+                "formula": "[ABSENCE_RECORDS/DimDate/Month]",
+                "hidden": true
+              },
+              {
+                "id": "id0042",
+                "formula": "[ABSENCE_RECORDS/DimDate/Quarter No]",
+                "hidden": true
+              },
+              {
+                "id": "id0043",
+                "formula": "[ABSENCE_RECORDS/DimDate/Quarter]",
+                "hidden": true
+              }
+            ],
+            "order": [
+              "id0032",
+              "id0033",
+              "id0034",
+              "id0035",
+              "id0036",
+              "id0037",
+              "id0038",
+              "id0039",
+              "id0040",
+              "id0041",
+              "id0042",
+              "id0043"
+            ],
+            "folders": [
+              {
+                "id": "id0044",
+                "name": "EMPLOYEES",
+                "items": [
+                  "id0036",
+                  "id0037",
+                  "id0038"
+                ]
+              },
+              {
+                "id": "id0045",
+                "name": "DimDate",
+                "items": [
+                  "id0039",
+                  "id0040",
+                  "id0041",
+                  "id0042",
+                  "id0043"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0046",
+            "kind": "table",
+            "name": "SAFETY_INCIDENTS View",
+            "source": {
+              "kind": "table",
+              "elementId": "id0018"
+            },
+            "columns": [
+              {
+                "id": "id0047",
+                "formula": "[SAFETY_INCIDENTS/Incident Id]"
+              },
+              {
+                "id": "id0048",
+                "formula": "[SAFETY_INCIDENTS/Employee Id]"
+              },
+              {
+                "id": "id0049",
+                "formula": "[SAFETY_INCIDENTS/Date]"
+              },
+              {
+                "id": "id0050",
+                "formula": "[SAFETY_INCIDENTS/Severity]"
+              },
+              {
+                "id": "id0051",
+                "formula": "[SAFETY_INCIDENTS/EMPLOYEES/Department]",
+                "hidden": true
+              },
+              {
+                "id": "id0052",
+                "formula": "[SAFETY_INCIDENTS/EMPLOYEES/Hire Date]",
+                "hidden": true
+              },
+              {
+                "id": "id0053",
+                "formula": "[SAFETY_INCIDENTS/EMPLOYEES/Status]",
+                "hidden": true
+              },
+              {
+                "id": "id0054",
+                "formula": "[SAFETY_INCIDENTS/DimDate/Year]",
+                "hidden": true
+              },
+              {
+                "id": "id0055",
+                "formula": "[SAFETY_INCIDENTS/DimDate/Month No]",
+                "hidden": true
+              },
+              {
+                "id": "id0056",
+                "formula": "[SAFETY_INCIDENTS/DimDate/Month]",
+                "hidden": true
+              },
+              {
+                "id": "id0057",
+                "formula": "[SAFETY_INCIDENTS/DimDate/Quarter No]",
+                "hidden": true
+              },
+              {
+                "id": "id0058",
+                "formula": "[SAFETY_INCIDENTS/DimDate/Quarter]",
+                "hidden": true
+              }
+            ],
+            "order": [
+              "id0047",
+              "id0048",
+              "id0049",
+              "id0050",
+              "id0051",
+              "id0052",
+              "id0053",
+              "id0054",
+              "id0055",
+              "id0056",
+              "id0057",
+              "id0058"
+            ],
+            "folders": [
+              {
+                "id": "id0059",
+                "name": "EMPLOYEES",
+                "items": [
+                  "id0051",
+                  "id0052",
+                  "id0053"
+                ]
+              },
+              {
+                "id": "id0060",
+                "name": "DimDate",
+                "items": [
+                  "id0054",
+                  "id0055",
+                  "id0056",
+                  "id0057",
+                  "id0058"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0061",
+            "kind": "table",
+            "name": "YTD Absence Hours",
+            "source": {
+              "kind": "table",
+              "elementId": "id0031"
+            },
+            "columns": [
+              {
+                "id": "id0062",
+                "formula": "DateTrunc(\"year\", [ABSENCE_RECORDS View/Date])",
+                "name": "Year"
+              },
+              {
+                "id": "id0063",
+                "formula": "DateTrunc(\"month\", [ABSENCE_RECORDS View/Date])",
+                "name": "Month"
+              },
+              {
+                "id": "id0064",
+                "formula": "Sum([ABSENCE_RECORDS View/Hours])",
+                "name": "Hours"
+              },
+              {
+                "id": "id0065",
+                "formula": "CumulativeSum([Hours])",
+                "name": "Hours YTD"
+              }
+            ],
+            "order": [
+              "id0062",
+              "id0063",
+              "id0064",
+              "id0065"
+            ],
+            "groupings": [
+              {
+                "id": "id0066",
+                "groupBy": [
+                  "id0062"
+                ]
+              },
+              {
+                "id": "id0067",
+                "groupBy": [
+                  "id0063"
+                ],
+                "calculations": [
+                  "id0064",
+                  "id0065"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0068",
+            "kind": "table",
+            "name": "PY Absence Hours",
+            "source": {
+              "kind": "table",
+              "elementId": "id0031"
+            },
+            "columns": [
+              {
+                "id": "id0069",
+                "formula": "DateTrunc(\"year\", [ABSENCE_RECORDS View/Date])",
+                "name": "Year"
+              },
+              {
+                "id": "id0070",
+                "formula": "Sum([ABSENCE_RECORDS View/Hours])",
+                "name": "Hours"
+              },
+              {
+                "id": "id0071",
+                "formula": "DateLookback([Hours], [Year], 1, \"year\")",
+                "name": "Hours (Prior Year)"
+              },
+              {
+                "id": "id0072",
+                "formula": "([Hours] - [Hours (Prior Year)]) / [Hours (Prior Year)]",
+                "name": "Hours YoY %",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.1%"
+                }
+              }
+            ],
+            "order": [
+              "id0069",
+              "id0070",
+              "id0071",
+              "id0072"
+            ],
+            "groupings": [
+              {
+                "id": "id0073",
+                "groupBy": [
+                  "id0069"
+                ],
+                "calculations": [
+                  "id0070",
+                  "id0071",
+                  "id0072"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0074",
+            "kind": "table",
+            "name": "Absence Hours 30d Ago",
+            "source": {
+              "kind": "table",
+              "elementId": "id0031"
+            },
+            "columns": [
+              {
+                "id": "id0075",
+                "formula": "DateTrunc(\"year\", [ABSENCE_RECORDS View/Date])",
+                "name": "Year"
+              },
+              {
+                "id": "id0076",
+                "formula": "Sum([ABSENCE_RECORDS View/Hours])",
+                "name": "Hours"
+              },
+              {
+                "id": "id0077",
+                "formula": "DateLookback([Hours], [Year], 1, \"year\")",
+                "name": "Hours (Prior Year)"
+              },
+              {
+                "id": "id0078",
+                "formula": "([Hours] - [Hours (Prior Year)]) / [Hours (Prior Year)]",
+                "name": "Hours YoY %",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.1%"
+                }
+              }
+            ],
+            "order": [
+              "id0075",
+              "id0076",
+              "id0077",
+              "id0078"
+            ],
+            "groupings": [
+              {
+                "id": "id0079",
+                "groupBy": [
+                  "id0075"
+                ],
+                "calculations": [
+                  "id0076",
+                  "id0077",
+                  "id0078"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0080",
+            "kind": "table",
+            "name": "PY Incident Count",
+            "source": {
+              "kind": "table",
+              "elementId": "id0046"
+            },
+            "columns": [
+              {
+                "id": "id0081",
+                "formula": "DateTrunc(\"year\", [SAFETY_INCIDENTS View/Date])",
+                "name": "Year"
+              },
+              {
+                "id": "id0082",
+                "formula": "CountDistinct([SAFETY_INCIDENTS View/Incident Id])",
+                "name": "Incident Id"
+              },
+              {
+                "id": "id0083",
+                "formula": "DateLookback([Incident Id], [Year], 1, \"year\")",
+                "name": "Incident Id (Prior Year)"
+              },
+              {
+                "id": "id0084",
+                "formula": "([Incident Id] - [Incident Id (Prior Year)]) / [Incident Id (Prior Year)]",
+                "name": "Incident Id YoY %",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.1%"
+                }
+              }
+            ],
+            "order": [
+              "id0081",
+              "id0082",
+              "id0083",
+              "id0084"
+            ],
+            "groupings": [
+              {
+                "id": "id0085",
+                "groupBy": [
+                  "id0081"
+                ],
+                "calculations": [
+                  "id0082",
+                  "id0083",
+                  "id0084"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0086",
+            "kind": "table",
+            "name": "YTD Incident Count",
+            "source": {
+              "kind": "table",
+              "elementId": "id0046"
+            },
+            "columns": [
+              {
+                "id": "id0087",
+                "formula": "DateTrunc(\"year\", [SAFETY_INCIDENTS View/Date])",
+                "name": "Year"
+              },
+              {
+                "id": "id0088",
+                "formula": "DateTrunc(\"month\", [SAFETY_INCIDENTS View/Date])",
+                "name": "Month"
+              },
+              {
+                "id": "id0089",
+                "formula": "CountDistinct([SAFETY_INCIDENTS View/Incident Id])",
+                "name": "Incident Id"
+              },
+              {
+                "id": "id0090",
+                "formula": "CumulativeSum([Incident Id])",
+                "name": "Incident Id YTD"
+              }
+            ],
+            "order": [
+              "id0087",
+              "id0088",
+              "id0089",
+              "id0090"
+            ],
+            "groupings": [
+              {
+                "id": "id0091",
+                "groupBy": [
+                  "id0087"
+                ]
+              },
+              {
+                "id": "id0092",
+                "groupBy": [
+                  "id0088"
+                ],
+                "calculations": [
+                  "id0089",
+                  "id0090"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0093",
+            "kind": "table",
+            "name": "Incident MoM Delta",
+            "source": {
+              "kind": "table",
+              "elementId": "id0046"
+            },
+            "columns": [
+              {
+                "id": "id0094",
+                "formula": "DateTrunc(\"year\", [SAFETY_INCIDENTS View/Date])",
+                "name": "Year"
+              },
+              {
+                "id": "id0095",
+                "formula": "CountDistinct([SAFETY_INCIDENTS View/Incident Id])",
+                "name": "Incident Id"
+              },
+              {
+                "id": "id0096",
+                "formula": "DateLookback([Incident Id], [Year], 1, \"year\")",
+                "name": "Incident Id (Prior Year)"
+              },
+              {
+                "id": "id0097",
+                "formula": "([Incident Id] - [Incident Id (Prior Year)]) / [Incident Id (Prior Year)]",
+                "name": "Incident Id YoY %",
+                "format": {
+                  "kind": "number",
+                  "formatString": ",.1%"
+                }
+              }
+            ],
+            "order": [
+              "id0094",
+              "id0095",
+              "id0096",
+              "id0097"
+            ],
+            "groupings": [
+              {
+                "id": "id0098",
+                "groupBy": [
+                  "id0094"
+                ],
+                "calculations": [
+                  "id0095",
+                  "id0096",
+                  "id0097"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [
+    "⚠ Connection ID not set — update in JSON before saving to Sigma",
+    "⚠ \"YTD Absence Hours\": uses DAX time intelligence (TOTALYTD). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "⚠ \"MTD Absence Hours\": uses DAX time intelligence (TOTALMTD). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "⚠ \"PY Absence Hours\": uses DAX time intelligence (SAMEPERIODLASTYEAR). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "⚠ \"Absence Hours 30d Ago\": uses DAX time intelligence (DATEADD). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "⚠ \"YoY Absence Hours Pct\": references \"[PY Absence Hours]\" which did not translate — dropped to avoid a dangling reference.",
+    "⚠ \"PY Incident Count\": uses DAX time intelligence (SAMEPERIODLASTYEAR). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "⚠ \"YTD Incident Count\": uses DAX time intelligence (TOTALYTD). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "⚠ \"Incident MoM Delta\": uses DAX time intelligence (DATEADD). Use Period over Period feature. See: community.sigmacomputing.com/t/which-logic-to-use-for-period-over-period-comparisons/3206",
+    "ℹ Calculated table \"DimDate\": DAX CALENDAR/ADDCOLUMNS → synthesized a Sigma SQL date-spine element (GENERATOR + DATEADD) with 4 simple derived column(s) in SQL; 1 complex derived column(s) became Sigma calculated columns.",
+    "ℹ Time-intel measure \"YTD Absence Hours\" → grouped CumulativeSum (YTD, year-reset) element on \"ABSENCE_RECORDS View\".",
+    "ℹ Time-intel measure \"PY Absence Hours\" → grouped DateLookback element on \"ABSENCE_RECORDS View\" (prior-year + YoY %).",
+    "ℹ Time-intel measure \"Absence Hours 30d Ago\" → grouped DateLookback element on \"ABSENCE_RECORDS View\" (prior-year + YoY %).",
+    "ℹ Time-intel measure \"PY Incident Count\" → grouped DateLookback element on \"SAFETY_INCIDENTS View\" (prior-year + YoY %).",
+    "ℹ Time-intel measure \"YTD Incident Count\" → grouped CumulativeSum (YTD, year-reset) element on \"SAFETY_INCIDENTS View\".",
+    "ℹ Time-intel measure \"Incident MoM Delta\" → grouped DateLookback element on \"SAFETY_INCIDENTS View\" (prior-year + YoY %)."
+  ],
+  "stats": {
+    "tables": 4,
+    "elements": 12,
+    "columns": 66,
+    "metrics": 3,
+    "relationships": 4
+  }
+}

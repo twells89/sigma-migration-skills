@@ -12,7 +12,7 @@
       "upstream_pr": null
     },
     {
-      "commit": "cursor/retail-dax-calendars-ce17 (this repo) — not yet landed in sigma-data-model-mcp",
+      "commit": "42df7f63 (this repo, PR #786) — not yet landed in sigma-data-model-mcp",
       "summary": "Calculated retail-calendar support for explicit ADDCOLUMNS(CALENDAR(...)): complex derived DAX uses the existing calculated-column translator instead of NULL SQL aliases; WEEKDAY return types, EDATE, EOMONTH, and QUARTER are translated. Present ONLY in this vendored bundle. A naive re-vendor before the equivalent src/powerbi.ts change lands upstream would restore queryable-but-wrong NULL holiday columns and break fixture_10_retail_calendar. Port the rewrite helpers, formula-column fallback, and incomplete-element marking upstream, then re-vendor and retire this entry.",
       "upstream_pr": null
     }

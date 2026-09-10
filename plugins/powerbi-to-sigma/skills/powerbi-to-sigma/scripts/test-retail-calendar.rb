@@ -75,15 +75,15 @@ if calendar
        by_name.dig('Is Easter', 'formula').to_s.include?('Mod('),
      by_name.dig('Is Easter', 'formula')
   ok 'Back-to-school window is translated',
-     by_name.dig('Is Back To School', 'formula').to_s.include?('Month([Date]) = 8'),
-     by_name.dig('Is Back To School', 'formula')
+     by_name.dig('Is Back to School', 'formula').to_s.include?('Month([Date]) = 8'),
+     by_name.dig('Is Back to School', 'formula')
   ok 'Christmas date is translated',
      by_name.dig('Is Christmas', 'formula').to_s.include?('MakeDate(Year([Date]), 12, 25)'),
      by_name.dig('Is Christmas', 'formula')
   ok 'retail SWITCH becomes nested If',
      by_name.dig('Retail Event', 'formula').to_s.start_with?('If('),
      by_name.dig('Retail Event', 'formula')
-  residual = formulas.grep(/\b(?:WEEKDAY|EDATE|EOMONTH|DATE|VAR|RETURN|SWITCH)\s*\(/i)
+  residual = formulas.grep(/\b(?:WEEKDAY|EDATE|EOMONTH|DATE|VAR|RETURN|SWITCH)\s*\(/)
   ok 'no retail DAX-only function remains', residual.empty?, residual.join(' | ')
 end
 

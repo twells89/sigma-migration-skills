@@ -187,5 +187,6 @@ beyond it and should be added as new worked rows / spike cases:
 
 ## Self-test
 
-`python3 validate.py` → all 6 fixtures PASS;
-**81 measures + 13 calculated columns = 94 DAX expressions** total.
+`python3 validate.py` → all 10 fixtures PASS;
+**116 measures + 22 calculated columns + 7 calculated tables = 145 DAX
+expressions** total.

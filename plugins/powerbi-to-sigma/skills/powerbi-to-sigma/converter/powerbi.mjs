@@ -1724,8 +1724,6 @@ function daxCalendarDerivedToSql(expr) {
     return "EXTRACT(DAY FROM d)";
   if (m = e.match(/^QUARTER\s*\(\s*\[[^\]]+\]\s*\)$/i))
     return "EXTRACT(QUARTER FROM d)";
-  if (m = e.match(/^WEEKDAY\s*\(\s*\[[^\]]+\]/i))
-    return "DAYOFWEEK(d)";
   if (m = e.match(/^FORMAT\s*\(\s*\[[^\]]+\]\s*,\s*"([^"]+)"\s*\)$/i)) {
     const fmt = m[1];
     if (/^MMMM$/.test(fmt))

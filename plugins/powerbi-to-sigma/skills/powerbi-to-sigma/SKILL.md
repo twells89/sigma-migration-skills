@@ -211,7 +211,7 @@ resume with `--converter-out`. The hosted MCP is a fallback, not the default pat
 > errors (validate-spec.rb now catches the first two, but the right fix is to feed it
 > real converter output). If the MCP tool is unavailable, STOP and gate — don't fabricate.
 
-- DAX measures → Sigma metrics. ~70% mechanical; see `refs/dax-to-sigma-coverage.md` and `fixtures/MANIFEST.md` (test oracle: 94 DAX expressions bucketed a/b/c).
+- DAX measures → Sigma metrics. ~70% mechanical; see `refs/dax-to-sigma-coverage.md` and `fixtures/MANIFEST.md` (test oracle: 145 DAX expressions bucketed a/b/c).
 - **DAX calculated retail calendars:** explicit
   `ADDCOLUMNS(CALENDAR(DATE(...),DATE(...)),...)` tables synthesize a SQL date
   spine; complex event columns become Sigma calculated columns. Covered:
