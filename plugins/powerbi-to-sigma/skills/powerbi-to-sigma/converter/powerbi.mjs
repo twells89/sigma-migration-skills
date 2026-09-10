@@ -1789,6 +1789,9 @@ FROM (
   return { ok: true, sql, formulaColumns };
 }
 function buildCalcTableSql(dax, seriesColName, colDisplayNames = []) {
+  if (/\b(?:GENERATE|ROW)\s*\(/i.test(dax)) {
+    return { ok: false, reason: "DAX GENERATE/ROW calculated tables are not safely reducible to a date spine; recreate the full row expression as warehouse SQL or Sigma calculated columns." };
+  }
   if (/\bCALENDAR\s*\(/i.test(dax)) {
     return buildCalendarSpineSql(dax, colDisplayNames);
   }

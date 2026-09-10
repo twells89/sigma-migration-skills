@@ -38,6 +38,17 @@ def convert(fixture)
   JSON.parse(out)
 end
 
+def convert_calendar_expression(expression)
+  model = JSON.parse(File.read(File.join(FIXTURES, 'fixture_10_retail_calendar.bim')))
+  date_table = model.dig('model', 'tables').find { |table| table['name'] == 'DimRetailDate' }
+  date_table.dig('partitions', 0, 'source')['expression'] = expression
+  Tempfile.create(['retail-calendar-negative-', '.bim']) do |file|
+    file.write(JSON.generate(model))
+    file.flush
+    return convert(file.path)
+  end
+end
+
 unless File.exist?(CONVERTER)
   warn "FAIL  converter missing: #{CONVERTER}"
   exit 1
@@ -102,6 +113,18 @@ if generic_calendar
   ok 'generic Quarter label no longer becomes NULL',
      generic_calendar.dig('source', 'statement').to_s !~ /\bNULL\s+AS\b/i &&
        (generic_calendar['columns'] || []).any? { |c| c['name'] == 'Quarter' && c['formula'].to_s.include?('Quarter([Date])') }
+end
+
+unsupported_expressions = {
+  'CALENDARAUTO' => 'CALENDARAUTO()',
+  'dynamic CALENDAR bounds' => 'CALENDAR(MIN(RETAIL_SALES[SALE_DATE]), MAX(RETAIL_SALES[SALE_DATE]))',
+  'GENERATE/ROW' => 'GENERATE(CALENDAR(DATE(2024,1,1), DATE(2024,12,31)), ROW("IsHoliday", FALSE()))'
+}
+unsupported_expressions.each do |label, expression|
+  result = convert_calendar_expression(expression)
+  element = (result.dig('model', 'pages', 0, 'elements') || []).find { |e| e.dig('source', 'kind') == 'sql' }
+  ok "#{label} fails closed", element && element['ok'] == false &&
+     element.dig('source', 'statement').to_s.include?('_placeholder')
 end
 
 puts($fail.zero? ? "\nPASS" : "\n#{$fail} FAILED")
