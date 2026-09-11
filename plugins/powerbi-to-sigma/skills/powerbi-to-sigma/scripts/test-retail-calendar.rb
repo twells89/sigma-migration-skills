@@ -4,7 +4,6 @@
 # inspects the returned Sigma model; no Sigma or Power BI credentials.
 require 'json'
 require 'open3'
-require 'pathname'
 require 'tempfile'
 
 HERE = File.expand_path(__dir__)
@@ -20,8 +19,12 @@ def ok(name, cond, detail = nil)
 end
 
 def convert(fixture)
-  converter_url = Pathname.new(CONVERTER).realpath.to_s
-  converter_url = "file://#{converter_url}" unless converter_url.start_with?('file:')
+  converter_url =
+    if Gem.win_platform? && CONVERTER.match?(/\A[A-Za-z]:/)
+      'file:///' + CONVERTER.gsub('\\', '/')
+    else
+      CONVERTER
+    end
   js = <<~JS
     import { readFileSync } from 'node:fs';
     import { convertPowerBIToSigma } from #{converter_url.to_json};
