@@ -18,6 +18,8 @@ export const DOC_KEYS = [
 // unchanged - only the container path moved. document() folds the legacy pair
 // forward so specs and fixtures written before the move still produce a valid body.
 export const LEGACY_THEME_KEYS = ['themeName', 'themeOverrides'];
+export const LEGACY_HORIZONTAL_ALIGN = { start: 'left', middle: 'center', end: 'right' };
+export const LEGACY_VERTICAL_ALIGN = { start: 'top', middle: 'center', end: 'bottom' };
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -148,10 +150,60 @@ export function canonicalizeLayout(layoutXml) {
     .replace(/<([/]?)GridContainer\b/g, '<$1Container');
 }
 
+function canonicalizeElement(element) {
+  if (!isObj(element)) return element;
+  if (element.kind === 'text' && element.verticalAlign in LEGACY_VERTICAL_ALIGN) {
+    return { ...element, verticalAlign: LEGACY_VERTICAL_ALIGN[element.verticalAlign] };
+  }
+  if (element.kind === 'kpi-chart' && isObj(element.layout)) {
+    const layout = { ...element.layout };
+    if (layout.anchor in LEGACY_HORIZONTAL_ALIGN) {
+      layout.anchor = LEGACY_HORIZONTAL_ALIGN[layout.anchor];
+    }
+    if (layout.verticalAnchor in LEGACY_VERTICAL_ALIGN) {
+      layout.verticalAnchor = LEGACY_VERTICAL_ALIGN[layout.verticalAnchor];
+    }
+    return { ...element, layout };
+  }
+  if (element.kind === 'tabbed-container' && isObj(element.tabBar)
+      && element.tabBar.alignment in LEGACY_HORIZONTAL_ALIGN) {
+    return {
+      ...element,
+      tabBar: {
+        ...element.tabBar,
+        alignment: LEGACY_HORIZONTAL_ALIGN[element.tabBar.alignment],
+      },
+    };
+  }
+  if (element.kind === 'divider' && element.align in LEGACY_VERTICAL_ALIGN) {
+    const mapping = element.direction === 'vertical'
+      ? LEGACY_HORIZONTAL_ALIGN
+      : LEGACY_VERTICAL_ALIGN;
+    return { ...element, align: mapping[element.align] };
+  }
+  return element;
+}
+
+function canonicalizeOverlay(overlay) {
+  if (!isObj(overlay) || !isObj(overlay.drawer) || !('position' in overlay.drawer)) {
+    return overlay;
+  }
+  const { position: _removed, ...drawer } = overlay.drawer;
+  return { ...overlay, drawer };
+}
+
 export function wrap(doc, extra = {}) {
   const flattened = flattenElements(doc);
-  const canonical = isObj(flattened) && 'layout' in flattened
-    ? { ...flattened, layout: canonicalizeLayout(flattened.layout) }
-    : flattened;
+  let canonical = flattened;
+  if (isObj(flattened)) {
+    canonical = { ...flattened };
+    if (Array.isArray(flattened.elements)) {
+      canonical.elements = flattened.elements.map(canonicalizeElement);
+    }
+    if (Array.isArray(flattened.overlays)) {
+      canonical.overlays = flattened.overlays.map(canonicalizeOverlay);
+    }
+    if ('layout' in flattened) canonical.layout = canonicalizeLayout(flattened.layout);
+  }
   return { ...extra, document: canonical };
 }

@@ -177,7 +177,7 @@ class CompositionTest(unittest.TestCase):
     def test_tabbed_container_labels_only_in_order_with_tab_bar(self):
         out = composition.tabbed_container("tc", self._tabbed_tabs(), "1 / 25", "7 / 60")
         self.assertEqual(out["element"]["tabs"], [{"name": "Overview"}, {"name": "Details"}])
-        self.assertEqual(out["element"]["tabBar"], {"alignment": "start"})
+        self.assertEqual(out["element"]["tabBar"], {"alignment": "left"})
 
     def test_tabbed_container_honors_non_default_tab_bar_alignment(self):
         out = composition.tabbed_container(

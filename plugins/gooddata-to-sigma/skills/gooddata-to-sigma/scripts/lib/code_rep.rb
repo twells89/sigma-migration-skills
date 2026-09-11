@@ -31,6 +31,12 @@ module Sigma
     # container path moved. document() folds the legacy pair forward so specs
     # and fixtures written before the move still produce a valid body.
     LEGACY_THEME_KEYS = %w[themeName themeOverrides].freeze
+    LEGACY_HORIZONTAL_ALIGN = {
+      'start' => 'left', 'middle' => 'center', 'end' => 'right'
+    }.freeze
+    LEGACY_VERTICAL_ALIGN = {
+      'start' => 'top', 'middle' => 'center', 'end' => 'bottom'
+    }.freeze
 
     class << self
       # Read path: accepts the live nested shape OR a legacy flat artifact.
@@ -72,9 +78,9 @@ module Sigma
 
       # Write path: every live workbook code-rep endpoint requires the wrapper
       # and flat document.elements. Flatten legacy page-nested artifacts and
-      # canonicalize legacy layout tags at this boundary so older converter
-      # output remains postable during migration; emitters always send the
-      # live-verified <Element>/<Container> vocabulary.
+      # canonicalize rejected legacy layout tags and element alignment enums at
+      # this boundary so older converter output remains postable during
+      # migration. Also remove drawer.position, which no longer exists.
       def wrap(document_hash, extra: {})
         extra.merge('document' => canonicalize_document(flatten_elements(document_hash)))
       end
@@ -145,8 +151,53 @@ module Sigma
       private
 
       def canonicalize_document(doc)
-        return doc unless doc.is_a?(Hash) && doc.key?('layout')
-        doc.merge('layout' => canonicalize_layout(doc['layout']))
+        return doc unless doc.is_a?(Hash)
+        out = doc
+        if doc['elements'].is_a?(Array)
+          out = out.merge('elements' => doc['elements'].map { |el| canonicalize_element(el) })
+        end
+        if doc['overlays'].is_a?(Array)
+          out = out.merge('overlays' => doc['overlays'].map { |overlay| canonicalize_overlay(overlay) })
+        end
+        out = out.merge('layout' => canonicalize_layout(doc['layout'])) if doc.key?('layout')
+        out
+      end
+
+      def canonicalize_element(element)
+        return element unless element.is_a?(Hash)
+        case element['kind']
+        when 'text'
+          mapped = LEGACY_VERTICAL_ALIGN[element['verticalAlign']]
+          mapped ? element.merge('verticalAlign' => mapped) : element
+        when 'kpi-chart'
+          layout = element['layout']
+          return element unless layout.is_a?(Hash)
+          canonical = layout.dup
+          canonical['anchor'] = LEGACY_HORIZONTAL_ALIGN[layout['anchor']] if LEGACY_HORIZONTAL_ALIGN.key?(layout['anchor'])
+          if LEGACY_VERTICAL_ALIGN.key?(layout['verticalAnchor'])
+            canonical['verticalAnchor'] = LEGACY_VERTICAL_ALIGN[layout['verticalAnchor']]
+          end
+          canonical == layout ? element : element.merge('layout' => canonical)
+        when 'tabbed-container'
+          tab_bar = element['tabBar']
+          return element unless tab_bar.is_a?(Hash)
+          mapped = LEGACY_HORIZONTAL_ALIGN[tab_bar['alignment']]
+          mapped ? element.merge('tabBar' => tab_bar.merge('alignment' => mapped)) : element
+        when 'divider'
+          legacy = element['align']
+          return element unless %w[start middle end].include?(legacy)
+          mapping = element['direction'] == 'vertical' ? LEGACY_HORIZONTAL_ALIGN : LEGACY_VERTICAL_ALIGN
+          element.merge('align' => mapping.fetch(legacy))
+        else
+          element
+        end
+      end
+
+      def canonicalize_overlay(overlay)
+        return overlay unless overlay.is_a?(Hash)
+        drawer = overlay['drawer']
+        return overlay unless drawer.is_a?(Hash) && drawer.key?('position')
+        overlay.merge('drawer' => drawer.reject { |key, _| key == 'position' })
       end
 
       # Emit only the current API shape. Elements are workbook-global in the

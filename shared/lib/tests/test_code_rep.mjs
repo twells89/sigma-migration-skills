@@ -49,4 +49,42 @@ assert.equal(
 );
 assert.doesNotMatch(canonicalLayout, /LayoutElement|GridContainer/);
 
+const legacyFields = {
+  pages: [],
+  elements: [
+    { id: 'text', kind: 'text', verticalAlign: 'middle' },
+    {
+      id: 'kpi',
+      kind: 'kpi-chart',
+      layout: { anchor: 'start', verticalAnchor: 'end', titleOrient: 'bottom' },
+    },
+    { id: 'tabs', kind: 'tabbed-container', tabBar: { alignment: 'end' } },
+    { id: 'h-rule', kind: 'divider', align: 'start' },
+    { id: 'v-rule', kind: 'divider', direction: 'vertical', align: 'end' },
+  ],
+  overlays: [
+    {
+      id: 'filters',
+      type: 'drawer',
+      drawer: { width: 'medium', position: 'end', showShadow: 'shown' },
+    },
+  ],
+};
+const canonicalFields = wrap(legacyFields).document;
+const fieldsById = Object.fromEntries(canonicalFields.elements.map((element) => [element.id, element]));
+assert.equal(fieldsById.text.verticalAlign, 'center');
+assert.deepEqual(
+  fieldsById.kpi.layout,
+  { anchor: 'left', verticalAnchor: 'bottom', titleOrient: 'bottom' },
+);
+assert.equal(fieldsById.tabs.tabBar.alignment, 'right');
+assert.equal(fieldsById['h-rule'].align, 'top');
+assert.equal(fieldsById['v-rule'].align, 'right');
+assert.deepEqual(
+  canonicalFields.overlays[0].drawer,
+  { width: 'medium', showShadow: 'shown' },
+);
+assert.equal(legacyFields.elements[0].verticalAlign, 'middle');
+assert.equal(legacyFields.overlays[0].drawer.position, 'end');
+
 console.log('PASS — JavaScript workbook code representation');

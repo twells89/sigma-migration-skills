@@ -485,6 +485,7 @@ jobs:
             shared/lib/test_plugin_embed.rb
             shared/lib/test_composition.rb
             shared/lib/test_composition_lint.rb
+            shared/lib/tests/test_code_rep.rb
             shared/lib/test_shared_script_closure.rb
             shared/lib/test_styling.rb
             shared/lib/test_coverage_catalog.rb
@@ -611,6 +612,7 @@ jobs:
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/tests/test-extract-report-classic.py
             shared/lib/test_plugin_embed.py
             shared/lib/test_composition.py
+            shared/lib/tests/test_code_rep.py
             shared/lib/test_styling.py
             shared/lib/test_coverage_catalog.py
             shared/lib/test_kpi_card.py
@@ -684,6 +686,7 @@ jobs:
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-scout-ledger-integrity.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-metric-reference.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-warehouse-column-refs.mjs
+            shared/lib/tests/test_code_rep.mjs
           )
           fail=0
           for t in "${tests[@]}"; do

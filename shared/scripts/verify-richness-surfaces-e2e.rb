@@ -322,7 +322,7 @@ def build_spec(home, schema_version, cortex_model, flags)
             'comparison' => { 'display' => 'delta', 'colorGood' => '#1a7f37', 'colorBad' => '#cf222e' },
             'trend' => { 'shape' => 'line' } },
           # SURFACE 2: CallText / AI-insight.
-          { 'id' => AI_TEXT_ID, 'kind' => 'text', 'verticalAlign' => 'middle', 'body' => ai_body },
+          { 'id' => AI_TEXT_ID, 'kind' => 'text', 'verticalAlign' => 'center', 'body' => ai_body },
           # SURFACE 3: dynamic grain — segmented control (documented
           # "date-grain switcher" idiom: manual value-list, no `filters`,
           # consumed only via the chart column's own Switch([GrainCtl],…)).

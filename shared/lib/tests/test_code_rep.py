@@ -82,6 +82,43 @@ class TestCodeRep(unittest.TestCase):
         )
         self.assertNotRegex(emitted, r'LayoutElement|GridContainer')
 
+    def test_wrap_canonicalizes_legacy_alignment_fields_and_drawer_position(self):
+        legacy = {
+            'pages': [],
+            'elements': [
+                {'id': 'text', 'kind': 'text', 'verticalAlign': 'middle'},
+                {'id': 'kpi', 'kind': 'kpi-chart',
+                 'layout': {'anchor': 'start', 'verticalAnchor': 'end',
+                            'titleOrient': 'bottom'}},
+                {'id': 'tabs', 'kind': 'tabbed-container',
+                 'tabBar': {'alignment': 'end'}},
+                {'id': 'h-rule', 'kind': 'divider', 'align': 'start'},
+                {'id': 'v-rule', 'kind': 'divider',
+                 'direction': 'vertical', 'align': 'end'},
+            ],
+            'overlays': [
+                {'id': 'filters', 'type': 'drawer',
+                 'drawer': {'width': 'medium', 'position': 'end',
+                            'showShadow': 'shown'}},
+            ],
+        }
+        emitted = code_rep.wrap(legacy)['document']
+        by_id = {element['id']: element for element in emitted['elements']}
+        self.assertEqual(by_id['text']['verticalAlign'], 'center')
+        self.assertEqual(
+            by_id['kpi']['layout'],
+            {'anchor': 'left', 'verticalAnchor': 'bottom', 'titleOrient': 'bottom'},
+        )
+        self.assertEqual(by_id['tabs']['tabBar']['alignment'], 'right')
+        self.assertEqual(by_id['h-rule']['align'], 'top')
+        self.assertEqual(by_id['v-rule']['align'], 'right')
+        self.assertEqual(
+            emitted['overlays'][0]['drawer'],
+            {'width': 'medium', 'showShadow': 'shown'},
+        )
+        self.assertEqual(legacy['elements'][0]['verticalAlign'], 'middle')
+        self.assertEqual(legacy['overlays'][0]['drawer']['position'], 'end')
+
     def test_page_membership_accepts_legacy_aliases_only_for_layout_nodes(self):
         legacy_layout = (
             '<Page id="p"><GridContainer elementId="c">'

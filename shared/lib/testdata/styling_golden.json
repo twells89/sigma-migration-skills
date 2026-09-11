@@ -93,7 +93,7 @@
       {
         "id": "ghdr4-title",
         "kind": "text",
-        "verticalAlign": "middle",
+        "verticalAlign": "center",
         "body": "# <span style=\"color: #FFFFFF\">Custom</span>"
       }
     ],
@@ -128,13 +128,13 @@
       {
         "id": "ghdr-title",
         "kind": "text",
-        "verticalAlign": "middle",
+        "verticalAlign": "center",
         "body": "# <span style=\"color: #FFFFFF\">Command Center</span>"
       },
       {
         "id": "ghdr-subtitle",
         "kind": "text",
-        "verticalAlign": "middle",
+        "verticalAlign": "center",
         "body": "<span style=\"color: #CBD5E1\">Live metrics</span>"
       }
     ],
@@ -161,7 +161,7 @@
       {
         "id": "ghdr3-title",
         "kind": "text",
-        "verticalAlign": "middle",
+        "verticalAlign": "center",
         "body": "# <span style=\"color: #FFFFFF\">Plain</span>"
       }
     ],
@@ -188,7 +188,7 @@
       {
         "id": "ghdr2-title",
         "kind": "text",
-        "verticalAlign": "middle",
+        "verticalAlign": "center",
         "body": "# <span style=\"color: #FFFFFF\">Ops</span>"
       }
     ],

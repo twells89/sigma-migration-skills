@@ -26,6 +26,8 @@ DOC_KEYS = (
 # unchanged - only the container path moved. document() folds the legacy pair
 # forward so specs and fixtures written before the move still produce a valid body.
 LEGACY_THEME_KEYS = ("themeName", "themeOverrides")
+LEGACY_HORIZONTAL_ALIGN = {"start": "left", "middle": "center", "end": "right"}
+LEGACY_VERTICAL_ALIGN = {"start": "top", "middle": "center", "end": "bottom"}
 
 
 def _fold_legacy_theme(doc, source):
@@ -179,11 +181,68 @@ def canonicalize_layout(layout_xml):
     return re.sub(r'<(/?)GridContainer\b', r'<\1Container', layout)
 
 
+def _canonicalize_element(element):
+    if not isinstance(element, dict):
+        return element
+    kind = element.get("kind")
+    if kind == "text" and element.get("verticalAlign") in LEGACY_VERTICAL_ALIGN:
+        return {**element, "verticalAlign": LEGACY_VERTICAL_ALIGN[element["verticalAlign"]]}
+    if kind == "kpi-chart" and isinstance(element.get("layout"), dict):
+        layout = element["layout"]
+        canonical = dict(layout)
+        if layout.get("anchor") in LEGACY_HORIZONTAL_ALIGN:
+            canonical["anchor"] = LEGACY_HORIZONTAL_ALIGN[layout["anchor"]]
+        if layout.get("verticalAnchor") in LEGACY_VERTICAL_ALIGN:
+            canonical["verticalAnchor"] = LEGACY_VERTICAL_ALIGN[layout["verticalAnchor"]]
+        return element if canonical == layout else {**element, "layout": canonical}
+    if kind == "tabbed-container" and isinstance(element.get("tabBar"), dict):
+        tab_bar = element["tabBar"]
+        if tab_bar.get("alignment") in LEGACY_HORIZONTAL_ALIGN:
+            return {
+                **element,
+                "tabBar": {
+                    **tab_bar,
+                    "alignment": LEGACY_HORIZONTAL_ALIGN[tab_bar["alignment"]],
+                },
+            }
+    if kind == "divider" and element.get("align") in LEGACY_VERTICAL_ALIGN:
+        mapping = (
+            LEGACY_HORIZONTAL_ALIGN
+            if element.get("direction") == "vertical"
+            else LEGACY_VERTICAL_ALIGN
+        )
+        return {**element, "align": mapping[element["align"]]}
+    return element
+
+
+def _canonicalize_overlay(overlay):
+    if not isinstance(overlay, dict) or not isinstance(overlay.get("drawer"), dict):
+        return overlay
+    drawer = overlay["drawer"]
+    if "position" not in drawer:
+        return overlay
+    return {
+        **overlay,
+        "drawer": {key: value for key, value in drawer.items() if key != "position"},
+    }
+
+
 def wrap(doc, extra=None):
-    """Build a current request body with flat elements and canonical layout."""
+    """Build a current request body with canonical layout and element fields."""
     out = dict(extra or {})
     flattened = _flatten_elements(doc)
-    if isinstance(flattened, dict) and "layout" in flattened:
-        flattened = {**flattened, "layout": canonicalize_layout(flattened["layout"])}
+    if isinstance(flattened, dict):
+        canonical = dict(flattened)
+        if isinstance(flattened.get("elements"), list):
+            canonical["elements"] = [
+                _canonicalize_element(element) for element in flattened["elements"]
+            ]
+        if isinstance(flattened.get("overlays"), list):
+            canonical["overlays"] = [
+                _canonicalize_overlay(overlay) for overlay in flattened["overlays"]
+            ]
+        if "layout" in flattened:
+            canonical["layout"] = canonicalize_layout(flattened["layout"])
+        flattened = canonical
     out["document"] = flattened
     return out

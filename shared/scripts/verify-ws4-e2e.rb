@@ -331,7 +331,7 @@ def build_spec(home, schema_version)
                                         'orders, margin, region, and category, and trends over time. Be concise ' \
                                         'and quantitative; cite the numbers you used.',
                           data_source_ids: [SRC_ID])
-  chat_hd = { 'id' => 'chat-hd', 'kind' => 'text', 'verticalAlign' => 'middle', 'body' => '**Ask the WS4 Analyst**' }
+  chat_hd = { 'id' => 'chat-hd', 'kind' => 'text', 'verticalAlign' => 'center', 'body' => '**Ask the WS4 Analyst**' }
   chat = Richness.chat(id: 'chat', agent_id: 'ag-ws4')
 
   # ==== SURFACE: Styling.gradient_header — second live motif (:rings) ======

@@ -613,7 +613,7 @@ if fresh_note
     'verdict_hint' => 'apply',
     'patch' => { 'op' => 'add_elements', 'page_id' => dash_pages.first&.dig('id'),
                  'elements' => [{ 'id' => 'el-phasee-freshness', 'kind' => 'text',
-                                  'body' => fresh_note, 'verticalAlign' => 'middle', 'overflow' => 'clip' }],
+                                  'body' => fresh_note, 'verticalAlign' => 'center', 'overflow' => 'clip' }],
                  'layout' => [{ 'element_id' => 'el-phasee-freshness', 'grid_column' => '1 / 25', 'height' => 2 }] }
   }
 end
