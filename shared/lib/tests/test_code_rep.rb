@@ -85,6 +85,36 @@ class TestCodeRep < Minitest::Test
     refute_match(/LayoutElement|GridContainer/, emitted)
   end
 
+  def test_wrap_canonicalizes_legacy_alignment_fields_and_drawer_position
+    legacy = {
+      'pages' => [],
+      'elements' => [
+        { 'id' => 'text', 'kind' => 'text', 'verticalAlign' => 'middle' },
+        { 'id' => 'kpi', 'kind' => 'kpi-chart',
+          'layout' => { 'anchor' => 'start', 'verticalAnchor' => 'end', 'titleOrient' => 'bottom' } },
+        { 'id' => 'tabs', 'kind' => 'tabbed-container', 'tabBar' => { 'alignment' => 'end' } },
+        { 'id' => 'h-rule', 'kind' => 'divider', 'align' => 'start' },
+        { 'id' => 'v-rule', 'kind' => 'divider', 'direction' => 'vertical', 'align' => 'end' }
+      ],
+      'overlays' => [
+        { 'id' => 'filters', 'type' => 'drawer',
+          'drawer' => { 'width' => 'medium', 'position' => 'end', 'showShadow' => 'shown' } }
+      ]
+    }
+    emitted = Sigma::CodeRep.wrap(legacy)['document']
+    by_id = emitted['elements'].each_with_object({}) { |element, out| out[element['id']] = element }
+    assert_equal 'center', by_id['text']['verticalAlign']
+    assert_equal({ 'anchor' => 'left', 'verticalAnchor' => 'bottom', 'titleOrient' => 'bottom' },
+                 by_id['kpi']['layout'])
+    assert_equal 'right', by_id['tabs'].dig('tabBar', 'alignment')
+    assert_equal 'top', by_id['h-rule']['align']
+    assert_equal 'right', by_id['v-rule']['align']
+    assert_equal({ 'width' => 'medium', 'showShadow' => 'shown' },
+                 emitted.dig('overlays', 0, 'drawer'))
+    assert_equal 'middle', legacy.dig('elements', 0, 'verticalAlign')
+    assert_equal 'end', legacy.dig('overlays', 0, 'drawer', 'position')
+  end
+
   def test_page_membership_accepts_legacy_aliases_but_ignores_unrelated_attributes
     legacy_layout = '<Page id="p"><GridContainer elementId="c"><LayoutElement elementId="e1"/>' \
                     '<Noise elementId="not-layout"/></GridContainer></Page>'

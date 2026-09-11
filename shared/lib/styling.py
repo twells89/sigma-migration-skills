@@ -306,7 +306,7 @@ def gradient_header(id, title, subtitle=None, gradient=None, motif="glow", motif
     # See feature-coverage-report for the full finding (mirrors the styling.rb fix).
     container_el = {"id": container_id, "kind": "container", "style": {"borderRadius": "round"},
                      "backgroundImage": {"source": {"kind": "url", "url": bg_url}, "style": {"fit": "cover"}}}
-    title_el = {"id": title_id, "kind": "text", "verticalAlign": "middle",
+    title_el = {"id": title_id, "kind": "text", "verticalAlign": "center",
                 "body": '# <span style="color: #FFFFFF">%s</span>' % title}
 
     elements = [container_el]
@@ -314,7 +314,7 @@ def gradient_header(id, title, subtitle=None, gradient=None, motif="glow", motif
         elements.append({"id": logo_id, "kind": "image", "url": logo_url, "style": {"fit": "contain"}})
     elements.append(title_el)
     if subtitle:
-        elements.append({"id": subtitle_id, "kind": "text", "verticalAlign": "middle",
+        elements.append({"id": subtitle_id, "kind": "text", "verticalAlign": "center",
                           "body": '<span style="color: #CBD5E1">%s</span>' % subtitle})
 
     r0, r1 = 1, 4

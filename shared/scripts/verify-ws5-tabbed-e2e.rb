@@ -263,7 +263,7 @@ begin
     'Composition.tabbed_container element (2 labels + tabBar)' => {
       post_accepted: !!(tc_back && tc_back['kind'] == 'tabbed-container' &&
                          tc_back['tabs'] == [{ 'name' => 'Table' }, { 'name' => 'Chart' }] &&
-                         tc_back.dig('tabBar', 'alignment') == 'start'),
+                         tc_back.dig('tabBar', 'alignment') == 'left'),
       render_hint: 'Read the pg-main render — a tab bar should be visible near the top of the ' \
                     'container reading "Table" and "Chart", with one tab active.'
     },

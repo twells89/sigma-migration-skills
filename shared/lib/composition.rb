@@ -144,7 +144,7 @@ module Composition
   # render order. The <Tab> is itself a mini-grid (gridTemplateColumns /
   # gridTemplateRows), so elements position directly within it; no inner
   # Container is needed.
-  def self.tabbed_container(id:, tabs:, grid_column:, grid_row:, tab_bar_alignment: 'start')
+  def self.tabbed_container(id:, tabs:, grid_column:, grid_row:, tab_bar_alignment: 'left')
     raise ArgumentError, 'tabbed_container: id required' if id.to_s.empty?
     raise ArgumentError, 'tabbed_container: tabs required' if tabs.nil? || tabs.empty?
     tabs.each do |t|

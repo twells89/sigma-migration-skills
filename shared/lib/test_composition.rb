@@ -161,9 +161,9 @@ end
 check('tabbed_container: element tabs are labels-only, in order, with tabBar.alignment') do
   out = Composition.tabbed_container(id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60')
   out[:element]['tabs'] == [{ 'name' => 'Overview' }, { 'name' => 'Details' }] &&
-    out[:element]['tabBar'] == { 'alignment' => 'start' }
+    out[:element]['tabBar'] == { 'alignment' => 'left' }
 end
-check('tabbed_container: non-default tab_bar_alignment is honored (not hardcoded to start)') do
+check('tabbed_container: non-default tab_bar_alignment is honored (not hardcoded to left)') do
   out = Composition.tabbed_container(
     id: 'tc', tabs: tabbed_tabs, grid_column: '1 / 25', grid_row: '7 / 60', tab_bar_alignment: 'center'
   )
