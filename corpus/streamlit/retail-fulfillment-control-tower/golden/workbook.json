@@ -577,7 +577,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
@@ -604,7 +604,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
@@ -631,7 +631,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
@@ -658,7 +658,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
@@ -685,7 +685,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
@@ -708,7 +708,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
@@ -1187,7 +1187,7 @@
             "fontSize": 26
           },
           "layout": {
-            "anchor": "middle"
+            "anchor": "center"
           }
         },
         {
