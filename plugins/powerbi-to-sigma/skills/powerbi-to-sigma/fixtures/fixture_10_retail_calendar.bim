@@ -1,0 +1,161 @@
+{
+  "compatibilityLevel": 1600,
+  "model": {
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"RETAIL_SALES\",\"DimRetailDate\"]"
+      },
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "1"
+      }
+    ],
+    "culture": "en-US",
+    "relationships": [
+      {
+        "name": "rel_retail_sales_date",
+        "fromColumn": "SALE_DATE",
+        "fromTable": "RETAIL_SALES",
+        "toColumn": "Date",
+        "toTable": "DimRetailDate"
+      }
+    ],
+    "sourceQueryCulture": "en-US",
+    "tables": [
+      {
+        "name": "RETAIL_SALES",
+        "columns": [
+          {
+            "name": "SALE_ID",
+            "dataType": "string",
+            "sourceColumn": "SALE_ID",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "SALE_DATE",
+            "dataType": "dateTime",
+            "sourceColumn": "SALE_DATE",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "SALES_AMOUNT",
+            "dataType": "double",
+            "sourceColumn": "SALES_AMOUNT",
+            "summarizeBy": "sum"
+          }
+        ],
+        "measures": [
+          {
+            "name": "Total Sales",
+            "expression": "SUM(RETAIL_SALES[SALES_AMOUNT])",
+            "formatString": "$#,0.00"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "RETAIL_SALES",
+            "mode": "import",
+            "source": {
+              "expression": [
+                "let",
+                "  Source = Snowflake.Databases(\"retail.snowflakecomputing.com\", \"SIGMA_WH\"),",
+                "  Database = Source{[Name = \"RETAIL_DB\", Kind = \"Database\"]}[Data],",
+                "  Schema = Database{[Name = \"ANALYTICS\", Kind = \"Schema\"]}[Data],",
+                "  Table = Schema{[Name = \"RETAIL_SALES\", Kind = \"Table\"]}[Data]",
+                "in",
+                "  Table"
+              ],
+              "type": "m"
+            }
+          }
+        ]
+      },
+      {
+        "name": "DimRetailDate",
+        "columns": [
+          {
+            "name": "Date",
+            "dataType": "dateTime",
+            "isKey": true,
+            "sourceColumn": "[Date]",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Year",
+            "dataType": "int64",
+            "sourceColumn": "[Year]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "WeekdayMon",
+            "dataType": "int64",
+            "sourceColumn": "[WeekdayMon]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "MonthEnd",
+            "dataType": "dateTime",
+            "sourceColumn": "[MonthEnd]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "NextMonth",
+            "dataType": "dateTime",
+            "sourceColumn": "[NextMonth]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "IsBlackFriday",
+            "dataType": "boolean",
+            "sourceColumn": "[IsBlackFriday]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "IsEaster",
+            "dataType": "boolean",
+            "sourceColumn": "[IsEaster]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "IsBackToSchool",
+            "dataType": "boolean",
+            "sourceColumn": "[IsBackToSchool]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "IsChristmas",
+            "dataType": "boolean",
+            "sourceColumn": "[IsChristmas]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "RetailEvent",
+            "dataType": "string",
+            "sourceColumn": "[RetailEvent]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DimRetailDate",
+            "mode": "import",
+            "source": {
+              "expression": "ADDCOLUMNS(CALENDAR(DATE(2024,1,1), DATE(2026,12,31)), \"Year\", YEAR([Date]), \"WeekdayMon\", WEEKDAY([Date], 2), \"MonthEnd\", EOMONTH([Date], 0), \"NextMonth\", EDATE([Date], 1), \"IsBlackFriday\", VAR WeekdayNumber = WEEKDAY([Date], 2) RETURN MONTH([Date]) = 11 && WeekdayNumber = 5 && DAY([Date]) >= 23 && DAY([Date]) <= 29, \"IsEaster\", VAR Y = YEAR([Date]) VAR A = MOD(Y, 19) VAR B = INT(Y / 100) VAR C = MOD(Y, 100) VAR D = INT(B / 4) VAR E = MOD(B, 4) VAR F = INT((B + 8) / 25) VAR G = INT((B - F + 1) / 3) VAR H = MOD(19 * A + B - D - G + 15, 30) VAR I = INT(C / 4) VAR K = MOD(C, 4) VAR L = MOD(32 + 2 * E + 2 * I - H - K, 7) VAR M = INT((A + 11 * H + 22 * L) / 451) VAR EasterMonth = INT((H + L - 7 * M + 114) / 31) VAR EasterDay = MOD(H + L - 7 * M + 114, 31) + 1 RETURN [Date] = DATE(Y, EasterMonth, EasterDay), \"IsBackToSchool\", MONTH([Date]) = 8 || (MONTH([Date]) = 9 && DAY([Date]) <= 15), \"IsChristmas\", [Date] = DATE(YEAR([Date]), 12, 25), \"RetailEvent\", SWITCH(TRUE(), MONTH([Date]) = 11 && WEEKDAY([Date], 2) = 5 && DAY([Date]) >= 23 && DAY([Date]) <= 29, \"Black Friday\", MONTH([Date]) = 8 || (MONTH([Date]) = 9 && DAY([Date]) <= 15), \"Back to School\", [Date] = DATE(YEAR([Date]), 12, 25), \"Christmas\", \"Regular\"))",
+              "type": "calculated"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

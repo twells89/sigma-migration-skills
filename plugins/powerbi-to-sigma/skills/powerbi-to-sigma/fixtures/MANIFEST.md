@@ -125,6 +125,32 @@ same Sigma translations and buckets apply. Notable:
 
 ---
 
+## fixture_10_retail_calendar.bim — retail event date dimension
+
+An explicit 2024–2026 `ADDCOLUMNS(CALENDAR(...))` date dimension with the
+customer-reported retail events. The table constructor remains bucket **(b)**
+because Sigma must synthesize a queryable date-spine SQL element; once that
+spine exists, each derived event expression below is a mechanical **(a)**
+calculated-column translation.
+
+| Name | DAX shape | Expected Sigma | Bucket | Notes |
+|---|---|---|---|---|
+| Year | `YEAR([Date])` | SQL date-spine column `EXTRACT(YEAR FROM d)` | a | Keep simple date parts in the generated SQL. |
+| WeekdayMon | `WEEKDAY([Date], 2)` | `Mod(Weekday([Date]) + 5, 7) + 1` | a | DAX return type 2 is Monday=1; Sigma `Weekday` is Sunday=1. |
+| MonthEnd | `EOMONTH([Date], 0)` | `EndOfMonth(DateAdd("month", 0, [Date]))` | a | Preserve the month-offset argument. |
+| NextMonth | `EDATE([Date], 1)` | `DateAdd("month", 1, [Date])` | a | |
+| IsBlackFriday | `VAR WeekdayNumber=WEEKDAY(...,2) RETURN MONTH=11 && WeekdayNumber=5 && DAY BETWEEN 23 AND 29` | inlined `If`-free boolean formula using `Month`, Monday-based `Weekday`, and `Day` | a | Friday between Nov 23–29 is Black Friday for every Gregorian year. |
+| IsEaster | Gregorian computus in `VAR`/`RETURN`, `MOD`, `INT`, `DATE` | inlined `Mod`/`Int` arithmetic ending in `[Date] = MakeDate(...)` | a | Exercises a movable holiday without a hard-coded lookup table. |
+| IsBackToSchool | August or Sep 1–15 predicate | `Month([Date]) = 8 Or (Month([Date]) = 9 And Day([Date]) <= 15)` | a | Representative configurable retail window. |
+| IsChristmas | `[Date] = DATE(YEAR([Date]),12,25)` | `[Date] = MakeDate(Year([Date]), 12, 25)` | a | Fixed-date event. |
+| RetailEvent | `SWITCH(TRUE(), Black Friday predicate, ..., "Regular")` | nested `If(...)` label formula | a | Exercises event labeling in the calculated-table path. |
+
+Regression contract: the converted `DimRetailDate` element must contain all ten
+columns, its SQL must contain neither `_placeholder` nor `NULL AS`, and its
+warnings must not report dropped calculated-table columns.
+
+---
+
 ## Patterns NOT covered by `dax-to-sigma-coverage.md` (gaps worth a spike)
 
 The coverage doc analysed 10 representative measures. These fixture patterns go
@@ -161,5 +187,6 @@ beyond it and should be added as new worked rows / spike cases:
 
 ## Self-test
 
-`python3 validate.py` → all 6 fixtures PASS;
-**81 measures + 13 calculated columns = 94 DAX expressions** total.
+`python3 validate.py` → all 10 fixtures PASS;
+**116 measures + 22 calculated columns + 7 calculated tables = 145 DAX
+expressions** total.

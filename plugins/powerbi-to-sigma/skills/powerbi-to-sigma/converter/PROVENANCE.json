@@ -10,6 +10,11 @@
       "commit": "23713065 (this repo, PR #385) — not yet landed in sigma-data-model-mcp",
       "summary": "Non-warehouse-source detection for Power BI tables sourced from a Fabric Dataflow / Lakehouse / OneLake / Dataverse / file connector (pbiDetectNonWarehouseSource, wired into the table-path-resolution fallback and exported). Applied by hand directly onto this bundle (source_commit 2f8c6cd) rather than via tools/vendor-converters.sh because upstream sigma-data-model-mcp does not yet have this change (its source_commit predates this feature and there is no newer upstream commit to re-vendor from). Present ONLY in this vendored bundle: a naive re-vendor from any upstream commit before this lands there would silently DROP the ⛔ nonWarehouseSourcedTables detection and stats field, breaking the migrate-powerbi.rb non_warehouse_source checkpoint decision and reopening the field-reported failure this PR fixes (a placeholder warehouse path shipped with no signal that it needs land-then-repoint). Port pbiDetectNonWarehouseSource (and its call site in convertPowerBIToSigma's table-path fallback) upstream to sigma-data-model-mcp's src/powerbi.ts, then re-vendor and retire this entry.",
       "upstream_pr": null
+    },
+    {
+      "commit": "42df7f63 (this repo, PR #786) — not yet landed in sigma-data-model-mcp",
+      "summary": "Calculated retail-calendar support for explicit ADDCOLUMNS(CALENDAR(...)): complex derived DAX uses the existing calculated-column translator instead of NULL SQL aliases; WEEKDAY return types, EDATE, EOMONTH, and QUARTER are translated. Present ONLY in this vendored bundle. A naive re-vendor before the equivalent src/powerbi.ts change lands upstream would restore queryable-but-wrong NULL holiday columns and break fixture_10_retail_calendar. Port the rewrite helpers, formula-column fallback, and incomplete-element marking upstream, then re-vendor and retire this entry.",
+      "upstream_pr": null
     }
   ]
 }

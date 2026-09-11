@@ -181,3 +181,36 @@ prevent silent miscompilations. The tool's value is concentrated in the hard
 cases as much as the easy ones — it short-circuits the "looks right but wrong"
 trap that filter-context semantics create when DAX users assume Sigma's formula
 language behaves like DAX.
+
+## 2026-09 update — calculated retail date tables
+
+The original spike measured scalar measures and did not cover whole-table DAX.
+That omission hid a distinct failure path: the calculated-table converter could
+build a valid `CALENDAR` spine while emitting every complex `ADDCOLUMNS`
+attribute as `NULL`. A retail model could therefore post and return dates while
+Black Friday, Easter, Back-to-School, and Christmas filters returned wrong data.
+
+Current explicit-calendar coverage:
+
+- Literal `CALENDAR(DATE(y,m,d), DATE(y,m,d))` bounds become a queryable SQL
+  date spine.
+- `YEAR`/`MONTH`/`DAY`/`QUARTER` and basic date formatting stay in SQL.
+- Other `ADDCOLUMNS` expressions use the calculated-column translator,
+  including top-level `VAR/RETURN`, `IF`, `SWITCH(TRUE())`, boolean arithmetic,
+  `DATE`, `WEEKDAY` return types 1/2/3 and 11–17, `EDATE`, `EOMONTH`, `MOD`,
+  `INT`, and `FLOOR`.
+- Unsupported derived columns are dropped and mark the table incomplete; they
+  are never represented by a queryable-but-wrong `NULL AS` source column.
+- The orchestrator blocks placeholder SQL, residual calendar `NULL AS`, and
+  dropped calculated-table columns before any Sigma POST. `--yes` does not
+  bypass this; an explicit
+  `--allow-incomplete-calculated-tables "<reason>"` is required.
+
+Still unsupported by design: `CALENDARAUTO()` (its bounds depend on model data),
+dynamic `CALENDAR` bounds, and arbitrary `GENERATE`/`ROW`/`SELECTCOLUMNS` table
+constructors. These require warehouse-aware table restructuring, not a safe
+formula-only rewrite.
+
+Regression source: `fixtures/fixture_10_retail_calendar.bim`; converter and
+gate assertions: `scripts/test-retail-calendar.rb` and
+`scripts/test-dax-gate.rb`.

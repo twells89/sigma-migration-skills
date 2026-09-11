@@ -61,5 +61,46 @@ ok '⛔ no-equivalent surfaces as dax_no_equivalent',  ho.size == 1 && ho[0]['id
 ok 'empty DM → realized set empty (⚠ all kept)',
    DaxGate.dax_questions(['⚠ "X": something'], {}).size == 1
 
+# Calculated tables fail differently from measures: placeholder SQL and NULL
+# event columns can still return rows, so the orchestrator must stop before POST.
+placeholder_dm = {
+  'pages' => [{ 'elements' => [{
+    'ok' => false,
+    'source' => { 'kind' => 'sql',
+                  'statement' => '-- Original DAX\nSELECT 1 AS _placeholder' }
+  }] }]
+}
+placeholder_issues = DaxGate.calculated_table_issues(placeholder_dm, [])
+ok 'placeholder calculated-table SQL is incomplete',
+   placeholder_issues.any? { |i| i.include?('placeholder SQL') }
+
+null_calendar_dm = {
+  'pages' => [{ 'elements' => [{
+    'source' => {
+      'kind' => 'sql',
+      'statement' => 'SELECT d AS "Date", NULL AS "Is Easter" FROM TABLE(GENERATOR(ROWCOUNT => 366))'
+    }
+  }] }]
+}
+null_issues = DaxGate.calculated_table_issues(null_calendar_dm, [])
+ok 'NULL calendar-derived column is incomplete',
+   null_issues.include?('calculated date table contains NULL-derived columns')
+
+dropped = ['⚠ Calculated table "DimRetailDate": dropped column(s) Is Easter — re-author them']
+ok 'dropped calculated-table warning is incomplete',
+   DaxGate.calculated_table_issues({}, dropped).first.include?('dropped column')
+
+clean_calendar_dm = {
+  'pages' => [{ 'elements' => [{
+    'source' => {
+      'kind' => 'sql',
+      'statement' => 'SELECT d AS "Date" FROM TABLE(GENERATOR(ROWCOUNT => 366))'
+    },
+    'columns' => [{ 'name' => 'Is Easter', 'formula' => '[Date] = MakeDate(2024, 3, 31)' }]
+  }] }]
+}
+ok 'queryable spine plus Sigma event formulas is complete',
+   DaxGate.calculated_table_issues(clean_calendar_dm, []).empty?
+
 puts(($fail.zero? ? "\nPASS" : "\n#{$fail} FAILED"))
 exit($fail.zero? ? 0 : 1)

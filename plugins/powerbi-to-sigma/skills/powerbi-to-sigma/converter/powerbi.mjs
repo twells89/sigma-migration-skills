@@ -649,6 +649,72 @@ function rewriteWeeknum(f) {
   }
   return f;
 }
+function rewriteWeekday(f) {
+  const re = /\bWEEKDAY\s*\(/gi;
+  let cursor = 0;
+  for (let guard = 0; guard < 200; guard++) {
+    re.lastIndex = cursor;
+    const m = re.exec(f);
+    if (!m)
+      break;
+    const openIdx = m.index + m[0].length;
+    const { args, endPos } = splitCallArgs(f, openIdx);
+    if (args.length < 1) {
+      cursor = openIdx;
+      continue;
+    }
+    const dateArg = args[0].trim();
+    const rt = (args[1] || "1").replace(/^\[|\]$/g, "").trim();
+    let replacement;
+    if (rt === "1") {
+      replacement = `Weekday(${dateArg})`;
+    } else if (rt === "2" || rt === "11") {
+      replacement = `(Mod(Weekday(${dateArg}) + 5, 7) + 1)`;
+    } else if (rt === "3") {
+      replacement = `Mod(Weekday(${dateArg}) + 5, 7)`;
+    } else if (/^1[2-7]$/.test(rt)) {
+      const startDay = (Number(rt) - 10) % 7 + 1;
+      const offset = 7 - startDay;
+      replacement = `(Mod(Weekday(${dateArg}) + ${offset}, 7) + 1)`;
+    } else {
+      return { formula: f, unsupportedReturnType: rt };
+    }
+    f = f.slice(0, m.index) + replacement + f.slice(endPos);
+    cursor = m.index + replacement.length;
+  }
+  return { formula: f, unsupportedReturnType: null };
+}
+function rewriteMonthShift(f) {
+  const rewrites = [
+    {
+      re: /\bEOMONTH\s*\(/gi,
+      build: (dateArg, months) => `EndOfMonth(DateAdd("month", ${months}, ${dateArg}))`
+    },
+    {
+      re: /\bEDATE\s*\(/gi,
+      build: (dateArg, months) => `DateAdd("month", ${months}, ${dateArg})`
+    }
+  ];
+  for (const rw of rewrites) {
+    let cursor = 0;
+    for (let guard = 0; guard < 200; guard++) {
+      rw.re.lastIndex = cursor;
+      const m = rw.re.exec(f);
+      if (!m)
+        break;
+      const openIdx = m.index + m[0].length;
+      const { args, endPos } = splitCallArgs(f, openIdx);
+      if (args.length < 2) {
+        cursor = openIdx;
+        continue;
+      }
+      const replacement = rw.build(args[0].trim(), args[1].trim());
+      f = f.slice(0, m.index) + replacement + f.slice(endPos);
+      cursor = m.index + replacement.length;
+    }
+  }
+  return f;
+}
 function rewriteSwitchTrue(f) {
   const re = /\bSWITCH\s*\(\s*TRUE\s*\(\s*\)\s*,/gi;
   for (let guard = 0; guard < 200; guard++) {
@@ -1449,6 +1515,14 @@ function pbiDaxToSigma(dax, warnings, measureName, measureDax = {}) {
   }
   f = rewriteDateDiff(f);
   f = rewriteWeeknum(f);
+  const weekdayRewrite = rewriteWeekday(f);
+  if (weekdayRewrite.unsupportedReturnType) {
+    if (warnings)
+      warnings.push(`\u26A0 "${measureName}": WEEKDAY return_type ${weekdayRewrite.unsupportedReturnType} is not supported. Use return_type 1, 2, 3, or 11\u201317.`);
+    return null;
+  }
+  f = weekdayRewrite.formula;
+  f = rewriteMonthShift(f);
   const divideMatch = f.match(/\bDIVIDE\s*\(/i);
   if (divideMatch) {
     const maskedF = maskDaxStringLiterals(f);
@@ -1537,6 +1611,7 @@ function pbiDaxToSigma(dax, warnings, measureName, measureDax = {}) {
   f = f.replace(/\bYEAR\s*\(/gi, "Year(");
   f = f.replace(/\bMONTH\s*\(/gi, "Month(");
   f = f.replace(/\bDAY\s*\(/gi, "Day(");
+  f = f.replace(/\bQUARTER\s*\(/gi, "Quarter(");
   f = f.replace(/\bHOUR\s*\(/gi, "Hour(");
   f = f.replace(/\bMINUTE\s*\(/gi, "Minute(");
   f = f.replace(/\bSECOND\s*\(/gi, "Second(");
@@ -1649,8 +1724,6 @@ function daxCalendarDerivedToSql(expr) {
     return "EXTRACT(DAY FROM d)";
   if (m = e.match(/^QUARTER\s*\(\s*\[[^\]]+\]\s*\)$/i))
     return "EXTRACT(QUARTER FROM d)";
-  if (m = e.match(/^WEEKDAY\s*\(\s*\[[^\]]+\]/i))
-    return "DAYOFWEEK(d)";
   if (m = e.match(/^FORMAT\s*\(\s*\[[^\]]+\]\s*,\s*"([^"]+)"\s*\)$/i)) {
     const fmt = m[1];
     if (/^MMMM$/.test(fmt))
@@ -1698,15 +1771,14 @@ function buildCalendarSpineSql(dax, colDisplayNames) {
   }
   const dateColName = colDisplayNames[0] || "Date";
   const selects = [`d AS "${dateColName}"`];
-  const unconverted = [];
+  const formulaColumns = [];
   derived.forEach((dv, idx) => {
     const display = colDisplayNames[idx + 1] || dv.name;
     const sqlExpr = daxCalendarDerivedToSql(dv.expr);
     if (sqlExpr) {
       selects.push(`${sqlExpr} AS "${display}"`);
     } else {
-      selects.push(`NULL AS "${display}"`);
-      unconverted.push(display);
+      formulaColumns.push({ name: display, dax: dv.expr });
     }
   });
   const sql = `SELECT ${selects.join(", ")}
@@ -1714,13 +1786,12 @@ FROM (
   SELECT DATEADD('day', SEQ4(), CAST('${startStr}' AS DATE)) AS d
   FROM TABLE(GENERATOR(ROWCOUNT => ${rowCount}))
 )`;
-  if (unconverted.length) {
-    return { ok: true, sql: sql + `
--- NOTE: derived column(s) ${unconverted.join(", ")} had a DAX expression that could not be auto-translated \u2014 emitted as NULL; fill in manually.` };
-  }
-  return { ok: true, sql };
+  return { ok: true, sql, formulaColumns };
 }
 function buildCalcTableSql(dax, seriesColName, colDisplayNames = []) {
+  if (/\b(?:GENERATE|ROW)\s*\(/i.test(dax)) {
+    return { ok: false, reason: "DAX GENERATE/ROW calculated tables are not safely reducible to a date spine; recreate the full row expression as warehouse SQL or Sigma calculated columns." };
+  }
   if (/\bCALENDAR\s*\(/i.test(dax)) {
     return buildCalendarSpineSql(dax, colDisplayNames);
   }
@@ -2556,11 +2627,9 @@ function convertPowerBIToSigma(modelJson, options = {}) {
       let statement;
       if (built.ok) {
         statement = built.sql;
-        if (/\bCALENDAR\s*\(/i.test(ctExpr)) {
-          warnings.push(`\u2139 Calculated table "${tableName}": DAX CALENDAR/ADDCOLUMNS \u2192 synthesized a Sigma SQL date-spine element (GENERATOR + DATEADD) with the derived columns translated to SQL.`);
-        } else if (ctCols.length > 1) {
+        if (!/\bCALENDAR\s*\(/i.test(ctExpr) && ctCols.length > 1) {
           warnings.push(`\u2139 Calculated table "${tableName}": synthesized a SQL VALUES series for column "${firstColName}". The remaining derived column(s) (${ctCols.slice(1).map((c) => sigmaDisplayName(c.sourceColumn || c.name)).join(", ")}) come from DAX ADDCOLUMNS/SELECTCOLUMNS \u2014 add their expressions to the SQL or as Sigma calc columns.`);
-        } else {
+        } else if (!/\bCALENDAR\s*\(/i.test(ctExpr)) {
           warnings.push(`\u2139 Calculated table "${tableName}": DAX GENERATESERIES \u2192 synthesized Sigma SQL element (VALUES list).`);
         }
       } else {
@@ -2572,18 +2641,31 @@ SELECT 1 AS _placeholder`;
       const ctColumns = [];
       const ctOrder = [];
       const droppedCols = [];
+      const formulaColumns = new Map((built.formulaColumns || []).map((fc) => [fc.name, fc.dax]));
+      let translatedFormulaCount = 0;
       for (const c of ctCols) {
         const sourceCol = (c.sourceColumn || c.name || "").replace(/^\[|\]$/g, "");
         const displayName = sigmaDisplayName(sourceCol);
         const aliasEmitted = built.ok && new RegExp(`AS\\s+"${displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "i").test(statement);
-        if (built.ok && !aliasEmitted) {
+        if (!built.ok) {
+          continue;
+        }
+        let formula = aliasEmitted ? `[Custom SQL/${displayName}]` : null;
+        if (!formula && formulaColumns.has(displayName)) {
+          formula = pbiDaxToSigma(formulaColumns.get(displayName), warnings, displayName, measureDaxMap);
+          if (formula)
+            translatedFormulaCount++;
+        }
+        if (!formula) {
           droppedCols.push(displayName);
           continue;
         }
         const colId = sigmaInodeId(sigmaPhysicalName(sourceCol || c.name));
         tableColMap[tableName][c.name] = colId;
         allPbiToSigmaNames[c.name] = displayName;
-        const col = { id: colId, formula: `[Custom SQL/${displayName}]` };
+        const col = { id: colId, formula };
+        if (!aliasEmitted)
+          col.name = displayName;
         if (c.isHidden)
           col.hidden = true;
         if (c.description)
@@ -2591,8 +2673,13 @@ SELECT 1 AS _placeholder`;
         ctColumns.push(col);
         ctOrder.push(colId);
       }
+      if (built.ok && /\bCALENDAR\s*\(/i.test(ctExpr)) {
+        const sqlDerivedCount = Math.max(0, ctColumns.length - translatedFormulaCount - 1);
+        const formulaSummary = translatedFormulaCount > 0 ? `; ${translatedFormulaCount} complex derived column(s) became Sigma calculated columns` : "";
+        warnings.push(`\u2139 Calculated table "${tableName}": DAX CALENDAR/ADDCOLUMNS \u2192 synthesized a Sigma SQL date-spine element (GENERATOR + DATEADD) with ${sqlDerivedCount} simple derived column(s) in SQL${formulaSummary}.`);
+      }
       if (droppedCols.length) {
-        warnings.push(`\u26A0 Calculated table "${tableName}": dropped column(s) ${droppedCols.join(", ")} \u2014 their DAX (ADDCOLUMNS/SELECTCOLUMNS) expression wasn't translated into the synthesized SQL, so they have no warehouse source. Add them to the SQL statement manually or as Sigma calc columns.`);
+        warnings.push(`\u26A0 Calculated table "${tableName}": dropped column(s) ${droppedCols.join(", ")} \u2014 their DAX (ADDCOLUMNS/SELECTCOLUMNS) expression could be translated to neither synthesized SQL nor a Sigma calculated column. Re-author them before posting.`);
       }
       const ctElement = {
         id: elementId,
@@ -2601,7 +2688,7 @@ SELECT 1 AS _placeholder`;
         columns: ctColumns,
         order: ctOrder
       };
-      if (!built.ok)
+      if (!built.ok || droppedCols.length)
         ctElement.ok = false;
       if (t.isHidden)
         ctElement.visibleAsSource = false;

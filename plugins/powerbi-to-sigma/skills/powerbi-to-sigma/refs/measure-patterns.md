@@ -254,7 +254,34 @@ Distribution model (DM `8c342d40`, all parity-exact vs PBI `executeQueries`).
 | disconnected `GENERATESERIES` bands + "% in band" | `banded_grouping` | `sql`: range-join fact into a `VALUES` band spine, `COUNT(*)` per band (feed `PercentOfTotal` in the viz) | 183/120/32/6 per band, sums to pop |
 | `COUNTROWS(FILTER(T, T[p]=EARLIER(T[p]) && T[m]>EARLIER(T[m])))+1` | `earlier_rank_column` | calc column `RankDense([m],"desc",[p])` | max rank 82 matches |
 | `SUMX(TOPN(n, VALUES(T[g]), [m], DESC), [m])` | `topn_sumx` | `sql`: `SELECT g, <agg> AS t … GROUP BY g QUALIFY ROW_NUMBER() OVER (ORDER BY <agg> DESC) <= n` — keeps the top-n groups; sum them via `GrandTotal(Sum([t]))` in the viz | "Top 5 Role Salary" — same 5 ROLEs in same rank order as PBI (Software Engineer▸VP Sales▸Sales Manager▸Forklift Operator▸Solutions Consultant); residual delta = live-vs-cached snapshot drift (365 vs 363 rows), not logic |
-| `ADDCOLUMNS(CALENDAR(DATE(a),DATE(b)), "Year",YEAR([Date]), …)` | converter (calc-table branch) | `sql` date-spine element: Snowflake `GENERATOR(ROWCOUNT=>N)` + `DATEADD('day',SEQ4(),start)`, derived cols → `EXTRACT(YEAR/MONTH/DAY/QUARTER)` / `TO_CHAR(d,'Mon')` | DimDate = **3287 rows, 2018-01-01..2026-12-31**, derived Year/MonthNo/Month exact vs PBI |
+| `ADDCOLUMNS(CALENDAR(DATE(a),DATE(b)), "Year",YEAR([Date]), …)` | converter (calc-table branch) | `sql` date-spine element: Snowflake `GENERATOR(ROWCOUNT=>N)` + `DATEADD('day',SEQ4(),start)`; simple date parts stay in SQL, complex derived expressions become sibling Sigma calculated columns | DimDate = **3287 rows, 2018-01-01..2026-12-31**; retail fixture covers Black Friday, Easter, Back to School, and Christmas without NULL columns |
+
+### Calculated retail calendars
+
+For an explicit, literal-bound `CALENDAR`, the converter now keeps the physical
+date spine small and translates derived `ADDCOLUMNS` expressions through the
+same DAX formula path used for calculated columns. This covers common retail
+calendar building blocks:
+
+| DAX | Sigma calculated column |
+|---|---|
+| `WEEKDAY([Date], 1)` | `Weekday([Date])` (Sunday=1) |
+| `WEEKDAY([Date], 2)` / `11` | `Mod(Weekday([Date]) + 5, 7) + 1` (Monday=1) |
+| `WEEKDAY([Date], 3)` | `Mod(Weekday([Date]) + 5, 7)` (Monday=0) |
+| `EDATE([Date], n)` | `DateAdd("month", n, [Date])` |
+| `EOMONTH([Date], n)` | `EndOfMonth(DateAdd("month", n, [Date]))` |
+| `VAR ... RETURN`, `IF`, `SWITCH(TRUE())`, `DATE`, `MOD`, `INT` | inlined/mechanical formula rewrites |
+
+The regression oracle is `fixtures/fixture_10_retail_calendar.bim`. It computes
+Black Friday by weekday/day range, Easter with Gregorian computus, a
+Back-to-School window, and Christmas.
+
+Do not guess at model-dependent table bounds. `CALENDARAUTO()`, dynamic
+`CALENDAR(MIN(...),MAX(...))` bounds, and unsupported `GENERATE`/`ROW` table
+constructors remain blocked. `migrate-powerbi.rb` stops before posting if a
+calculated table contains placeholder SQL, `NULL AS`, or dropped columns;
+`--yes` cannot waive it. Only
+`--allow-incomplete-calculated-tables "<reason>"` records an explicit exception.
 
 ### The TREATAS trap that actually mattered (verify, don't assume)
 `Absence Hours (High Earners)` *looked* like a sophisticated P90-threshold

@@ -2,14 +2,15 @@
 """Validate every .bim fixture in this directory.
 
 Checks each file is valid JSON and follows the TMSL shape of model_clean.bim:
-- top-level `compatibilityLevel` and `model`
+- top-level `model` (`compatibilityLevel` is optional for converter fixtures)
 - `model.tables` is a non-empty list
-- at least one table carries `measures`
 - every measure has a `name` + `expression`; every calculated column has a
   `type == "calculated"` + `expression`
+- every calculated-table partition has an expression
 
-Prints a per-fixture count of explicit measures and calculated columns, then a
-total. Exits non-zero if any fixture fails a structural assertion.
+Prints a per-fixture count of explicit measures, calculated columns, and
+calculated tables, then a total. Exits non-zero if any fixture fails a
+structural assertion.
 """
 import json
 import sys
@@ -19,26 +20,31 @@ HERE = Path(__file__).resolve().parent
 
 
 def validate(path: Path):
-    """Return (n_measures, n_calc_columns). Raises AssertionError on bad shape."""
+    """Return DAX object counts. Raises AssertionError on bad shape."""
     with path.open() as fh:
         model = json.load(fh)  # raises JSONDecodeError if not valid JSON
 
-    assert "compatibilityLevel" in model, "missing top-level compatibilityLevel"
     assert "model" in model, "missing top-level 'model'"
     tables = model["model"].get("tables")
     assert isinstance(tables, list) and tables, "model.tables must be a non-empty list"
 
     n_measures = 0
     n_calc_cols = 0
-    has_any_measures = False
+    n_calc_tables = 0
 
     for t in tables:
         assert "name" in t, "table missing name"
         # partitions are required for a real TMSL table
         assert t.get("partitions"), f"table {t['name']} missing partitions"
+        for partition in t["partitions"]:
+            source = partition.get("source") or {}
+            if source.get("type") == "calculated":
+                assert source.get("expression"), (
+                    f"calculated-table partition {t['name']} missing expression"
+                )
+                n_calc_tables += 1
 
         for m in t.get("measures", []) or []:
-            has_any_measures = True
             assert m.get("name"), f"measure missing name in table {t['name']}"
             assert m.get("expression"), f"measure {m.get('name')} missing expression"
             n_measures += 1
@@ -50,30 +56,32 @@ def validate(path: Path):
                 )
                 n_calc_cols += 1
 
-    assert has_any_measures, "no table in the model carries any measures"
-    return n_measures, n_calc_cols
+    return n_measures, n_calc_cols, n_calc_tables
 
 
 def main():
     bims = sorted(HERE.glob("*.bim"))
     assert bims, "no .bim fixtures found"
 
-    total_m = total_c = 0
+    total_m = total_c = total_t = 0
     failures = []
     print(f"Validating {len(bims)} fixture(s) in {HERE}\n")
     for p in bims:
         try:
-            nm, nc = validate(p)
+            nm, nc, nt = validate(p)
         except (AssertionError, json.JSONDecodeError) as e:
             failures.append((p.name, str(e)))
             print(f"  FAIL  {p.name}: {e}")
             continue
         total_m += nm
         total_c += nc
-        print(f"  PASS  {p.name}: {nm} measures, {nc} calc columns")
+        total_t += nt
+        print(f"  PASS  {p.name}: {nm} measures, {nc} calc columns, "
+              f"{nt} calc tables")
 
-    print(f"\nTOTAL: {total_m} measures + {total_c} calc columns "
-          f"= {total_m + total_c} DAX expressions across {len(bims)} fixtures")
+    print(f"\nTOTAL: {total_m} measures + {total_c} calc columns + "
+          f"{total_t} calc tables = {total_m + total_c + total_t} "
+          f"DAX expressions across {len(bims)} fixtures")
 
     if failures:
         print(f"\n{len(failures)} fixture(s) FAILED")

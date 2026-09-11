@@ -1,0 +1,253 @@
+{
+  "model": {
+    "name": "Power BI Import",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0001",
+        "name": "Page 1",
+        "elements": [
+          {
+            "id": "id0002",
+            "kind": "table",
+            "name": "RETAIL_SALES",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "RETAIL_DB",
+                "ANALYTICS",
+                "RETAIL_SALES"
+              ]
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0003/SALE_ID",
+                "formula": "[RETAIL_SALES/Sale Id]"
+              },
+              {
+                "id": "inode-NORM0004/SALE_DATE",
+                "formula": "[RETAIL_SALES/Sale Date]"
+              },
+              {
+                "id": "inode-NORM0005/SALES_AMOUNT",
+                "formula": "[RETAIL_SALES/Sales Amount]"
+              }
+            ],
+            "order": [
+              "inode-NORM0003/SALE_ID",
+              "inode-NORM0004/SALE_DATE",
+              "inode-NORM0005/SALES_AMOUNT"
+            ],
+            "metrics": [
+              {
+                "id": "id0006",
+                "formula": "Sum([Sales Amount])",
+                "name": "Total Sales",
+                "format": {
+                  "kind": "number",
+                  "formatString": "$,.2f",
+                  "currencySymbol": "$"
+                }
+              }
+            ],
+            "relationships": [
+              {
+                "id": "id0007",
+                "targetElementId": "id0008",
+                "keys": [
+                  {
+                    "sourceColumnId": "inode-NORM0004/SALE_DATE",
+                    "targetColumnId": "inode-NORM0009/DATE"
+                  }
+                ],
+                "name": "DimRetailDate"
+              }
+            ]
+          },
+          {
+            "id": "id0008",
+            "kind": "table",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "sql",
+              "statement": "SELECT d AS \"Date\", EXTRACT(YEAR FROM d) AS \"Year\"\nFROM (\n  SELECT DATEADD('day', SEQ4(), CAST('2024-01-01' AS DATE)) AS d\n  FROM TABLE(GENERATOR(ROWCOUNT => 1096))\n)"
+            },
+            "columns": [
+              {
+                "id": "inode-NORM0009/DATE",
+                "formula": "[Custom SQL/Date]"
+              },
+              {
+                "id": "inode-NORM0010/YEAR",
+                "formula": "[Custom SQL/Year]"
+              },
+              {
+                "id": "inode-NORM0011/WEEKDAY_MON",
+                "formula": "(Mod(Weekday([Date]) + 5, 7) + 1)",
+                "name": "Weekday Mon"
+              },
+              {
+                "id": "inode-NORM0012/MONTH_END",
+                "formula": "EndOfMonth(DateAdd(\"month\", 0, [Date]))",
+                "name": "Month End"
+              },
+              {
+                "id": "inode-NORM0013/NEXT_MONTH",
+                "formula": "DateAdd(\"month\", 1, [Date])",
+                "name": "Next Month"
+              },
+              {
+                "id": "inode-NORM0014/IS_BLACK_FRIDAY",
+                "formula": "Month([Date]) = 11  and  ((Mod(Weekday([Date]) + 5, 7) + 1)) = 5  and  Day([Date]) >= 23  and  Day([Date]) <= 29",
+                "name": "Is Black Friday"
+              },
+              {
+                "id": "inode-NORM0015/IS_EASTER",
+                "formula": "[Date] = MakeDate((Year([Date])), (Int(((Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) + (Mod(32 + 2 * (Mod((Int((Year([Date])) / 100)), 4)) + 2 * (Int((Mod((Year([Date])), 100)) / 4)) - (Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) - (Mod((Mod((Year([Date])), 100)), 4)), 7)) - 7 * (Int(((Mod((Year([Date])), 19)) + 11 * (Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) + 22 * (Mod(32 + 2 * (Mod((Int((Year([Date])) / 100)), 4)) + 2 * (Int((Mod((Year([Date])), 100)) / 4)) - (Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) - (Mod((Mod((Year([Date])), 100)), 4)), 7))) / 451)) + 114) / 31)), (Mod((Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) + (Mod(32 + 2 * (Mod((Int((Year([Date])) / 100)), 4)) + 2 * (Int((Mod((Year([Date])), 100)) / 4)) - (Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) - (Mod((Mod((Year([Date])), 100)), 4)), 7)) - 7 * (Int(((Mod((Year([Date])), 19)) + 11 * (Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) + 22 * (Mod(32 + 2 * (Mod((Int((Year([Date])) / 100)), 4)) + 2 * (Int((Mod((Year([Date])), 100)) / 4)) - (Mod(19 * (Mod((Year([Date])), 19)) + (Int((Year([Date])) / 100)) - (Int((Int((Year([Date])) / 100)) / 4)) - (Int(((Int((Year([Date])) / 100)) - (Int(((Int((Year([Date])) / 100)) + 8) / 25)) + 1) / 3)) + 15, 30)) - (Mod((Mod((Year([Date])), 100)), 4)), 7))) / 451)) + 114, 31) + 1))",
+                "name": "Is Easter"
+              },
+              {
+                "id": "inode-NORM0016/IS_BACK_TO_SCHOOL",
+                "formula": "Month([Date]) = 8  or  (Month([Date]) = 9  and  Day([Date]) <= 15)",
+                "name": "Is Back to School"
+              },
+              {
+                "id": "inode-NORM0017/IS_CHRISTMAS",
+                "formula": "[Date] = MakeDate(Year([Date]), 12, 25)",
+                "name": "Is Christmas"
+              },
+              {
+                "id": "inode-NORM0018/RETAIL_EVENT",
+                "formula": "If(Month([Date]) = 11  and  (Mod(Weekday([Date]) + 5, 7) + 1) = 5  and  Day([Date]) >= 23  and  Day([Date]) <= 29, \"Black Friday\", If(Month([Date]) = 8  or  (Month([Date]) = 9  and  Day([Date]) <= 15), \"Back to School\", If([Date] = MakeDate(Year([Date]), 12, 25), \"Christmas\", \"Regular\")))",
+                "name": "Retail Event"
+              }
+            ],
+            "order": [
+              "inode-NORM0009/DATE",
+              "inode-NORM0010/YEAR",
+              "inode-NORM0011/WEEKDAY_MON",
+              "inode-NORM0012/MONTH_END",
+              "inode-NORM0013/NEXT_MONTH",
+              "inode-NORM0014/IS_BLACK_FRIDAY",
+              "inode-NORM0015/IS_EASTER",
+              "inode-NORM0016/IS_BACK_TO_SCHOOL",
+              "inode-NORM0017/IS_CHRISTMAS",
+              "inode-NORM0018/RETAIL_EVENT"
+            ]
+          },
+          {
+            "id": "id0019",
+            "kind": "table",
+            "name": "RETAIL_SALES View",
+            "source": {
+              "kind": "table",
+              "elementId": "id0002"
+            },
+            "columns": [
+              {
+                "id": "id0020",
+                "formula": "[RETAIL_SALES/Sale Id]"
+              },
+              {
+                "id": "id0021",
+                "formula": "[RETAIL_SALES/Sale Date]"
+              },
+              {
+                "id": "id0022",
+                "formula": "[RETAIL_SALES/Sales Amount]"
+              },
+              {
+                "id": "id0023",
+                "formula": "[RETAIL_SALES/DimRetailDate/Year]",
+                "hidden": true
+              },
+              {
+                "id": "id0024",
+                "formula": "[RETAIL_SALES/DimRetailDate/Weekday Mon]",
+                "hidden": true
+              },
+              {
+                "id": "id0025",
+                "formula": "[RETAIL_SALES/DimRetailDate/Month End]",
+                "hidden": true
+              },
+              {
+                "id": "id0026",
+                "formula": "[RETAIL_SALES/DimRetailDate/Next Month]",
+                "hidden": true
+              },
+              {
+                "id": "id0027",
+                "formula": "[RETAIL_SALES/DimRetailDate/Is Black Friday]",
+                "hidden": true
+              },
+              {
+                "id": "id0028",
+                "formula": "[RETAIL_SALES/DimRetailDate/Is Easter]",
+                "hidden": true
+              },
+              {
+                "id": "id0029",
+                "formula": "[RETAIL_SALES/DimRetailDate/Is Back to School]",
+                "hidden": true
+              },
+              {
+                "id": "id0030",
+                "formula": "[RETAIL_SALES/DimRetailDate/Is Christmas]",
+                "hidden": true
+              },
+              {
+                "id": "id0031",
+                "formula": "[RETAIL_SALES/DimRetailDate/Retail Event]",
+                "hidden": true
+              }
+            ],
+            "order": [
+              "id0020",
+              "id0021",
+              "id0022",
+              "id0023",
+              "id0024",
+              "id0025",
+              "id0026",
+              "id0027",
+              "id0028",
+              "id0029",
+              "id0030",
+              "id0031"
+            ],
+            "folders": [
+              {
+                "id": "id0032",
+                "name": "DimRetailDate",
+                "items": [
+                  "id0023",
+                  "id0024",
+                  "id0025",
+                  "id0026",
+                  "id0027",
+                  "id0028",
+                  "id0029",
+                  "id0030",
+                  "id0031"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [
+    "⚠ Connection ID not set — update in JSON before saving to Sigma",
+    "ℹ Calculated table \"DimRetailDate\": DAX CALENDAR/ADDCOLUMNS → synthesized a Sigma SQL date-spine element (GENERATOR + DATEADD) with 1 simple derived column(s) in SQL; 8 complex derived column(s) became Sigma calculated columns."
+  ],
+  "stats": {
+    "tables": 2,
+    "elements": 3,
+    "columns": 25,
+    "metrics": 1,
+    "relationships": 1
+  }
+}

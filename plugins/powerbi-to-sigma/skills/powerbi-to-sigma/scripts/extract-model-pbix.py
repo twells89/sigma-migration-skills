@@ -13,7 +13,8 @@ vendored converter (convertPowerBIToSigma) already consume:
     "model": {
       "culture": "en-US",
       "tables": [ { "name", "columns":[{"name","dataType","sourceColumn",...}],
-                    "measures":[{"name","expression"}], "partitions":[...] } ],
+                    "measures":[{"name","expression"}],
+                    "partitions":[M or calculated-table DAX] } ],
       "relationships": [ { "name","fromTable","fromColumn","toTable","toColumn",
                            "crossFilteringBehavior","isActive" } ] } }
 
@@ -79,7 +80,8 @@ def _truthy(v, default=True):
 
 
 def assemble_tmsl(model_name, schema_recs, measure_recs, relationship_recs,
-                  calc_col_recs=(), mquery_recs=(), table_order=None):
+                  calc_col_recs=(), calc_table_recs=(), mquery_recs=(),
+                  table_order=None):
     """PURE pbixray-records -> TMSL model.bim dict.
 
     Each *_recs arg is a list of dicts (what pandas `df.to_dict("records")`
@@ -89,10 +91,17 @@ def assemble_tmsl(model_name, schema_recs, measure_recs, relationship_recs,
       relationship_recs : {FromTableName, FromColumnName, ToTableName,
                            ToColumnName, [IsActive], [CrossFilteringBehavior], [Name]}
       calc_col_recs     : {TableName, ColumnName, Expression}  (DAX calc columns)
+      calc_table_recs   : {TableName, Expression}              (DAX calc tables)
       mquery_recs       : {TableName, Expression}              (Power Query M)
     """
     tables = {}          # name -> table dict (insertion-ordered)
     order = []
+    calc_tables = {}
+    for r in calc_table_recs:
+        tn = _clean(r.get("TableName"))
+        expr = _clean(r.get("Expression"))
+        if tn and expr:
+            calc_tables.setdefault(tn, expr)
 
     def _table(name):
         name = _clean(name)
@@ -116,12 +125,15 @@ def assemble_tmsl(model_name, schema_recs, measure_recs, relationship_recs,
         col = _clean(r.get("ColumnName"))
         if not col:
             continue
-        t["columns"].append({
+        column = {
             "name": col,
             "dataType": _tmsl_datatype(r.get("PandasDataType")),
-            "sourceColumn": col,
+            "sourceColumn": f"[{col}]" if _clean(r.get("TableName")) in calc_tables else col,
             "summarizeBy": "none",
-        })
+        }
+        if _clean(r.get("TableName")) in calc_tables:
+            column["type"] = "calculatedTableColumn"
+        t["columns"].append(column)
 
     # Calculated (DAX) columns — carried through so the converter's calc-column
     # translator can see them; marked type=calculated so it does NOT treat them
@@ -153,10 +165,11 @@ def assemble_tmsl(model_name, schema_recs, measure_recs, relationship_recs,
             m["description"] = desc
         t["measures"].append(m)
 
-    # Partitions from Power Query M (carries the warehouse FQN the converter
-    # extracts via pbiExtractPathFromM; db/schema are repointed at convert time
-    # from --database/--schema). Tables with no captured M get an honest
-    # placeholder partition so the converter falls back to the override path.
+    # Partitions. A DAX calculated table must win over the generic no-M fallback:
+    # pbixray exposes its constructor through dax_tables, and losing that
+    # expression makes the converter invent a physical warehouse table. Regular
+    # tables retain their Power Query M (and therefore warehouse FQN); tables
+    # with neither get an honest placeholder M partition.
     mq_by_table = {}
     for r in mquery_recs:
         tn = _clean(r.get("TableName"))
@@ -165,7 +178,12 @@ def assemble_tmsl(model_name, schema_recs, measure_recs, relationship_recs,
             mq_by_table.setdefault(tn, expr)
     for name, t in tables.items():
         mq = mq_by_table.get(name)
-        if mq:
+        calc_expr = calc_tables.get(name)
+        if calc_expr:
+            t["partitions"].append({"name": name, "mode": "import",
+                                    "source": {"type": "calculated",
+                                               "expression": calc_expr}})
+        elif mq:
             t["partitions"].append({"name": name, "mode": "import",
                                     "source": {"type": "m", "expression": mq}})
         else:
@@ -308,6 +326,7 @@ def build_model_from_pbixray(pbi, model_name):
         _records(getattr(pbi, "dax_measures", None)),
         _records(getattr(pbi, "relationships", None)),
         calc_col_recs=_records(getattr(pbi, "dax_columns", None)),
+        calc_table_recs=_records(getattr(pbi, "dax_tables", None)),
         mquery_recs=_records(getattr(pbi, "power_query", None)),
         table_order=table_order,
     )

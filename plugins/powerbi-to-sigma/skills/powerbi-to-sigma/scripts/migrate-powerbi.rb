@@ -134,6 +134,14 @@ OptionParser.new do |o|
   # Sigma limit (USERELATIONSHIP / ISINSCOPE and friends); the reason is still
   # printed, never suppressed.
   o.on('--allow-field-loss', 'proceed despite field-binding loss (still reports it)') { opts[:allow_field_loss] = true }
+  # Calculated-table incompleteness is earlier and more dangerous than workbook
+  # field loss: a generated date spine can return rows while holiday columns are
+  # all NULL. This override requires an auditable reason and is never implied by
+  # --yes.
+  o.on('--allow-incomplete-calculated-tables REASON',
+       'proceed past placeholder/NULL/dropped calculated-table output; records REASON') do |v|
+    opts[:allow_incomplete_calculated_tables] = v
+  end
   o.on('--connection ID')   { |v| opts[:conn]   = v }
   o.on('--database DB')     { |v| opts[:db]     = v }
   o.on('--schema S')        { |v| opts[:schema] = v }
@@ -705,6 +713,30 @@ if native_result['converted'].any?
   conv['model'] = dm_model
   File.write(File.join(WORK, 'conv-meta.json'), JSON.pretty_generate(conv))
   puts "   restored #{native_result['converted'].size} NativeQuery source(s) as Custom SQL"
+end
+
+# Fail closed on calculated tables that only look converted. A CALENDAR spine
+# with NULL event flags is queryable and can pass shape/readback checks, but
+# every Black-Friday/Easter/etc. filter is wrong. Unlike ordinary DAX measure
+# review questions this gate is NOT auto-accepted by --yes.
+calc_table_issues = DaxGate.calculated_table_issues(dm_model, conv_warnings)
+unless calc_table_issues.empty?
+  override_reason = opts[:allow_incomplete_calculated_tables].to_s.strip
+  gate_record = {
+    'status' => override_reason.empty? ? 'blocked' : 'accepted_incomplete',
+    'reason' => override_reason.empty? ? nil : override_reason,
+    'issues' => calc_table_issues
+  }.compact
+  File.write(File.join(WORK, 'calculated-table-gate.json'), JSON.pretty_generate(gate_record))
+  if override_reason.empty?
+    abort "FATAL: incomplete DAX calculated table output; no Sigma objects were created:\n" \
+          "#{calc_table_issues.map { |issue| "  - #{issue}" }.join("\n")}\n" \
+          "Fix/restructure the calculated table, or explicitly accept the missing semantics with:\n" \
+          "  --allow-incomplete-calculated-tables \"<reason>\"\n" \
+          "(--yes does not bypass this gate.)"
+  end
+  warn "   \u26A0 calculated-table completeness override accepted: #{override_reason}"
+  calc_table_issues.each { |issue| warn "      - #{issue}" }
 end
 puts "   #{conv_stats['elements'] || (dm_model['pages'] || []).flat_map { |p| p['elements'] || [] }.size} element(s), " \
      "#{conv_stats['columns']} column(s), #{conv_stats['metrics']} metric(s); #{conv_warnings.size} converter warning(s)"
