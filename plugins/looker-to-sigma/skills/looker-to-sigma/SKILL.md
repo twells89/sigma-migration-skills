@@ -368,6 +368,8 @@ as a scoped slice**, and say so in the handoff.
 
 ### 0b.2 — Scope the estate
 
+**Read `refs/lookml-remodeling.md` before scoping any project above a few dozen views.** A mature LookML model encodes Looker's constraints as much as the business's semantics, so a 1:1 port imports them. It covers scoping by System Activity usage, the five shapes that should change on the way across (role-playing explosion, parameterized calendar UDFs, Liquid table switching, security threaded through `sql_on`, M:M bridges), how to read `sql_distinct_key` as a map of where fan-out actually lives, and what not to promise about the semantic-aggregates beta.
+
 Inventory models/explores/dashboards, score complexity, and rank a migration shortlist.
 There is no `looker-assessment` sibling skill today (unlike Tableau) — until there is, do
 this from the Looker API in Phase 1, and use **Looker System Activity** (`i__looker`) field-
@@ -596,23 +598,12 @@ The converter handles, end-to-end and clean:
 - **Joins** — snowflake (multi-hop) joins wire the FK to the correct intermediate element (not
   always the base); `full_outer` + field-limited joins; `sql_always_where` / `always_filter`.
 - **Composite join keys** — a `sql_on` that ANDs several `${a.b} = ${c.d}` pairs becomes ONE
-  relationship carrying every key pair (Sigma's `keys` is an array). Liquid
-  `{% condition %}` blocks are stripped before key extraction so their inner text is never
-  mistaken for a key. Literal predicates (`${view.col} = 5`) are join-time scoping a
-  relationship cannot express — reported so you can apply them as an element filter.
-  *(Before this, only the FIRST pair was captured — a silently under-constrained join that
-  still POSTs, still queries, and fans out. Verified live: the single-key shape returned
-  NULL for a column pulled through the relationship where the composite shape returned the
-  correct value.)*
-- **Unique keys / table grain** — `primary_key: yes` → element `uniqueKeys` (an array, so
-  composite keys work). This is what Sigma's **semantic aggregates** uses to track a table's
-  grain and aggregate to it before display; it is inert on orgs without the private beta, so
-  it is always safe to emit. A view with no `primary_key` warns that its grain is undeclared.
-  **`sql_distinct_key` is deliberately NOT mapped into `uniqueKeys`** — it is a *measure*-level
-  de-dup grain that routinely spans joined views, whereas `uniqueKeys` lists columns ON the
-  element. A cross-view grain written there would declare the WRONG grain, and under semantic
-  aggregates a wrong grain produces wrong numbers. Those measures are reported, naming the
-  views their grain spans, for manual confirmation.
+  relationship carrying every key pair; Liquid `{% condition %}` is stripped first; literal
+  predicates (`${view.col} = 5`) are reported, not dropped.
+- **Unique keys / table grain** — `primary_key: yes` → element `uniqueKeys` (what semantic
+  aggregates uses to track grain; inert without the beta, so always safe to emit). A view with
+  no `primary_key` warns. `sql_distinct_key` is deliberately NOT mapped there — see
+  `refs/lookml-remodeling.md`, "Diagnosing where fan-out actually lives".
 - **Other** — `derived_table`, `parameter` + Liquid, `drill_fields`, `set`, view/group labels,
   multiple explores per model.
 
