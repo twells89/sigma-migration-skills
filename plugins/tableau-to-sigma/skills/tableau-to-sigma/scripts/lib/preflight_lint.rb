@@ -41,6 +41,8 @@
 #       number-range with the keys OMITTED is a valid unbounded control
 #       (refs/workbook-layout.md); only null-VALUED bounds are the trap.
 #   C8  `includeNulls` on a controlType where it is off-schema.
+#   C9  an element-level filter missing a non-empty, element-unique `id`.
+#       Control `filters` are target bindings and deliberately exempt.
 #   N1  an element or column whose `name` is empty/whitespace-only — breaks
 #       parity header matching and blank-renders axes (title hiding belongs on
 #       the element, not the name).
@@ -230,6 +232,30 @@ def lint(spec)
               errs << "T2 table '#{name}': grouping calculation '#{cid}' is a passthrough (`#{f}`) — a grouped calculation must be an aggregate expression (Sum([...]) etc.), not a passthrough of an already-aggregated column (renders 'multiple values')." if cols_by_id[cid] && (cols_by_id[cid]['name'].to_s =~ /total|sum|count|avg|revenue|profit|tcv|amount/i)
             end
           end
+        end
+      end
+
+      # C9: every ELEMENT-level filter needs a stable id. A control's
+      # `filters` array has a different schema (target bindings with
+      # source/columnId), so it is deliberately exempt.
+      if kind != 'control'
+        filter_ids = []
+        (el['filters'] || []).each_with_index do |flt, i|
+          unless flt.is_a?(Hash)
+            errs << "C9 element '#{name}': filter[#{i}] must be an object with a non-empty `id`."
+            next
+          end
+          fid = flt['id'].to_s.strip
+          if fid.empty?
+            errs << "C9 element '#{name}': filter[#{i}] is missing required `id` — Sigma rejects element filters without it."
+          else
+            filter_ids << fid
+          end
+        end
+        filter_id_counts = Hash.new(0)
+        filter_ids.each { |fid| filter_id_counts[fid] += 1 }
+        filter_id_counts.each do |fid, count|
+          errs << "C9 element '#{name}': filter id '#{fid}' is duplicated #{count}x — filter ids must be unique within the element." if count > 1
         end
       end
 

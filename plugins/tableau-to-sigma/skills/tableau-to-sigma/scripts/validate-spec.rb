@@ -309,6 +309,30 @@ spec.fetch('pages', []).each do |page|
     cols = (el['columns'] || []) + (el['metrics'] || [])
     sibling_names = Set.new(cols.map { |c| c['name'] }.compact)
 
+    # Element filters and control target bindings deliberately use different
+    # shapes. Sigma requires a stable id on every element-level filter, while
+    # control `filters` entries are only {source,columnId} targets.
+    if opts[:type] == 'workbook' && kind != 'control'
+      filter_ids = []
+      (el['filters'] || []).each_with_index do |flt, i|
+        unless flt.is_a?(Hash)
+          errors << "#{name}: filter[#{i}] must be an object with a non-empty id"
+          next
+        end
+        fid = flt['id'].to_s.strip
+        if fid.empty?
+          errors << "#{name}: element filter[#{i}] is missing required id — Sigma rejects filters without it"
+        else
+          filter_ids << fid
+        end
+      end
+      filter_id_counts = Hash.new(0)
+      filter_ids.each { |fid| filter_id_counts[fid] += 1 }
+      filter_id_counts.each do |fid, count|
+        errors << "#{name}: element filter id #{fid.inspect} is duplicated #{count}x" if count > 1
+      end
+    end
+
     src = el['source'] || {}
     own_prefixes = Set.new
     if src['kind'] == 'warehouse-table' && src['path']

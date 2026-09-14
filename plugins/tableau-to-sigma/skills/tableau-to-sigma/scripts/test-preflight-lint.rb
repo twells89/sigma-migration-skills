@@ -7,6 +7,7 @@
 #   K1  kpi-chart value column with a bare sibling-column ref (renders null)
 #   S1  style.backgroundColor on kpi-chart / bar-chart (blanks PNG export)
 #   C5  selectionMode:"single" control carrying values:[] instead of scalar value
+#   C9  element-level filter missing/duplicating its required id
 #   N1  whitespace-only element / column names (break parity header matching)
 #   P1  conditionalFormats includeValues:false (silent no-op)         [WARN]
 #   I1  If() over a bare column ref, no comparison operator (v5.4: If-only)  [WARN]
@@ -131,6 +132,32 @@ ctl.delete('value')
 ctl['selectionMode'] = 'multi'
 ctl['values'] = %w[East West]
 check(rule(lint(s), 'C5').empty?, 'C5: selectionMode multi + values array → no violation', fails)
+
+# ---- C9: element-filter ids --------------------------------------------------
+s = valid_spec
+fixture_elements(s)[2]['filters'] = [
+  { 'columnId' => 'col-bar-dim', 'kind' => 'list', 'mode' => 'include', 'values' => ['East'] }
+]
+c9 = rule(lint(s), 'C9')
+check(c9.size == 1 && c9.first.include?('missing required `id`'),
+      'C9: element filter without id → one local preflight violation', fails)
+
+s = valid_spec
+fixture_elements(s)[2]['filters'] = [
+  { 'id' => 'flt-dup', 'columnId' => 'col-bar-dim', 'kind' => 'list', 'mode' => 'include', 'values' => ['East'] },
+  { 'id' => 'flt-dup', 'columnId' => 'col-bar-dim', 'kind' => 'list', 'mode' => 'exclude', 'values' => ['West'] }
+]
+c9 = rule(lint(s), 'C9')
+check(c9.size == 1 && c9.first.include?('duplicated 2x'),
+      'C9: duplicate element-filter ids → one local preflight violation', fails)
+
+s = valid_spec
+fixture_elements(s)[2]['filters'] = [
+  { 'id' => 'flt-ok', 'columnId' => 'col-bar-dim', 'kind' => 'list', 'mode' => 'include', 'values' => ['East'] }
+]
+check(rule(lint(s), 'C9').empty?, 'C9: valid element filter id → clean', fails)
+check(rule(lint(valid_spec), 'C9').empty?,
+      'C9: control filter-target bindings remain exempt from element-filter id rules', fails)
 
 # ---- N1: whitespace-only names ------------------------------------------------
 s = valid_spec
