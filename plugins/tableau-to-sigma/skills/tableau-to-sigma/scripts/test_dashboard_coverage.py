@@ -94,6 +94,43 @@ class DashboardCoverageTest(unittest.TestCase):
         )
         self.assertEqual("fail", inferred["status"])
 
+    def test_story_points_are_required_pages_in_full_scope(self):
+        story_plan = self.root / "story-plan.json"
+        story_plan.write_text(
+            json.dumps(
+                [
+                    {
+                        "story": "Executive Story",
+                        "points": [
+                            {
+                                "id": "1",
+                                "caption": "Where we landed",
+                                "captured_sheet": "Overview",
+                                "sheet_kind": "dashboard",
+                            }
+                        ],
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.write_spec(["Overview", "Operations"])
+        missing = dashboard_coverage.evaluate(
+            self.twb,
+            self.workbook,
+            {"mode": "full", "provenance": "full-workbook"},
+            story_plan,
+        )
+        self.assertEqual(["Where we landed"], missing["missing_story_points"])
+        self.write_spec(["Overview", "Operations", "Where we landed"])
+        complete = dashboard_coverage.evaluate(
+            self.twb,
+            self.workbook,
+            {"mode": "full", "provenance": "full-workbook"},
+            story_plan,
+        )
+        self.assertEqual("pass", complete["status"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

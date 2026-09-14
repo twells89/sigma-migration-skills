@@ -276,7 +276,9 @@ This gate is intentionally independent of `dashboard-layout.json`: a parser or
 scope bug that omitted a tab from the layout cannot use that same omission as
 proof that the tab was out of scope. Hidden parameter-host dashboards and truly
 empty dashboard debris remain excluded; text-only visible dashboards remain
-required.
+required. When `story-plan.json` exists, every in-scope story-point caption is
+also a required Sigma page; until `build-story-pages.rb` has produced those
+pages the gate stops rather than silently dropping the story.
 
 ### 5b. Validate the workbook spec
 

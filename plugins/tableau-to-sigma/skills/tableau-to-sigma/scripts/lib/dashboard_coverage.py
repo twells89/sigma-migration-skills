@@ -48,7 +48,31 @@ def source_dashboards(path: Path) -> tuple[list[str], str]:
     return list(dict.fromkeys(visible)), hashlib.sha256(raw).hexdigest()
 
 
-def evaluate(twb_path: Path, spec_path: Path, scope: Any) -> dict:
+def story_points(path: Path | None) -> list[dict]:
+    if path is None or not path.is_file():
+        return []
+    document = json.loads(path.read_text(encoding="utf-8-sig"))
+    return [
+        {
+            "story": story.get("story"),
+            "id": point.get("id"),
+            "caption": point.get("caption"),
+            "captured_sheet": point.get("captured_sheet"),
+            "sheet_kind": point.get("sheet_kind"),
+        }
+        for story in document or []
+        if isinstance(story, dict)
+        for point in story.get("points") or []
+        if isinstance(point, dict) and point.get("caption")
+    ]
+
+
+def evaluate(
+    twb_path: Path,
+    spec_path: Path,
+    scope: Any,
+    story_plan_path: Path | None = None,
+) -> dict:
     visible, source_sha = source_dashboards(twb_path)
     spec_raw = spec_path.read_bytes()
     spec = json.loads(spec_raw.decode("utf-8-sig"))
@@ -70,6 +94,7 @@ def evaluate(twb_path: Path, spec_path: Path, scope: Any) -> dict:
             if str(value)
         )
     )
+    stories = story_points(story_plan_path)
     blockers = []
     if mode == "selected" and provenance not in {"stated", "cli"}:
         blockers.append(
@@ -99,14 +124,33 @@ def evaluate(twb_path: Path, spec_path: Path, scope: Any) -> dict:
                 expected.append(match)
     else:
         expected = visible
+    expected_story_points = (
+        [
+            point
+            for point in stories
+            if any(
+                str(point.get("story") or "").casefold() == name.casefold()
+                for name in requested
+            )
+        ]
+        if mode == "selected"
+        else stories
+    )
+    expected_pages = expected + [
+        str(point["caption"]) for point in expected_story_points
+    ]
     missing = [
         name
-        for name in expected
+        for name in expected_pages
         if not any(name.casefold() == built.casefold() for built in built_pages)
     ]
     blockers.extend(
         {
-            "kind": "missing-dashboard",
+            "kind": (
+                "missing-story-point"
+                if any(point["caption"] == name for point in expected_story_points)
+                else "missing-dashboard"
+            ),
             "dashboard": name,
             "reason": (
                 "visible in Tableau and in stated scope, but no Sigma workbook page "
@@ -122,11 +166,26 @@ def evaluate(twb_path: Path, spec_path: Path, scope: Any) -> dict:
         "provenance": provenance or ("full-workbook" if mode == "full" else ""),
         "visible_source_dashboards": visible,
         "expected_dashboards": expected,
+        "story_points": stories,
+        "expected_story_points": expected_story_points,
+        "expected_pages": expected_pages,
         "built_pages": built_pages,
         "scope_excluded_dashboards": [
             name for name in visible if name not in expected
         ],
-        "missing_dashboards": missing,
+        "scope_excluded_story_points": [
+            point for point in stories if point not in expected_story_points
+        ],
+        "missing_dashboards": [
+            name
+            for name in missing
+            if not any(point["caption"] == name for point in expected_story_points)
+        ],
+        "missing_story_points": [
+            name
+            for name in missing
+            if any(point["caption"] == name for point in expected_story_points)
+        ],
         "blockers": blockers,
         "source_sha256": source_sha,
         "page_names_sha256": hashlib.sha256(

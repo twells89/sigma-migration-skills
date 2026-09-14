@@ -53,7 +53,9 @@ def main() -> int:
             if scope_path.is_file()
             else {"mode": "full"}
         )
-        result = dashboard_coverage.evaluate(source, spec, scope)
+        result = dashboard_coverage.evaluate(
+            source, spec, scope, workdir / "story-plan.json"
+        )
         if args.check:
             actual = json.loads(artifact.read_text(encoding="utf-8-sig"))
             if actual != result:
@@ -73,8 +75,9 @@ def main() -> int:
         return 3
     print(
         f"dashboard coverage: {result['status'].upper()} — "
-        f"{len(result['built_pages'])}/{len(result['expected_dashboards'])} "
-        f"expected page(s), {len(result['missing_dashboards'])} missing"
+        f"{len(result['built_pages'])}/{len(result['expected_pages'])} "
+        f"expected page(s), "
+        f"{len(result['missing_dashboards']) + len(result['missing_story_points'])} missing"
     )
     if result["status"] == "fail":
         for blocker in result["blockers"]:

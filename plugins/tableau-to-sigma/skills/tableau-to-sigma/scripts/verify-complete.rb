@@ -187,7 +187,8 @@ if File.file?(source_path) || File.file?(File.join(wd, 'dashboard-coverage.json'
     expected_dashboards = DashboardCoverage.evaluate(
       twb_path: source_path,
       spec_path: dashboard_spec_path,
-      scope: JSON.parse(File.read(dashboard_scope_path))
+      scope: JSON.parse(File.read(dashboard_scope_path)),
+      story_plan_path: File.join(wd, 'story-plan.json')
     )
     actual_dashboards = JSON.parse(File.read(dashboard_artifact_path))
     unless actual_dashboards == expected_dashboards && expected_dashboards['status'] == 'pass'

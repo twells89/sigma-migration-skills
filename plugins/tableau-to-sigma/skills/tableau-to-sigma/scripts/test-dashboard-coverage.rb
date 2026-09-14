@@ -77,6 +77,28 @@ Dir.mktmpdir('dashboard-coverage') do |dir|
   check.call(result['status'] == 'fail' &&
              result['blockers'].any? { |row| row['kind'] == 'unstated-scope' },
              'inferred selected scope cannot excuse a missing dashboard')
+
+  story_plan = File.join(dir, 'story-plan.json')
+  File.write(story_plan, JSON.generate([
+    { 'story' => 'Executive Story',
+      'points' => [{ 'id' => '1', 'caption' => 'Where we landed',
+                     'captured_sheet' => 'Overview', 'sheet_kind' => 'dashboard' }] }
+  ]))
+  File.write(spec_path, JSON.generate(spec_for.call(%w[Overview Operations])))
+  result = DashboardCoverage.evaluate(
+    twb_path: twb_path, spec_path: spec_path,
+    scope: { 'mode' => 'full', 'provenance' => 'full-workbook' },
+    story_plan_path: story_plan
+  )
+  check.call(result['missing_story_points'] == ['Where we landed'],
+             'full scope blocks when a Tableau story point has no Sigma page')
+  File.write(spec_path, JSON.generate(spec_for.call(['Overview', 'Operations', 'Where we landed'])))
+  result = DashboardCoverage.evaluate(
+    twb_path: twb_path, spec_path: spec_path,
+    scope: { 'mode' => 'full', 'provenance' => 'full-workbook' },
+    story_plan_path: story_plan
+  )
+  check.call(result['status'] == 'pass', 'story point coverage passes after its page is built')
 end
 
 if fails.empty?

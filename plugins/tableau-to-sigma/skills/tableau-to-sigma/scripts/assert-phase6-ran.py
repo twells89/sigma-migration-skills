@@ -598,6 +598,7 @@ def gate_dashboard_coverage(workdir: Path) -> None:
             workdir / "workbook-content.twb",
             spec_path,
             require_object(workdir / "dashboard-scope.json", "dashboard-coverage"),
+            workdir / "story-plan.json",
         )
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         fail("dashboard-coverage", f"could not rederive dashboard coverage: {exc}")

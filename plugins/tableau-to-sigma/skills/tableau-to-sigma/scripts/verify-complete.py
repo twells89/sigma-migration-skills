@@ -119,7 +119,10 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
     try:
         dashboard_scope = load(workdir / "dashboard-scope.json")
         expected_dashboards = dashboard_coverage_lib.evaluate(
-            workdir / "workbook-content.twb", dashboard_spec, dashboard_scope
+            workdir / "workbook-content.twb",
+            dashboard_spec,
+            dashboard_scope,
+            workdir / "story-plan.json",
         )
         dashboard_gate_pass = (
             dashboard_doc == expected_dashboards

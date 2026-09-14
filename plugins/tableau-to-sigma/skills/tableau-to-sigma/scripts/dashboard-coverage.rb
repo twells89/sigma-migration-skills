@@ -35,7 +35,10 @@ rescue JSON::ParserError => e
   exit 3
 end
 result = begin
-  DashboardCoverage.evaluate(twb_path: source, spec_path: spec, scope: scope)
+  DashboardCoverage.evaluate(
+    twb_path: source, spec_path: spec, scope: scope,
+    story_plan_path: File.join(workdir, 'story-plan.json')
+  )
 rescue JSON::ParserError, ArgumentError, SystemCallError => e
   warn "DASHBOARD COVERAGE FAIL: #{e.message}"
   exit 3
@@ -57,8 +60,8 @@ else
 end
 
 puts "dashboard coverage: #{result['status'].upcase} — " \
-     "#{result['built_pages'].size}/#{result['expected_dashboards'].size} expected page(s), " \
-     "#{result['missing_dashboards'].size} missing"
+     "#{result['built_pages'].size}/#{result['expected_pages'].size} expected page(s), " \
+     "#{result['missing_dashboards'].size + result['missing_story_points'].size} missing"
 if result['status'] == 'fail'
   result['blockers'].each { |blocker| warn "  - #{blocker['dashboard'] || blocker['kind']}: #{blocker['reason']}" }
   exit 3
