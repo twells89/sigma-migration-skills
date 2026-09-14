@@ -346,7 +346,7 @@ class AssertPhase6RanTest(unittest.TestCase):
             hashlib.sha256(self.blind_grade.read_bytes()).hexdigest(),
             marker["blind_grade_sha256"],
         )
-        self.assertEqual(13, len(marker["gates"]))
+        self.assertEqual(16, len(marker["gates"]))
 
     def test_mission_requires_stated_nonempty_fields_exit_40(self):
         mission = self.load_json("mission.json")
