@@ -18,7 +18,7 @@ plus a **dashboard JSON** — pick the right input per asset.
 | Artifact | Format | Notes |
 |---|---|---|
 | **Report Specification** | XML, IBM-published XSDs in `/schemas/rspec/10.0/*.xsd` (ships with Cognos SDK). 10.0 schema is still current in CA 11.x / 12.x. | The primary, well-defined artifact — every Cognos Report Studio / CA Reporting report is a single XML doc. **This is the main input.** |
-| **Framework Manager package** | `.cpf` + project XML. Legacy semantic layer. | CWM/XMI export drops joins, prompts, folders, namespaces, calculations — **don't use CWM**. Parse the raw `.cpf` / project XML directly. |
+| **Framework Manager package** | `.cpf` + project XML. Legacy semantic layer. | **Implemented** (`converter/cognos-fm.ts`) — the `.cpf` is only a workspace pointer, `model.xml` holds the model. CWM/XMI export drops joins, prompts, folders, namespaces, calculations — **don't use CWM**. Parse the raw project XML directly. |
 | **Data Module** | JSON. CA 11.x's modern semantic layer; replaces Framework Manager. | **Cleanest input.** Native JSON export supported as of recent CA 11.x. Where a customer has migrated FM→DM, this is the high-fidelity path. |
 | **Dashboard** | JSON in the content store (distinct from "Reports"). | Separate code path from report-spec XML. |
 | **Deployment archive** | `.zip` produced by `cogtr.sh` / Lifecycle Manager. Bundles report specs + metadata. | Practical input format when a customer dumps a content store. |
@@ -83,7 +83,7 @@ Docs:
 | Cognos concept | Sigma equivalent | Difficulty |
 |---|---|---|
 | Data Module (JSON) | Data model | easy — closest 1:1 in the BI converter universe |
-| Framework Manager package (`.cpf`) | Data model | medium — namespaced model, requires resolving query subjects to physical tables |
+| Framework Manager package (`.cpf`) | Data model (one per presentation subject area) | medium — layered namespaces; resolve shortcut → logical → database → physical table, and keep role-playing aliases distinct |
 | Query Subject | Source table (or `join` element if model-side) | easy |
 | Query Item | Column | easy |
 | Calculation (data-module or report-level) | Calculated column / formula | medium — Cognos expression DSL ≠ Sigma; mapping needed |
@@ -134,7 +134,7 @@ Phase 1: **Data Module JSON → Sigma DM.** Highest leverage, cleanest input. Co
 
 Phase 2: **Report-spec XML → Sigma workbook spec.** Pages, lists, basic charts, crosstabs (with `rowsBy`/`columnsBy`), prompts as controls, simple filters.
 
-Phase 3: **Framework Manager `.cpf` → Sigma DM.** Fallback for customers still on the legacy semantic layer. Parse raw project XML; ignore CWM export.
+Phase 3: **Framework Manager `.cpf` → Sigma DM.** ✅ **Shipped** — `converter/cognos-fm.ts` normalizes the raw project XML into the same `CognosModule` IR the Data Module path uses, so `convertCognosIR()` is shared. Scoped per presentation subject area (`--list` / `--subject-area`); CWM export ignored as planned. Shape reference: `refs/format-shapes.md`.
 
 Phase 4: Cognos expression DSL → Sigma formula. Lift the `formulas.ts` pattern from the Tableau converter; build a function-map table.
 

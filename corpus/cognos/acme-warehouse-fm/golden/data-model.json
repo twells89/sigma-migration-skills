@@ -1,0 +1,461 @@
+{
+  "sigmaDataModel": {
+    "name": "AcmeDW — Sales Analysis",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0001",
+        "name": "Page 1",
+        "elements": [
+          {
+            "id": "id0002",
+            "kind": "table",
+            "name": "Sales Fact",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "ACME_ANALYTICS",
+                "DW",
+                "SALES_FACT"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0003",
+                "formula": "[SALES_FACT/Sales Key]"
+              },
+              {
+                "id": "id0004",
+                "formula": "[SALES_FACT/Order Qty]"
+              },
+              {
+                "id": "id0005",
+                "formula": "[SALES_FACT/Net Amount]"
+              },
+              {
+                "id": "id0006",
+                "formula": "[SALES_FACT/Discount Amount]"
+              },
+              {
+                "id": "id0007",
+                "name": "Gross Amount",
+                "formula": "[Net Amount] + [Discount Amount]"
+              },
+              {
+                "id": "id0008",
+                "name": "Order Size Band",
+                "formula": "If([Net Amount] < 100, \"Small\", If([Net Amount] < 1000, \"Medium\", \"Large\"))"
+              },
+              {
+                "id": "id0009",
+                "name": "Running Net Amount",
+                "formula": "CumulativeSum([Net Amount])"
+              },
+              {
+                "id": "id0010",
+                "formula": "[SALES_FACT/Order Date Key]",
+                "hidden": true
+              },
+              {
+                "id": "id0011",
+                "formula": "[SALES_FACT/Ship Date Key]",
+                "hidden": true
+              },
+              {
+                "id": "id0012",
+                "formula": "[SALES_FACT/Customer Key]",
+                "hidden": true
+              },
+              {
+                "id": "id0013",
+                "formula": "[SALES_FACT/Product Key]",
+                "hidden": true
+              }
+            ],
+            "order": [
+              "id0003",
+              "id0004",
+              "id0005",
+              "id0006",
+              "id0007",
+              "id0008",
+              "id0009",
+              "id0010",
+              "id0011",
+              "id0012",
+              "id0013"
+            ],
+            "relationships": [
+              {
+                "id": "id0014",
+                "targetElementId": "id0015",
+                "keys": [
+                  {
+                    "sourceColumnId": "id0010",
+                    "targetColumnId": "id0016"
+                  }
+                ],
+                "name": "ORDER DATE"
+              },
+              {
+                "id": "id0017",
+                "targetElementId": "id0018",
+                "keys": [
+                  {
+                    "sourceColumnId": "id0011",
+                    "targetColumnId": "id0019"
+                  }
+                ],
+                "name": "SHIP DATE"
+              },
+              {
+                "id": "id0020",
+                "targetElementId": "id0021",
+                "keys": [
+                  {
+                    "sourceColumnId": "id0012",
+                    "targetColumnId": "id0022"
+                  }
+                ],
+                "name": "CUSTOMER"
+              },
+              {
+                "id": "id0023",
+                "targetElementId": "id0024",
+                "keys": [
+                  {
+                    "sourceColumnId": "id0013",
+                    "targetColumnId": "id0025"
+                  }
+                ],
+                "name": "PRODUCT"
+              }
+            ],
+            "metrics": [
+              {
+                "id": "id0026",
+                "name": "Order Quantity",
+                "formula": "Sum([Order Qty])"
+              },
+              {
+                "id": "id0027",
+                "name": "Net Amount",
+                "formula": "Sum([Net Amount])",
+                "format": {
+                  "kind": "number",
+                  "formatString": "$,.2f",
+                  "currencySymbol": "$"
+                }
+              },
+              {
+                "id": "id0028",
+                "name": "Discount Amount",
+                "formula": "Sum([Discount Amount])",
+                "format": {
+                  "kind": "number",
+                  "formatString": "$,.2f",
+                  "currencySymbol": "$"
+                }
+              },
+              {
+                "id": "id0029",
+                "name": "Region Net Amount",
+                "formula": "Sum([Net Amount])",
+                "format": {
+                  "kind": "number",
+                  "formatString": "$,.2f",
+                  "currencySymbol": "$"
+                }
+              }
+            ]
+          },
+          {
+            "id": "id0015",
+            "kind": "table",
+            "name": "Order Date",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "ACME_ANALYTICS",
+                "DW",
+                "DATE_DIM"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0016",
+                "formula": "[DATE_DIM/Date Key]"
+              },
+              {
+                "id": "id0030",
+                "formula": "[DATE_DIM/Calendar Date]",
+                "name": "Order Date"
+              },
+              {
+                "id": "id0031",
+                "formula": "[DATE_DIM/Calendar Year]",
+                "name": "Order Year"
+              },
+              {
+                "id": "id0032",
+                "formula": "[DATE_DIM/Calendar Month Name]",
+                "name": "Order Month"
+              }
+            ],
+            "order": [
+              "id0016",
+              "id0030",
+              "id0031",
+              "id0032"
+            ]
+          },
+          {
+            "id": "id0018",
+            "kind": "table",
+            "name": "Ship Date",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "ACME_ANALYTICS",
+                "DW",
+                "DATE_DIM"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0019",
+                "formula": "[DATE_DIM/Date Key]"
+              },
+              {
+                "id": "id0033",
+                "formula": "[DATE_DIM/Calendar Date]",
+                "name": "Ship Date"
+              },
+              {
+                "id": "id0034",
+                "formula": "[DATE_DIM/Calendar Year]",
+                "name": "Ship Year"
+              }
+            ],
+            "order": [
+              "id0019",
+              "id0033",
+              "id0034"
+            ]
+          },
+          {
+            "id": "id0021",
+            "kind": "table",
+            "name": "Customer",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "ACME_ANALYTICS",
+                "DW",
+                "CUSTOMER_DIM"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0022",
+                "formula": "[CUSTOMER_DIM/Customer Key]"
+              },
+              {
+                "id": "id0035",
+                "formula": "[CUSTOMER_DIM/Customer Name]"
+              },
+              {
+                "id": "id0036",
+                "formula": "[CUSTOMER_DIM/Customer Tier]"
+              },
+              {
+                "id": "id0037",
+                "formula": "[CUSTOMER_DIM/Region Code]"
+              }
+            ],
+            "order": [
+              "id0022",
+              "id0035",
+              "id0036",
+              "id0037"
+            ]
+          },
+          {
+            "id": "id0024",
+            "kind": "table",
+            "name": "Product",
+            "source": {
+              "connectionId": "<CONNECTION_ID>",
+              "kind": "warehouse-table",
+              "path": [
+                "ACME_ANALYTICS",
+                "DW",
+                "PRODUCT_DIM"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0025",
+                "formula": "[PRODUCT_DIM/Product Key]"
+              },
+              {
+                "id": "id0038",
+                "formula": "[PRODUCT_DIM/Product Name]"
+              },
+              {
+                "id": "id0039",
+                "formula": "[PRODUCT_DIM/Product Category]"
+              }
+            ],
+            "order": [
+              "id0025",
+              "id0038",
+              "id0039"
+            ]
+          },
+          {
+            "id": "id0040",
+            "kind": "table",
+            "name": "Sales Fact View",
+            "source": {
+              "kind": "table",
+              "elementId": "id0002"
+            },
+            "columns": [
+              {
+                "id": "id0041",
+                "formula": "[Sales Fact/Sales Key]"
+              },
+              {
+                "id": "id0042",
+                "formula": "[Sales Fact/Order Qty]"
+              },
+              {
+                "id": "id0043",
+                "formula": "[Sales Fact/Net Amount]"
+              },
+              {
+                "id": "id0044",
+                "formula": "[Sales Fact/Discount Amount]"
+              },
+              {
+                "id": "id0045",
+                "formula": "[Sales Fact/Order Date Key]"
+              },
+              {
+                "id": "id0046",
+                "formula": "[Sales Fact/Ship Date Key]"
+              },
+              {
+                "id": "id0047",
+                "formula": "[Sales Fact/Customer Key]"
+              },
+              {
+                "id": "id0048",
+                "formula": "[Sales Fact/Product Key]"
+              },
+              {
+                "id": "id0049",
+                "formula": "[Sales Fact/ORDER DATE/Date Key]"
+              },
+              {
+                "id": "id0050",
+                "formula": "[Sales Fact/ORDER DATE/Calendar Date]"
+              },
+              {
+                "id": "id0051",
+                "formula": "[Sales Fact/ORDER DATE/Calendar Year]"
+              },
+              {
+                "id": "id0052",
+                "formula": "[Sales Fact/ORDER DATE/Calendar Month Name]"
+              },
+              {
+                "id": "id0053",
+                "formula": "[Sales Fact/SHIP DATE/Date Key]"
+              },
+              {
+                "id": "id0054",
+                "formula": "[Sales Fact/SHIP DATE/Calendar Date]"
+              },
+              {
+                "id": "id0055",
+                "formula": "[Sales Fact/SHIP DATE/Calendar Year]"
+              },
+              {
+                "id": "id0056",
+                "formula": "[Sales Fact/CUSTOMER/Customer Key]"
+              },
+              {
+                "id": "id0057",
+                "formula": "[Sales Fact/CUSTOMER/Customer Name]"
+              },
+              {
+                "id": "id0058",
+                "formula": "[Sales Fact/CUSTOMER/Customer Tier]"
+              },
+              {
+                "id": "id0059",
+                "formula": "[Sales Fact/CUSTOMER/Region Code]"
+              },
+              {
+                "id": "id0060",
+                "formula": "[Sales Fact/PRODUCT/Product Key]"
+              },
+              {
+                "id": "id0061",
+                "formula": "[Sales Fact/PRODUCT/Product Name]"
+              },
+              {
+                "id": "id0062",
+                "formula": "[Sales Fact/PRODUCT/Product Category]"
+              }
+            ],
+            "order": [
+              "id0041",
+              "id0042",
+              "id0043",
+              "id0044",
+              "id0045",
+              "id0046",
+              "id0047",
+              "id0048",
+              "id0049",
+              "id0050",
+              "id0051",
+              "id0052",
+              "id0053",
+              "id0054",
+              "id0055",
+              "id0056",
+              "id0057",
+              "id0058",
+              "id0059",
+              "id0060",
+              "id0061",
+              "id0062"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "stats": {
+    "querySubjects": 5,
+    "elements": 6,
+    "columns": 47,
+    "metrics": 4,
+    "relationships": 4
+  },
+  "warnings": [
+    "\"Sales Fact\": 1 embedded Framework Manager filter(s) (EXCLUDE_CANCELLED_ORDERS) are NOT applied to the Sigma model — re-create as data-model filters if they are governance rules.",
+    "model defines 1 parameter map(s) (_env) — session-parameter substitution is NOT translated. Any SQL or filter depending on them needs manual review.",
+    "model defines 1 DMR dimension(s) (hierarchies/levels) — dimensional metadata is NOT converted; Sigma has no OLAP hierarchy equivalent. Re-author drill paths in the workbook.",
+    "\"Sales Fact.Region Net Amount\": \"total( … for [Region Code])\" scoped aggregate — Sigma has no spec-valid partitioned aggregate, so this emits Sum(…) and the \"for [Region Code]\" partition is DROPPED. Re-author as a grouped element, a model metric, or a sql source if the partition matters.",
+    "SECURITY: 1 data-module security filter(s) detected — NOT ported into the model spec. Run the skill's RLS flow (scripts/apply_sigma_rls.py) after posting the model; skipping leaves ALL rows visible to everyone."
+  ]
+}

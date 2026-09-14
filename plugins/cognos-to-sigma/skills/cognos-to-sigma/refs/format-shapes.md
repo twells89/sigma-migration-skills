@@ -97,3 +97,96 @@ Key facts:
   - **Type map:** clusteredBar/stackedBar→bar (horizontal), clusteredColumn/stackedColumn→bar (vertical, `stacking` from `stacked*`), line/spline→line, area→area, pie→pie, donut→donut, clusteredCombination→combo, bubble/scatter→scatter.
   - **Maps** (`com.ibm.vis.tiledmap`) → Sigma map elements: lat/long slots (`latlongLocations.latitude`/`.longitude` + `latlongSize`/`latlongColor`) → **point-map** (`latitude{id}`/`longitude{id}`/`size{id}`/`color`); named-location slots (`locations` + `locationColor`) → **region-map** (`region{id, regionType}` — defaults to `country` + a flag to set the right `regionType`: country / us-state / us-county / us-zipcode / us-cbsa / us-postal-place / ca-province; `color` = the measure). Rendering needs genuinely geographic columns.
   - **No native Sigma element** (`network`, `wordcloud`, `packedbubble`, `treemap`) → emitted as a **flagged table** (data preserved; re-pick an element in the workbook).
+
+## Framework Manager project XML (`model.xml`)
+
+Cognos's **legacy** semantic layer (the desktop modeller Data Modules replaced). A customer
+hands over a project directory, not an API response:
+
+| File | Use |
+|---|---|
+| `<Project>.cpf` | Workspace pointer only — names the model segment. **Not the model.** |
+| `model.xml` | **The whole model.** This is the input. |
+| `IDlog.xml`, `log.xml`, `session-log.xml`, `archive-log.xml` | Edit history. **Ignore** — `IDlog.xml` alone can be hundreds of MB. |
+
+Root element is `<project queryMode="dynamic" xmlns="http://www.developer.cognos.com/schemas/bmt/60/12">`
+— that namespace is the sniff that distinguishes an FM model from a report spec (both `.xml`).
+
+### Layers
+
+A conventional model nests four layer namespaces under one root namespace:
+
+```xml
+<project xmlns="http://www.developer.cognos.com/schemas/bmt/60/12">
+  <namespace><name>MyModel</name>
+    <namespace><name>Database Layer</name>     <!-- physical tables + joins -->
+      <folder><name>SALES</name>
+        <querySubject><name>SALES_FACT</name>
+          <definition><dbQuery>
+            <sources><dataSourceRef>[].[dataSources].[MyWarehouse]</dataSourceRef></sources>
+            <sql type="cognos">Select * From [MyWarehouse].SALES_FACT as SALES_FACT</sql>
+            <tableType>table</tableType>
+          </dbQuery></definition>
+          <queryItem><name>NET_AMOUNT</name><externalName>NET_AMOUNT</externalName>
+            <usage>fact</usage><datatype>decimal</datatype><regularAggregate>sum</regularAggregate></queryItem>
+        </querySubject>
+        <shortcut><name>SALES_ORDER_DATE</name><refobj>[Database Layer].[DATE_DIM]</refobj>
+          <targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+      </folder>
+    </namespace>
+    <namespace><name>Logical Layer</name>      <!-- business names + calcs -->
+      <querySubject><name>Sales Fact</name>
+        <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+        <queryItem><name>Net Amount</name>
+          <expression><refobj>[Database Layer].[SALES_FACT].[NET_AMOUNT]</refobj></expression>
+          <usage>fact</usage><regularAggregate>sum</regularAggregate></queryItem>
+      </querySubject>
+    </namespace>
+    <namespace><name>Presentation Layer</name> <!-- SUBJECT AREAS -->
+      <namespace><name>Sales Analysis</name>
+        <shortcut><name>Sales Fact</name><refobj>[Logical Layer].[Sales Fact]</refobj>
+          <targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+      </namespace>
+    </namespace>
+    <namespace><name>Dimension Layer</name></namespace>  <!-- DMR, flagged not converted -->
+  </namespace>
+  <dataSources>…</dataSources> <parameterMaps>…</parameterMaps>
+  <securityViews>…</securityViews> <packages>…</packages>
+</project>
+```
+
+### Two rules that govern every lookup
+
+1. **Folders are path-transparent.** A `refobj` like `[Database Layer].[DATE_DIM].[ID]` skips
+   every `<folder>` / `<queryItemFolder>` in between. Only `namespace`, `querySubject` and
+   `queryItem` contribute an identifier segment. Index them the same way or nothing resolves.
+2. **`refobjViaShortcut` is a 2-tuple** — `(alias-shortcut, physical-item)`:
+   ```xml
+   <expression><refobjViaShortcut>
+     <refobj>[Database Layer].[SALES_ORDER_DATE]</refobj>     <!-- the ALIAS (role) -->
+     <refobj>[Database Layer].[DATE_DIM].[CALENDAR_DATE]</refobj>  <!-- the real item -->
+   </refobjViaShortcut></expression>
+   ```
+   The alias is how FM models **role-playing dimensions**: one physical `DATE_DIM` exposed as
+   order-date, ship-date, … Each alias must become its **own** Sigma element, or the roles
+   collapse and the fact joins at the wrong grain.
+
+### Other key facts
+
+- **Resolution chain:** presentation `shortcut` → logical `querySubject` → item `expression`
+  → database `querySubject` → `dbQuery/sql` → `[datasource].TABLE` → the `<dataSource>`
+  entry's `<catalog>`/`<schema>` gives the fully-qualified warehouse path.
+- **Most expressions are nothing but a reference.** On real enterprise models ~95% of
+  `<expression>` bodies are a bare `refobj` / `refobjViaShortcut` with no operators — a plain
+  column, no translation required. Only the remainder are genuine Cognos expressions.
+- **`stopNodes` / raw XML:** `<expression>` and `<sql>` are mixed content (text interleaved
+  with `<refobj>`), so they must be read as raw XML and **entity-decoded** — an undecoded
+  `&lt;` produces the literal formula `If([x] &lt; 100, …)`, which Sigma compiles to type
+  `error`.
+- `<relationship>` carries `<left>`/`<right>` `refobj` + `<mincard>`/`<maxcard>`; the
+  `<expression>` holds the join conditions (several `and`-joined = a composite key).
+- `<determinant>` declares grain/uniqueness — no Sigma equivalent; flagged.
+- `<securityView>` = package-scoped include/exclude/hide over model objects (**object**
+  security, → Sigma permissions/CLS). Row-level security is usually a runtime macro in
+  query-subject SQL: `#sq($account.personalInfo.email)#` joined to a permissions table.
+- `<parameterMap>` = session-parameter substitution; not translated.

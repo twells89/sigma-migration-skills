@@ -2,21 +2,28 @@
 /**
  * score-coverage.mjs — converter-coverage scorer for the cognos-assessment skill.
  *
- * For every Cognos Data Module JSON (*.module.json) and report-spec XML
- * (*.report.xml), classify features into auto / hint / manual / unhandled by
- * detecting the EXACT gap signals the cognos-to-sigma converter
- * (cognos.ts + cognos-report.ts) translates cleanly vs. flags. This does NOT
- * re-run the converter — it detects the same patterns so the estate's
- * auto-migration % matches what the tool will actually do.
+ * For every Cognos Data Module JSON (*.module.json), report-spec XML
+ * (*.report.xml) and Framework Manager project XML (model.xml), classify features
+ * into auto / hint / manual / unhandled by detecting the EXACT gap signals the
+ * cognos-to-sigma converter (cognos.ts + cognos-report.ts + cognos-fm.ts)
+ * translates cleanly vs. flags. This does NOT re-run the converter — it detects
+ * the same patterns so the estate's auto-migration % matches what the tool will
+ * actually do.
  *
  * Zero external dependencies (Node built-ins only) — module JSON is parsed with
- * JSON.parse; report XML is scanned with tolerant regexes (gap detection needs
- * signals, not a full parse tree), exactly the surface the converter warns on.
+ * JSON.parse; report and Framework Manager XML are scanned with tolerant regexes
+ * (gap detection needs signals, not a full parse tree, and an enterprise model.xml
+ * runs to tens of MB), exactly the surface the converter warns on.
  *
  *   node score-coverage.mjs --in <dir-of-specs> --out <dir>
  *
- * Reads --in for *.module.json + *.report.xml (recurses one level into specs/).
- * Writes <out>/coverage.json. Read-only.
+ * Reads --in for *.module.json + any *.xml (recurses one level into specs/); XML is
+ * dispatched by ROOT ELEMENT, since a Framework Manager model and a report spec are
+ * both `.xml`. Writes <out>/coverage.json. Read-only.
+ *
+ * NOTE Framework Manager is scored WHOLE-MODEL, while the converter runs one
+ * presentation subject area at a time — treat FM counts as an estate-size and gap
+ * profile, not a single migration unit.
  */
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
@@ -47,7 +54,9 @@ function collect(dir) {
       const p = join(d, f);
       let st;
       try { st = statSync(p); } catch { continue; }
-      if (st.isFile() && (f.endsWith('.module.json') || f.endsWith('.report.xml'))) out.push(p);
+      // Any .xml is collected and sniffed later — a Framework Manager export is
+      // conventionally just `model.xml`, so an extension filter would miss it.
+      if (st.isFile() && (f.endsWith('.module.json') || f.endsWith('.xml'))) out.push(p);
     }
   };
   tryDir(dir);
@@ -147,6 +156,138 @@ function scoreModule(text, name) {
   return finalize({ type: 'module', name, gaps, nAuto, nHint, nManual, nUnhandled });
 }
 
+// ---- Framework Manager scorer (mirrors cognos-fm.ts) ----
+
+/** Root-element sniff — an FM model and a report spec are both `.xml`. */
+function isFrameworkManagerXml(text) {
+  const head = String(text || '').slice(0, 4000);
+  return /<project[\s>]/.test(head) && /schemas\/bmt\//.test(head);
+}
+
+function decodeXmlEntities(s) {
+  return String(s ?? '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * Score a Framework Manager model. Regex-based like the report scorer — gap detection
+ * needs signals, not a parse tree, and an enterprise `model.xml` runs to tens of MB.
+ *
+ * NOTE this scores the WHOLE model. The converter works one presentation subject area at
+ * a time (`cli.mjs <model.xml> --list`), so treat these counts as the estate-wide size and
+ * gap profile, not a single migration unit.
+ */
+function scoreFrameworkManager(text, name) {
+  const gaps = [];
+  let nAuto = 0, nHint = 0, nManual = 0, nUnhandled = 0;
+  const addN = (signal, bucket, reason, remediation, n = 1) => {
+    if (n <= 0) return;
+    let g = gaps.find((x) => x.signal === signal);
+    if (!g) { g = { signal, bucket, count: 0, reason, remediation }; gaps.push(g); }
+    g.count += n;
+    if (bucket === 'auto') nAuto += n; else if (bucket === 'hint') nHint += n;
+    else if (bucket === 'manual') nManual += n; else nUnhandled += n;
+  };
+  const add = (signal, bucket, reason, remediation) => addN(signal, bucket, reason, remediation, 1);
+  const countOf = (re) => (text.match(re) || []).length;
+
+  // Relationship and filter expressions are scored on their own terms below; pull them
+  // out so they are not mistaken for calculations.
+  const relBlocks = [...text.matchAll(/<relationship\b[^>]*>([\s\S]*?)<\/relationship>/gi)].map((m) => m[1]);
+  const body = text
+    .replace(/<relationship\b[^>]*>[\s\S]*?<\/relationship>/gi, '')
+    .replace(/<filterDefinition\b[^>]*>[\s\S]*?<\/filterDefinition>/gi, '');
+
+  // ── Structure ──────────────────────────────────────────────────────────────
+  // Counts EVERY layer (database + logical), so it exceeds the element count of any one
+  // subject area — it is an estate-size signal, not a per-conversion element count.
+  addN('query subject (all layers)', 'auto',
+    'FM query subjects resolve to Sigma warehouse-table (or sql) elements, scoped per subject area', '—',
+    countOf(/<querySubject\b/gi));
+
+  // Physical definitions: a plain `Select * From [ds].TABLE` is a table; anything else
+  // becomes a Sigma `sql` source (converts, but review the statement).
+  let simple = 0, custom = 0, macroSql = 0;
+  for (const m of text.matchAll(/<dbQuery>[\s\S]*?<sql\b[^>]*>([\s\S]*?)<\/sql>/gi)) {
+    const sql = decodeXmlEntities(m[1].replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+    if (/^\s*select\s+(?:\*|[\w$]+\s*\.\s*\*)\s*from\s*\[[^\]]+\]\s*\.\s*\[?[\w$]+\]?(?:\s+(?:as\s+)?[\w$]+)?\s*$/i.test(sql)) simple++;
+    else { custom++; if (/#[^#]{1,400}#/.test(sql)) macroSql++; }
+  }
+  addN('table passthrough query subject', 'auto', 'Select * From [ds].TABLE → warehouse-table source', '—', simple);
+  addN('custom-SQL query subject', 'hint', 'query subject is defined by a query, not a table',
+    'Converts to a Sigma `sql` source with [datasource].TABLE rewritten to catalog.schema.table. Review the statement — warehouse dialect differences are not translated.', custom);
+  addN('runtime macro in query subject SQL', 'unhandled',
+    'Cognos `#...#` macro (e.g. $account.personalInfo.email) embedded in the SQL',
+    'The macro is passed through VERBATIM and will not execute in Sigma. This is usually the model\'s row-level-security join — replace it with CurrentUserEmail() and apply the rule via the skill\'s RLS flow.', macroSql);
+
+  // Role-playing dimension aliases — handled, but they multiply the element count.
+  // Covers both role-playing dimension aliases (database layer) and presentation-layer
+  // exposure; a regex cannot tell them apart without resolving each target.
+  const aliases = countOf(/<treatAs>\s*alias\s*<\/treatAs>/gi);
+  addN('alias shortcut', 'auto',
+    'alias shortcut — a role-playing dimension becomes its own Sigma element (keeping join grain correct); a presentation shortcut resolves through to its query subject', '—', aliases);
+
+  // ── Relationships ──────────────────────────────────────────────────────────
+  for (const blk of relBlocks) {
+    // Scan the EXPRESSION only. The relationship's <name> often contains an arrow
+    // ("A <-> B"), which would otherwise read as a comparison operator.
+    const em = /<expression>([\s\S]*?)<\/expression>/i.exec(blk);
+    if (!em) continue;
+    const bare = decodeXmlEntities(em[1].replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+    const conds = bare.split(/\band\b/i).length;
+    if (/\bor\b/i.test(bare) || /<>|!=|>=|<=|[<>]/.test(bare)) {
+      add('non-equi join', 'manual', 'relationship condition is not a conjunction of equalities',
+        'Sigma relationships are equi-joins. Re-create this join by hand, or push it into a sql source.');
+    } else if (conds > 1) {
+      add('composite join', 'auto', 'multi-column equi-join → one relationship with several key pairs', '—');
+    } else {
+      add('equi-join relationship', 'auto', 'single equi-join → DM relationship (source = many side)', '—');
+    }
+  }
+
+  // ── Calculations ───────────────────────────────────────────────────────────
+  // ~95% of a real FM model's expressions are pure reference passthroughs needing no
+  // translation at all; only the remainder are genuine expressions.
+  let passthrough = 0;
+  for (const m of body.matchAll(/<expression>([\s\S]*?)<\/expression>/gi)) {
+    const raw = m[1];
+    const bare = raw
+      .replace(/<refobjViaShortcut>[\s\S]*?<\/refobjViaShortcut>/gi, '')
+      .replace(/<refobj>[\s\S]*?<\/refobj>/gi, '')
+      .replace(/<[^>]*>/g, '').trim();
+    if (!bare) { passthrough++; continue; }
+    const readable = decodeXmlEntities(raw.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+    classifyExpr(readable, `${name} calc`, add);
+  }
+  addN('passthrough query item', 'auto', 'item is a plain reference to a physical column — no translation needed', '—', passthrough);
+
+  // ── Flagged, never faked ───────────────────────────────────────────────────
+  addN('DMR dimension (hierarchy/levels)', 'unhandled',
+    'dimensionally-modelled relational metadata (hierarchies, levels, member rollups)',
+    'Sigma has no OLAP hierarchy equivalent. Re-author drill paths in the workbook.',
+    countOf(/<dimension\b[^>]*>/gi));
+  addN('determinant (declared grain)', 'hint',
+    'determinant declares uniqueness / multi-grain aggregation behavior',
+    'Sigma has no determinant concept. Verify aggregate correctness where a dimension is joined at more than one grain.',
+    countOf(/<determinant>/gi));
+  addN('embedded model filter', 'manual',
+    'filter embedded on a query subject, applied on every query',
+    'Not applied to the Sigma model. Re-create as a data-model filter if it is a governance rule.',
+    countOf(/<filterDefinition\b/gi));
+  addN('parameter map', 'manual',
+    'session-parameter substitution map',
+    'Not translated. Any SQL or filter depending on it needs manual review.',
+    countOf(/<parameterMap\b/gi));
+  addN('security view (object security)', 'manual',
+    'package-scoped include/exclude/hide rules over model objects',
+    'Object-level security is not ported. Inventory these and re-create as Sigma folder/document permissions or column-level security.',
+    countOf(/<securityView>/gi));
+
+  return finalize({ type: 'framework-manager', name, gaps, nAuto, nHint, nManual, nUnhandled });
+}
+
 // Classify a single Cognos expression the way translateCognosExpr would.
 function classifyExpr(expr, where, add) {
   const e = String(expr || '');
@@ -157,7 +298,7 @@ function classifyExpr(expr, where, add) {
   for (const bad of RUNNING) {
     if (new RegExp(`\\b${bad}\\b`, 'i').test(e)) {
       add(`${bad} (window/running calc)`, 'unhandled', `calc "${where}" uses Cognos ${bad}`,
-        'No clean single-column Sigma analog. Re-author as a Sigma window function in a data-model element or workbook (CountOver/SumOver have grouping caveats).');
+        'The converter maps running-total/moving-*/rank onto the Sigma-NATIVE window family (CumulativeSum / MovingSum / MovingAvg / Rank) and drops any "for" partition with a warning. Never use the *Over names — they hard-reject a DM-spec POST with 400. Verify the partition, or push the window into a sql source.');
       flagged = true;
     }
   }
@@ -170,13 +311,13 @@ function classifyExpr(expr, where, add) {
   // manual: CASE WHEN ... END (converter only does if/then/else)
   if (/\bcase\b[\s\S]*\bwhen\b[\s\S]*\bend\b/i.test(e)) {
     add('CASE…WHEN…END expression', 'manual', `calc "${where}" uses a CASE block`,
-      'The converter translates if/then/else, not CASE…WHEN. Re-author as nested Sigma If() / Switch().');
+      'The converter translates a searched CASE to nested If() and a simple CASE to Switch(), but warns when the block is nested or non-standard. Budget a review pass; re-author by hand only where the warning fires.');
     flagged = true;
   }
   // manual: "for" window scope → *Over (window function)
   if (/\b(total|sum|average|count|maximum|minimum)\s*\([^()]*\bfor\b/i.test(e)) {
-    add('aggregate "… for …" scope (→ *Over)', 'manual', `calc "${where}" scopes an aggregate with "for"`,
-      'Translates to a Sigma *Over window function — verify the grouping in a data-model element (window fns have known caveats there).');
+    add('aggregate "… for …" scope (partition dropped)', 'manual', `calc "${where}" scopes an aggregate with "for"`,
+      'Sigma has no spec-valid partitioned aggregate, so the converter emits the plain aggregate and DROPS the partition (with a warning). Re-create the grouping as a grouped element, a model metric, or a sql source.');
     flagged = true;
   }
   // unhandled: unknown bareword function with no Sigma mapping
@@ -313,15 +454,18 @@ function finalize(r) {
 // ============================================================================
 const files = collect(inDir);
 if (!files.length) {
-  console.error(`no *.module.json / *.report.xml found under ${inDir}`);
+  console.error(`no *.module.json / *.report.xml / Framework Manager model.xml found under ${inDir}`);
   process.exit(1);
 }
 
 const artifacts = [];
 for (const f of files) {
   const text = readFileSync(f, 'utf8');
-  const name = basename(f).replace(/\.(module\.json|report\.xml)$/, '');
-  const res = f.endsWith('.module.json') ? scoreModule(text, name) : scoreReport(text, name);
+  const name = basename(f).replace(/\.(module\.json|report\.xml|fm\.xml|xml)$/, '');
+  // Dispatch on CONTENT, not extension: an FM model and a report spec are both `.xml`.
+  const res = f.endsWith('.module.json') ? scoreModule(text, name)
+    : isFrameworkManagerXml(text) ? scoreFrameworkManager(text, name)
+      : scoreReport(text, name);
   if (res) { res.specFile = f; artifacts.push(res); }
 }
 artifacts.sort((a, b) => b.score - a.score);
@@ -361,6 +505,7 @@ const rollup = {
   n_artifacts: artifacts.length,
   n_modules: artifacts.filter((a) => a.type === 'module').length,
   n_reports: artifacts.filter((a) => a.type === 'report').length,
+  n_framework_manager: artifacts.filter((a) => a.type === 'framework-manager').length,
   totals,
   pct_auto_migratable: pctAuto,
   gap_histogram: gapHistogram,
@@ -410,4 +555,9 @@ writeFileSync(join(outDir, 'coverage.json'), JSON.stringify(out, null, 2));
 const dupMsg = duplicateDashboards
   ? ` — ${duplicateDashboards.summary.duplicate_groups} duplicate group(s), ${duplicateDashboards.summary.conversions_avoided} conversion(s) avoidable`
   : '';
-console.log(`scored ${artifacts.length} artifacts (${rollup.n_modules} modules, ${rollup.n_reports} reports) — ${pctAuto}% auto-migratable${dupMsg} -> ${join(outDir, 'coverage.json')}`);
+const mix = [
+  `${rollup.n_modules} modules`,
+  `${rollup.n_reports} reports`,
+  ...(rollup.n_framework_manager ? [`${rollup.n_framework_manager} framework-manager`] : []),
+].join(', ');
+console.log(`scored ${artifacts.length} artifacts (${mix}) — ${pctAuto}% auto-migratable${dupMsg} -> ${join(outDir, 'coverage.json')}`);

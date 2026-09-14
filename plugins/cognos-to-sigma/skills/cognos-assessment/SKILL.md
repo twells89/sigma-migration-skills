@@ -11,7 +11,7 @@ via the CA REST layer (`/bi/v1`) and produces a branded, share-friendly HTML
 readout plus a JSON inventory. The differentiator versus a generic BI audit is
 **converter-coverage scoring**: every Data Module and report is classified
 auto-convert vs. flagged using the *same* rules the `cognos-to-sigma` converter
-(`cognos.ts` + `cognos-report.ts`) actually applies — so the readout's
+(`cognos.ts` + `cognos-report.ts` + `cognos-fm.ts`) actually applies — so the readout's
 auto-migration % reflects what the tool will really do, not a hand-wave.
 
 > **Read-only.** This skill only issues `GET`s against CA REST. It never POSTs,
@@ -65,7 +65,7 @@ data, or making any change to the Cognos environment.
 | Mode | Setup | Use when |
 |---|---|---|
 | **Live (REST)** | `COGNOS_BASE` + `COGNOS_COOKIE` + `COGNOS_XSRF` env (see below) | Real estate scan against a running CA server / Cognos on Cloud |
-| **Offline (files)** | A directory of `*.module.json` + `*.report.xml` already on disk | No live access; scoring a sample set or an export the customer mailed you |
+| **Offline (files)** | A directory of `*.module.json` + `*.report.xml` + a Framework Manager `model.xml` already on disk | No live access; scoring a sample set or an export the customer mailed you. FM projects only arrive this way — there is no CA REST endpoint for them |
 
 Both modes feed the same scorer + renderer. The bundled samples in
 `~/cognos-samples/` let you validate the whole pipeline offline.
@@ -136,12 +136,19 @@ node scripts/score-coverage.mjs --in /tmp/cognos-assessment-<env>/specs --out /t
 node scripts/score-coverage.mjs --in ~/cognos-samples --out /tmp/cognos-assessment-<env>
 ```
 
-For every `*.module.json` and `*.report.xml`, the scorer classifies features
+For every `*.module.json`, `*.report.xml` and Framework Manager `model.xml`, the
+scorer classifies features
 into four buckets — **auto / hint / manual / unhandled** — by detecting the
 *exact* gap signals the converter flags. It does NOT re-implement the converter;
 it detects the patterns the converter's `translateCognosExpr` / report parser
 either translate cleanly or warn on. Each detected gap is recorded with a count
 **and** the specific reason + remediation.
+
+XML is dispatched by **root element**, not extension — an FM model and a report spec
+are both `.xml`. Framework Manager is scored **whole-model** while the converter runs one
+presentation subject area at a time, so its counts are an estate-size and gap profile
+rather than one migration unit. Point `--in` at the directory holding `model.xml`; the
+sibling `IDlog.xml` / `log.xml` are edit history and are ignored.
 
 ### Module signals (mirror `cognos.ts`)
 
