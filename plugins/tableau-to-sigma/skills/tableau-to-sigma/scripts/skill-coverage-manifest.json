@@ -172,6 +172,7 @@
     "dm-denorm-plan.json",
     "dm-ids.json",
     "dm-match.json",
+    "dm-readback.json",
     "dm-spec.json",
     "doctor.json",
     "doctor.ps1",
