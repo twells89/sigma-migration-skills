@@ -1,25 +1,8 @@
 {
   "source_repo": "twells89/sigma-data-model-mcp",
-  "source_commit": "21f3167",
-  "source_commit_date": "2026-08-07",
+  "source_commit": "16ad063",
+  "source_commit_date": "2026-09-14",
   "bundler": "esbuild --bundle --format=esm --platform=node",
   "vendored_modules": "lookml.mjs",
-  "note": "Self-contained bundled artifacts, not source. Refresh with tools/vendor-converters.sh after the converter repo changes.",
-  "local_patches": [
-    {
-      "commit": "5bff1404 (this repo) — not yet landed in sigma-data-model-mcp",
-      "summary": "Expand Looker filter normalization for IS NULL/NOT NULL, EMPTY/NOT EMPTY, negated null/empty values, and mixed value lists. Applied directly to the bundle pinned at source_commit 21f3167; re-vendoring before the patch lands upstream would drop these filter semantics.",
-      "upstream_pr": null
-    },
-    {
-      "commit": "9cd9aac4 (this repo) — not yet landed in sigma-data-model-mcp",
-      "summary": "Collect deterministic workbook-local LookML parameter branches and expose dynamicParameters in converter output. Applied directly to the bundle pinned at source_commit 21f3167; port lookCollectDynamicParameters and its return wiring upstream before re-vendoring.",
-      "upstream_pr": null
-    },
-    {
-      "commit": "3f497c17 (this repo) — not yet landed in sigma-data-model-mcp",
-      "summary": "Allow ${TABLE} references while validating resolved dynamic parameter branches; other unresolved substitutions still reject the branch. Applied directly to the bundle pinned at source_commit 21f3167 and must be ported with the dynamic-parameter patch before re-vendoring.",
-      "upstream_pr": null
-    }
-  ]
+  "note": "Self-contained bundled artifacts, not source. Refresh with tools/vendor-converters.sh after the converter repo changes. The three former local_patches (filter normalization, dynamicParameters, ${TABLE} branch allowance) LANDED UPSTREAM in source_commit 16ad063 and are no longer bundle-local \u2014 this bundle is regenerable from source with no drift."
 }

@@ -339,10 +339,41 @@ unusable for Looker. To stand up an end-to-end test pointed at the same warehous
 
 ## Phase 0b — Assess the Looker estate
 
-Scope the migration before converting anything — inventory models/explores/dashboards, score
-complexity, and rank a migration shortlist. This is handled by the **`looker-assessment`**
-sibling skill (analogous to `tableau-assessment` / `qlik-assessment`). Run it first for any
-multi-dashboard migration; skip it for a single known dashboard.
+### 0b.1 — Is the input actually COMPLETE? (run this FIRST, always)
+
+```bash
+python3 scripts/check_input_completeness.py <lookml_dir>
+```
+
+**Do this before you form any opinion about convertibility.** A partial LookML export
+converts "successfully" and looks catastrophic: every view an explore joins but that was not
+exported becomes a `LOOKER_SCRATCH.<VIEW>` placeholder with its own loud warning, so a
+project missing most of its views emits hundreds of warnings and reads as *"this tool cannot
+convert our model."*
+
+That is a **missing-input problem, not a capability problem**, and the two must never be
+confused — one is fixed by asking for the rest of the repo, the other by engineering work.
+Reporting the first as the second has already cost us credibility on a live migration.
+
+The script is silent on a complete project (one all-clear line, exit 0) and never blocks.
+When the input is partial it reports, in numbers: physical views referenced vs. supplied
+(`from:` aliasing resolved first, so N aliases of one view count once), joins wirable vs.
+not, whether a `.model.lkml` is present at all, and whether the target explore is
+`extension: required` — an ABSTRACT base that nobody can run directly, whose concrete
+extending explores live elsewhere.
+
+If the input is incomplete, either ask for the complete project (ideally a git clone — all
+views, the `.model.lkml`, and the manifest) or convert the resolvable subset **deliberately,
+as a scoped slice**, and say so in the handoff.
+
+### 0b.2 — Scope the estate
+
+Inventory models/explores/dashboards, score complexity, and rank a migration shortlist.
+There is no `looker-assessment` sibling skill today (unlike Tableau) — until there is, do
+this from the Looker API in Phase 1, and use **Looker System Activity** (`i__looker`) field-
+and dashboard-usage history to scope by what is actually queried rather than by what exists.
+On a large estate that single input is usually the difference between porting a few hundred
+fields and porting a few thousand.
 
 ---
 
@@ -564,6 +595,24 @@ The converter handles, end-to-end and clean:
   the right Sigma formula; `1.0` literals preserved; `NULLIF` → `NullIf`.
 - **Joins** — snowflake (multi-hop) joins wire the FK to the correct intermediate element (not
   always the base); `full_outer` + field-limited joins; `sql_always_where` / `always_filter`.
+- **Composite join keys** — a `sql_on` that ANDs several `${a.b} = ${c.d}` pairs becomes ONE
+  relationship carrying every key pair (Sigma's `keys` is an array). Liquid
+  `{% condition %}` blocks are stripped before key extraction so their inner text is never
+  mistaken for a key. Literal predicates (`${view.col} = 5`) are join-time scoping a
+  relationship cannot express — reported so you can apply them as an element filter.
+  *(Before this, only the FIRST pair was captured — a silently under-constrained join that
+  still POSTs, still queries, and fans out. Verified live: the single-key shape returned
+  NULL for a column pulled through the relationship where the composite shape returned the
+  correct value.)*
+- **Unique keys / table grain** — `primary_key: yes` → element `uniqueKeys` (an array, so
+  composite keys work). This is what Sigma's **semantic aggregates** uses to track a table's
+  grain and aggregate to it before display; it is inert on orgs without the private beta, so
+  it is always safe to emit. A view with no `primary_key` warns that its grain is undeclared.
+  **`sql_distinct_key` is deliberately NOT mapped into `uniqueKeys`** — it is a *measure*-level
+  de-dup grain that routinely spans joined views, whereas `uniqueKeys` lists columns ON the
+  element. A cross-view grain written there would declare the WRONG grain, and under semantic
+  aggregates a wrong grain produces wrong numbers. Those measures are reported, naming the
+  views their grain spans, for manual confirmation.
 - **Other** — `derived_table`, `parameter` + Liquid, `drill_fields`, `set`, view/group labels,
   multiple explores per model.
 
@@ -595,7 +644,9 @@ shapes so you recognize a regression:
 - **Table-calc grain/sort** for window functions (rank / offset / percentile) → review.
 - **`merged_results`** → a DM join or a Custom SQL element (follow `merge_result_id` to the
   source queries; >2 sources or non-equi joins → manual + warn).
-- **Not yet converted:** NDT (`explore_source`), PDT `datagroup`/`persist_for`, `many_to_many`.
+- **`many_to_many`** → mapped to the closest Sigma type (`N:1`) with a warning to verify
+  cardinality and introduce a bridge/junction table where the join can fan out on both
+  sides. Sigma has no native M:N relationship.
 - **RLS (`access_filter` / `sql_always_where` / `access_grant`)** — detected at discovery
   (Phase 1d) and decided ONCE at the Phase 1.5 gate, then ported via the scripted, API-driven
   `apply_sigma_rls.py` (reuse-first user-attribute lookup → create/assign → PATCH the

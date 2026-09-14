@@ -1,4 +1,4 @@
-// ../../../tmp/converter-src/sigma-data-model-mcp/build/sigma-ids.js
+// ../sigma-data-model-mcp/build/sigma-ids.js
 var SIGMA_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var _usedIds = /* @__PURE__ */ new Set();
 var _idCounter = 0;
@@ -130,7 +130,7 @@ function makeRlsSecurity(opts) {
   };
 }
 
-// ../../../tmp/converter-src/sigma-data-model-mcp/build/formulas.js
+// ../sigma-data-model-mcp/build/formulas.js
 function stripOuterParens(s) {
   s = s.trim();
   while (s.length > 1 && s.startsWith("(") && s.endsWith(")")) {
@@ -931,7 +931,7 @@ function lookSigmaMetric(measureType, colName) {
   return map[(measureType || "").toLowerCase()] || `CountIf(IsNotNull([${dn}]))`;
 }
 
-// ../../../tmp/converter-src/sigma-data-model-mcp/build/lookml.js
+// ../sigma-data-model-mcp/build/lookml.js
 function lookmlNamedFormat(name) {
   const n = name.trim().toLowerCase();
   const CUR = { usd: "$", gbp: "\xA3", eur: "\u20AC", cad: "$", aud: "$" };
@@ -1074,7 +1074,7 @@ function parseLookML(text) {
   })();
   const sqlPlaceholders = {};
   let phIdx = 0;
-  text = text.replace(/\b(sql_trigger_value|sql_table_name|sql_where|sql_start|sql_end|sql_on|html|sql)\s*:([\s\S]*?);;/g, (match, keyName, sqlContent) => {
+  text = text.replace(/\b(sql_distinct_key|sql_trigger_value|sql_table_name|sql_where|sql_start|sql_end|sql_on|html|sql)\s*:([\s\S]*?);;/g, (match, keyName, sqlContent) => {
     const key = `__SQLPH${phIdx++}__`;
     sqlPlaceholders[key] = sqlContent.trim();
     return `${keyName}: "${key}" ;;`;
@@ -1113,7 +1113,8 @@ function parseLookML(text) {
     "html",
     "label_from_parameter",
     "sql_start",
-    "sql_end"
+    "sql_end",
+    "sql_distinct_key"
   ]);
   function parseBlock() {
     const obj = {};
@@ -1408,11 +1409,12 @@ function lookParseFilterExpr(expr, columnId) {
     return null;
   if (/^[\[(]/.test(expr))
     return null;
+  const expandTokens = (v) => /^NULL$/i.test(v) ? [null] : /^EMPTY$/i.test(v) ? [null, ""] : [v];
   if (expr.startsWith("-")) {
-    const vals2 = expr.slice(1).split(/\s*,\s*-?\s*/).map((v) => v.replace(/^"|"$/g, "").trim()).filter(Boolean).flatMap((v) => /^NULL$/i.test(v) ? [null] : /^EMPTY$/i.test(v) ? [null, ""] : [v]);
+    const vals2 = expr.slice(1).split(/\s*,\s*-?\s*/).map((v) => v.replace(/^"|"$/g, "").trim()).filter(Boolean).flatMap(expandTokens);
     return { id: sigmaShortId(), columnId, kind: "list", mode: "exclude", values: vals2 };
   }
-  const vals = expr.split(",").map((v) => v.replace(/^"|"$/g, "").trim()).filter(Boolean).flatMap((v) => /^NULL$/i.test(v) ? [null] : /^EMPTY$/i.test(v) ? [null, ""] : [v]);
+  const vals = expr.split(",").map((v) => v.replace(/^"|"$/g, "").trim()).filter(Boolean).flatMap(expandTokens);
   if (vals.length > 0)
     return { id: sigmaShortId(), columnId, kind: "list", mode: "include", values: vals };
   return null;
@@ -1580,7 +1582,11 @@ function lookCollectDynamicParameters(views) {
         defaults.set(p._name.toLowerCase(), String(p.default_value));
     }
     const fields = [];
-    for (const [kind, raw] of [["dimension", view.dimension], ["dimension_group", view.dimension_group], ["measure", view.measure]]) {
+    for (const [kind, raw] of [
+      ["dimension", view.dimension],
+      ["dimension_group", view.dimension_group],
+      ["measure", view.measure]
+    ]) {
       const entries = raw ? Array.isArray(raw) ? raw : [raw] : [];
       for (const field of entries) {
         if (field?._name && typeof field.sql === "string")
@@ -1612,8 +1618,9 @@ function lookCollectDynamicParameters(views) {
           const substituted = lookResolveParamSubst(branchSql, values);
           if (substituted.resolved)
             branchSql = substituted.sql;
-          if (!/\{%|\{\{|\$\{(?!TABLE\})[A-Za-z_][A-Za-z0-9_]*\}/i.test(branchSql))
+          if (!/\{%|\{\{|\$\{(?!TABLE\})[A-Za-z_][A-Za-z0-9_]*\}/i.test(branchSql)) {
             branches[allowed.value] = branchSql.replace(/\s+/g, " ").trim();
+          }
         }
         affectedFields.push({
           field: `${viewName}.${field._name}`,
@@ -2326,6 +2333,41 @@ function lookConvertView(viewName, view, connectionId, warnings, sqlTableNameMap
       element.metrics.push({ id: sigmaShortId(), formula, name: msLabel, ...msFormat ? { format: msFormat } : {} });
     }
   });
+  const pkDims = dims.filter((d) => d && d._name && /^(yes|true)$/i.test(String(d.primary_key ?? "")));
+  if (pkDims.length) {
+    const ukIds = [];
+    const unresolved = [];
+    for (const d of pkDims) {
+      const id = colIdMap[d._name.toUpperCase()];
+      if (id) {
+        if (!ukIds.includes(id))
+          ukIds.push(id);
+      } else
+        unresolved.push(d._name);
+    }
+    if (ukIds.length)
+      element.uniqueKeys = ukIds;
+    if (unresolved.length) {
+      warnings.push(`\u26A0 View "${viewName}": primary_key dimension(s) ${unresolved.join(", ")} did not resolve to a column \u2014 uniqueKeys is incomplete, so fan-out safety on this table is not guaranteed. Set the unique key manually in Sigma.`);
+    }
+  } else {
+    warnings.push(`\u26A0 View "${viewName}": no \`primary_key: yes\` dimension, so the table's grain is undeclared and no uniqueKeys could be emitted. Aggregations reaching this table through a relationship may fan out. Declare the unique key on the element in Sigma.`);
+  }
+  const sdkMeasures = measures.filter((m) => m && m.sql_distinct_key);
+  if (sdkMeasures.length) {
+    const spanning = /* @__PURE__ */ new Set();
+    for (const m of sdkMeasures) {
+      for (const ref of String(m.sql_distinct_key).matchAll(/\$\{([A-Za-z_0-9]+)\.[A-Za-z_0-9]+\}/g)) {
+        if (ref[1] !== "TABLE" && ref[1] !== viewName)
+          spanning.add(ref[1]);
+      }
+    }
+    if (spanning.size) {
+      warnings.push(`\u2139 View "${viewName}": ${sdkMeasures.length} measure(s) use \`sql_distinct_key\` at a grain spanning other view(s) (${[...spanning].join(", ")}) \u2014 a join-expanded de-dup that element-level uniqueKeys cannot express. These measures were converted as ordinary aggregates; re-verify them against the relationship grain, and note that removing the fan-out at its source may make the de-dup unnecessary.`);
+    } else {
+      warnings.push(`\u2139 View "${viewName}": ${sdkMeasures.length} measure(s) use \`sql_distinct_key\` over local columns only \u2014 confirm it matches the emitted uniqueKeys.`);
+    }
+  }
   if (element.metrics.length === 0)
     delete element.metrics;
   return { element, elementId, colIdMap };
@@ -2412,15 +2454,19 @@ function convertLookMLToSigma(files, options = {}) {
     const viewName = j.from || alias;
     const rel = (j.relationship || "many_to_one").toLowerCase();
     const jType = (j.type || "left_outer").toLowerCase().replace("_join", "").replace(" ", "_");
-    const sqlOn = j.sql_on || "";
-    const keyMatch = sqlOn.match(/\$\{(\w+)\.(\w+)\}\s*=\s*\$\{(\w+)\.(\w+)\}/);
-    const keys = keyMatch ? [{
-      leftView: keyMatch[1],
-      leftCol: keyMatch[2].toUpperCase(),
-      rightView: keyMatch[3],
-      rightCol: keyMatch[4].toUpperCase()
-    }] : [];
-    if (!keyMatch && sqlOn) {
+    const sqlOnRaw = j.sql_on || "";
+    const sqlOn = sqlOnRaw.replace(/\{%\s*condition[\s\S]*?\{%\s*endcondition\s*%\}/gi, " ").replace(/\{%[\s\S]*?%\}/g, " ").replace(/\{\{[\s\S]*?\}\}/g, " ");
+    const keys = [...sqlOn.matchAll(/\$\{(\w+)\.(\w+)\}\s*=\s*\$\{(\w+)\.(\w+)\}/g)].map((m) => ({
+      leftView: m[1],
+      leftCol: m[2].toUpperCase(),
+      rightView: m[3],
+      rightCol: m[4].toUpperCase()
+    }));
+    const literalPreds = [...sqlOn.matchAll(/\$\{(\w+)\.(\w+)\}\s*=\s*('[^']*'|-?\d+(?:\.\d+)?)/g)].map((m) => `${m[1]}.${m[2]} = ${m[3]}`);
+    if (literalPreds.length) {
+      warnings.push(`\u2139 Join "${alias}": sql_on carries ${literalPreds.length} literal predicate(s) that a Sigma relationship cannot express \u2014 ${literalPreds.join(", ")}. Apply as an element filter on the joined table if the scoping matters.`);
+    }
+    if (!keys.length && sqlOnRaw) {
       const isRangeJoin = /\$\{[^}]+\}\s*[><!]|[><!]=?\s*\$\{/.test(sqlOn);
       if (isRangeJoin) {
         warnings.push(`\u26A0 Join "${alias}": uses range-based sql_on (>=, <=, >, <) which cannot be expressed as a Sigma relationship. Recreate this as a filtered join or custom SQL after import.`);
@@ -2463,6 +2509,7 @@ function convertLookMLToSigma(files, options = {}) {
       return;
     }
     const isTargetView = (name) => name === j.alias || name === j.viewName;
+    const bySource = /* @__PURE__ */ new Map();
     j.keys.forEach((k) => {
       let srcView, srcCol, tgtCol;
       if (isTargetView(k.rightView)) {
@@ -2491,12 +2538,22 @@ function convertLookMLToSigma(files, options = {}) {
         warnings.push(`\u26A0 Relationship "${j.alias}": could not resolve column IDs for keys (${k.leftCol} / ${k.rightCol})`);
         return;
       }
-      const pairKey = `${targetRes.elementId}|${tgtColId}`;
-      if (usedTargetCols.has(pairKey)) {
-        warnings.push(`\u2139 Role-playing join "${j.alias}" shares a physical table \u2014 add manually in Sigma.`);
+      const grp = bySource.get(srcRes.elementId) || { srcRes, pairs: [] };
+      if (!grp.pairs.some((p) => p.sourceColumnId === srcColId && p.targetColumnId === tgtColId)) {
+        grp.pairs.push({ sourceColumnId: srcColId, targetColumnId: tgtColId });
+      }
+      bySource.set(srcRes.elementId, grp);
+    });
+    if (j.keys.length && !bySource.size) {
+      warnings.push(`\u26A0 Relationship "${j.alias}": no key pair could be resolved to real columns \u2014 add join keys manually in Sigma's ERD view.`);
+    }
+    bySource.forEach(({ srcRes, pairs }) => {
+      const sig = `${srcRes.elementId}|${targetRes.elementId}|` + pairs.map((p) => `${p.sourceColumnId}>${p.targetColumnId}`).sort().join(",");
+      if (usedTargetCols.has(sig)) {
+        warnings.push(`\u2139 Join "${j.alias}": duplicate of an existing relationship on the same key set \u2014 skipped.`);
         return;
       }
-      usedTargetCols.add(pairKey);
+      usedTargetCols.add(sig);
       let relType = "N:1";
       if (j.rel === "one_to_one")
         relType = "1:1";
@@ -2516,7 +2573,7 @@ function convertLookMLToSigma(files, options = {}) {
       srcEl.relationships.push({
         id: sigmaShortId(),
         targetElementId: targetRes.elementId,
-        keys: [{ sourceColumnId: srcColId, targetColumnId: tgtColId }],
+        keys: pairs,
         name: j.alias,
         relationshipType: relType
       });
