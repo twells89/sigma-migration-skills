@@ -30,6 +30,19 @@ def main() -> int:
         else workdir / "workbook-content.twb"
     )
     artifact = workdir / "relationship-coverage.json"
+    model = next(
+        (
+            path
+            for path in (
+                workdir / "datamodel-readback.json",
+                workdir / "dm-remapped.json",
+                workdir / "dm-raw.json",
+                workdir / "dm-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
 
     if not artifact.is_file():
         source_has_graph = (
@@ -63,7 +76,7 @@ def main() -> int:
         print("relationship coverage: N/A — no converter metadata and no source object-graph")
         return 0
     try:
-        expected = relationship_coverage.from_files(metadata, source)
+        expected = relationship_coverage.from_files(metadata, source, model)
         actual = json.loads(artifact.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"RELATIONSHIP COVERAGE FAIL: {exc}", file=sys.stderr)

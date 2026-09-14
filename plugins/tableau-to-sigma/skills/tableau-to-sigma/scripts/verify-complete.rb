@@ -162,7 +162,14 @@ source_has_graph = File.file?(source_path) &&
                        .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
 if source_has_graph || File.file?(coverage_path)
   begin
-    expected_coverage = RelationshipCoverage.from_files(metadata_path, source_path)
+    relationship_model_path = [
+      File.join(wd, 'dm-readback.json'),
+      File.join(wd, 'dm-spec.json'),
+      File.join(wd, 'dm-raw.json')
+    ].find { |path| File.file?(path) }
+    expected_coverage = RelationshipCoverage.from_files(
+      metadata_path, source_path, relationship_model_path
+    )
     actual_coverage = JSON.parse(File.read(coverage_path))
     unless actual_coverage == expected_coverage && expected_coverage['status'] != 'fail'
       warn '⛔ RELATIONSHIP COVERAGE INVALID — object-graph coverage is stale, unwired, or partial.'

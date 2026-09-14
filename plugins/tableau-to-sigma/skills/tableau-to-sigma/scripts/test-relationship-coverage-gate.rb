@@ -45,6 +45,30 @@ check.call(result['status'] == 'fail' &&
            result['blockers'].map { |row| row['kind'] } == %w[unwired partial],
            'unwired and partial relationships both block')
 
+complete_meta = metadata.call([
+  { 'left' => 'FACT', 'right' => 'DIM', 'derivedVia' => 'serialized', 'keyCount' => 1 }
+])
+result = RelationshipCoverage.evaluate(
+  complete_meta, source_text: '<object-graph/>',
+  model: { 'pages' => [{ 'elements' => [] }] }
+)
+check.call(result['status'] == 'fail' &&
+           result['blockers'].any? { |row| row['kind'] == 'model-count-mismatch' },
+           'a source relationship missing from the data-model spec/readback blocks')
+result = RelationshipCoverage.evaluate(
+  complete_meta, source_text: '<object-graph/>',
+  model: {
+    'pages' => [{ 'elements' => [{
+      'relationships' => [{
+        'targetElementId' => 'dim',
+        'keys' => [{ 'sourceColumnId' => 'fact-key', 'targetColumnId' => 'dim-key' }]
+      }]
+    }] }]
+  }
+)
+check.call(result['status'] == 'pass',
+           'matching data-model relationship count with non-empty keys passes')
+
 if fails.empty?
   puts 'ALL PASS'
   exit 0

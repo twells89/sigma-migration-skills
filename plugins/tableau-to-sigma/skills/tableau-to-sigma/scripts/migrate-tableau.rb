@@ -1932,6 +1932,7 @@ if opts[:dm_spec] || opts[:wb_spec]
     _rel_out, _rel_st = run!(
       ['ruby', File.join(HERE, 'emit-relationship-coverage.rb'),
        '--converter-out', _manual_meta, '--source', _manual_source,
+       '--dm-spec', opts[:dm_spec],
        '--out', File.join(WORK, 'relationship-coverage.json'), '--strict'],
       allow_fail: true
     )
@@ -2911,7 +2912,8 @@ if mechanical
   _rel_out, rel_cov_st = run!(
     ['ruby', File.join(HERE, 'emit-relationship-coverage.rb'),
      '--converter-out', File.join(WORK, 'conv-meta.json'),
-     '--source', conv_twb, '--out', rel_coverage_path, '--strict'],
+     '--source', conv_twb, '--dm-spec', File.join(WORK, 'dm-raw.json'),
+     '--out', rel_coverage_path, '--strict'],
     allow_fail: true
   )
   unless rel_cov_st.success?

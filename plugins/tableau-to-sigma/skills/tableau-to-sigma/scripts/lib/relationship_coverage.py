@@ -36,7 +36,9 @@ def blocker(entry: dict, index: int, kind: str, reason: str) -> dict:
     return {key: value for key, value in row.items() if value is not None}
 
 
-def evaluate(metadata: Any, source_text: str | None = None) -> dict:
+def evaluate(
+    metadata: Any, source_text: str | None = None, model: Any = None
+) -> dict:
     coverage = metadata.get("relationshipCoverage") if isinstance(metadata, dict) else None
     object_graph = bool(OBJECT_GRAPH_RE.search(source_text or ""))
     if not isinstance(coverage, dict):
@@ -141,7 +143,7 @@ def evaluate(metadata: Any, source_text: str | None = None) -> dict:
                     ),
                 )
             )
-    return {
+    result = {
         "schema_version": 1,
         "applicable": True,
         "status": "pass" if not blockers else "fail",
@@ -150,9 +152,44 @@ def evaluate(metadata: Any, source_text: str | None = None) -> dict:
         "entries": entries,
         "blockers": blockers,
     }
+    if isinstance(model, dict):
+        relationships = [
+            relationship
+            for page in model.get("pages") or []
+            for element in page.get("elements") or []
+            for relationship in element.get("relationships") or []
+            if isinstance(relationship, dict)
+        ]
+        empty = sum(not (relationship.get("keys") or []) for relationship in relationships)
+        result["model_relationships"] = len(relationships)
+        result["model_relationships_without_keys"] = empty
+        if result["applicable"] and len(relationships) != serialized:
+            result["blockers"].append(
+                {
+                    "kind": "model-count-mismatch",
+                    "reason": (
+                        f"data-model has {len(relationships)} relationships for "
+                        f"{serialized} serialized Tableau relationships"
+                    ),
+                }
+            )
+        if empty:
+            result["blockers"].append(
+                {
+                    "kind": "model-relationship-without-keys",
+                    "reason": f"{empty} data-model relationship(s) have no keys",
+                }
+            )
+        if result["blockers"]:
+            result["status"] = "fail"
+    return result
 
 
-def from_files(metadata_path: Path, source_path: Path | None = None) -> dict:
+def from_files(
+    metadata_path: Path,
+    source_path: Path | None = None,
+    model_path: Path | None = None,
+) -> dict:
     raw = metadata_path.read_bytes()
     metadata = json.loads(raw.decode("utf-8-sig"))
     source_text = (
@@ -160,7 +197,12 @@ def from_files(metadata_path: Path, source_path: Path | None = None) -> dict:
         if source_path is not None and source_path.is_file()
         else None
     )
-    result = evaluate(metadata, source_text)
+    model = (
+        json.loads(model_path.read_text(encoding="utf-8-sig"))
+        if model_path is not None and model_path.is_file()
+        else None
+    )
+    result = evaluate(metadata, source_text, model)
     coverage_source = json.dumps(
         metadata.get("relationshipCoverage") if isinstance(metadata, dict) else None,
         sort_keys=True,

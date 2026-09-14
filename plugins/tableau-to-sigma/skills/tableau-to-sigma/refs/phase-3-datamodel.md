@@ -49,6 +49,8 @@ before posting a new or reused data model:
   `partial:true`, or any positive `dropped_conditions` is a hard stop. A
   physical subset is not “close enough”: dropping a computed predicate widens
   the join and can recreate the field-reported flattened/pre-aggregated model.
+  The relationship/key count is checked again against the posted DM readback,
+  so a local converter ledger cannot hide an API-dropped or manual-spec edge.
 - `sql-provenance.json` — every `source.kind:"sql"` element is labeled as
   source Custom SQL or a generated LOD/Top-N/window/blend helper. An
   unattributed SQL element stops before POST. A manual entry in

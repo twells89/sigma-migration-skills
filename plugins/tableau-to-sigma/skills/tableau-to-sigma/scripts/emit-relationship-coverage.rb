@@ -61,6 +61,7 @@ OptionParser.new do |p|
   p.on('--converter-out PATH') { |v| opts[:converter_out] = v }
   p.on('--out PATH')           { |v| opts[:out] = v }
   p.on('--source PATH', 'source TWB; detects an object-graph when converter coverage is missing') { |v| opts[:source] = v }
+  p.on('--dm-spec PATH', 'data-model spec/readback; count and key census must match source') { |v| opts[:dm_spec] = v }
   p.on('--strict', 'exit nonzero when any relationship is unwired or partial') { opts[:strict] = true }
 end.parse!
 unless opts[:converter_out] && opts[:out]
@@ -74,7 +75,7 @@ unless File.exist?(opts[:converter_out])
 end
 
 result = begin
-  RelationshipCoverage.from_files(opts[:converter_out], opts[:source])
+  RelationshipCoverage.from_files(opts[:converter_out], opts[:source], opts[:dm_spec])
 rescue JSON::ParserError => e
   warn "FATAL: #{opts[:converter_out]} is malformed JSON: #{e.message.lines.first.to_s.strip[0, 120]}"
   exit 2

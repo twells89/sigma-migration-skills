@@ -71,6 +71,52 @@ class RelationshipCoverageTest(unittest.TestCase):
         self.assertEqual("fail", result["status"])
         self.assertEqual(["unwired", "partial"], [row["kind"] for row in result["blockers"]])
 
+    def test_data_model_relationship_count_and_keys_must_match(self):
+        meta = metadata(
+            [
+                {
+                    "left": "FACT",
+                    "right": "DIM",
+                    "derivedVia": "serialized",
+                    "keyCount": 1,
+                }
+            ]
+        )
+        missing = relationship_coverage.evaluate(
+            meta, "<object-graph/>", {"pages": [{"elements": []}]}
+        )
+        self.assertEqual("fail", missing["status"])
+        self.assertIn(
+            "model-count-mismatch",
+            [row["kind"] for row in missing["blockers"]],
+        )
+        complete = relationship_coverage.evaluate(
+            meta,
+            "<object-graph/>",
+            {
+                "pages": [
+                    {
+                        "elements": [
+                            {
+                                "relationships": [
+                                    {
+                                        "targetElementId": "dim",
+                                        "keys": [
+                                            {
+                                                "sourceColumnId": "fact-key",
+                                                "targetColumnId": "dim-key",
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+        self.assertEqual("pass", complete["status"])
+
     def test_strict_emitter_and_assertion_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             workdir = Path(tmp)

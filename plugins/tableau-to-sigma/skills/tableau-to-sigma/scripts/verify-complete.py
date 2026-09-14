@@ -86,10 +86,23 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
     relationship_doc = documents.get("relationship_coverage")
     metadata_path = workdir / "conv-meta.json"
     source_path = workdir / "workbook-content.twb"
+    relationship_model = next(
+        (
+            path
+            for path in (
+                workdir / "datamodel-readback.json",
+                workdir / "dm-remapped.json",
+                workdir / "dm-raw.json",
+                workdir / "dm-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
     if relationship_doc is not None:
         try:
             expected_relationships = relationship_coverage_lib.from_files(
-                metadata_path, source_path
+                metadata_path, source_path, relationship_model
             )
             relationship_gate_pass = (
                 relationship_doc == expected_relationships

@@ -16,6 +16,11 @@ workdir = opts[:workdir] || abort('usage: assert-relationship-coverage.rb --work
 metadata_path = opts[:metadata] || File.join(workdir, 'conv-meta.json')
 source_path = opts[:source] || File.join(workdir, 'workbook-content.twb')
 artifact_path = File.join(workdir, 'relationship-coverage.json')
+model_path = [
+  File.join(workdir, 'dm-readback.json'),
+  File.join(workdir, 'dm-spec.json'),
+  File.join(workdir, 'dm-raw.json')
+].find { |path| File.file?(path) }
 
 unless File.file?(artifact_path)
   source_has_graph = File.file?(source_path) &&
@@ -41,7 +46,7 @@ unless File.file?(metadata_path)
 end
 
 expected = begin
-  RelationshipCoverage.from_files(metadata_path, source_path)
+  RelationshipCoverage.from_files(metadata_path, source_path, model_path)
 rescue JSON::ParserError, SystemCallError => e
   warn "RELATIONSHIP COVERAGE FAIL: #{e.message}"
   exit 3

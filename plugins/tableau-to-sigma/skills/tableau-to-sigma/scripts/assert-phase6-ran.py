@@ -548,8 +548,23 @@ def gate_relationship_coverage(workdir: Path) -> None:
         workdir / "relationship-coverage.json", "relationship-coverage"
     )
     try:
+        model_path = next(
+            (
+                path
+                for path in (
+                    workdir / "datamodel-readback.json",
+                    workdir / "dm-remapped.json",
+                    workdir / "dm-raw.json",
+                    workdir / "dm-spec.json",
+                )
+                if path.is_file()
+            ),
+            None,
+        )
         expected = relationship_coverage_lib.from_files(
-            workdir / "conv-meta.json", workdir / "workbook-content.twb"
+            workdir / "conv-meta.json",
+            workdir / "workbook-content.twb",
+            model_path,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         fail("relationship-coverage", f"could not rederive relationship coverage: {exc}")

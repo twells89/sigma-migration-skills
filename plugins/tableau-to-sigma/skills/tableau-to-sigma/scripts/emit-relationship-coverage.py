@@ -17,12 +17,14 @@ def main() -> int:
     parser.add_argument("--converter-out", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--source")
+    parser.add_argument("--dm-spec")
     parser.add_argument("--strict", action="store_true")
     args = parser.parse_args()
     try:
         result = relationship_coverage.from_files(
             Path(args.converter_out),
             Path(args.source) if args.source else None,
+            Path(args.dm_spec) if args.dm_spec else None,
         )
         Path(args.out).write_text(
             json.dumps(result, indent=2, ensure_ascii=False) + "\n",

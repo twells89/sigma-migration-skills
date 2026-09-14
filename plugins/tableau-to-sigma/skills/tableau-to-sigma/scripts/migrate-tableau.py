@@ -917,6 +917,8 @@ def main() -> int:
             str(metadata_path),
             "--source",
             str(conversion_twb),
+            "--dm-spec",
+            str(dm_spec),
             "--out",
             str(relationship_artifact),
             "--strict",
