@@ -268,18 +268,6 @@ On ANY nonzero exit or waiver: `refs/gates.md`. On a STOP naming a script:
 
 ## Hard-gate kernels (full stanzas live in the phase refs + `refs/gates.md`)
 
-- **Object-graph completeness — never flatten around a missing edge.**
-  `emit-relationship-coverage.* --strict` blocks before DM POST when any
-  Tableau relationship is unwired, partial, or dropped a computed condition;
-  `assert-relationship-coverage.*` re-derives the artifact at completion.
-- **Visible-dashboard completeness.** `dashboard-coverage.*` compares visible
-  Tableau dashboard windows directly with built Sigma pages. Only a
-  `stated`/CLI selected scope may exclude a visible dashboard; absence from
-  `dashboard-layout.json` does not make a source tab not-applicable.
-- **Generated SQL must identify itself.** `sql-provenance.*` accounts every DM
-  `source.kind:"sql"` as source Custom SQL or a generated LOD/Top-N/window/
-  blend helper. Unattributed SQL blocks before POST; a manual override needs a
-  reason plus a `match:true` semantic-proof artifact.
 - **🚧 Phase 1a — ANY numeric Tableau URL MUST go through `resolve-project.rb`
   first.** Exit 0 → migrate exactly what it lists; **exit 2 → STOP and ask
   with the printed candidates — never guess** (a wrong guess field-cost 6
