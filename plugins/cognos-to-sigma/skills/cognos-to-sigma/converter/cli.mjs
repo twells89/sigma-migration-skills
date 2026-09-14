@@ -284,22 +284,30 @@ function isPlainColumn(expr, subjectId) {
 function convertCognosIR(model, options = {}) {
   resetIds();
   const { connectionId = "<CONNECTION_ID>", database: dbOverride = "", schema: schOverride = "", modelName } = options;
-  const warnings = [];
+  const warnings = [...model.ingestWarnings || []];
   const ctxByKey = /* @__PURE__ */ new Map();
   for (const qs of model.querySubjects) {
     const key = qs.identifier.toUpperCase();
-    const path = [];
-    const db = dbOverride || qs.database || "";
-    const sch = schOverride || qs.schema || "";
-    if (db) path.push(db);
-    if (sch) path.push(sch);
-    const tableTail = (qs.table || qs.identifier).toUpperCase();
-    path.push(tableTail);
+    let source;
+    let tableTail;
+    if (qs.sql) {
+      source = { connectionId, kind: "sql", statement: qs.sql };
+      tableTail = "Custom SQL";
+    } else {
+      const path = [];
+      const db = dbOverride || qs.database || "";
+      const sch = schOverride || qs.schema || "";
+      if (db) path.push(db);
+      if (sch) path.push(sch);
+      tableTail = (qs.table || qs.identifier).toUpperCase();
+      path.push(tableTail);
+      source = { connectionId, kind: "warehouse-table", path };
+    }
     const element = {
       id: sigmaShortId(),
       kind: "table",
       name: sigmaDisplayName(qs.identifier),
-      source: { connectionId, kind: "warehouse-table", path },
+      source,
       columns: [],
       order: []
     };
@@ -326,7 +334,7 @@ function convertCognosIR(model, options = {}) {
       if (item.isCalculation && item.expression) {
         const { formula, warnings: w } = translateCognosExpr(applyLearnedRules(item.expression, options.learnedRules), qs, ensureRawCol, ctx);
         w.forEach((x) => warnings.push(`"${qs.identifier}.${item.identifier}": ${x}`));
-        if (/\b(Sum|Avg|Count|Min|Max|.*Over)\(/.test(formula)) {
+        if (/\b(Sum|Avg|Count|CountDistinct|Min|Max)\(/.test(formula) && !/\b(Cumulative|Moving|Rank|RowNumber|Lag|Lead|PercentOfTotal)\w*\(/.test(formula)) {
           const m = { id: sigmaShortId(), name: dispName, formula };
           const fmt = inferSigmaFormat(formula, dispName);
           if (fmt) m.format = fmt;
@@ -362,6 +370,10 @@ function convertCognosIR(model, options = {}) {
   }
   for (const rel of model.relationships) {
     let leftTable = rel.left, rightTable = rel.right, leftCol = rel.leftKey, rightCol = rel.rightKey;
+    if ((!leftCol || !rightCol) && rel.keys?.length) {
+      leftCol = rel.keys[0].leftKey;
+      rightCol = rel.keys[0].rightKey;
+    }
     if (!leftCol || !rightCol) {
       const parsed = parseJoinExpr(rel.expression);
       if (!parsed) {
@@ -372,7 +384,8 @@ function convertCognosIR(model, options = {}) {
     }
     const rightIsMany = /many|\bn\b|\*/.test(rel.rightCard || "");
     const leftIsMany = /many|\bn\b|\*/.test(rel.leftCard || "");
-    if (rightIsMany && !leftIsMany) {
+    const flipped = rightIsMany && !leftIsMany;
+    if (flipped) {
       [leftTable, leftCol, rightTable, rightCol] = [rightTable, rightCol, leftTable, leftCol];
     }
     const srcKey = leftTable.toUpperCase(), tgtKey = rightTable.toUpperCase();
@@ -381,12 +394,15 @@ function convertCognosIR(model, options = {}) {
       warnings.push(`Relationship ${srcKey}\u2192${tgtKey}: a query subject is missing \u2014 relationship skipped.`);
       continue;
     }
-    const srcColId = ensureRawCol(srcCtx, srcKey, leftCol, true);
-    const tgtColId = ensureRawCol(tgtCtx, tgtKey, rightCol, true);
+    const pairs = rel.keys && rel.keys.length ? rel.keys.map((k) => flipped ? { l: k.rightKey, r: k.leftKey } : { l: k.leftKey, r: k.rightKey }) : [{ l: leftCol, r: rightCol }];
+    const keys = pairs.map((p) => ({
+      sourceColumnId: ensureRawCol(srcCtx, srcKey, p.l, true),
+      targetColumnId: ensureRawCol(tgtCtx, tgtKey, p.r, true)
+    }));
     (srcCtx.element.relationships ||= []).push({
       id: sigmaShortId(),
       targetElementId: tgtCtx.element.id,
-      keys: [{ sourceColumnId: srcColId, targetColumnId: tgtColId }],
+      keys,
       name: tgtKey
     });
   }
@@ -431,7 +447,16 @@ var AGG_MAP = {
   minimum: "Min",
   min: "Min"
 };
-var OVER_MAP = { total: "SumOver", sum: "SumOver", average: "AvgOver", count: "CountOver", maximum: "MaxOver", minimum: "MinOver" };
+var WINDOW_MAP = {
+  "running-total": "CumulativeSum",
+  "running-count": "CumulativeCount",
+  "running-average": "CumulativeAvg",
+  "running-maximum": "CumulativeMax",
+  "running-minimum": "CumulativeMin",
+  "moving-total": "MovingSum",
+  "moving-average": "MovingAvg",
+  rank: "Rank"
+};
 function aggFn(agg, inner) {
   const fn = AGG_MAP[agg] || "Sum";
   return `${fn}(${inner})`;
@@ -439,6 +464,21 @@ function aggFn(agg, inner) {
 function translateCognosExpr(expr, qs, ensureRawCol, ctx) {
   const warnings = [];
   let f = (expr || "").trim();
+  f = f.replace(
+    /\b(running-total|running-count|running-average|running-maximum|running-minimum|moving-total|moving-average|rank)\s*\(([^()]*)\)/gi,
+    (_m, fn, inner) => {
+      const native = WINDOW_MAP[lc(fn)];
+      if (!native) return _m;
+      const [args2, scope] = String(inner).split(/\s+for\s+/i);
+      if (scope) {
+        warnings.push(`"${fn}( \u2026 for ${scope.trim()})" \u2014 translated to ${native}(), but the "for" partition is DROPPED (Sigma's native window functions take no partition argument). Re-author as a grouped element or push the window into a sql source if the partition matters.`);
+      }
+      if (/^moving-/i.test(fn)) {
+        warnings.push(`"${fn}" \u2192 ${native}(): verify the window-size argument order against Sigma's signature.`);
+      }
+      return `${native}(${args2.trim()})`;
+    }
+  );
   for (const bad of ["running-total", "running-count", "running-average", "running-difference", "moving-total", "moving-average", "rank", "percentile", "quantile", "tertile"]) {
     if (new RegExp(`\\b${bad}\\b`, "i").test(f)) warnings.push(`uses Cognos "${bad}" (window/running calc) \u2014 no clean single-column Sigma analog; needs manual authoring (window function).`);
   }
@@ -461,9 +501,10 @@ function translateCognosExpr(expr, qs, ensureRawCol, ctx) {
   f = f.replace(
     /\b(total|sum|average|count|maximum|minimum)\s*\(\s*([^()]*?)\s+for\s+([^()]*)\)/gi,
     (_m, fn, inner, scope) => {
-      const over = OVER_MAP[lc(fn)] || "SumOver";
-      const dims = scope.split(",").map((s) => s.trim()).join(", ");
-      return `${over}(${inner.trim()}, ${dims})`;
+      const agg = AGG_MAP[lc(fn)] || "Sum";
+      const dims = scope.split(",").map((s) => s.trim()).filter(Boolean).join(", ");
+      warnings.push(`"${fn}( \u2026 for ${dims})" scoped aggregate \u2014 Sigma has no spec-valid partitioned aggregate, so this emits ${agg}(\u2026) and the "for ${dims}" partition is DROPPED. Re-author as a grouped element, a model metric, or a sql source if the partition matters.`);
+      return `${agg}(${inner.trim()})`;
     }
   );
   f = f.replace(/\b(total|sum|average|count|maximum|minimum)\s*\(/gi, (_m, fn) => `${AGG_MAP[lc(fn)] || "Sum"}(`);
@@ -497,7 +538,7 @@ function translateCognosExpr(expr, qs, ensureRawCol, ctx) {
   f = f.replace(/\bcoalesce\s*\(/gi, "Coalesce(");
   f = f.replace(/\babs\s*\(/gi, "Abs(").replace(/\bround\s*\(/gi, "Round(").replace(/\bfloor\s*\(/gi, "Floor(").replace(/\bceiling\s*\(/gi, "Ceiling(").replace(/\bsqrt\s*\(/gi, "Sqrt(").replace(/\bln\s*\(/gi, "Ln(").replace(/\bmod\s*\(/gi, "Mod(").replace(/\bpower\s*\(/gi, "Power(");
   f = f.replace(/'([^']*)'/g, '"$1"');
-  const known = /\b(If|Switch|Sum|Avg|Count|CountDistinct|Min|Max|SumOver|AvgOver|CountOver|MinOver|MaxOver|DateAdd|DateDiff|DatePart|Mid|Upper|Lower|Trim|Coalesce|Text|RegexpReplace|Replace|Abs|Round|Floor|Ceiling|Sqrt|Ln|Mod|Power)\b/;
+  const known = /\b(If|Switch|Sum|Avg|Count|CountDistinct|Min|Max|CumulativeSum|CumulativeAvg|CumulativeCount|CumulativeMax|CumulativeMin|MovingSum|MovingAvg|MovingMax|MovingMin|Rank|RankDense|RowNumber|Lag|Lead|PercentOfTotal|DateAdd|DateDiff|DatePart|Mid|Upper|Lower|Trim|Coalesce|Text|RegexpReplace|Replace|Abs|Round|Floor|Ceiling|Sqrt|Ln|Mod|Power)\b/;
   for (const m of f.matchAll(/\b([a-z][a-z0-9_-]*)\s*\(/gi)) {
     if (!known.test(m[1]) && !/^(and|or|not|in|like|between|then|else|end|case|when)$/i.test(m[1])) {
       warnings.push(`function "${m[1]}()" has no confirmed Sigma mapping \u2014 review/translate manually.`);
@@ -3798,10 +3839,10 @@ function normalise(context) {
   return { lists: [context], regex: null };
 }
 function matchList(value, list) {
-  const label = list.label ?? "CUSTOM";
+  const label2 = list.label ?? "CUSTOM";
   for (const rule of list) {
     if (rule.pattern.test(value)) {
-      return { context: label, id: rule.id, description: rule.description, pattern: rule.pattern };
+      return { context: label2, id: rule.id, description: rule.description, pattern: rule.pattern };
     }
   }
   return null;
@@ -4427,7 +4468,7 @@ function prettify(node, options, matcher, readonlyMatcher) {
   return compress(node, options, matcher, readonlyMatcher);
 }
 function compress(arr3, options, matcher, readonlyMatcher) {
-  let text;
+  let text2;
   const compressedObj = {};
   for (let i = 0; i < arr3.length; i++) {
     const tagObj = arr3[i];
@@ -4440,8 +4481,8 @@ function compress(arr3, options, matcher, readonlyMatcher) {
       matcher.push(property, rawAttrs);
     }
     if (property === options.textNodeName) {
-      if (text === void 0) text = tagObj[property];
-      else text += "" + tagObj[property];
+      if (text2 === void 0) text2 = tagObj[property];
+      else text2 += "" + tagObj[property];
     } else if (property === void 0) {
       continue;
     } else if (tagObj[property]) {
@@ -4479,9 +4520,9 @@ function compress(arr3, options, matcher, readonlyMatcher) {
       }
     }
   }
-  if (typeof text === "string") {
-    if (text.length > 0) compressedObj[options.textNodeName] = text;
-  } else if (text !== void 0) compressedObj[options.textNodeName] = text;
+  if (typeof text2 === "string") {
+    if (text2.length > 0) compressedObj[options.textNodeName] = text2;
+  } else if (text2 !== void 0) compressedObj[options.textNodeName] = text2;
   return compressedObj;
 }
 function propName(obj) {
@@ -4626,6 +4667,8 @@ function workbookGap(feature, detail) {
 }
 
 // ../scripts/lib/code_rep.mjs
+var LEGACY_HORIZONTAL_ALIGN = { start: "left", middle: "center", end: "right" };
+var LEGACY_VERTICAL_ALIGN = { start: "top", middle: "center", end: "bottom" };
 var isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function flattenElements(doc) {
   if (!isObj(doc) || !Array.isArray(doc.pages)) return doc;
@@ -4649,9 +4692,56 @@ function flattenElements(doc) {
 function canonicalizeLayout(layoutXml) {
   return String(layoutXml || "").replace(/<([/]?)LayoutElement\b/g, "<$1Element").replace(/<([/]?)GridContainer\b/g, "<$1Container");
 }
+function canonicalizeElement(element) {
+  if (!isObj(element)) return element;
+  if (element.kind === "text" && element.verticalAlign in LEGACY_VERTICAL_ALIGN) {
+    return { ...element, verticalAlign: LEGACY_VERTICAL_ALIGN[element.verticalAlign] };
+  }
+  if (element.kind === "kpi-chart" && isObj(element.layout)) {
+    const layout = { ...element.layout };
+    if (layout.anchor in LEGACY_HORIZONTAL_ALIGN) {
+      layout.anchor = LEGACY_HORIZONTAL_ALIGN[layout.anchor];
+    }
+    if (layout.verticalAnchor in LEGACY_VERTICAL_ALIGN) {
+      layout.verticalAnchor = LEGACY_VERTICAL_ALIGN[layout.verticalAnchor];
+    }
+    return { ...element, layout };
+  }
+  if (element.kind === "tabbed-container" && isObj(element.tabBar) && element.tabBar.alignment in LEGACY_HORIZONTAL_ALIGN) {
+    return {
+      ...element,
+      tabBar: {
+        ...element.tabBar,
+        alignment: LEGACY_HORIZONTAL_ALIGN[element.tabBar.alignment]
+      }
+    };
+  }
+  if (element.kind === "divider" && element.align in LEGACY_VERTICAL_ALIGN) {
+    const mapping = element.direction === "vertical" ? LEGACY_HORIZONTAL_ALIGN : LEGACY_VERTICAL_ALIGN;
+    return { ...element, align: mapping[element.align] };
+  }
+  return element;
+}
+function canonicalizeOverlay(overlay) {
+  if (!isObj(overlay) || !isObj(overlay.drawer) || !("position" in overlay.drawer)) {
+    return overlay;
+  }
+  const { position: _removed, ...drawer } = overlay.drawer;
+  return { ...overlay, drawer };
+}
 function wrap(doc, extra = {}) {
   const flattened = flattenElements(doc);
-  const canonical = isObj(flattened) && "layout" in flattened ? { ...flattened, layout: canonicalizeLayout(flattened.layout) } : flattened;
+  let canonical = flattened;
+  if (isObj(flattened)) {
+    canonical = { ...flattened };
+    if (Array.isArray(flattened.elements)) {
+      canonical.elements = flattened.elements.map(canonicalizeElement);
+    }
+    if (Array.isArray(flattened.overlays)) {
+      canonical.overlays = flattened.overlays.map(canonicalizeOverlay);
+    }
+    if ("layout" in flattened) canonical.layout = canonicalizeLayout(flattened.layout);
+  }
   return { ...extra, document: canonical };
 }
 
@@ -5270,8 +5360,8 @@ function convertCognosReportToSigma(xml2, options = {}) {
         value: { type: "formula", formula },
         line: { color: String(b["@_color"] || b["@_lineColor"] || "#ef4444"), width: 2 }
       };
-      const label = b["@_label"] || b["@_text"] || (di ? sigmaDisplayName(di.name) : void 0);
-      if (label) rm.label = { visibility: "shown", text: String(label) };
+      const label2 = b["@_label"] || b["@_text"] || (di ? sigmaDisplayName(di.name) : void 0);
+      if (label2) rm.label = { visibility: "shown", text: String(label2) };
       out.push(rm);
     }
     return out;
@@ -5414,7 +5504,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
     }
     if (!kind) {
       const gated = VIZ_GATED[vizType];
-      const label = gated || VIZ_NO_ANALOG[vizType] || vizType.replace("com.ibm.vis.", "");
+      const label2 = gated || VIZ_NO_ANALOG[vizType] || vizType.replace("com.ibm.vis.", "");
       for (const c of findAll(V, "vcSlotDsColumn")) if (c["@_refDsColumn"]) addCol({ ref: c["@_refDsColumn"], rollup: c["@_rollupMethod"] }, !!c["@_rollupMethod"]);
       if (!cols.length) {
         warnings.push(`<vizControl> "${vizName}" (${vizType}) had no resolvable columns \u2014 skipped.`);
@@ -5422,9 +5512,9 @@ function convertCognosReportToSigma(xml2, options = {}) {
       }
       warnings.push(workbookGap(
         gated ? "box-chart (workspace gated)" : `visual ${vizType}`,
-        gated ? `chart "${vizName}" is a Cognos ${label}; Sigma box-chart is workspace-gated, so the converter preserved its data as a table instead of risking a masked entitlement failure. Enable and verify box-chart before replacing it.` : `chart "${vizName}" is a Cognos ${label}; no grounded Sigma mapping is cataloged. Its data was preserved as a table.`
+        gated ? `chart "${vizName}" is a Cognos ${label2}; Sigma box-chart is workspace-gated, so the converter preserved its data as a table instead of risking a masked entitlement failure. Enable and verify box-chart before replacing it.` : `chart "${vizName}" is a Cognos ${label2}; no grounded Sigma mapping is cataloged. Its data was preserved as a table.`
       ));
-      const fb = { id: sigmaShortId(), kind: "table", name: `${vizName} (was ${label})`, source: chartSource(q), columns: cols, order: cols.map((c) => c.id) };
+      const fb = { id: sigmaShortId(), kind: "table", name: `${vizName} (was ${label2})`, source: chartSource(q), columns: cols, order: cols.map((c) => c.id) };
       const measures = cols.filter((c) => /^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(c.formula)).map((c) => c.id);
       const dimensions = cols.filter((c) => !measures.includes(c.id)).map((c) => c.id);
       if (measures.length && dimensions.length) fb.groupings = [{ id: sigmaShortId(), groupBy: dimensions, calculations: measures }];
@@ -5719,6 +5809,524 @@ function convertCognosReportToSigma(xml2, options = {}) {
   };
 }
 
+// cognos-fm.ts
+var STOP_NODES = ["*.expression", "*.sql"];
+var ALWAYS_ARRAY = /* @__PURE__ */ new Set([
+  "namespace",
+  "folder",
+  "queryItemFolder",
+  "querySubject",
+  "queryItem",
+  "shortcut",
+  "calculation",
+  "relationship",
+  "determinant",
+  "filterDefinition",
+  "dataSource",
+  "securityView",
+  "package",
+  "dimension",
+  "refobj",
+  "set",
+  "parameterMap"
+]);
+var parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  parseTagValue: false,
+  // keep everything as strings — no surprise numeric coercion
+  parseAttributeValue: false,
+  trimValues: true,
+  stopNodes: STOP_NODES,
+  isArray: (tag) => ALWAYS_ARRAY.has(tag)
+});
+var asArray = (x) => Array.isArray(x) ? x : x == null ? [] : [x];
+function text(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object" && "#text" in v) return String(v["#text"] ?? "");
+  return "";
+}
+var nameOf = (el) => text(el?.name).trim();
+function isFrameworkManagerXml(xml2) {
+  const head = (xml2 || "").slice(0, 4e3);
+  return /<project[\s>]/.test(head) && /schemas\/bmt\//.test(head);
+}
+var joinPath = (segs) => segs.map((s) => `[${s}]`).join(".");
+var CHILD_TAGS = [
+  "namespace",
+  "folder",
+  "queryItemFolder",
+  "querySubject",
+  "shortcut",
+  "calculation",
+  "queryItem",
+  "dimension"
+];
+var PATH_TRANSPARENT = /* @__PURE__ */ new Set(["folder", "queryItemFolder"]);
+function buildIndex(rootNamespace) {
+  const index = /* @__PURE__ */ new Map();
+  const walk = (node, segs) => {
+    for (const tag of CHILD_TAGS) {
+      for (const el of asArray(node?.[tag])) {
+        const n = nameOf(el);
+        if (!n) continue;
+        const transparent = PATH_TRANSPARENT.has(tag);
+        const childSegs = transparent ? segs : [...segs, n];
+        if (!transparent) {
+          const path = joinPath(childSegs);
+          if (!index.has(path)) {
+            index.set(path, { kind: tag, el, path, parent: joinPath(segs) });
+          }
+        }
+        walk(el, childSegs);
+      }
+    }
+  };
+  walk(rootNamespace, []);
+  return index;
+}
+function resolve(index, path, depth = 0) {
+  if (depth > 12) return null;
+  const o = index.get(path);
+  if (!o) return null;
+  if (o.kind === "shortcut") {
+    const target = text(o.el?.refobj?.[0] ?? o.el?.refobj);
+    return target ? resolve(index, target.trim(), depth + 1) : null;
+  }
+  return o;
+}
+var RE_VIA = /<refobjViaShortcut>([\s\S]*?)<\/refobjViaShortcut>/gi;
+var RE_REF = /<refobj>([\s\S]*?)<\/refobj>/gi;
+function decodeEntities(s) {
+  return String(s ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(Number(d))).replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, "&");
+}
+function expressionRefs(raw) {
+  const out = [];
+  const scan = String(raw || "");
+  const viaSpans = [];
+  let m;
+  RE_VIA.lastIndex = 0;
+  while (m = RE_VIA.exec(scan)) {
+    viaSpans.push([m.index, m.index + m[0].length]);
+    const inner = [...String(m[1]).matchAll(/<refobj>([\s\S]*?)<\/refobj>/gi)].map((x) => x[1].trim());
+    if (inner.length) out.push(inner[inner.length - 1]);
+  }
+  RE_REF.lastIndex = 0;
+  while (m = RE_REF.exec(scan)) {
+    const inside = viaSpans.some(([a, b]) => m.index >= a && m.index < b);
+    if (!inside) out.push(String(m[1]).trim());
+  }
+  return out;
+}
+function isPassthrough(raw) {
+  const stripped = String(raw || "").replace(RE_VIA, "").replace(RE_REF, "").replace(/<[^>]*>/g, "").trim();
+  return stripped === "";
+}
+function expressionText(raw) {
+  const stripped = String(raw || "").replace(RE_VIA, (_m, inner) => {
+    const refs = [...String(inner).matchAll(/<refobj>([\s\S]*?)<\/refobj>/gi)].map((x) => x[1].trim());
+    return refs.length ? refs[refs.length - 1] : "";
+  }).replace(RE_REF, (_m, p1) => String(p1).trim()).replace(/<[^>]*\/>/g, "").replace(/<[^>]*>/g, "");
+  return decodeEntities(stripped).replace(/\s+/g, " ").trim();
+}
+var leafOf = (path) => {
+  const segs = String(path || "").match(/\[([^\]]*)\]/g) || [];
+  return segs.length ? segs[segs.length - 1].replace(/[[\]]/g, "") : "";
+};
+var parentOf = (path) => {
+  const segs = String(path || "").match(/\[[^\]]*\]/g) || [];
+  return segs.slice(0, -1).join(".");
+};
+function readDataSources(project) {
+  const out = /* @__PURE__ */ new Map();
+  for (const ds of asArray(project?.dataSources?.dataSource)) {
+    const n = nameOf(ds);
+    if (!n) continue;
+    out.set(n, { name: n, catalog: text(ds.catalog) || void 0, schema: text(ds.schema) || void 0 });
+  }
+  return out;
+}
+var RE_SIMPLE_SELECT = /^\s*select\s+(?:\*|[\w$]+\s*\.\s*\*)\s*from\s*\[([^\]]+)\]\s*\.\s*\[?([\w$]+)\]?(?:\s+(?:as\s+)?[\w$]+)?\s*$/i;
+var RE_MACRO = /#[^#]{1,400}#/g;
+function countShortcuts(el) {
+  let n = asArray(el?.shortcut).length;
+  for (const tag of ["namespace", "folder", "queryItemFolder"]) {
+    for (const child of asArray(el?.[tag])) n += countShortcuts(child);
+  }
+  return n;
+}
+function collectShortcuts(el, out = []) {
+  for (const sc of asArray(el?.shortcut)) out.push(sc);
+  for (const tag of ["namespace", "folder", "queryItemFolder"]) {
+    for (const child of asArray(el?.[tag])) collectShortcuts(child, out);
+  }
+  return out;
+}
+function parseFm(xml2) {
+  const doc = parser.parse(xml2);
+  const project = doc?.project;
+  if (!project) throw new Error("not a Framework Manager project XML (no <project> root)");
+  const root = asArray(project.namespace)[0];
+  if (!root) throw new Error("Framework Manager model has no root <namespace>");
+  return { project, root, index: buildIndex(root) };
+}
+function pickPresentationLayer(root) {
+  let best = null;
+  let bestN = 0;
+  for (const ns of asArray(root?.namespace)) {
+    const n = countShortcuts(ns);
+    if (n > bestN) {
+      best = ns;
+      bestN = n;
+    }
+  }
+  return bestN > 0 ? best : null;
+}
+function listFrameworkManagerSubjectAreas(xml2) {
+  const { root } = parseFm(xml2);
+  const layer = pickPresentationLayer(root);
+  const areas = [];
+  if (layer) {
+    const layerName = nameOf(layer);
+    for (const ns of asArray(layer.namespace)) {
+      areas.push({ name: nameOf(ns), path: joinPath([layerName, nameOf(ns)]), objects: countShortcuts(ns) });
+    }
+    if (asArray(layer.shortcut).length) {
+      areas.push({ name: layerName, path: joinPath([layerName]), objects: countShortcuts(layer) });
+    }
+  } else {
+    for (const ns of asArray(root?.namespace)) {
+      const n = asArray(ns.querySubject).length + asArray(ns.folder).reduce((a, f) => a + asArray(f.querySubject).length, 0);
+      if (n) areas.push({ name: nameOf(ns), path: joinPath([nameOf(ns)]), objects: n });
+    }
+  }
+  return areas.sort((a, b) => b.objects - a.objects);
+}
+function normalizeCognosFrameworkManager(xml2, opts = {}) {
+  const ingestWarnings = [];
+  const warn = (m) => {
+    ingestWarnings.push(m);
+  };
+  const { project, root, index } = parseFm(xml2);
+  const dataSources = readDataSources(project);
+  const modelName = nameOf(root) || text(project.name) || "Cognos Framework Manager model";
+  const layer = pickPresentationLayer(root);
+  let scopeEl;
+  let scopeName;
+  if (opts.all) {
+    scopeEl = layer || root;
+    scopeName = nameOf(scopeEl) || modelName;
+  } else {
+    const want = (opts.subjectArea || "").trim();
+    if (!want) throw new Error("Framework Manager conversion needs --subject-area (or --all). Run with --list to see them.");
+    const areas = listFrameworkManagerSubjectAreas(xml2);
+    const hit = areas.find((a) => a.path === want) || areas.find((a) => a.name.toLowerCase() === want.toLowerCase()) || areas.find((a) => a.path.toLowerCase() === want.toLowerCase());
+    if (!hit) {
+      throw new Error(`subject area "${want}" not found. Available: ${areas.map((a) => a.name).join(" | ")}`);
+    }
+    const found = index.get(hit.path);
+    if (!found) throw new Error(`subject area "${hit.path}" is not indexable`);
+    scopeEl = found.el;
+    scopeName = hit.name;
+  }
+  const querySubjects = [];
+  const byIdentifier = /* @__PURE__ */ new Map();
+  const anchorToIr = /* @__PURE__ */ new Map();
+  const claimAnchor = (path, ident) => {
+    if (path && !anchorToIr.has(path)) anchorToIr.set(path, ident);
+  };
+  const exposed = collectShortcuts(scopeEl);
+  if (!exposed.length) {
+    const direct = [];
+    for (const [path, obj] of index) {
+      if (obj.kind === "querySubject" && path.startsWith(joinPath([scopeName]))) {
+        direct.push({ obj, label: nameOf(obj.el) });
+      }
+    }
+    for (const d of direct) addSubject(d.obj, d.label, d.obj.path);
+  }
+  for (const sc of exposed) {
+    const label2 = nameOf(sc);
+    const targetPath = text(sc.refobj?.[0] ?? sc.refobj).trim();
+    if (!targetPath) continue;
+    const target = resolve(index, targetPath);
+    if (!target) {
+      warn(`subject area "${scopeName}": shortcut "${label2}" \u2192 ${targetPath} does not resolve \u2014 skipped.`);
+      continue;
+    }
+    if (target.kind !== "querySubject") {
+      warn(`subject area "${scopeName}": shortcut "${label2}" targets a ${target.kind}, not a query subject \u2014 skipped.`);
+      continue;
+    }
+    addSubject(target, label2, targetPath);
+  }
+  function addSubject(target, label2, viaPath) {
+    const identifier = label2 || leafOf(target.path);
+    if (byIdentifier.has(identifier)) return;
+    const qsEl = target.el;
+    const items = [];
+    const tableVotes = /* @__PURE__ */ new Map();
+    const aliasVotes = /* @__PURE__ */ new Map();
+    const rawItems = [
+      ...asArray(qsEl.queryItem).map((el) => ({ el, isCalc: false })),
+      ...asArray(qsEl.calculation).map((el) => ({ el, isCalc: true }))
+    ];
+    for (const f of asArray(qsEl.queryItemFolder)) {
+      for (const el of asArray(f.queryItem)) rawItems.push({ el, isCalc: false });
+      for (const el of asArray(f.calculation)) rawItems.push({ el, isCalc: true });
+    }
+    for (const { el, isCalc } of rawItems) {
+      const label22 = nameOf(el);
+      if (!label22) continue;
+      const rawExpr = text(el.expression) || (typeof el.expression === "string" ? el.expression : "");
+      const usage = text(el.usage) || void 0;
+      const aggregate = text(el.regularAggregate) || void 0;
+      const hidden = text(el.hidden) === "true";
+      if (!isCalc && rawExpr && isPassthrough(rawExpr)) {
+        const refs = expressionRefs(rawExpr);
+        const physPath = refs[refs.length - 1] || "";
+        const physItem = physPath ? resolve(index, physPath) : null;
+        const physName = physItem ? text(physItem.el.externalName) || nameOf(physItem.el) : leafOf(physPath);
+        const ownerPath2 = physItem ? parentOf(physItem.path) : parentOf(physPath);
+        if (ownerPath2) tableVotes.set(ownerPath2, (tableVotes.get(ownerPath2) || 0) + 1);
+        const viaAlias = firstViaAlias(rawExpr);
+        if (viaAlias) aliasVotes.set(viaAlias, (aliasVotes.get(viaAlias) || 0) + 1);
+        items.push({
+          identifier: physName || label22,
+          label: label22,
+          usage,
+          aggregate,
+          datatype: text(el.datatype) || void 0,
+          isCalculation: false,
+          ...hidden ? { hidden: true } : {},
+          ...ownerPath2 ? { __owner: ownerPath2 } : {}
+        });
+      } else if (rawExpr) {
+        items.push({
+          identifier: label22,
+          label: label22,
+          usage,
+          aggregate,
+          datatype: text(el.datatype) || void 0,
+          expression: expressionText(rawExpr),
+          isCalculation: true
+        });
+      } else {
+        const physName = text(el.externalName) || label22;
+        items.push({
+          identifier: physName,
+          label: label22,
+          usage,
+          aggregate,
+          datatype: text(el.datatype) || void 0,
+          isCalculation: false
+        });
+        tableVotes.set(target.path, (tableVotes.get(target.path) || 0) + 1);
+      }
+    }
+    const ranked = [...tableVotes.entries()].sort((a, b) => b[1] - a[1]);
+    const ownerPath = ranked[0]?.[0] || target.path;
+    if (ranked.length > 1) {
+      const dropped = ranked.slice(1).reduce((n, [, c]) => n + c, 0);
+      warn(`"${identifier}": logical query subject spans ${ranked.length} physical tables; sourcing from ${leafOf(ownerPath)} and DROPPING ${dropped} item(s) from the others. Re-author as a sql source or split the subject if those columns are needed.`);
+    }
+    const keptOwner = ownerPath;
+    const usable = items.filter((it) => !it.__owner || it.__owner === keptOwner);
+    usable.forEach((it) => {
+      delete it.__owner;
+    });
+    const owner = resolve(index, keptOwner) || target;
+    const phys = readPhysical(owner, dataSources, warn, identifier);
+    const subject = {
+      identifier,
+      label: label2,
+      items: usable,
+      ...phys
+    };
+    const grain = readDeterminantGrain(owner.el);
+    if (grain.length) subject.grain = grain;
+    const filters = readEmbeddedFilters(qsEl, owner.el);
+    if (filters.length) {
+      subject.filters = filters;
+      warn(`"${identifier}": ${filters.length} embedded Framework Manager filter(s) (${filters.map((f) => f.name).join(", ")}) are NOT applied to the Sigma model \u2014 re-create as data-model filters if they are governance rules.`);
+    }
+    const alias = [...aliasVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (alias) {
+      subject.aliasOf = leafOf(keptOwner);
+      claimAnchor(alias, identifier);
+    }
+    claimAnchor(viaPath, identifier);
+    claimAnchor(target.path, identifier);
+    if (!alias) claimAnchor(keptOwner, identifier);
+    querySubjects.push(subject);
+    byIdentifier.set(identifier, subject);
+  }
+  const relationships = [];
+  for (const relEl of allRelationships(root)) {
+    const leftPath = text(relEl.left?.refobj?.[0] ?? relEl.left?.refobj).trim();
+    const rightPath = text(relEl.right?.refobj?.[0] ?? relEl.right?.refobj).trim();
+    const leftIr = anchorToIr.get(leftPath);
+    const rightIr = anchorToIr.get(rightPath);
+    if (!leftIr || !rightIr || leftIr === rightIr) continue;
+    const rawExpr = text(relEl.expression) || (typeof relEl.expression === "string" ? relEl.expression : "");
+    const parsed = parseFmJoin(rawExpr, leftPath, rightPath);
+    if (!parsed.keys.length) {
+      warn(`relationship ${leafOf(leftPath)} \u2192 ${leafOf(rightPath)}: join condition is not a simple equi-join (${parsed.reason}) \u2014 add it by hand in Sigma.`);
+      continue;
+    }
+    if (parsed.nonEqui) {
+      warn(`relationship ${leafOf(leftPath)} \u2192 ${leafOf(rightPath)}: extra non-equality condition(s) dropped \u2014 Sigma relationships are equi-joins only. Verify the result set.`);
+    }
+    relationships.push({
+      left: leftIr,
+      right: rightIr,
+      leftKey: parsed.keys[0].leftKey,
+      rightKey: parsed.keys[0].rightKey,
+      keys: parsed.keys,
+      leftCard: text(relEl.left?.maxcard) || void 0,
+      rightCard: text(relEl.right?.maxcard) || void 0
+    });
+  }
+  const securityFilters = [];
+  for (const qs of querySubjects) {
+    for (const macro of String(qs.sql || "").match(RE_MACRO) || []) {
+      securityFilters.push({
+        type: "framework-manager-macro",
+        subject: qs.identifier,
+        name: "runtime macro in query subject SQL",
+        expression: macro
+      });
+    }
+  }
+  for (const sv of asArray(project?.securityViews?.securityView)) {
+    const sets = asArray(sv.definition?.set);
+    securityFilters.push({
+      type: "framework-manager-security-view",
+      name: nameOf(sv),
+      expression: sets.map((s) => `${s["@_includeRule"] || "include"}: ${asArray(s.refobj).map((r) => text(r)).join(", ")}`).join(" | ")
+    });
+  }
+  const paramMaps = asArray(project?.parameterMaps?.parameterMap).map((p) => nameOf(p)).filter(Boolean);
+  if (paramMaps.length) {
+    warn(`model defines ${paramMaps.length} parameter map(s) (${paramMaps.join(", ")}) \u2014 session-parameter substitution is NOT translated. Any SQL or filter depending on them needs manual review.`);
+  }
+  const dmr = asArray(root?.namespace).reduce((n, ns) => n + countDimensions(ns), 0);
+  if (dmr) {
+    warn(`model defines ${dmr} DMR dimension(s) (hierarchies/levels) \u2014 dimensional metadata is NOT converted; Sigma has no OLAP hierarchy equivalent. Re-author drill paths in the workbook.`);
+  }
+  return { name: `${modelName} \u2014 ${scopeName}`, querySubjects, relationships, securityFilters, ingestWarnings };
+}
+function firstViaAlias(raw) {
+  RE_VIA.lastIndex = 0;
+  const m = RE_VIA.exec(String(raw || ""));
+  if (!m) return null;
+  const inner = [...String(m[1]).matchAll(/<refobj>([\s\S]*?)<\/refobj>/gi)].map((x) => x[1].trim());
+  return inner.length > 1 ? inner[0] : null;
+}
+function readPhysical(owner, dataSources, warn, subjectName) {
+  const dbQuery = owner.el?.definition?.dbQuery;
+  if (!dbQuery) return { table: leafOf(owner.path) };
+  const sqlRaw = text(dbQuery.sql) || (typeof dbQuery.sql === "string" ? dbQuery.sql : "");
+  const sql = decodeEntities(String(sqlRaw).replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+  const dsRef = text(dbQuery.sources?.dataSourceRef);
+  const dsName = leafOf(dsRef);
+  const ds = dataSources.get(dsName);
+  const simple = RE_SIMPLE_SELECT.exec(sql);
+  if (simple) {
+    const table = simple[2];
+    return { table, database: ds?.catalog, schema: ds?.schema };
+  }
+  let statement = sql;
+  statement = statement.replace(/\[([^\]]+)\]\s*\.\s*\[?([\w$]+)\]?/g, (m0, dsn, tbl) => {
+    const d = dataSources.get(String(dsn));
+    if (!d) return m0;
+    return [d.catalog, d.schema, tbl].filter(Boolean).join(".");
+  });
+  if (RE_MACRO.test(statement)) {
+    RE_MACRO.lastIndex = 0;
+    warn(`"${subjectName}": custom SQL contains a Cognos runtime macro \u2014 it is passed through VERBATIM and will not execute in Sigma. Replace it (e.g. $account.personalInfo.email \u2192 CurrentUserEmail()) before posting.`);
+  }
+  return { sql: statement };
+}
+function readDeterminantGrain(el) {
+  const out = [];
+  for (const d of asArray(el?.determinants?.determinant ?? el?.determinant)) {
+    if (text(d.identifiesRow) !== "true" && !asArray(d.key?.refobj).length) continue;
+    for (const r of asArray(d.key?.refobj)) out.push(leafOf(text(r)));
+  }
+  return [...new Set(out.filter(Boolean))];
+}
+function readEmbeddedFilters(...els) {
+  const out = [];
+  for (const el of els) {
+    for (const fd of asArray(el?.filters?.filterDefinition)) {
+      const raw = text(fd.expression) || (typeof fd.expression === "string" ? fd.expression : "");
+      out.push({
+        name: text(fd.displayName) || nameOf(fd) || "filter",
+        expression: expressionText(raw),
+        apply: fd["@_apply"] || void 0
+      });
+    }
+  }
+  return out;
+}
+function allRelationships(node, out = []) {
+  for (const r of asArray(node?.relationship)) out.push(r);
+  for (const tag of ["namespace", "folder", "queryItemFolder"]) {
+    for (const child of asArray(node?.[tag])) allRelationships(child, out);
+  }
+  return out;
+}
+function countDimensions(node) {
+  let n = asArray(node?.dimension).length;
+  for (const tag of ["namespace", "folder"]) {
+    for (const child of asArray(node?.[tag])) n += countDimensions(child);
+  }
+  return n;
+}
+function parseFmJoin(raw, leftPath, rightPath) {
+  const keys = [];
+  let nonEqui = false;
+  let reason = "no equality condition found";
+  const body = String(raw || "");
+  if (/\bor\b/i.test(body.replace(/<[^>]*>/g, " "))) {
+    return { keys: [], nonEqui: true, reason: "contains OR" };
+  }
+  const conds = body.split(/\band\b/i);
+  for (const cond of conds) {
+    const sides = cond.split("=");
+    if (sides.length !== 2) {
+      if (cond.trim()) nonEqui = true;
+      continue;
+    }
+    const a = sideRef(sides[0]);
+    const b = sideRef(sides[1]);
+    if (!a || !b) {
+      nonEqui = true;
+      continue;
+    }
+    const aIsLeft = belongsTo(a, leftPath);
+    const bIsLeft = belongsTo(b, leftPath);
+    if (aIsLeft && !bIsLeft) keys.push({ leftKey: a.column, rightKey: b.column });
+    else if (bIsLeft && !aIsLeft) keys.push({ leftKey: b.column, rightKey: a.column });
+    else keys.push({ leftKey: a.column, rightKey: b.column });
+  }
+  if (keys.length) reason = "";
+  return { keys, nonEqui, reason };
+}
+function sideRef(chunk) {
+  const refs = expressionRefs(chunk);
+  if (!refs.length) return null;
+  const alias = firstViaAlias(chunk);
+  const item = refs[refs.length - 1];
+  return { owner: alias || parentOf(item), column: leafOf(item) };
+}
+function belongsTo(side, endpointPath) {
+  if (!side.owner || !endpointPath) return false;
+  return side.owner === endpointPath || leafOf(side.owner) === leafOf(endpointPath);
+}
+
 // cli.ts
 function loadLearnedRules() {
   try {
@@ -5738,7 +6346,9 @@ var opt = (k, d = "") => {
   return i >= 0 ? args[i + 1] : d;
 };
 if (!file) {
-  console.error("usage: cli.ts <module.json|report.xml> [--connection X --database DB --schema S --dm ID]");
+  console.error("usage: cli.ts <module.json|report.xml|fm-model.xml> [--connection X --database DB --schema S --dm ID]");
+  console.error("       Framework Manager: cli.ts <fm-model.xml> --list");
+  console.error('                          cli.ts <fm-model.xml> --subject-area "<name>" [--connection X]');
   process.exit(1);
 }
 function loadMetrics() {
@@ -5752,12 +6362,29 @@ function loadMetrics() {
   }
 }
 var xml = readFileSync(file, "utf8");
-var isReport = file.endsWith(".xml") || xml.trimStart().startsWith("<");
-var res = isReport ? convertCognosReportToSigma(xml, { dataModelId: opt("dm", "<DM_ID>"), metrics: loadMetrics() }) : convertCognosToSigma(xml, { connectionId: opt("connection", "<CONNECTION_ID>"), database: opt("database"), schema: opt("schema"), learnedRules: loadLearnedRules() });
+var isFm = isFrameworkManagerXml(xml);
+if (isFm && args.includes("--list")) {
+  const areas = listFrameworkManagerSubjectAreas(xml);
+  process.stdout.write(`${areas.length} subject area(s) \u2014 convert one at a time with --subject-area:
+
+`);
+  for (const a of areas) process.stdout.write(`  ${String(a.objects).padStart(5)}  ${a.name}
+`);
+  process.stdout.write(`
+  (or --all for the whole presentation layer \u2014 large)
+`);
+  process.exit(0);
+}
+var isReport = !isFm && (file.endsWith(".xml") || xml.trimStart().startsWith("<"));
+var res = isFm ? convertCognosIR(
+  normalizeCognosFrameworkManager(xml, { subjectArea: opt("subject-area"), all: args.includes("--all") }),
+  { connectionId: opt("connection", "<CONNECTION_ID>"), database: opt("database"), schema: opt("schema"), learnedRules: loadLearnedRules() }
+) : isReport ? convertCognosReportToSigma(xml, { dataModelId: opt("dm", "<DM_ID>"), metrics: loadMetrics() }) : convertCognosToSigma(xml, { connectionId: opt("connection", "<CONNECTION_ID>"), database: opt("database"), schema: opt("schema"), learnedRules: loadLearnedRules() });
 var payload = isReport ? res.workbook : res.model;
+var label = isReport ? "report\u2192workbook" : isFm ? "framework-manager\u2192data-model" : "module\u2192data-model";
 process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
 console.error(`
-[${isReport ? "report\u2192workbook" : "module\u2192data-model"}] stats: ${JSON.stringify(res.stats)}`);
+[${label}] stats: ${JSON.stringify(res.stats)}`);
 var security = res.security;
 if (security?.length) {
   const out = opt("security-out", "security.json");

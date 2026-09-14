@@ -1,10 +1,11 @@
 /**
  * IBM Cognos Analytics → Sigma Data Model converter.   [LOCAL / WIP — not registered]
  *
- * MVP Phase 1 (per research/cognos-to-sigma.md): **Data Module JSON → Sigma DM** —
- * the cleanest, highest-leverage Cognos input (CA 11.x's modern semantic layer,
- * `GET /modules/{id}`). Mirrors the bobj.ts pattern: a tolerant normalizer maps the
- * source into a single IR, and `convertCognosIR()` emits the Sigma data model.
+ * Ingests **Data Module JSON** — CA 11.x's modern semantic layer, `GET /modules/{id}` and
+ * the cleanest Cognos input. Mirrors the bobj.ts pattern: a tolerant normalizer maps the
+ * source into a single IR, and `convertCognosIR()` emits the Sigma data model. That IR and
+ * emitter are SHARED — `cognos-fm.ts` reuses them for Framework Manager, so any change to
+ * `convertCognosIR()` or `translateCognosExpr()` affects both ingests.
  *
  *   query subject (dbQuery)      → Sigma warehouse-table element
  *   query item (attribute)       → column   (business label preserved via `name`)
@@ -17,8 +18,12 @@
  * Hard cases (running-total, moving-*, rank, master-detail) emit a warning and pass
  * through, matching the "flag, never fake" philosophy.
  *
- * NOT yet covered (research long-tail): Framework Manager .cpf, report-spec XML
- * (workbook side), dashboards, sub-queries, RAVE2 charts.
+ * SIBLING INGESTS sharing this file's IR and `convertCognosIR()`:
+ *   cognos-fm.ts      Framework Manager project XML (the legacy semantic layer)
+ *   cognos-report.ts  report-spec XML → Sigma workbook (emits a workbook, not a DM)
+ *
+ * NOT covered: Cognos dashboards (exploration JSON) — hand-authored per
+ * refs/dashboard-migration.md.
  */
 
 import {
@@ -45,6 +50,11 @@ export interface CognosQuerySubject {
   schema?: string;
   table?: string;              // physical table name (defaults to identifier)
   items: CognosItem[];
+  // ── Framework Manager additions (unused by the Data Module path) ──
+  sql?: string;                // custom SQL → source.kind 'sql' (+ statement) instead of a table
+  aliasOf?: string;            // role-playing alias → the physical subject it aliases
+  grain?: string[];            // <determinant><key> — declared uniqueness / grain
+  filters?: Array<{ name: string; expression: string; apply?: string }>;  // embedded FM filters
 }
 export interface CognosRelationship {
   left: string;                // query-subject identifier
@@ -55,6 +65,8 @@ export interface CognosRelationship {
   rightCard?: string;          // right maxcard
   expression?: string;         // fallback: "[A].[K] = [B].[K]" (authored-fixture shape)
   cardinality?: string;
+  // Composite (multi-condition) join. When set, takes precedence over leftKey/rightKey.
+  keys?: Array<{ leftKey: string; rightKey: string }>;
 }
 export interface CognosSecurityFilter {
   type: string;                // 'data-module-security-filter'
@@ -68,6 +80,13 @@ export interface CognosModule {
   querySubjects: CognosQuerySubject[];
   relationships: CognosRelationship[];
   securityFilters: CognosSecurityFilter[];
+  /**
+   * Findings raised while READING the source (unresolved shortcuts, dropped partitions,
+   * runtime macros, untranslated security). Carried on the IR so they reach
+   * `ConversionResult.warnings` no matter who calls the converter — several of these are
+   * safety-critical and must not be lost when the library is used directly.
+   */
+  ingestWarnings?: string[];
 }
 export interface CognosConvertOptions {
   connectionId?: string;
@@ -212,23 +231,35 @@ interface ElemCtx {
 export function convertCognosIR(model: CognosModule, options: CognosConvertOptions = {}): ConversionResult {
   resetIds();
   const { connectionId = '<CONNECTION_ID>', database: dbOverride = '', schema: schOverride = '', modelName } = options;
-  const warnings: string[] = [];
+  // Ingest-time findings lead — they describe what the SOURCE could not express, which
+  // frames every translation warning that follows.
+  const warnings: string[] = [...(model.ingestWarnings || [])];
   const ctxByKey = new Map<string, ElemCtx>();
 
-  // Pass 1 — one Sigma element per query subject (physical table).
+  // Pass 1 — one Sigma element per query subject (physical table, or a sql source when
+  // the subject is defined by a query rather than a table).
   for (const qs of model.querySubjects) {
     const key = qs.identifier.toUpperCase();
-    const path: string[] = [];
-    const db = dbOverride || qs.database || '';
-    const sch = schOverride || qs.schema || '';
-    if (db) path.push(db);
-    if (sch) path.push(sch);
-    const tableTail = (qs.table || qs.identifier).toUpperCase();
-    path.push(tableTail);
+    let source: Record<string, any>;
+    let tableTail: string;
+    if (qs.sql) {
+      // Query-backed subject → a `sql` source. Sigma resolves a sql source's columns under
+      // the literal prefix `Custom SQL`, NOT the element name — so that is the column tail.
+      source = { connectionId, kind: 'sql', statement: qs.sql };
+      tableTail = 'Custom SQL';
+    } else {
+      const path: string[] = [];
+      const db = dbOverride || qs.database || '';
+      const sch = schOverride || qs.schema || '';
+      if (db) path.push(db);
+      if (sch) path.push(sch);
+      tableTail = (qs.table || qs.identifier).toUpperCase();
+      path.push(tableTail);
+      source = { connectionId, kind: 'warehouse-table', path };
+    }
     const element: SigmaElement = {
       id: sigmaShortId(), kind: 'table', name: sigmaDisplayName(qs.identifier),
-      source: { connectionId, kind: 'warehouse-table', path },
-      columns: [], order: [],
+      source, columns: [], order: [],
     };
     ctxByKey.set(key, { element, columns: [], metrics: [], order: [], colIdByName: new Map(), tableTail });
   }
@@ -257,8 +288,10 @@ export function convertCognosIR(model: CognosModule, options: CognosConvertOptio
       if (item.isCalculation && item.expression) {
         const { formula, warnings: w } = translateCognosExpr(applyLearnedRules(item.expression, options.learnedRules), qs, ensureRawCol, ctx);
         w.forEach(x => warnings.push(`"${qs.identifier}.${item.identifier}": ${x}`));
-        // a calc that aggregates → metric, else calculated column
-        if (/\b(Sum|Avg|Count|Min|Max|.*Over)\(/.test(formula)) {
+        // A calc that aggregates → metric, else calculated column. Window calcs
+        // (Cumulative* / Moving* / Rank) are deliberately NOT metrics — they are
+        // row-level window formulas and belong in a calculated column.
+        if (/\b(Sum|Avg|Count|CountDistinct|Min|Max)\(/.test(formula) && !/\b(Cumulative|Moving|Rank|RowNumber|Lag|Lead|PercentOfTotal)\w*\(/.test(formula)) {
           const m: SigmaMetric = { id: sigmaShortId(), name: dispName, formula };
           const fmt = inferSigmaFormat(formula, dispName); if (fmt) (m as any).format = fmt;
           ctx.metrics.push(m);
@@ -289,6 +322,10 @@ export function convertCognosIR(model: CognosModule, options: CognosConvertOptio
   for (const rel of model.relationships) {
     // Real CA shape gives join columns directly; fall back to parsing an expression.
     let leftTable = rel.left, rightTable = rel.right, leftCol = rel.leftKey, rightCol = rel.rightKey;
+    // A composite join supplies its pairs directly; seed the single-key vars from the first.
+    if ((!leftCol || !rightCol) && rel.keys?.length) {
+      leftCol = rel.keys[0].leftKey; rightCol = rel.keys[0].rightKey;
+    }
     if (!leftCol || !rightCol) {
       const parsed = parseJoinExpr(rel.expression);
       if (!parsed) { warnings.push(`Relationship ${rel.left}→${rel.right}: no join columns and expression "${trunc(rel.expression)}" not a simple equi-join — add manually in Sigma.`); continue; }
@@ -297,17 +334,24 @@ export function convertCognosIR(model: CognosModule, options: CognosConvertOptio
     // Sigma relationship source = the "many" side. Flip if the RIGHT side is many.
     const rightIsMany = /many|\bn\b|\*/.test(rel.rightCard || '');
     const leftIsMany = /many|\bn\b|\*/.test(rel.leftCard || '');
-    if (rightIsMany && !leftIsMany) {
+    const flipped = rightIsMany && !leftIsMany;
+    if (flipped) {
       [leftTable, leftCol, rightTable, rightCol] = [rightTable, rightCol, leftTable, leftCol];
     }
     const srcKey = leftTable.toUpperCase(), tgtKey = rightTable.toUpperCase();
     const srcCtx = ctxByKey.get(srcKey), tgtCtx = ctxByKey.get(tgtKey);
     if (!srcCtx || !tgtCtx) { warnings.push(`Relationship ${srcKey}→${tgtKey}: a query subject is missing — relationship skipped.`); continue; }
-    const srcColId = ensureRawCol(srcCtx, srcKey, leftCol!, true);
-    const tgtColId = ensureRawCol(tgtCtx, tgtKey, rightCol!, true);
+    // Composite join: every condition becomes a key pair on the one relationship. `flipped`
+    // tracks whether the many-side swap above also swapped each pair's sides.
+    const pairs = (rel.keys && rel.keys.length)
+      ? rel.keys.map((k) => (flipped ? { l: k.rightKey, r: k.leftKey } : { l: k.leftKey, r: k.rightKey }))
+      : [{ l: leftCol!, r: rightCol! }];
+    const keys = pairs.map((p) => ({
+      sourceColumnId: ensureRawCol(srcCtx, srcKey, p.l, true),
+      targetColumnId: ensureRawCol(tgtCtx, tgtKey, p.r, true),
+    }));
     (srcCtx.element.relationships ||= []).push({
-      id: sigmaShortId(), targetElementId: tgtCtx.element.id,
-      keys: [{ sourceColumnId: srcColId, targetColumnId: tgtColId }], name: tgtKey,
+      id: sigmaShortId(), targetElementId: tgtCtx.element.id, keys, name: tgtKey,
     });
   }
 
@@ -351,7 +395,17 @@ const AGG_MAP: Record<string, string> = {
   count: 'Count', 'count distinct': 'CountDistinct',
   maximum: 'Max', max: 'Max', minimum: 'Min', min: 'Min',
 };
-const OVER_MAP: Record<string, string> = { total: 'SumOver', sum: 'SumOver', average: 'AvgOver', count: 'CountOver', maximum: 'MaxOver', minimum: 'MinOver' };
+// Cognos window/running calc → Sigma-NATIVE window function. These names are
+// live-verified to compile to real warehouse OVER(...) in a DM-element calc column.
+// The `*Over` family (SumOver / CountOver / RankOver / …) is deliberately ABSENT: it is
+// not a valid spec formula and hard-rejects a DM-spec POST with 400.
+const WINDOW_MAP: Record<string, string> = {
+  'running-total': 'CumulativeSum', 'running-count': 'CumulativeCount',
+  'running-average': 'CumulativeAvg', 'running-maximum': 'CumulativeMax',
+  'running-minimum': 'CumulativeMin',
+  'moving-total': 'MovingSum', 'moving-average': 'MovingAvg',
+  rank: 'Rank',
+};
 
 function aggFn(agg: string, inner: string): string {
   const fn = AGG_MAP[agg] || 'Sum';
@@ -364,7 +418,34 @@ export function translateCognosExpr(
   const warnings: string[] = [];
   let f = (expr || '').trim();
 
-  // Flag unsupported window/running constructs up front (pass through, warn).
+  // Cognos window/running calcs → the Sigma-NATIVE window family. The `*Over` names
+  // (SumOver / CountOver / RankOver / …) are NOT spec-valid: a DM-spec POST hard-rejects
+  // them with 400 and a workbook calc column resolves them to `Unknown function`. The
+  // native family below is live-verified to compile to real warehouse OVER(...).
+  // See plugins/sigma-authoring/skills/sigma-data-models/reference/calc-columns.md.
+  // NEVER emit an `*Over` name from this translator.
+  //
+  // Cognos partitions these with a trailing `for <dims>`; the native forms take no
+  // partition argument, so any `for` scope is dropped and flagged rather than faked.
+  f = f.replace(
+    /\b(running-total|running-count|running-average|running-maximum|running-minimum|moving-total|moving-average|rank)\s*\(([^()]*)\)/gi,
+    (_m, fn, inner) => {
+      const native = WINDOW_MAP[lc(fn)];
+      if (!native) return _m;
+      const [args, scope] = String(inner).split(/\s+for\s+/i);
+      if (scope) {
+        warnings.push(`"${fn}( … for ${scope.trim()})" — translated to ${native}(), but the "for" partition is ` +
+          `DROPPED (Sigma's native window functions take no partition argument). Re-author as a grouped element ` +
+          `or push the window into a sql source if the partition matters.`);
+      }
+      if (/^moving-/i.test(fn)) {
+        warnings.push(`"${fn}" → ${native}(): verify the window-size argument order against Sigma's signature.`);
+      }
+      return `${native}(${args.trim()})`;
+    });
+
+  // Constructs with no native analog at all, and any window call the regex above could not
+  // reach (nested parens in the arguments) — pass through and warn. Never silently fake.
   for (const bad of ['running-total', 'running-count', 'running-average', 'running-difference', 'moving-total', 'moving-average', 'rank', 'percentile', 'quantile', 'tertile']) {
     if (new RegExp(`\\b${bad}\\b`, 'i').test(f)) warnings.push(`uses Cognos "${bad}" (window/running calc) — no clean single-column Sigma analog; needs manual authoring (window function).`);
   }
@@ -396,12 +477,19 @@ export function translateCognosExpr(
   }
   if (/\bcase\b[\s\S]*\bwhen\b/i.test(f)) warnings.push('a CASE expression could not be fully translated (nested or non-standard) — review/author manually.');
 
-  // Aggregations with optional "for" scope: total([X] for [A],[B])
+  // Aggregations with a "for" scope: total([X] for [A],[B]).
+  // Cognos scopes the aggregate to a partition. Sigma has NO spec-valid partitioned
+  // aggregate — the `*Over` family this used to emit 400s on a DM-spec POST (see the
+  // window-function note above). Emit the plain aggregate and flag the dropped partition,
+  // rather than shipping a formula that cannot be posted.
   f = f.replace(/\b(total|sum|average|count|maximum|minimum)\s*\(\s*([^()]*?)\s+for\s+([^()]*)\)/gi,
     (_m, fn, inner, scope) => {
-      const over = OVER_MAP[lc(fn)] || 'SumOver';
-      const dims = scope.split(',').map((s: string) => s.trim()).join(', ');
-      return `${over}(${inner.trim()}, ${dims})`;
+      const agg = AGG_MAP[lc(fn)] || 'Sum';
+      const dims = scope.split(',').map((s: string) => s.trim()).filter(Boolean).join(', ');
+      warnings.push(`"${fn}( … for ${dims})" scoped aggregate — Sigma has no spec-valid partitioned aggregate, ` +
+        `so this emits ${agg}(…) and the "for ${dims}" partition is DROPPED. Re-author as a grouped element, ` +
+        `a model metric, or a sql source if the partition matters.`);
+      return `${agg}(${inner.trim()})`;
     });
   // Plain aggregations: total([X]) → Sum([X])
   f = f.replace(/\b(total|sum|average|count|maximum|minimum)\s*\(/gi, (_m, fn) => `${AGG_MAP[lc(fn)] || 'Sum'}(`);
@@ -449,7 +537,9 @@ export function translateCognosExpr(
   f = f.replace(/'([^']*)'/g, '"$1"');  // Cognos single-quoted strings → Sigma double-quoted
 
   // Unknown bareword(...) functions → warn (kept as-is for manual review)
-  const known = /\b(If|Switch|Sum|Avg|Count|CountDistinct|Min|Max|SumOver|AvgOver|CountOver|MinOver|MaxOver|DateAdd|DateDiff|DatePart|Mid|Upper|Lower|Trim|Coalesce|Text|RegexpReplace|Replace|Abs|Round|Floor|Ceiling|Sqrt|Ln|Mod|Power)\b/;
+  // Functions this translator is allowed to emit. The Sigma-native window family is
+  // listed; the `*Over` names are NOT (they 400 on a DM-spec POST — see WINDOW_MAP).
+  const known = /\b(If|Switch|Sum|Avg|Count|CountDistinct|Min|Max|CumulativeSum|CumulativeAvg|CumulativeCount|CumulativeMax|CumulativeMin|MovingSum|MovingAvg|MovingMax|MovingMin|Rank|RankDense|RowNumber|Lag|Lead|PercentOfTotal|DateAdd|DateDiff|DatePart|Mid|Upper|Lower|Trim|Coalesce|Text|RegexpReplace|Replace|Abs|Round|Floor|Ceiling|Sqrt|Ln|Mod|Power)\b/;
   for (const m of f.matchAll(/\b([a-z][a-z0-9_-]*)\s*\(/gi)) {
     if (!known.test(m[1]) && !/^(and|or|not|in|like|between|then|else|end|case|when)$/i.test(m[1])) {
       warnings.push(`function "${m[1]}()" has no confirmed Sigma mapping — review/translate manually.`);

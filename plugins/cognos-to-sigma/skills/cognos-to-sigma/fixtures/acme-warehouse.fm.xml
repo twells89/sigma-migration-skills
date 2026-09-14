@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Synthetic IBM Cognos Framework Manager project XML (BMT model specification).
+
+  Hand-authored for the converter's tests — invented company, schema, tables and columns.
+  It is deliberately small but exercises every FM construct the ingest handles:
+
+    * four-layer model (Database / Logical / Presentation / Dimension)
+    * folders (path-transparent) nesting query subjects
+    * dbQuery with a simple `Select * From [ds].TABLE` passthrough
+    * dbQuery with genuine custom SQL, including a runtime macro
+    * modelQuery logical subjects whose items are refobj / refobjViaShortcut passthroughs
+    * role-playing dimension aliases (one DATE_DIM exposed as order date + ship date)
+    * calculations: arithmetic, searched CASE, a `total(... for ...)` scoped aggregate,
+      and a `running-total(...)` window calc
+    * a determinant declaring grain
+    * an embedded filter definition
+    * a composite (two-condition) relationship
+    * security views, packages and a parameter map
+-->
+<project queryMode="dynamic" xmlns="http://www.developer.cognos.com/schemas/bmt/60/12">
+  <name>Project</name>
+  <locales><locale>en</locale></locales>
+  <defaultLocale>en</defaultLocale>
+
+  <namespace>
+    <name locale="en">AcmeDW</name>
+
+    <!-- ══ Database Layer — physical tables and their joins ══════════════════ -->
+    <namespace>
+      <name locale="en">Database Layer</name>
+
+      <folder>
+        <name locale="en">_DIMENSIONS</name>
+
+        <querySubject status="valid">
+          <name locale="en">DATE_DIM</name>
+          <definition><dbQuery>
+            <sources><dataSourceRef>[].[dataSources].[AcmeWarehouse]</dataSourceRef></sources>
+            <sql type="cognos">Select * From [AcmeWarehouse].DATE_DIM as DATE_DIM</sql>
+            <tableType>table</tableType>
+          </dbQuery></definition>
+          <queryItem><name locale="en">DATE_KEY</name><externalName>DATE_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">CALENDAR_DATE</name><externalName>CALENDAR_DATE</externalName><usage>attribute</usage><datatype>date</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">CALENDAR_YEAR</name><externalName>CALENDAR_YEAR</externalName><usage>attribute</usage><datatype>int16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">CALENDAR_MONTH_NAME</name><externalName>CALENDAR_MONTH_NAME</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+
+        <querySubject status="valid">
+          <name locale="en">CUSTOMER_DIM</name>
+          <definition><dbQuery>
+            <sources><dataSourceRef>[].[dataSources].[AcmeWarehouse]</dataSourceRef></sources>
+            <sql type="cognos">Select * From [AcmeWarehouse].CUSTOMER_DIM as CUSTOMER_DIM</sql>
+            <tableType>table</tableType>
+          </dbQuery></definition>
+          <queryItem><name locale="en">CUSTOMER_KEY</name><externalName>CUSTOMER_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">CUSTOMER_NAME</name><externalName>CUSTOMER_NAME</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">CUSTOMER_TIER</name><externalName>CUSTOMER_TIER</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">REGION_CODE</name><externalName>REGION_CODE</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">INTERNAL_LOAD_ID</name><externalName>INTERNAL_LOAD_ID</externalName><usage>attribute</usage><datatype>int64</datatype><hidden>true</hidden><regularAggregate>unsupported</regularAggregate></queryItem>
+          <determinants>
+            <determinant>
+              <name>CUSTOMER_KEY</name>
+              <identifiesRow>true</identifiesRow>
+              <key><refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_KEY]</refobj></key>
+              <attributes>
+                <refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_NAME]</refobj>
+                <refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_TIER]</refobj>
+              </attributes>
+            </determinant>
+          </determinants>
+        </querySubject>
+
+        <querySubject status="valid">
+          <name locale="en">PRODUCT_DIM</name>
+          <definition><dbQuery>
+            <sources><dataSourceRef>[].[dataSources].[AcmeWarehouse]</dataSourceRef></sources>
+            <sql type="cognos">Select * From [AcmeWarehouse].PRODUCT_DIM as PRODUCT_DIM</sql>
+            <tableType>table</tableType>
+          </dbQuery></definition>
+          <queryItem><name locale="en">PRODUCT_KEY</name><externalName>PRODUCT_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">PRODUCT_NAME</name><externalName>PRODUCT_NAME</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">PRODUCT_CATEGORY</name><externalName>PRODUCT_CATEGORY</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+      </folder>
+
+      <folder>
+        <name locale="en">SALES</name>
+
+        <querySubject status="valid">
+          <name locale="en">SALES_FACT</name>
+          <definition><dbQuery>
+            <sources><dataSourceRef>[].[dataSources].[AcmeWarehouse]</dataSourceRef></sources>
+            <sql type="cognos">Select * From [AcmeWarehouse].SALES_FACT as SALES_FACT</sql>
+            <tableType>table</tableType>
+          </dbQuery></definition>
+          <queryItem><name locale="en">SALES_KEY</name><externalName>SALES_KEY</externalName><usage>identifier</usage><datatype>int64</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">ORDER_DATE_KEY</name><externalName>ORDER_DATE_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">SHIP_DATE_KEY</name><externalName>SHIP_DATE_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">CUSTOMER_KEY</name><externalName>CUSTOMER_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">PRODUCT_KEY</name><externalName>PRODUCT_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">ORDER_QTY</name><externalName>ORDER_QTY</externalName><usage>fact</usage><datatype>int32</datatype><regularAggregate>sum</regularAggregate></queryItem>
+          <queryItem><name locale="en">NET_AMOUNT</name><externalName>NET_AMOUNT</externalName><usage>fact</usage><datatype>decimal</datatype><regularAggregate>sum</regularAggregate></queryItem>
+          <queryItem><name locale="en">DISCOUNT_AMOUNT</name><externalName>DISCOUNT_AMOUNT</externalName><usage>fact</usage><datatype>decimal</datatype><regularAggregate>sum</regularAggregate></queryItem>
+        </querySubject>
+
+        <!-- Role-playing aliases: ONE physical DATE_DIM exposed twice. -->
+        <shortcut>
+          <name locale="en">SALES_ORDER_DATE</name>
+          <refobj>[Database Layer].[DATE_DIM]</refobj>
+          <targetType>querySubject</targetType>
+          <treatAs>alias</treatAs>
+        </shortcut>
+        <shortcut>
+          <name locale="en">SALES_SHIP_DATE</name>
+          <refobj>[Database Layer].[DATE_DIM]</refobj>
+          <targetType>querySubject</targetType>
+          <treatAs>alias</treatAs>
+        </shortcut>
+
+        <relationship status="valid">
+          <name>SALES_ORDER_DATE &lt;-&gt; SALES_FACT</name>
+          <expression><refobjViaShortcut><refobj>[Database Layer].[SALES_ORDER_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[DATE_KEY]</refobj></refobjViaShortcut>=<refobj>[Database Layer].[SALES_FACT].[ORDER_DATE_KEY]</refobj></expression>
+          <left><refobj>[Database Layer].[SALES_ORDER_DATE]</refobj><mincard>one</mincard><maxcard>one</maxcard></left>
+          <right><refobj>[Database Layer].[SALES_FACT]</refobj><mincard>one</mincard><maxcard>many</maxcard></right>
+        </relationship>
+
+        <relationship status="valid">
+          <name>SALES_SHIP_DATE &lt;-&gt; SALES_FACT</name>
+          <expression><refobjViaShortcut><refobj>[Database Layer].[SALES_SHIP_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[DATE_KEY]</refobj></refobjViaShortcut>=<refobj>[Database Layer].[SALES_FACT].[SHIP_DATE_KEY]</refobj></expression>
+          <left><refobj>[Database Layer].[SALES_SHIP_DATE]</refobj><mincard>one</mincard><maxcard>one</maxcard></left>
+          <right><refobj>[Database Layer].[SALES_FACT]</refobj><mincard>one</mincard><maxcard>many</maxcard></right>
+        </relationship>
+
+        <relationship status="valid">
+          <name>CUSTOMER_DIM &lt;-&gt; SALES_FACT</name>
+          <expression><refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_KEY]</refobj>=<refobj>[Database Layer].[SALES_FACT].[CUSTOMER_KEY]</refobj></expression>
+          <left><refobj>[Database Layer].[CUSTOMER_DIM]</refobj><mincard>one</mincard><maxcard>one</maxcard></left>
+          <right><refobj>[Database Layer].[SALES_FACT]</refobj><mincard>one</mincard><maxcard>many</maxcard></right>
+        </relationship>
+
+        <relationship status="valid">
+          <name>PRODUCT_DIM &lt;-&gt; SALES_FACT</name>
+          <expression><refobj>[Database Layer].[PRODUCT_DIM].[PRODUCT_KEY]</refobj>=<refobj>[Database Layer].[SALES_FACT].[PRODUCT_KEY]</refobj></expression>
+          <left><refobj>[Database Layer].[PRODUCT_DIM]</refobj><mincard>one</mincard><maxcard>one</maxcard></left>
+          <right><refobj>[Database Layer].[SALES_FACT]</refobj><mincard>one</mincard><maxcard>many</maxcard></right>
+        </relationship>
+      </folder>
+
+      <folder>
+        <name locale="en">ENTITLEMENT</name>
+
+        <!-- Genuine custom SQL + a Cognos runtime macro (the FM row-level-security idiom). -->
+        <querySubject status="valid">
+          <name locale="en">V_CUSTOMER_ENTITLEMENT</name>
+          <definition><dbQuery>
+            <sources><dataSourceRef>[].[dataSources].[AcmeWarehouse]</dataSourceRef></sources>
+            <sql type="cognos">Select ENT.CUSTOMER_KEY, ENT.REGION_CODE, ENT.ENTITLEMENT_LEVEL From [AcmeWarehouse].V_CUSTOMER_ENTITLEMENT ENT Where UPPER(#sq($account.personalInfo.email)#) = ENT.USER_EMAIL</sql>
+            <tableType>view</tableType>
+          </dbQuery></definition>
+          <queryItem><name locale="en">CUSTOMER_KEY</name><externalName>CUSTOMER_KEY</externalName><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">REGION_CODE</name><externalName>REGION_CODE</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">ENTITLEMENT_LEVEL</name><externalName>ENTITLEMENT_LEVEL</externalName><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+
+        <!-- Composite (two-condition) join. -->
+        <relationship status="valid">
+          <name>CUSTOMER_DIM &lt;-&gt; V_CUSTOMER_ENTITLEMENT</name>
+          <expression><refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_KEY]</refobj>=<refobj>[Database Layer].[V_CUSTOMER_ENTITLEMENT].[CUSTOMER_KEY]</refobj> and <refobj>[Database Layer].[CUSTOMER_DIM].[REGION_CODE]</refobj>=<refobj>[Database Layer].[V_CUSTOMER_ENTITLEMENT].[REGION_CODE]</refobj></expression>
+          <left><refobj>[Database Layer].[CUSTOMER_DIM]</refobj><mincard>one</mincard><maxcard>one</maxcard></left>
+          <right><refobj>[Database Layer].[V_CUSTOMER_ENTITLEMENT]</refobj><mincard>one</mincard><maxcard>many</maxcard></right>
+        </relationship>
+      </folder>
+    </namespace>
+
+    <!-- ══ Logical Layer — business names, calculations, filters ═════════════ -->
+    <namespace>
+      <name locale="en">Logical Layer</name>
+
+      <folder>
+        <name locale="en">Sales</name>
+
+        <querySubject status="valid">
+          <name locale="en">Sales Fact</name>
+          <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+          <queryItem><name locale="en">Sales Key</name><expression><refobj>[Database Layer].[SALES_FACT].[SALES_KEY]</refobj></expression><usage>identifier</usage><datatype>int64</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">Order Quantity</name><expression><refobj>[Database Layer].[SALES_FACT].[ORDER_QTY]</refobj></expression><usage>fact</usage><datatype>int32</datatype><regularAggregate>sum</regularAggregate></queryItem>
+          <queryItem><name locale="en">Net Amount</name><expression><refobj>[Database Layer].[SALES_FACT].[NET_AMOUNT]</refobj></expression><usage>fact</usage><datatype>decimal</datatype><regularAggregate>sum</regularAggregate></queryItem>
+          <queryItem><name locale="en">Discount Amount</name><expression><refobj>[Database Layer].[SALES_FACT].[DISCOUNT_AMOUNT]</refobj></expression><usage>fact</usage><datatype>decimal</datatype><regularAggregate>sum</regularAggregate></queryItem>
+
+          <calculation status="valid">
+            <name locale="en">Gross Amount</name>
+            <expression><refobj>[Logical Layer].[Sales Fact].[Net Amount]</refobj> + <refobj>[Logical Layer].[Sales Fact].[Discount Amount]</refobj></expression>
+            <usage>fact</usage><datatype>decimal</datatype><regularAggregate>unsupported</regularAggregate>
+          </calculation>
+
+          <calculation status="valid">
+            <name locale="en">Order Size Band</name>
+            <expression>case when <refobj>[Logical Layer].[Sales Fact].[Net Amount]</refobj> &lt; 100 then 'Small' when <refobj>[Logical Layer].[Sales Fact].[Net Amount]</refobj> &lt; 1000 then 'Medium' else 'Large' end</expression>
+            <usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate>
+          </calculation>
+
+          <!-- Scoped aggregate: Cognos partitions this; Sigma has no spec-valid equivalent. -->
+          <calculation status="valid">
+            <name locale="en">Region Net Amount</name>
+            <expression>total ( <refobj>[Logical Layer].[Sales Fact].[Net Amount]</refobj> for <refobj>[Logical Layer].[Customer].[Region Code]</refobj> )</expression>
+            <usage>fact</usage><datatype>decimal</datatype><regularAggregate>unsupported</regularAggregate>
+          </calculation>
+
+          <!-- Window calc: maps to the Sigma-native CumulativeSum. -->
+          <calculation status="valid">
+            <name locale="en">Running Net Amount</name>
+            <expression>running-total ( <refobj>[Logical Layer].[Sales Fact].[Net Amount]</refobj> )</expression>
+            <usage>fact</usage><datatype>decimal</datatype><regularAggregate>unsupported</regularAggregate>
+          </calculation>
+
+          <filters>
+            <filterDefinition application="beforeAutoAggregation" apply="always">
+              <displayName>EXCLUDE_CANCELLED_ORDERS</displayName>
+              <expression><refobj>[Database Layer].[SALES_FACT].[ORDER_QTY]</refobj> &gt; 0</expression>
+            </filterDefinition>
+          </filters>
+        </querySubject>
+
+        <!-- Two logical subjects over ONE physical DATE_DIM, via the role aliases. -->
+        <querySubject status="valid">
+          <name locale="en">Order Date</name>
+          <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+          <queryItem><name locale="en">Date Key</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_ORDER_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[DATE_KEY]</refobj></refobjViaShortcut></expression><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">Order Date</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_ORDER_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[CALENDAR_DATE]</refobj></refobjViaShortcut></expression><usage>attribute</usage><datatype>date</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Order Year</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_ORDER_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[CALENDAR_YEAR]</refobj></refobjViaShortcut></expression><usage>attribute</usage><datatype>int16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Order Month</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_ORDER_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[CALENDAR_MONTH_NAME]</refobj></refobjViaShortcut></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+
+        <querySubject status="valid">
+          <name locale="en">Ship Date</name>
+          <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+          <queryItem><name locale="en">Date Key</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_SHIP_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[DATE_KEY]</refobj></refobjViaShortcut></expression><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">Ship Date</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_SHIP_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[CALENDAR_DATE]</refobj></refobjViaShortcut></expression><usage>attribute</usage><datatype>date</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Ship Year</name><expression><refobjViaShortcut><refobj>[Database Layer].[SALES_SHIP_DATE]</refobj><refobj>[Database Layer].[DATE_DIM].[CALENDAR_YEAR]</refobj></refobjViaShortcut></expression><usage>attribute</usage><datatype>int16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+
+        <querySubject status="valid">
+          <name locale="en">Customer</name>
+          <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+          <queryItem><name locale="en">Customer Key</name><expression><refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_KEY]</refobj></expression><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">Customer Name</name><expression><refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_NAME]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Customer Tier</name><expression><refobj>[Database Layer].[CUSTOMER_DIM].[CUSTOMER_TIER]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Region Code</name><expression><refobj>[Database Layer].[CUSTOMER_DIM].[REGION_CODE]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+
+        <querySubject status="valid">
+          <name locale="en">Product</name>
+          <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+          <queryItem><name locale="en">Product Key</name><expression><refobj>[Database Layer].[PRODUCT_DIM].[PRODUCT_KEY]</refobj></expression><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">Product Name</name><expression><refobj>[Database Layer].[PRODUCT_DIM].[PRODUCT_NAME]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Product Category</name><expression><refobj>[Database Layer].[PRODUCT_DIM].[PRODUCT_CATEGORY]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+
+        <querySubject status="valid">
+          <name locale="en">Customer Entitlement</name>
+          <definition><modelQuery><sql type="cognos">Select <column>*</column>from<table /></sql></modelQuery></definition>
+          <queryItem><name locale="en">Customer Key</name><expression><refobj>[Database Layer].[V_CUSTOMER_ENTITLEMENT].[CUSTOMER_KEY]</refobj></expression><usage>identifier</usage><datatype>int32</datatype><regularAggregate>count</regularAggregate></queryItem>
+          <queryItem><name locale="en">Region Code</name><expression><refobj>[Database Layer].[V_CUSTOMER_ENTITLEMENT].[REGION_CODE]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          <queryItem><name locale="en">Entitlement Level</name><expression><refobj>[Database Layer].[V_CUSTOMER_ENTITLEMENT].[ENTITLEMENT_LEVEL]</refobj></expression><usage>attribute</usage><datatype>characterLength16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+        </querySubject>
+      </folder>
+    </namespace>
+
+    <!-- ══ Presentation Layer — the subject areas report authors see ═════════ -->
+    <namespace>
+      <name locale="en">Presentation Layer</name>
+
+      <namespace>
+        <name locale="en">Sales Analysis</name>
+        <shortcut><name locale="en">Sales Fact</name><refobj>[Logical Layer].[Sales Fact]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+        <shortcut><name locale="en">Order Date</name><refobj>[Logical Layer].[Order Date]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+        <shortcut><name locale="en">Ship Date</name><refobj>[Logical Layer].[Ship Date]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+        <shortcut><name locale="en">Customer</name><refobj>[Logical Layer].[Customer]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+        <shortcut><name locale="en">Product</name><refobj>[Logical Layer].[Product]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+      </namespace>
+
+      <namespace>
+        <name locale="en">Customer Entitlement</name>
+        <shortcut><name locale="en">Customer</name><refobj>[Logical Layer].[Customer]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+        <shortcut><name locale="en">Entitlement</name><refobj>[Logical Layer].[Customer Entitlement]</refobj><targetType>querySubject</targetType><treatAs>alias</treatAs></shortcut>
+      </namespace>
+    </namespace>
+
+    <!-- ══ Dimension Layer — DMR metadata (flagged, not converted) ═══════════ -->
+    <namespace>
+      <name locale="en">Dimension Layer</name>
+      <dimension status="valid">
+        <name locale="en">Order Time (DMR)</name>
+        <definition><modelQuery><sql /></modelQuery></definition>
+        <type>regular</type>
+        <hierarchy>
+          <name locale="en">Time</name>
+          <level><name locale="en">Years (All)</name><isManual>true</isManual></level>
+          <level>
+            <name locale="en">Calendar Year</name>
+            <queryItem><name locale="en">Calendar Year</name><expression><refobj>[Logical Layer].[Order Date].[Order Year]</refobj></expression><usage>attribute</usage><datatype>int16</datatype><regularAggregate>unsupported</regularAggregate></queryItem>
+          </level>
+        </hierarchy>
+      </dimension>
+    </namespace>
+  </namespace>
+
+  <dataSources>
+    <dataSource>
+      <name>AcmeWarehouse</name>
+      <cmDataSource>Acme-Snowflake</cmDataSource>
+      <catalog>ACME_ANALYTICS</catalog>
+      <schema>DW</schema>
+      <type><queryType>relational</queryType><interface>JDBC</interface></type>
+    </dataSource>
+  </dataSources>
+
+  <parameterMaps>
+    <parameterMap hidden="true"><name>_env</name></parameterMap>
+  </parameterMaps>
+
+  <securityViews>
+    <securityView>
+      <name>SALES_ANALYSIS</name>
+      <definition>
+        <set includeRule="include"><refobj>[AcmeDW]</refobj></set>
+        <set includeRule="exclude"><refobj>[Customer Entitlement]</refobj></set>
+      </definition>
+    </securityView>
+  </securityViews>
+
+  <packages>
+    <package>
+      <name locale="en">SALES_ANALYSIS</name>
+      <description locale="en">Sales analysis subject area</description>
+      <locales><locale>en</locale></locales>
+      <definition><viewref>[].[securityViews].[SALES_ANALYSIS]</viewref></definition>
+      <useV5DataServer>true</useV5DataServer>
+    </package>
+  </packages>
+</project>

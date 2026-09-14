@@ -2,9 +2,10 @@
 name: cognos-to-sigma
 description: >-
   Migrate IBM Cognos Analytics content to Sigma. Use when the user has a Cognos
-  Data Module, Framework Manager package, report (Report Studio / CA Reporting),
-  or dashboard (exploration) and wants to recreate it in Sigma. Converts Data
-  Module JSON → Sigma data model and report-spec XML → Sigma workbook, translating
+  Data Module, Framework Manager model (.cpf / model.xml), report (Report Studio /
+  CA Reporting), or dashboard (exploration) and wants to recreate it in Sigma.
+  Converts Data Module JSON and Framework Manager project XML → Sigma data model,
+  and report-spec XML → Sigma workbook, translating
   the Cognos expression DSL and flagging constructs with no clean Sigma analog.
   Dashboards (exploration JSON) are hand-authored per refs/dashboard-migration.md
   (tabs → separate Sigma pages). Discovery via the CA REST API.
@@ -187,7 +188,7 @@ windows are the workaround for session-replay auth, not a substitute for asking.
   ones — they carry complete schemas. File-backed modules (uploaded `.xlsx`) are a
   *land-in-warehouse-first* case (see Verify/parity).
 
-## Phase 1 — Convert the Data Module → Sigma data model
+## Phase 1 — Convert the semantic layer → Sigma data model
 
 ```bash
 # zero-config: the self-contained bundle runs via plain node (no npm install, no tsx)
@@ -197,6 +198,42 @@ node converter/cli.mjs path/to/module.json --connection <SIGMA_CONN> --database 
 Emits the Sigma data-model JSON on stdout; stats + warnings on stderr. Read the
 warnings aloud to the user — they are the parts that need manual authoring
 (running-totals, cross-element metrics, FIXED-LOD-style calcs, localization).
+
+The input is auto-detected by **root element**, not by file extension — a Framework
+Manager model and a report spec are both `.xml`.
+
+### Phase 1-FM — Framework Manager (`.cpf` / `model.xml`)
+
+Customers still on the legacy modeller have an FM project, not a Data Module. The `.cpf`
+is only a workspace pointer: **`model.xml` holds the whole model**, and the sibling
+`IDlog.xml` / `log.xml` / `session-log.xml` are edit history — ignore them.
+
+An enterprise FM model is far too large for one Sigma data model (thousands of query
+subjects), so **convert one presentation subject area at a time**:
+
+```bash
+node converter/cli.mjs path/to/model.xml --list            # enumerate subject areas + sizes
+node converter/cli.mjs path/to/model.xml --subject-area "Sales Analysis" \
+     --connection <SIGMA_CONN> > dm.json
+```
+
+Then run Phases 1.5 → 4 exactly as for a Data Module, once per subject area. Ask the user
+which areas are in scope before converting a large model — do not loop over all of them.
+
+**What converts:** the shortcut chain (presentation → logical → database → physical table);
+query subjects → table elements; `Select * From [ds].TABLE` → a warehouse-table source and
+anything else → a `sql` source (with `[ds].TABLE` rewritten to `catalog.schema.table`);
+facts with a `regularAggregate` → metrics; business labels preserved as column names;
+`mincard`/`maxcard` → relationship direction (source = many side); composite equi-joins →
+one relationship with several key pairs; the Cognos expression DSL via the shared
+translator. **Role-playing dimension aliases stay separate elements** — one physical
+`DATE_DIM` exposed as order-date and ship-date becomes two Sigma elements, which is what
+keeps the fact joined at the right grain.
+
+**Flagged, never faked:** DMR dimensions/hierarchies/levels, determinant-driven multi-grain
+aggregation, parameter maps, embedded model filters, non-equi joins, logical subjects that
+span several physical tables (the dominant table is used and the rest reported), and Cognos
+runtime macros — see Security below.
 
 ## Phase 1.5 — Reuse an existing DM? (avoid sprawl — the reuse-first DM gate every converter runs before building)
 
@@ -345,14 +382,24 @@ element (network, word-cloud, packed-bubble, treemap → flagged table).
 fallback until entitlement is proven. Cross-report drill-through stays a loud
 gap (Sigma's drill control is hierarchy drill, not a cross-document action).
 Cognos page footers also stay loud because released workbook panels support
-header/sidebar, not footer. Framework Manager `.cpf` remains roadmap. See
-`refs/cognos-coverage.md` for the executable catalog and gap ledger.
+header/sidebar, not footer. See `refs/cognos-coverage.md` for the executable catalog and
+gap ledger.
+
+**Window functions:** `running-total` / `moving-total` / `moving-average` / `rank` map onto
+the Sigma-**native** window family (`CumulativeSum` / `MovingSum` / `MovingAvg` / `Rank`),
+and a `total(… for …)` scoped aggregate degrades to the plain aggregate with the dropped
+partition flagged. The `*Over` family (`SumOver`, `CountOver`, `RankOver`, …) is **never
+emitted** — it is not a valid spec formula and hard-rejects a DM-spec POST with 400.
 
 ## Security: Row- & Column-Level Security (RLS/CLS)
 
 Row/column security is **never silently dropped and never silently ported** — and it is handled by the **skill**, not baked into the converted model. The converter only **detects and reports** security in `result.security[]` (the CLI writes it to `security.json` and prints a loud `SECURITY:` line); it does **not** inject it into the data-model spec (a stateless converter can't create Sigma user attributes or assign members, so an injected `CurrentUserAttributeText` filter would fail-closed to 0 rows). This skill provisions + applies it after the model is posted.
 
-**What is detected for Cognos:** Data-Module **security filters** (`securityFilter` entries — top-level or per-query-subject — holding a filter expression + the CAM groups/roles they apply to). Detection is best-effort across the shape variants; **also check manually**: in the Cognos UI a data module's security filters live under the query subject's *Security filters* tab (`Properties → Security`), and Framework Manager packages carry object/data security in the `.cpf` (not parsed — inventory those by hand). Report-level security (CAM object policies on the report itself) maps to Sigma document permissions, not RLS.
+**What is detected for Cognos:** Data-Module **security filters** (`securityFilter` entries — top-level or per-query-subject — holding a filter expression + the CAM groups/roles they apply to). Detection is best-effort across the shape variants; **also check manually**: in the Cognos UI a data module's security filters live under the query subject's *Security filters* tab (`Properties → Security`). Report-level security (CAM object policies on the report itself) maps to Sigma document permissions, not RLS.
+
+**Framework Manager** carries security in two places, and both are now detected (still detect-only — nothing is injected):
+- **Runtime macros in query-subject SQL** — `#sq($account.personalInfo.email)#` joined to a permissions table is FM's row-level-security idiom. It is reported as a `framework-manager-macro` rule and the macro is passed through **verbatim**, so the statement will NOT execute in Sigma until you replace it (`$account.personalInfo.email` → `CurrentUserEmail()`) and apply the rule through the flow below. Treat a converted model that still contains `#…#` as unshippable.
+- **Security views** — the package-scoped include/exclude/hide rule sets are reported as `framework-manager-security-view` rules. This is **object**-level security, not row-level: it maps to Sigma folder/document permissions and column-level security, so port it as permissions rather than through `apply_sigma_rls.py`.
 
 **Flow (only runs when security was detected or found manually — zero overhead otherwise):**
 1. **Convert + post** the data model as usual. Capture the `dataModelId` and `security.json` (write entries found manually in the same shape: `[{ "type": "row-filter", "name": …, "expression": …, "groups": […] }]`).

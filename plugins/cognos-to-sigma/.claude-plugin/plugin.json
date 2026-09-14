@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cognos-to-sigma",
   "displayName": "Cognos \u2192 Sigma",
-  "version": "1.2.29",
-  "description": "Migrate IBM Cognos Analytics to Sigma \u2014 Data Module JSON \u2192 Sigma data model, and report-spec XML \u2192 Sigma workbook. Translates the Cognos expression DSL (total..for \u2192 window funcs, if/then/else, date/string fns) and flags what it can't (macros, running-totals, localization). Companion to the other sigma-migration-skills converters.",
+  "version": "1.3.0",
+  "description": "Migrate IBM Cognos Analytics to Sigma \u2014 Data Module JSON and Framework Manager project XML \u2192 Sigma data model, and report-spec XML \u2192 Sigma workbook. Framework Manager converts one presentation subject area at a time, resolving shortcuts to physical tables and keeping role-playing dimension aliases distinct. Translates the Cognos expression DSL (total..for, if/then/else, CASE, date/string fns) and flags what it can't (runtime macros, DMR hierarchies, determinants, parameter maps). Companion to the other sigma-migration-skills converters.",
   "author": {
     "name": "Thomas Wells"
   },

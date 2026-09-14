@@ -34,12 +34,36 @@ recorded with a count, the reason, and the remediation shown in the readout.
 | single equi-join (`link.leftRef = link.rightRef`) | auto | → DM relationship | — |
 | file-backed source (`useSpec.type:"file"`) | hint | uploaded file backs the module | land the file in the warehouse first (original upload is not re-downloadable via REST), then point the DM at the warehouse table |
 | layered module (base + presentation subjects, `useSpec.type:"module"`) | hint | both layers convert | dedupe to the physical-table layer in Sigma to avoid redundant elements |
-| `CASE … WHEN … END` | manual | converter does `if/then/else`, not `CASE` | re-author as nested Sigma `If()` / `Switch()` |
-| aggregate `… for …` scope | manual | → Sigma `*Over` window function | verify the grouping in a DM element (window fns have known caveats) |
+| `CASE … WHEN … END` | manual | converter maps searched `CASE`→nested `If()` and simple `CASE`→`Switch()`, but warns when nested/non-standard | budget a review pass; re-author by hand only where the warning fires |
+| aggregate `… for …` scope | manual | Sigma has no spec-valid partitioned aggregate — converter emits the plain aggregate and DROPS the partition (with a warning) | re-create the grouping as a grouped element, a model metric, or a `sql` source |
 | composite / non-equi join (`link[]` length > 1, or expression with `and`/`or`/inequality) | manual | converter does single equi-joins only | re-create the relationship + keys by hand |
-| `running-total`/`running-count`/`running-average`/`running-difference`/`moving-total`/`moving-average`/`rank`/`percentile`/`quantile`/`tertile` | unhandled | window/running calc | re-author as a Sigma window function |
+| `running-total`/`running-count`/`running-average`/`running-difference`/`moving-total`/`moving-average`/`rank`/`percentile`/`quantile`/`tertile` | unhandled | window/running calc | `running-*`/`moving-*`/`rank` map onto the Sigma-**native** family (`CumulativeSum`/`MovingSum`/`MovingAvg`/`Rank`) with any `for` partition dropped; the rest need hand authoring. Never the `*Over` names — they 400 a DM-spec POST |
 | `GetResourceString(...)` | unhandled | localization-resource lookup | replace with the literal label or model a lookup table |
 | unmapped `bareword()` function | unhandled | no confirmed Sigma mapping | review/translate by hand |
+
+## Framework Manager signals (from `cognos-fm.ts`)
+
+Scored **whole-model**, while the converter runs one presentation subject area at a time
+(`cli.mjs model.xml --list`). Treat these counts as the estate-wide size and gap profile,
+not a single migration unit. Input is `model.xml` — the `.cpf` is only a workspace pointer,
+and `IDlog.xml` / `log.xml` are edit history.
+
+| Signal | Bucket | Reason | Remediation |
+|---|---|---|---|
+| query subject (any layer) | auto | resolves to a Sigma warehouse-table or `sql` element, scoped per subject area | — |
+| table passthrough (`Select * From [ds].TABLE`) | auto | → warehouse-table source, fully qualified from the `<dataSource>` catalog/schema | — |
+| alias shortcut (`treatAs: alias`) | auto | a role-playing dimension becomes its own Sigma element, keeping join grain correct; a presentation shortcut resolves through | — |
+| passthrough query item (bare `refobj` / `refobjViaShortcut`) | auto | a plain physical column — no translation needed (~95% of items on real models) | — |
+| equi-join / composite join (`mincard`/`maxcard`) | auto | → DM relationship (source = many side); a multi-column equi-join becomes one relationship with several key pairs | — |
+| custom-SQL query subject | hint | query subject defined by a query, not a table | converts to a `sql` source with `[ds].TABLE` rewritten to `catalog.schema.table`; review the statement — warehouse dialect differences are not translated |
+| `determinant` | hint | declares uniqueness / multi-grain aggregation | no Sigma equivalent; verify aggregate correctness where a dimension joins at more than one grain |
+| embedded model filter (`filterDefinition`) | manual | filter applied on every query | not applied to the Sigma model; re-create as a data-model filter if it is a governance rule |
+| `parameterMap` | manual | session-parameter substitution | not translated; review any SQL or filter that depends on it |
+| `securityView` | manual | package-scoped include/exclude/hide over model objects — **object** security, not row-level | re-create as Sigma folder/document permissions or column-level security (not `apply_sigma_rls.py`) |
+| non-equi join | manual | condition is not a conjunction of equalities | Sigma relationships are equi-joins; re-create by hand or push into a `sql` source |
+| runtime macro in query-subject SQL (`#sq($account.personalInfo.email)#`) | unhandled | FM's row-level-security idiom, passed through **verbatim** | the statement will NOT execute until you replace it (→ `CurrentUserEmail()`) and apply the rule via the RLS flow. A model still containing `#…#` is unshippable |
+| DMR `dimension` / hierarchy / level | unhandled | OLAP dimensional metadata | Sigma has no hierarchy equivalent; re-author drill paths in the workbook |
+| logical subject spanning several physical tables | unhandled | not expressible as one Sigma table source | converter sources from the dominant table and reports the dropped items; split the subject or author a `sql` source |
 
 ## Report signals (from `cognos-report.ts` + `format-shapes.md`)
 
