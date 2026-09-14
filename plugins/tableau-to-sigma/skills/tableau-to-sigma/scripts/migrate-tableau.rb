@@ -1336,17 +1336,14 @@ if opts[:finalize]
     ['ruby', File.join(HERE, 'assert-relationship-coverage.rb'), '--workdir', WORK],
     allow_fail: true
   )
-  mark('assert-relationship-coverage')
   dashgout, dashgst = run!(
     ['ruby', File.join(HERE, 'dashboard-coverage.rb'), '--workdir', WORK, '--check'],
     allow_fail: true
   )
-  mark('dashboard-coverage')
   sqlpout, sqlpst = run!(
     ['ruby', File.join(HERE, 'sql-provenance.rb'), '--workdir', WORK, '--check'],
     allow_fail: true
   )
-  mark('sql-provenance')
 
   # The census-aware hard gate. NEVER bypassed — this command fails when it fails.
   gate = ['ruby', File.join(HERE, 'assert-phase6-ran.rb'), '--tableau', WORK, '--workbook-id', wb_id]
