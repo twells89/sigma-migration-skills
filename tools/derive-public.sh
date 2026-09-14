@@ -1104,6 +1104,58 @@ if t is not None:
         open(path, "w", encoding="utf-8").write(t)
 DERIVE_PY_EOF
 
+# --- 4k. reintroduced phone-home telemetry (defense-in-depth). Telemetry was
+#     removed from dev main permanently, but a NEW plugin can copy an old
+#     template back in (metabase-to-sigma did: sigma_telemetry.py +
+#     report-telemetry.mjs + a "send an anonymous usage ping" SKILL.md block).
+#     The fleet-wide scrub only neutralizes the endpoint STRING, not the files
+#     or the wiring — so delete the client/reporter/gate files fleet-wide (glob,
+#     not a hardcoded list) and strip the consent+invocation block from any
+#     SKILL.md/orchestrator that runs them. NOTE: refs/usage-telemetry.md docs
+#     are about the SOURCE tool's usage analytics (Metabase view_count, Cognos
+#     audit) — legitimate migration content, NOT our phone-home — and are kept.
+echo "  4k. remove reintroduced phone-home telemetry (files + wiring)"
+while IFS= read -r -d '' f; do
+  rm -f "$f"; echo "    deleted telemetry file: $f"
+done < <(find . -path ./.git -prune -o -type f \( \
+      -name 'sigma_telemetry.py'    -o -name 'sigma_telemetry.mjs' \
+   -o -name 'report-telemetry.py'   -o -name 'report-telemetry.mjs' -o -name 'report-telemetry.rb' \
+   -o -name 'report_telemetry.py' \
+   -o -name 'assert-telemetry-ran.rb' -o -name 'test-telemetry-gate.rb' \) -print0 2>/dev/null)
+
+python3 - <<'DERIVE_PY_EOF'
+import re, glob
+TELE = re.compile(r'report[-_]telemetry|sigma_telemetry|report_migration')
+CODEBLOCK = (r'```(?:bash|sh)\n(?:(?!```)[\s\S])*?'
+             r'(?:report[-_]telemetry|sigma_telemetry|report_migration)'
+             r'(?:(?!```)[\s\S])*?```\n')
+n = 0
+for path in glob.glob('plugins/**/*.md', recursive=True) + glob.glob('shared/**/*.md', recursive=True):
+    try:
+        t = open(path, encoding='utf-8').read()
+    except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+        continue
+    if not TELE.search(t):
+        continue
+    orig = t
+    # 1) consent block: an intro line telling the user about an anonymous usage
+    #    ping, an optional blockquote + "If the user ..." lead-in, through the
+    #    fenced block that runs the (now-deleted) reporter.
+    t = re.sub(
+        r'\n\*\*[^\n]*(?:tell the user[^\n]*conversation|usage ping)[^\n]*\*\*\n\n'
+        r'(?:>[^\n]*\n\n)?(?:If the user[^\n]*\n\n)?' + CODEBLOCK,
+        '\n', t)
+    # 2) backstop: any remaining fenced block that invokes the reporter.
+    t = re.sub(CODEBLOCK, '', t)
+    # 3) drop dangling links/mentions of the telemetry repo left in prose.
+    t = re.sub(r'\s*\(?\[?[^\n\]]*sigma-migration-telemetry[^\n)]*\)?\]?', '', t)
+    if t != orig:
+        open(path, 'w', encoding='utf-8').write(t)
+        print('    scrubbed telemetry wiring: ' + path)
+        n += 1
+print('    telemetry-wiring scrub touched %d file(s)' % n)
+DERIVE_PY_EOF
+
 # ─────────────────────────────────────────────────────────────────────────
 # STEP 5 — fleet-wide identity + internal-identifier scrub
 # ─────────────────────────────────────────────────────────────────────────
