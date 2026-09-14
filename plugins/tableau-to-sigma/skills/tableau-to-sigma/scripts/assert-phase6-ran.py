@@ -582,6 +582,7 @@ def gate_dashboard_coverage(workdir: Path) -> None:
         (
             path
             for path in (
+                workdir / "workbook-readback.json",
                 workdir / "wb-spec-python.json",
                 workdir / "wb-spec.resolved.json",
                 workdir / "wb-spec.json",

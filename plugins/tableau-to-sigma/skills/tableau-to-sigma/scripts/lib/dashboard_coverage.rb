@@ -90,7 +90,7 @@ module DashboardCoverage
       'missing_dashboards' => missing,
       'blockers' => blockers,
       'source_sha256' => source_sha,
-      'spec_sha256' => Digest::SHA256.hexdigest(spec_raw)
+      'page_names_sha256' => Digest::SHA256.hexdigest(JSON.generate(built_pages))
     }
   end
 end

@@ -129,5 +129,9 @@ def evaluate(twb_path: Path, spec_path: Path, scope: Any) -> dict:
         "missing_dashboards": missing,
         "blockers": blockers,
         "source_sha256": source_sha,
-        "spec_sha256": hashlib.sha256(spec_raw).hexdigest(),
+        "page_names_sha256": hashlib.sha256(
+            json.dumps(built_pages, separators=(",", ":"), ensure_ascii=False).encode(
+                "utf-8"
+            )
+        ).hexdigest(),
     }

@@ -17,7 +17,8 @@ end.parse!
 workdir = opts[:workdir] || abort('usage: dashboard-coverage.rb --workdir DIR [--spec PATH] [--check]')
 source = opts[:source] || File.join(workdir, 'workbook-content.twb')
 spec = opts[:spec] ||
-       [File.join(workdir, 'wb-spec.resolved.json'), File.join(workdir, 'wb-spec.json')]
+       [File.join(workdir, 'wb-readback.json'),
+        File.join(workdir, 'wb-spec.resolved.json'), File.join(workdir, 'wb-spec.json')]
        .find { |path| File.file?(path) }
 scope_path = opts[:scope] || File.join(workdir, 'dashboard-scope.json')
 artifact_path = File.join(workdir, 'dashboard-coverage.json')

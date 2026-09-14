@@ -179,6 +179,7 @@ if File.file?(source_path) || File.file?(File.join(wd, 'dashboard-coverage.json'
   dashboard_artifact_path = File.join(wd, 'dashboard-coverage.json')
   dashboard_scope_path = File.join(wd, 'dashboard-scope.json')
   dashboard_spec_path = [
+    File.join(wd, 'wb-readback.json'),
     File.join(wd, 'wb-spec.resolved.json'),
     File.join(wd, 'wb-spec.json')
   ].find { |path| File.file?(path) }

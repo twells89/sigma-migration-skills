@@ -107,6 +107,7 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         (
             path
             for path in (
+                workdir / "workbook-readback.json",
                 workdir / "wb-spec-python.json",
                 workdir / "wb-spec.resolved.json",
                 workdir / "wb-spec.json",
