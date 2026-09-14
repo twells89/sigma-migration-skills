@@ -20,7 +20,7 @@ artifact_path = File.join(workdir, 'relationship-coverage.json')
 unless File.file?(artifact_path)
   source_has_graph = File.file?(source_path) &&
                      File.read(source_path, encoding: 'bom|utf-8')
-                         .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>]/)
+                         .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
   unless source_has_graph
     puts 'relationship coverage: N/A — source has no object-graph'
     exit 0
@@ -31,7 +31,7 @@ end
 unless File.file?(metadata_path)
   source_has_graph = File.file?(source_path) &&
                      File.read(source_path, encoding: 'bom|utf-8')
-                         .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>]/)
+                         .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
   if source_has_graph
     warn "RELATIONSHIP COVERAGE FAIL: source has an object-graph but #{metadata_path} is missing"
     exit 3

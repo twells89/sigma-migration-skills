@@ -26,7 +26,7 @@ module RelationshipCoverage
 
   def evaluate(metadata, source_text: nil)
     coverage = metadata.is_a?(Hash) ? metadata['relationshipCoverage'] : nil
-    object_graph = source_text.to_s.match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>]/)
+    object_graph = source_text.to_s.match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
 
     unless coverage.is_a?(Hash)
       blockers = object_graph ? [{

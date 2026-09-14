@@ -105,6 +105,20 @@ requires per-displayed-tile anchor coverage (`anchor_coverage.covered ==
 displayed`, or `coverage_waivers` naming each uncovered tile). Subagent flows
 MUST call this gate as their final step.
 
+### Tableau-local structural gates
+
+These run alongside the shared final gate and are included in the
+orchestrator's GREEN predicate:
+
+| Gate | Artifact | Failure |
+|---|---|---|
+| Relationship completeness | `relationship-coverage.json` | Missing/stale coverage, count mismatch, unwired edge, `partial:true`, or dropped relationship condition. No waiver. |
+| Visible dashboards | `dashboard-coverage.json` + `dashboard-scope.json` | Any non-empty visible Tableau dashboard lacks a Sigma page unless excluded by stated/CLI scope. No waiver. |
+| SQL provenance | `sql-provenance.json` | A DM `source.kind:"sql"` element matches neither source Custom SQL nor a recognized generated helper, and has no reasoned override backed by `proof.match:true`. No waiver. |
+
+All three run before the relevant Sigma POST and are re-derived at completion;
+hand-editing their result files fails the stale-artifact check.
+
 ## 🚧 GATE convention
 
 > **🚧 GATE convention.** A step marked **🚧 GATE** is backed by a script that

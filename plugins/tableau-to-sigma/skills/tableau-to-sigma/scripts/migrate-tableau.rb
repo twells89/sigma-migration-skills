@@ -1925,7 +1925,7 @@ if opts[:dm_spec] || opts[:wb_spec]
   _manual_meta = File.join(WORK, 'conv-meta.json')
   _manual_has_object_graph = File.file?(_manual_source) &&
                              File.read(_manual_source, encoding: 'bom|utf-8')
-                                 .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>]/)
+                                 .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
   if dm_json && (_manual_has_object_graph || File.file?(File.join(WORK, 'relationship-coverage.json')))
     abort "FATAL: object-graph manual repair requires #{_manual_meta}; regenerate converter metadata " \
           'with every relationship fully resolved.' unless File.file?(_manual_meta)

@@ -159,7 +159,7 @@ metadata_path = File.join(wd, 'conv-meta.json')
 coverage_path = File.join(wd, 'relationship-coverage.json')
 source_has_graph = File.file?(source_path) &&
                    File.read(source_path, encoding: 'bom|utf-8')
-                       .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>]/)
+                       .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
 if source_has_graph || File.file?(coverage_path)
   begin
     expected_coverage = RelationshipCoverage.from_files(metadata_path, source_path)

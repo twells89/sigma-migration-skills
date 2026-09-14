@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-OBJECT_GRAPH_RE = re.compile(r"<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>]")
+OBJECT_GRAPH_RE = re.compile(r"<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>/]")
 
 
 def snake_key(key: str) -> str:

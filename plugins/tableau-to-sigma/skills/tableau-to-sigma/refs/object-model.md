@@ -46,6 +46,7 @@ All names below are neutral stand-ins (`FACT_VISITS` / `DIM_DATES` /
 | Snowflake chains (dim → sub-dim) | ✅ relationship carried by the nearer-the-fact side; fact reaches sub-dims via inherited relationships | Per-edge `ℹ` lines | Verify chain depth in the DM |
 | Relationship with **no serialized key** (2020.2-era file) | 🛑 REFUSED — named gap, no guessing | Gap-scan ❌ `disconnected tables` row → orchestrator **exit 11**; `object-graph-plan.json` punch list | Wire each listed pair manually (LEFT from fact/many side), then re-enter (§3) |
 | Computed-only key (`DATE([col])=`), non-equality/range key | 🛑 REFUSED — same named-gap class (previously silent inside AND trees) | Same ❌ row + per-pair reason | Add a calc key column or wire manually; re-enter (§3) |
+| Mixed physical + unsupported computed conditions | 🛑 REFUSED when any condition would be dropped — the physical subset is a wider join, not a valid approximation | `relationship-coverage.json` entry has `partial:true` / `dropped_conditions`; strict gate stops before POST | Materialize the computed key/predicate or prove and author an exact equivalent; never accept the physical subset alone |
 | End-point `object-id` resolving to no object | 🛑 REFUSED — named gap (previously a silent `continue`) | Same ❌ row | Fix/re-export the `.twb`, or wire manually |
 | Isolated logical table (no edge touches it) | ⚠ flagged + gap entry | `untouched_objects` in the plan | Decide: relate it or drop it deliberately |
 | Single object, zero relationships (legacy-migrated join model) | ✅ flat table, no noodle semantics | No object-model row | Nothing |
@@ -106,3 +107,7 @@ mass `Dependency not found`, helper SQL selecting fact measures FROM a dim.
 - [ ] Post-POST: the spec readback (`GET /v2/dataModels/{id}/spec`) shows the
       relationships (count, targets, keys) you expected — wrong-fact is
       detectable at migration time, not at the customer's first dashboard.
+- [ ] `relationship-coverage.json` is `status:"pass"` with
+      `wired == serialized`, no `derived_via:"unwired"`, no `partial:true`, and
+      no dropped conditions. The orchestrator and completion gate enforce this;
+      a warning-only partial edge is never shippable.

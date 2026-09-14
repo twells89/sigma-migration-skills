@@ -255,9 +255,9 @@ phase by hand or need to understand why it stopped.
 | 1.5 | Reuse an existing DM | `find-or-pick-dm.rb` | `dm-match.json` (reuse-first) | `refs/phase-1_5-dm-reuse.md`, `refs/modeling-strategy.md` |
 | 2 | Warehouse column names | `discover-warehouse-columns.rb` | real column ids | `refs/phase-2-columns-filters.md`, `refs/column-gotchas.md` |
 | 2.5 | View-level filters (mandatory) | detect from CSV distinct values | filters applied at the right grain | `refs/phase-2-columns-filters.md` |
-| 3 | Build the DM spec | author → `validate-spec.rb --type datamodel` | clean `dm-spec.json` + `join-plan.json` probed (exit 23) + `semantic-edits.json` proven (exit 27) | `refs/phase-3-datamodel.md`, `refs/data-model-spec.md`, `refs/window-functions.md`, `refs/blending.md`, `refs/multi-datasource.md` |
+| 3 | Build the DM spec | author → `validate-spec.rb --type datamodel` | clean `dm-spec.json` + **complete `relationship-coverage.json`** (no unwired/partial edges) + attributed `sql-provenance.json` + `join-plan.json` probed (exit 23) + `semantic-edits.json` proven (exit 27) | `refs/phase-3-datamodel.md`, `refs/data-model-spec.md`, `refs/window-functions.md`, `refs/blending.md`, `refs/multi-datasource.md` |
 | 4 | POST the DM + **read back** | `post-and-readback.rb --type datamodel` | `dm-ids.json` (server ids) | `refs/phase-4-post-dm.md` |
-| 5 | Build workbook | `build-charts-from-signals.rb` → `post-and-readback` → `build-dashboard-layout.rb` → `put-layout.rb` | `preflight_lint` clean; body = metadata + `document{pages(metadata only),elements(flat),layout(required)}`; layout owns pages, places each element once, and is the **LAST write**; LOD/aggregation audits resolved | `refs/phase-5-workbook.md`, `refs/workbook-code-release-gaps.md`, `refs/chart-patterns.md`, `refs/layout-grid.md`, `refs/story-points.md` |
+| 5 | Build workbook | `build-charts-from-signals.rb` → `dashboard-coverage.rb` → `post-and-readback` → `build-dashboard-layout.rb` → `put-layout.rb` | every visible, in-scope Tableau dashboard has a Sigma page; `preflight_lint` clean; body = metadata + `document{pages(metadata only),elements(flat),layout(required)}`; layout owns pages, places each element once, and is the **LAST write**; LOD/aggregation audits resolved | `refs/phase-5-workbook.md`, `refs/workbook-code-release-gaps.md`, `refs/chart-patterns.md`, `refs/layout-grid.md`, `refs/story-points.md` |
 | 6 | **🚧 Parity + anchors + ground truth + visual** | `phase6-parity.rb`; `verify-anchors.rb`; ground-truth trio; then finalization and the gate sequence | 🚧 `parity-final.json` PASS + `anchors-verdict.json` + per-tile `numeric_parity` (exit 25) + recorded visual verdict + full `run-state.json` + `MIGRATION_REPORT.md` / `migration-result.json` with complete source-object and formula accounting | `refs/phase-6-parity.md`, `refs/source-anchors.md`, `refs/ground-truth-oracle.md`, `refs/gates.md`, `refs/migration-report-format.md`, `refs/blind-grader-brief.md`, `refs/visual-similarity.md`, `refs/control-parity.md`, `refs/orchestration.md` (verifier) |
 | 5g | **RCF fidelity loop** | `fidelity-loop.rb` render → compare → fix until clean | 🚧 (default-on) `fidelity-ledger.json` no unresolved spec-fixable deltas (gate 8d) | `refs/phase-5g-rcf.md`, `refs/fidelity-rubric.md`, `refs/fidelity-recipes.md`, `refs/layout-visual-qa.md` |
 | E | Enhance (opt-in) | `enhance-scan.rb` → `enhance-apply.rb` | cloned "— Enhanced" workbook | `refs/phase-e-enhance.md`, `refs/postpublish-interactivity.md` |
@@ -268,6 +268,18 @@ On ANY nonzero exit or waiver: `refs/gates.md`. On a STOP naming a script:
 
 ## Hard-gate kernels (full stanzas live in the phase refs + `refs/gates.md`)
 
+- **Object-graph completeness — never flatten around a missing edge.**
+  `emit-relationship-coverage.* --strict` blocks before DM POST when any
+  Tableau relationship is unwired, partial, or dropped a computed condition;
+  `assert-relationship-coverage.*` re-derives the artifact at completion.
+- **Visible-dashboard completeness.** `dashboard-coverage.*` compares visible
+  Tableau dashboard windows directly with built Sigma pages. Only a
+  `stated`/CLI selected scope may exclude a visible dashboard; absence from
+  `dashboard-layout.json` does not make a source tab not-applicable.
+- **Generated SQL must identify itself.** `sql-provenance.*` accounts every DM
+  `source.kind:"sql"` as source Custom SQL or a generated LOD/Top-N/window/
+  blend helper. Unattributed SQL blocks before POST; a manual override needs a
+  reason plus a `match:true` semantic-proof artifact.
 - **🚧 Phase 1a — ANY numeric Tableau URL MUST go through `resolve-project.rb`
   first.** Exit 0 → migrate exactly what it lists; **exit 2 → STOP and ask
   with the printed candidates — never guess** (a wrong guess field-cost 6
