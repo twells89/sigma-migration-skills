@@ -904,6 +904,7 @@ def main() -> int:
             ],
         )
 
+    dm_spec = effective_dm_spec
     metadata_path = workdir / "conv-meta.json"
     metadata = load(metadata_path, {}) or {}
     if not metadata_path.is_file():
@@ -1001,7 +1002,6 @@ def main() -> int:
         for pattern in metadata.get("workbookPatterns") or []
         if pattern.get("kind") == "unsupported"
     ]
-    dm_spec = effective_dm_spec
     if unsupported and not args.dm_spec:
         write(workdir / "unsupported-patterns.json", unsupported)
         return stop(

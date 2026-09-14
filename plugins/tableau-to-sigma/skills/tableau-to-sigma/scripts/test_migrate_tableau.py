@@ -211,6 +211,13 @@ class MigrateTableauPythonTest(unittest.TestCase):
         self.assertNotIn('["ruby"', source)
         self.assertNotIn("RbConfig", source)
 
+    def test_dm_spec_is_bound_before_structural_prepost_gates(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertLess(
+            source.index("dm_spec = effective_dm_spec"),
+            source.index('"emit-relationship-coverage.py"'),
+        )
+
     def test_parity_is_automatic_after_readback_without_overrides(self):
         workdir = self.parity_workdir()
         commands = []
