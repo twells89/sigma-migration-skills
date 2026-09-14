@@ -46,6 +46,7 @@ class SourceObjectCensus
     @parity_pass = Set.new
     @parity_fail = Set.new
     @parity_green = false
+    @explicit_scope_dashboards = Set.new
     load_inputs
   end
 
@@ -90,6 +91,13 @@ class SourceObjectCensus
     @twb_path = twb
     xml = File.read(twb, encoding: 'bom|utf-8')
     @twb_doc = TwbXml.parse(xml)
+    scope_path = File.join(@workdir, 'dashboard-scope.json')
+    if File.file?(scope_path)
+      scope = read_json(scope_path)
+      if scope['mode'] == 'selected' && %w[stated cli].include?(scope['provenance'].to_s)
+        Array(scope['dashboards']).each { |name| add_folded(@explicit_scope_dashboards, name) }
+      end
+    end
   rescue TwbXml::ParseError => e
     raise CensusError, "#{display_path(twb)}: #{e.message}"
   rescue Errno::ENOENT, Errno::EACCES => e
@@ -378,13 +386,16 @@ class SourceObjectCensus
     dashboard = fold(object['dashboard_name'])
     case object['type']
     when 'dashboard'
-      !@layout_dashboards.empty? && !@layout_dashboards.include?(fold(object['name']))
+      !@explicit_scope_dashboards.empty? &&
+        !@explicit_scope_dashboards.include?(fold(object['name']))
     when 'dashboard-zone'
-      return true if !@layout_dashboards.empty? && !@layout_dashboards.include?(dashboard)
+      return true if !@explicit_scope_dashboards.empty? &&
+                     !@explicit_scope_dashboards.include?(dashboard)
       furniture?(object)
     when 'worksheet'
       refs = @worksheet_dashboards[fold(object['name'])]
-      refs.empty? || (!@layout_dashboards.empty? && (refs & @layout_dashboards).empty?)
+      refs.empty? || (!@explicit_scope_dashboards.empty? &&
+                      (refs & @explicit_scope_dashboards).empty?)
     else
       false
     end
@@ -394,12 +405,13 @@ class SourceObjectCensus
     case object['type']
     when 'worksheet'
       refs = @worksheet_dashboards[fold(object['name'])]
-      refs.empty? ? 'worksheet is orphaned from every dashboard' : 'worksheet appears only on out-of-scope dashboards'
+      refs.empty? ? 'worksheet is orphaned from every dashboard' :
+                    'worksheet appears only on explicitly scoped-out dashboards'
     when 'dashboard-zone'
       furniture?(object) ? "non-data dashboard furniture (kind=#{object['zone_kind'] || 'unknown'})" :
                            'dashboard zone belongs to an out-of-scope dashboard'
     else
-      'dashboard is outside dashboard-layout scope'
+      'dashboard is outside the explicitly stated dashboard scope'
     end
   end
 

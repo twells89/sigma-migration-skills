@@ -71,6 +71,9 @@ XML
 Dir.mktmpdir('tableau-source-census') do |dir|
   twb = File.join(dir, 'workbook-content.twb')
   File.write(twb, TWB)
+  write_json(dir, 'dashboard-scope.json',
+             'schema_version' => 1, 'mode' => 'selected',
+             'provenance' => 'stated', 'dashboards' => ['Sales Dashboard'])
   layout = write_json(dir, 'dashboard-layout.json', [
     {
       'dashboard' => 'Sales Dashboard',
