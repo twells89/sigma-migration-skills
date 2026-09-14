@@ -60,6 +60,7 @@ class ConvertTableauTest(unittest.TestCase):
             self.assertIn("security", meta)
             self.assertIn("workbookPatterns", meta)
             self.assertIn("relationshipCoverage", meta)
+            self.assertIn("sqlProvenance", meta)
 
 
 if __name__ == "__main__":

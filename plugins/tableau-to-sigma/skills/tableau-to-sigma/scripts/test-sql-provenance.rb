@@ -21,6 +21,7 @@ end
 Dir.mktmpdir('sql-provenance') do |dir|
   twb = File.join(dir, 'source.twb')
   dm = File.join(dir, 'dm.json')
+  meta = File.join(dir, 'conv-meta.json')
   File.write(twb, <<~XML)
     <workbook><datasources><datasource><connection>
       <relation type="text"><![CDATA[SELECT order_id, amount FROM orders]]></relation>
@@ -31,16 +32,23 @@ Dir.mktmpdir('sql-provenance') do |dir|
       'elements' => [
         element.call('source-sql', 'Source SQL', 'SELECT order_id, amount FROM orders'),
         element.call('lod', 'Revenue LOD Helper', 'SELECT region, SUM(amount) FROM orders GROUP BY region'),
-        element.call('mystery', 'Mystery', 'SELECT secret FROM nowhere')
+        element.call('mystery', 'Mystery',
+                     'SELECT secret, COUNT(*) FROM nowhere GROUP BY secret')
       ]
     }]
   ))
-  result = SqlProvenance.evaluate(dm_spec_path: dm, twb_path: twb)
+  File.write(meta, JSON.generate(
+    'sqlProvenance' => [{
+      'elementId' => 'lod', 'originType' => 'generated-lod',
+      'statement' => 'SELECT region, SUM(amount) FROM orders GROUP BY region'
+    }]
+  ))
+  result = SqlProvenance.evaluate(dm_spec_path: dm, metadata_path: meta, twb_path: twb)
   by_id = result['sql_elements'].to_h { |row| [row['element_id'], row] }
   check.call(by_id['source-sql']['origin_type'] == 'source-custom-sql',
              'source Custom SQL is attributed to the Tableau relation')
-  check.call(by_id['lod']['origin_type'] == 'generated-aggregate',
-             'generated grouped helper is labeled as a target-side aggregate')
+  check.call(by_id['lod']['origin_type'] == 'generated-lod',
+             'generated grouped helper is labeled by the converter ledger')
   check.call(result['status'] == 'fail' && by_id['mystery']['status'] == 'fail',
              'unrecognized SQL is blocked instead of appearing as an invented table')
 
@@ -53,7 +61,8 @@ Dir.mktmpdir('sql-provenance') do |dir|
       'reason' => 'operator-proven semantic rewrite', 'proof' => proof
     }]
   ))
-  result = SqlProvenance.evaluate(dm_spec_path: dm, twb_path: twb, overrides_path: overrides)
+  result = SqlProvenance.evaluate(dm_spec_path: dm, metadata_path: meta,
+                                  twb_path: twb, overrides_path: overrides)
   check.call(result['status'] == 'pass', 'a reasoned explicit override makes every SQL element accountable')
 end
 

@@ -10,6 +10,15 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+ALLOWED_ORIGINS = {
+    "source-custom-sql",
+    "generated-lod",
+    "generated-top-n",
+    "generated-window",
+    "generated-blend",
+    "generated-manual",
+}
+
 
 def normalize_sql(value: Any) -> str:
     text = html.unescape(str(value or "")).strip()
@@ -69,7 +78,7 @@ def load_overrides(path: Path | None) -> dict[str, dict]:
             proof = None
         if (
             key
-            and row.get("origin_type")
+            and row.get("origin_type") in ALLOWED_ORIGINS
             and str(row.get("reason") or "").strip()
             and isinstance(proof, dict)
             and proof.get("match") is True
@@ -94,6 +103,7 @@ def evaluate(
     )
     source_sql = source_queries(twb_path, custom_sql_path)
     overrides = load_overrides(overrides_path)
+    converter_entries = metadata.get("sqlProvenance") or []
     elements = [
         element
         for page in spec.get("pages") or []
@@ -109,42 +119,43 @@ def evaluate(
         override = overrides.get(str(element.get("id") or "")) or overrides.get(
             str(element.get("name") or "")
         )
+        converter_entry = next(
+            (
+                row
+                for row in converter_entries
+                if isinstance(row, dict)
+                and str(row.get("elementId") or "") == str(element.get("id") or "")
+            ),
+            None,
+        )
+        converter_origin = (
+            str(converter_entry.get("originType") or "")
+            if converter_entry is not None
+            else ""
+        )
+        converter_statement_matches = (
+            converter_entry is not None
+            and normalize_sql(converter_entry.get("statement")) == normalized
+        )
         if override:
             origin = str(override["origin_type"])
             evidence = f"override: {override['reason']}"
-        elif any(
-            normalized == query or query in normalized for query in source_sql
+        elif (
+            converter_statement_matches and converter_origin in ALLOWED_ORIGINS
         ):
+            origin, evidence = (
+                converter_origin,
+                "converter-emitted SQL provenance ledger",
+            )
+        elif any(normalized == query for query in source_sql):
             origin, evidence = (
                 "source-custom-sql",
                 "statement matches Tableau source Custom SQL",
             )
-        elif re.search(r"top-?n helper", str(element.get("name") or ""), re.I) or (
-            "rank() over" in normalized and "with agg as" in normalized
-        ):
-            origin, evidence = "generated-top-n", "converter Top-N helper signature"
-        elif re.search(r"\bover\s*\(", normalized):
-            origin, evidence = (
-                "generated-window",
-                "converter window-function helper signature",
-            )
-        elif re.search(r"\bgroup\s+by\b", normalized):
-            origin, evidence = (
-                "generated-aggregate",
-                "converter LOD/grouped helper signature",
-            )
-        elif re.search(r"\bjoin\b", normalized) and any(
-            "blend collapsed" in str(warning)
-            for warning in metadata.get("warnings") or []
-        ):
-            origin, evidence = (
-                "generated-blend",
-                "converter blend-collapse warning + JOIN statement",
-            )
         else:
             origin, evidence = (
                 "unattributed",
-                "no source-SQL match or recognized generated-helper signature",
+                "no exact source-SQL match, statement-bound converter ledger, or proven override",
             )
         entries.append(
             {

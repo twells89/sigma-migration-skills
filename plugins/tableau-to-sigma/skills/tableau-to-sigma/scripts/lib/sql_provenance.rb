@@ -8,6 +8,11 @@ require 'json'
 # LOD/window/Top-N/blend semantics, but it must never masquerade as a source
 # table or appear without a deterministic reason.
 module SqlProvenance
+  ALLOWED_ORIGINS = %w[
+    source-custom-sql generated-lod generated-top-n generated-window
+    generated-blend generated-manual
+  ].freeze
+
   module_function
 
   def normalize_sql(value)
@@ -47,6 +52,7 @@ module SqlProvenance
     metadata = metadata_path && File.file?(metadata_path) ? JSON.parse(File.read(metadata_path)) : {}
     source_sql = source_queries(twb_path, custom_sql_path)
     overrides = load_overrides(overrides_path)
+    converter_entries = Array(metadata['sqlProvenance'])
     elements = Array(spec['pages']).flat_map { |page| Array(page['elements']) }
     sql_elements = elements.select { |element| element.dig('source', 'kind') == 'sql' }
 
@@ -54,23 +60,21 @@ module SqlProvenance
       statement = element.dig('source', 'statement').to_s
       normalized = normalize_sql(statement)
       override = overrides[element['id'].to_s] || overrides[element['name'].to_s]
+      converter_entry = converter_entries.find do |entry|
+        entry.is_a?(Hash) && entry['elementId'].to_s == element['id'].to_s
+      end
+      converter_origin = converter_entry && converter_entry['originType'].to_s
+      converter_statement_matches = converter_entry &&
+                                    normalize_sql(converter_entry['statement']) == normalized
       origin, evidence =
         if override
           [override['origin_type'], "override: #{override['reason']}"]
-        elsif source_sql.any? { |query| normalized == query || normalized.include?(query) }
+        elsif converter_statement_matches && ALLOWED_ORIGINS.include?(converter_origin)
+          [converter_origin, 'converter-emitted SQL provenance ledger']
+        elsif source_sql.any? { |query| normalized == query }
           ['source-custom-sql', 'statement matches Tableau source Custom SQL']
-        elsif element['name'].to_s.match?(/top-?n helper/i) ||
-              (normalized.include?('rank() over') && normalized.include?('with agg as'))
-          ['generated-top-n', 'converter Top-N helper signature']
-        elsif normalized.match?(/\bover\s*\(/)
-          ['generated-window', 'converter window-function helper signature']
-        elsif normalized.match?(/\bgroup\s+by\b/)
-          ['generated-aggregate', 'converter LOD/grouped helper signature']
-        elsif normalized.match?(/\bjoin\b/) &&
-              Array(metadata['warnings']).any? { |warning| warning.to_s.include?('blend collapsed') }
-          ['generated-blend', 'converter blend-collapse warning + JOIN statement']
         else
-          ['unattributed', 'no source-SQL match or recognized generated-helper signature']
+          ['unattributed', 'no exact source-SQL match, statement-bound converter ledger, or proven override']
         end
       {
         'element_id' => element['id'],
@@ -105,7 +109,7 @@ module SqlProvenance
       rescue JSON::ParserError, SystemCallError
         nil
       end
-      next if key.empty? || entry['origin_type'].to_s.empty? ||
+      next if key.empty? || !ALLOWED_ORIGINS.include?(entry['origin_type'].to_s) ||
               entry['reason'].to_s.strip.empty? || !proof.is_a?(Hash) || proof['match'] != true
       out[key] = entry
     end

@@ -4000,7 +4000,7 @@ ${joins.join("\n")}`;
   const mergedName = fact.name || (factFrom && factFrom[1] ? factFrom[1].replace(/"/g, "") : "BLEND") || "BLEND";
   warnings.push(`\u2139 Multi-source blend collapsed into one wide JOIN element: fact + ${rels.length} pre-aggregated secondary island(s) (link-grain SUM/MAX) \u2192 ${mergedColumns.length} columns. Charts can now resolve every column locally.`);
   return {
-    mergedElement: { id: fact.id, name: mergedName, kind: "table", source: { connectionId: connId, kind: "sql", statement }, columns: mergedColumns, order },
+    mergedElement: { id: fact.id, name: mergedName, kind: "table", source: { connectionId: connId, kind: "sql", statement }, columns: mergedColumns, order, _sqlOrigin: "generated-blend" },
     consumedIds: [fact.id, ...rels.map((r) => r.targetElementId)]
   };
 }
@@ -5017,6 +5017,8 @@ function convertTableauToSigma(xmlContent, options = {}) {
             warnings.push(`\u26A0 Custom SQL relation "${fullName}" has no inline SQL text \u2014 emitted as a table path "${path.join(".")}"; verify or replace with the query.`);
           }
           const el = { id: sigmaShortId(), kind: "table", source, columns, order };
+          if (source.kind === "sql")
+            el._sqlOrigin = "source-custom-sql";
           elementMap[fullName] = { element: el, colIdMap, cleanName, objId: relObjId };
           elements.push(el);
         }
@@ -5760,7 +5762,8 @@ ${statement}
           kind: "table",
           source: { connectionId: connId, kind: "sql", statement: finalStatement },
           columns,
-          order
+          order,
+          _sqlOrigin: "source-custom-sql"
         });
         if (columns.length === 0) {
           warnings.push("\u26A0 Custom SQL element emitted with no columns (no <columns> projection or column metadata-records found) \u2014 add columns from the query output.");
@@ -5934,7 +5937,8 @@ ${stmt}
           // filled in below once aggs are known
         },
         columns: helperCols,
-        order: helperOrder
+        order: helperOrder,
+        _sqlOrigin: "generated-lod"
       };
       lodHelpers[signatureKey] = {
         element: helperEl,
@@ -6185,7 +6189,8 @@ ${joinSql}
         // No element-level name field for kind:sql elements (per spec rule 3).
         source: { connectionId: connId, kind: "sql", statement },
         columns: cols,
-        order
+        order,
+        _sqlOrigin: "generated-top-n"
       };
       helperEl.name = `${top.caption} Top-N Helper`;
       const relName = `${factTableName}_TOPN_${aliasBase}`;
@@ -6263,7 +6268,8 @@ ${joinSql}
         name: relName,
         source: { connectionId: connId, kind: "sql", statement: "__PLACEHOLDER__" },
         columns: cols,
-        order
+        order,
+        _sqlOrigin: "generated-window"
       };
       const rec = {
         element: helperEl,
@@ -7870,6 +7876,15 @@ ${suggestion}
   }
   if (!connectionId)
     warnings.unshift("\u26A0 Connection ID not set \u2014 update in JSON before saving to Sigma");
+  const sqlProvenance = elements.filter((e) => e.source?.kind === "sql").map((e) => ({
+    elementId: e.id,
+    elementName: e.name,
+    originType: e._sqlOrigin || "unattributed",
+    statement: e.source.statement
+  }));
+  elements.forEach((e) => {
+    delete e._sqlOrigin;
+  });
   const sigmaModel = {
     name: ds.name,
     schemaVersion: 1,
@@ -7885,6 +7900,7 @@ ${suggestion}
     ...workbookPatterns.length ? { workbookPatterns } : {},
     ...parameters.length ? { parameters } : {},
     ...relationshipCoverage ? { relationshipCoverage } : {},
+    ...sqlProvenance.length ? { sqlProvenance } : {},
     stats: {
       datasources: datasources.length,
       elements: elements.length,

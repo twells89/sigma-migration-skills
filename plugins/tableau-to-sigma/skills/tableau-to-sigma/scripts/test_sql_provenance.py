@@ -26,6 +26,7 @@ class SqlProvenanceTest(unittest.TestCase):
             root = Path(tmp)
             twb = root / "source.twb"
             dm = root / "dm.json"
+            metadata = root / "conv-meta.json"
             twb.write_text(
                 """
                 <workbook><datasources><datasource><connection>
@@ -53,7 +54,10 @@ class SqlProvenanceTest(unittest.TestCase):
                                     element(
                                         "mystery",
                                         "Mystery",
-                                        "SELECT secret FROM nowhere",
+                                        (
+                                            "SELECT secret, COUNT(*) FROM nowhere "
+                                            "GROUP BY secret"
+                                        ),
                                     ),
                                 ]
                             }
@@ -62,10 +66,29 @@ class SqlProvenanceTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            result = sql_provenance.evaluate(dm, twb_path=twb)
+            metadata.write_text(
+                json.dumps(
+                    {
+                        "sqlProvenance": [
+                            {
+                                "elementId": "lod",
+                                "originType": "generated-lod",
+                                "statement": (
+                                    "SELECT region, SUM(amount) FROM orders "
+                                    "GROUP BY region"
+                                ),
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = sql_provenance.evaluate(
+                dm, metadata_path=metadata, twb_path=twb
+            )
             by_id = {row["element_id"]: row for row in result["sql_elements"]}
             self.assertEqual("source-custom-sql", by_id["source-sql"]["origin_type"])
-            self.assertEqual("generated-aggregate", by_id["lod"]["origin_type"])
+            self.assertEqual("generated-lod", by_id["lod"]["origin_type"])
             self.assertEqual("fail", result["status"])
 
             overrides = root / "sql-provenance-overrides.json"
@@ -90,7 +113,10 @@ class SqlProvenanceTest(unittest.TestCase):
                 encoding="utf-8",
             )
             result = sql_provenance.evaluate(
-                dm, twb_path=twb, overrides_path=overrides
+                dm,
+                metadata_path=metadata,
+                twb_path=twb,
+                overrides_path=overrides,
             )
             self.assertEqual("pass", result["status"])
 
