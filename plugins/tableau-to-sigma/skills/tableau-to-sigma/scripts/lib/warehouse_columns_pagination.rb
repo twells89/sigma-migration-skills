@@ -48,9 +48,12 @@ module WarehouseColumnsPagination
   # An optional block receives each page's parsed body as it arrives (same
   # observability seam as Sigma.list_entries — callers use it to announce a
   # multi-page fetch on stderr without re-implementing the loop). A repeated
-  # cursor stops the loop defensively and warns on stderr rather than
-  # spinning or silently truncating.
+  # cursor or malformed page is fatal. Returning the entries accumulated so
+  # far would recreate the exact silent-partial-catalog failure this helper
+  # exists to prevent.
   def self.list(path, http: nil, limit: 1000)
+    raise Sigma::Error, 'warehouse columns page limit must be positive' unless limit.to_i.positive?
+
     entries = []
     cursor = nil
     cursor_param = nil
@@ -61,10 +64,20 @@ module WarehouseColumnsPagination
       qs += "&#{cursor_param}=#{URI.encode_www_form_component(cursor.to_s)}" if cursor && cursor_param
       full_path = "#{path}#{path.include?('?') ? '&' : '?'}#{qs}"
       doc = Sigma.request(:get, full_path, http: http)
-      break unless doc.is_a?(Hash)
+      unless doc.is_a?(Hash)
+        raise Sigma::Error,
+              "#{path}: columns endpoint returned #{doc.class}, expected a JSON object; " \
+              'refusing a partial column list'
+      end
+      page_entries = doc['entries']
+      unless page_entries.is_a?(Array) && page_entries.all? { |entry| entry.is_a?(Hash) }
+        raise Sigma::Error,
+              "#{path}: columns endpoint response has no valid entries array; " \
+              'refusing a partial column list'
+      end
       pages += 1
       yield doc if block_given?
-      entries.concat(doc['entries'] || [])
+      entries.concat(page_entries)
 
       next_cursor =
         if doc.key?('nextPageToken')
@@ -77,9 +90,9 @@ module WarehouseColumnsPagination
       break if next_cursor.nil? || next_cursor.to_s.empty?
       if seen[next_cursor]
         cursor_label = cursor_param == 'page' ? 'nextPage token' : 'nextPageToken cursor'
-        warn "#{path}: server repeated #{cursor_label} #{next_cursor.inspect} — " \
-             "stopping after #{pages} page(s) to avoid an infinite loop (list may be incomplete)"
-        break
+        raise Sigma::Error,
+              "#{path}: server repeated #{cursor_label} #{next_cursor.inspect} after " \
+              "#{pages} page(s); refusing a partial column list"
       end
 
       seen[next_cursor] = true
