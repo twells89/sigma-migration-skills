@@ -7,10 +7,6 @@
     "skill-md-bytes": "crossed budget at 24.7KB when the upstream v0.7.2 live-validation content merged in (#557) — diet the live-run guidance into phase-scoped refs/, then remove",
     "ref-bytes:live-validation-2026-07-30.md": "arrived over budget (39.6KB) from main's Track B parity work (#575/#578) via the 2026-07-31 wave/2-integration merge — the file predates wave-2's byte-budget lint and belongs to the domo owner; diet it into phase-scoped refs/ during domo's E9 diet, then remove"
   },
-  "looker-to-sigma": {
-    "skill-md-bytes": "pre-diet converter (77.2KB, largest surface) — first in line for the E9 diet; shrink then remove",
-    "pre-read-width": "legacy 'Read ALL of the following' block names 5 refs — phase-scope it during looker's E9 diet, then remove"
-  },
   "microstrategy-to-sigma": {
     "skill-md-bytes": "pre-diet converter (30.4KB) — E9 diet pending; shrink then remove"
   },
