@@ -34,11 +34,11 @@ METRICS = [{"id": "el-x", "name": "Order Fact View", "metrics": [
     {"name": "Orders", "formula": "CountDistinct([Order Id])"}]}]
 
 
-def build(dm_elements=None):
+def build(dm_elements=None, fixture="look_grouped_table", kind="table"):
     with tempfile.TemporaryDirectory() as d:
         op = os.path.join(d, "wb.json")
         cmd = [sys.executable, os.path.join(SCRIPTS, "build_workbook.py"),
-               os.path.join(FIX, "look_grouped_table.contract.json"),
+               os.path.join(FIX, f"{fixture}.contract.json"),
                "--views", VIEWS, "--dm-element-name", "Order Fact View", "--out", op]
         if dm_elements is not None:
             dep = os.path.join(d, "dm-elements.json")
@@ -48,7 +48,7 @@ def build(dm_elements=None):
         assert r.returncode == 0, f"build_workbook failed:\n{r.stderr}"
         spec = json.load(open(op))
         t = [e for e in code_rep.workbook_elements(spec)
-             if e.get("kind") == "table" and e.get("name") != "Data"][0]
+             if e.get("kind") == kind and e.get("name") != "Data"][0]
         return {c.get("name"): c["formula"] for c in t["columns"]}
 
 
@@ -61,12 +61,31 @@ def test_fallback_without_metrics():
     print("[ok] no metrics passed → inline (byte-identical fallback)")
 
 
-def test_metric_ref_when_matched():
-    """A measure whose inline aggregate matches a DM metric → [Metrics/<name>]."""
-    cols = build(METRICS)
+def test_metric_ref_when_matched_on_pivot_values():
+    """A measure matching a DM metric → [Metrics/<name>] where that is VALID: pivot values.
+
+    Retargeted from the grouped-table fixture (beads-sigma-w22s). A grouped table's
+    `groupings.calculations` must hold a real aggregate; a [Metrics/<name>] ref there is a
+    passthrough of an already-aggregated column, renders 'multiple values', and preflight_lint
+    T2 rejects it — so the old expectation asserted a spec that could never be POSTed. A
+    pivot-table's `values` are aggregated cells with no `groupings`, so the governed ref is
+    both valid and reachable there.
+    """
+    cols = build(METRICS, fixture="look_pivot_table", kind="pivot-table")
     assert cols["Total Net Revenue"] == "[Metrics/Net Revenue]", cols["Total Net Revenue"]
-    assert cols["Distinct Order Count"] == "[Metrics/Orders]", cols["Distinct Order Count"]
-    print("[ok] matched aggregates → [Metrics/<name>] (governed, no re-derive)")
+    print("[ok] matched aggregate on a pivot value → [Metrics/<name>] (governed, no re-derive)")
+
+
+def test_grouped_table_calculations_stay_inline():
+    """The grouped-table path must NOT use the governed ref (preflight T2 would reject it).
+
+    Full gate coverage — including that preflight_lint accepts the result — lives in
+    tests/test_grouped_metric_ref_preflight.py.
+    """
+    cols = build(METRICS, fixture="look_grouped_table", kind="table")
+    assert not any(str(v).startswith("[Metrics/") for v in cols.values()), cols
+    assert cols["Total Net Revenue"].startswith("Sum("), cols["Total Net Revenue"]
+    print("[ok] grouped-table calculations stay inline aggregates")
 
 
 def test_ratio_falls_back_to_inline():
@@ -86,7 +105,8 @@ def test_unmatched_metric_is_ignored():
 
 if __name__ == "__main__":
     test_fallback_without_metrics()
-    test_metric_ref_when_matched()
+    test_metric_ref_when_matched_on_pivot_values()
+    test_grouped_table_calculations_stay_inline()
     test_ratio_falls_back_to_inline()
     test_unmatched_metric_is_ignored()
     print("ALL PASS")
