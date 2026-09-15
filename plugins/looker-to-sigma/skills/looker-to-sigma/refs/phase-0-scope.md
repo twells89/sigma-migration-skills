@@ -81,9 +81,13 @@ as a scoped slice**, and say so in the handoff.
 
 **Read `refs/lookml-remodeling.md` before scoping any project above a few dozen views.** A mature LookML model encodes Looker's constraints as much as the business's semantics, so a 1:1 port imports them. It covers scoping by System Activity usage, the five shapes that should change on the way across (role-playing explosion, parameterized calendar UDFs, Liquid table switching, security threaded through `sql_on`, M:M bridges), how to read `sql_distinct_key` as a map of where fan-out actually lives, and what not to promise about the semantic-aggregates beta.
 
-Inventory models/explores/dashboards, score complexity, and rank a migration shortlist.
-There is no `looker-assessment` sibling skill today (unlike Tableau) — until there is, do
-this from the Looker API in Phase 1, and use **Looker System Activity** (`i__looker`) field-
-and dashboard-usage history to scope by what is actually queried rather than by what exists.
-On a large estate that single input is usually the difference between porting a few hundred
-fields and porting a few thousand.
+**Use the `looker-assessment` sibling skill** — `../looker-assessment/SKILL.md`. It inventories
+models/explores/dashboards/Looks, scores per-dashboard complexity against Sigma's coverage, pulls
+usage from **Looker System Activity** (`i__looker`), ranks a value/cost migration shortlist, and
+renders the readout — then hands back here for the conversion. It is read-only (GETs plus System
+Activity inline queries). **Do not hand-roll this from the Looker API**; that duplicates a shipped
+skill and produces a worse shortlist.
+
+On a large estate the System Activity usage input is usually the difference between porting a few
+hundred fields and porting a few thousand — scope by what is actually **queried**, not by what
+exists.

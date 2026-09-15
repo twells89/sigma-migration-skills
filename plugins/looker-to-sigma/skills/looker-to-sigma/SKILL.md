@@ -144,7 +144,7 @@ to understand why it stopped.
 |---|---|---|---|---|
 | 0a | Destination (ask when not given) | `python3 scripts/pick_destination.py list` | chosen workspace/folder id → `--folder <id>` | `refs/phase-0-scope.md` |
 | 0b.1 | **Input completeness (run FIRST)** | `python3 scripts/check_input_completeness.py <dir>` | partial-input verdict in numbers — informational, never blocks | `refs/phase-0-scope.md` |
-| 0b.2 | Scope the estate | System Activity (`i__looker`) usage history | ranked migration shortlist | `refs/lookml-remodeling.md`, `refs/open-items.md` |
+| 0b.2 | Scope the estate | **the `looker-assessment` sibling skill** (read-only; System Activity usage) | ranked value/cost shortlist + readout | `../looker-assessment/SKILL.md`, `refs/lookml-remodeling.md`, `refs/open-items.md` |
 | 0c | **Readiness audit (mandatory, creds-free)** | `node scripts/audit-lookml-readiness.mjs` | `lookml-readiness.json` + field/formula censuses — **exit 1 = blocked, a hard pre-POST stop** | `refs/phase-0-scope.md` |
 | 1 | Discover the Looker content | `fetch_looker_dashboard.py` / `fetch_looker_look.py` (live) or `parse_lookml_dashboard.py` (offline) | normalized contract JSON | `refs/phase-1-discover.md`, `refs/dashboard-contract.md` |
 | 1d | RLS scan (cheap, silent if none) | `python3 scripts/detect_rls.py <dir>` | findings summary; silent + exit 0 when no RLS | `refs/security-rls.md` |
