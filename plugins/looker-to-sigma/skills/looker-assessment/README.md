@@ -31,13 +31,14 @@ Nothing in this directory is uploaded anywhere. To share, zip and send deliberat
 
   ```ini
   [Looker]
-  base_url=https://<host>.cloud.looker.com:19999
+  base_url=https://<host>.cloud.looker.com
   client_id=...
   client_secret=...
   verify_ssl=true
   ```
 
-  The `:19999` API port matters. Confirm with
+  No port needed — modern Google-hosted Looker serves the API on 443. A legacy `:19999`
+  base_url self-heals (retries on 443 with a warning). Confirm with
   `python3 scripts/looker_api.py whoami`.
 - Python 3 (inventory script) and Ruby (HTML renderer)
 
