@@ -798,7 +798,9 @@ def main():
         naming-independent and SAFE: any mismatch (ratios, filtered measures, custom/ad-hoc
         measures, or an absent metric list, e.g. the offline test path) falls back to the
         inline formula. A metric on the DM element resolves as `[Metrics/<name>]` through the
-        master→DM-element source chain (verified live). Scoped to table/pivot calc columns."""
+        master→DM-element source chain (verified live). Scoped to table/pivot calc columns —
+        but NOT to a grouped table's `groupings.calculations`, which need a real aggregate
+        expression (see the grouping-calculation revert below; beads-sigma-w22s)."""
         inline = formula_for(f, explore)
         if not is_measure(f) or not isinstance(inline, str):
             return inline
@@ -1444,6 +1446,18 @@ def main():
             # round-trip): groupings:[{id, groupBy:[dim col ids], calculations:[measure
             # col ids]}].
             if gids and cids:
+                # A grouped table's `calculations` must be REAL aggregate expressions. A
+                # governed [Metrics/<name>] ref is a PASSTHROUGH of an already-aggregated
+                # column here: Sigma renders 'multiple values' and preflight_lint T2 rejects
+                # it, so the whole dashboard was unbuildable (beads-sigma-w22s). Keep the
+                # governed ref everywhere it IS valid (KPI values, pivot-table values) and
+                # revert to the inline aggregate only for these grouping calculations.
+                _cid2field = {cid: fld for fld, cid in field2cid.items()}
+                _by_id = {c["id"]: c for c in cols}
+                for _cid in cids:
+                    _c = _by_id.get(_cid)
+                    if _c and str(_c.get("formula", "")).startswith("[Metrics/"):
+                        _c["formula"] = formula_for(_cid2field[_cid], ex)
                 base["groupings"] = [{"id": sid("g"), "groupBy": gids, "calculations": cids}]
             if hidden:
                 warnings.append(
