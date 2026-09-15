@@ -9,6 +9,11 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import relationship_coverage as relationship_coverage_lib  # noqa: E402
+import dashboard_coverage as dashboard_coverage_lib  # noqa: E402
+import sql_provenance as sql_provenance_lib  # noqa: E402
+
 
 def load(path: Path) -> dict:
     with path.open(encoding="utf-8-sig") as handle:
@@ -36,6 +41,9 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         "anchors": workdir / "anchors-verdict.json",
         "visual_similarity": workdir / "visual-similarity-final.json",
         "semantic_edits": workdir / "semantic-edits.json",
+        "relationship_coverage": workdir / "relationship-coverage.json",
+        "dashboard_coverage": workdir / "dashboard-coverage.json",
+        "sql_provenance": workdir / "sql-provenance.json",
         "source_census": workdir / "source-object-census.json",
         "security_decision": workdir / "security-decision.json",
         "data_model_ids": workdir / "dm-ids.json",
@@ -74,6 +82,101 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         failures.append("visual_similarity: machine floor failed")
     if documents.get("semantic_edits", {}).get("match") is not True:
         failures.append("semantic_edits: structural proof missing or failed")
+    relationship_gate_pass = False
+    relationship_doc = documents.get("relationship_coverage")
+    metadata_path = workdir / "conv-meta.json"
+    source_path = workdir / "workbook-content.twb"
+    relationship_model = next(
+        (
+            path
+            for path in (
+                workdir / "datamodel-readback.json",
+                workdir / "dm-remapped.json",
+                workdir / "dm-raw.json",
+                workdir / "dm-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    if relationship_doc is not None:
+        try:
+            expected_relationships = relationship_coverage_lib.from_files(
+                metadata_path, source_path, relationship_model
+            )
+            relationship_gate_pass = (
+                relationship_doc == expected_relationships
+                and expected_relationships.get("status") != "fail"
+            )
+        except (OSError, ValueError, json.JSONDecodeError):
+            relationship_gate_pass = False
+    if not relationship_gate_pass:
+        failures.append(
+            "relationship_coverage: artifact is stale, unwired, partial, or unreadable"
+        )
+    dashboard_gate_pass = False
+    dashboard_doc = documents.get("dashboard_coverage")
+    dashboard_spec = next(
+        (
+            path
+            for path in (
+                workdir / "workbook-readback.json",
+                workdir / "wb-spec-python.json",
+                workdir / "wb-spec.resolved.json",
+                workdir / "wb-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    try:
+        dashboard_scope = load(workdir / "dashboard-scope.json")
+        expected_dashboards = dashboard_coverage_lib.evaluate(
+            workdir / "workbook-content.twb",
+            dashboard_spec,
+            dashboard_scope,
+            workdir / "story-plan.json",
+        )
+        dashboard_gate_pass = (
+            dashboard_doc == expected_dashboards
+            and expected_dashboards.get("status") == "pass"
+        )
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        dashboard_gate_pass = False
+    if not dashboard_gate_pass:
+        failures.append(
+            "dashboard_coverage: visible in-scope Tableau dashboard is missing "
+            "or the artifact is stale"
+        )
+    sql_gate_pass = False
+    sql_doc = documents.get("sql_provenance")
+    sql_spec = next(
+        (
+            path
+            for path in (
+                workdir / "dm-remapped.json",
+                workdir / "dm-raw.json",
+                workdir / "dm-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    try:
+        expected_sql = sql_provenance_lib.evaluate(
+            sql_spec,
+            workdir / "conv-meta.json",
+            workdir / "workbook-content.twb",
+            workdir / "custom-sql.json",
+            workdir / "sql-provenance-overrides.json",
+        )
+        sql_gate_pass = sql_doc == expected_sql and expected_sql.get("status") == "pass"
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        sql_gate_pass = False
+    if not sql_gate_pass:
+        failures.append(
+            "sql_provenance: a data-model SQL element is unattributed or the artifact is stale"
+        )
     census = documents.get("source_census") or {}
     census_summary = census.get("summary") or {}
     source_objects = census.get("objects") or []
@@ -138,6 +241,9 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         "visual_floor": visual_pass,
         "blind_visual_grade": blind.get("verdict") == "pass" and not failed_dimensions,
         "semantic_edit_proof": documents.get("semantic_edits", {}).get("match") is True,
+        "relationship_coverage": relationship_gate_pass,
+        "dashboard_coverage": dashboard_gate_pass,
+        "sql_provenance": sql_gate_pass,
         "security_decision": security.get("decision") in {"not-required", "port", "customize", "skip"},
     }
     return {

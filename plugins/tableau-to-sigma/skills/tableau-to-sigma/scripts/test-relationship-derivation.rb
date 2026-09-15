@@ -385,6 +385,31 @@ Dir.mktmpdir('deny-b') do |dir|
 end
 
 puts ''
+puts 'normalized-name collision: never trust the last colIdMap write'
+Dir.mktmpdir('collision') do |dir|
+  # Add a second, distinct FACT column whose display name normalizes to the
+  # same STORE_KEY inference key ("Store  Key" -> STORE_KEY). The converter's
+  # legacy colIdMap assignment kept only the last writer and could wire a real
+  # but wrong column id with no signal.
+  variant = raw_twb.sub(
+    /<metadata-record class='column'>\s*<remote-name>store_key<\/remote-name>.*?<parent-name>\[LMOG_FACT_WIDE\]<\/parent-name>.*?<\/metadata-record>/m
+  ) do |block|
+    shadow = block.gsub('store_key', 'store_key_shadow').gsub('Store Key', 'Store  Key')
+    block + "\n" + shadow
+  end
+  vp = File.join(dir, 'variant-collision.twb')
+  File.write(vp, variant)
+  vdoc = run_converter_capture(vp)
+  vstore = ((vdoc['relationshipCoverage'] || {})['entries'] || [])
+           .find { |e| e['right'] == 'LMOG_DIM_STORE' } || {}
+  check(vstore['derivedVia'] == 'unwired',
+        "normalized STORE_KEY collision leaves the relationship unwired (got #{vstore['derivedVia'].inspect})", fails)
+  check(Array(vstore['collisions']).include?('STORE_KEY') &&
+        vstore['reason'].to_s.include?('normalized column name collision'),
+        "coverage names STORE_KEY collision and the refusal reason (got #{vstore.inspect})", fails)
+end
+
+puts ''
 if fails.empty?
   puts 'test-relationship-derivation.rb: ALL PASS'
   exit 0

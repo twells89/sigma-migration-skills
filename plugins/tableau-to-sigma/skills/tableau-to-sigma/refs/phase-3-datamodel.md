@@ -39,6 +39,28 @@ Write the spec to `<WORK>/dm-spec.json`. Full schema is in
    aggregation, window behavior, vendor-specific semantics, or cannot yet be
    proven. Never discard SQL clauses merely to get a table-shaped model.
 
+### Pre-POST structural provenance gates
+
+The orchestrator writes and strictly evaluates two Tableau-local artifacts
+before posting a new or reused data model:
+
+- `relationship-coverage.json` — every source object-graph relationship must
+  be completely wired. `wired < serialized`, `derived_via:"unwired"`,
+  `partial:true`, or any positive `dropped_conditions` is a hard stop. A
+  physical subset is not “close enough”: dropping a computed predicate widens
+  the join and can recreate the field-reported flattened/pre-aggregated model.
+  The relationship/key count is checked again against the posted DM readback,
+  so a local converter ledger cannot hide an API-dropped or manual-spec edge.
+- `sql-provenance.json` — every `source.kind:"sql"` element is labeled as
+  source Custom SQL or a generated LOD/Top-N/window/blend helper. An
+  unattributed SQL element stops before POST. A manual entry in
+  `sql-provenance-overrides.json` requires `element_id`/`element_name`,
+  `origin_type`, a non-empty `reason`, and a `proof` JSON path whose document
+  has `match:true`.
+
+Both artifacts are re-derived during finalization; editing the artifact cannot
+turn a blocker green.
+
 ### Data-model metrics in workbook formulas
 
 Metrics defined in a data-model element's `metrics[]` **do flow into workbook

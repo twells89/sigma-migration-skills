@@ -46,6 +46,7 @@ class SourceObjectCensus
     @parity_pass = Set.new
     @parity_fail = Set.new
     @parity_green = false
+    @explicit_scope_dashboards = Set.new
     load_inputs
   end
 
@@ -54,6 +55,7 @@ class SourceObjectCensus
     parse_parity
     inventory_twb
     inventory_layout
+    inventory_stories
     inventory_calculations
     inventory_blends
     account_objects
@@ -90,6 +92,13 @@ class SourceObjectCensus
     @twb_path = twb
     xml = File.read(twb, encoding: 'bom|utf-8')
     @twb_doc = TwbXml.parse(xml)
+    scope_path = File.join(@workdir, 'dashboard-scope.json')
+    if File.file?(scope_path)
+      scope = read_json(scope_path)
+      if scope['mode'] == 'selected' && %w[stated cli].include?(scope['provenance'].to_s)
+        Array(scope['dashboards']).each { |name| add_folded(@explicit_scope_dashboards, name) }
+      end
+    end
   rescue TwbXml::ParseError => e
     raise CensusError, "#{display_path(twb)}: #{e.message}"
   rescue Errno::ENOENT, Errno::EACCES => e
@@ -272,6 +281,25 @@ class SourceObjectCensus
                'dashboard_name' => name)
   end
 
+  def inventory_stories
+    path = File.join(@workdir, 'story-plan.json')
+    return unless File.file?(path)
+    Array(read_json(path)).each do |story|
+      next unless story.is_a?(Hash)
+      Array(story['points']).each do |point|
+        next unless point.is_a?(Hash) && !point['caption'].to_s.empty?
+        add_object(
+          'story-point',
+          stable_id('story-point', story['story'], point['id'] || point['caption']),
+          point['caption'],
+          evidence(path, "Tableau story point #{story['story'].inspect}/#{point['caption'].inspect}"),
+          'story_name' => story['story'],
+          'captured_sheet' => point['captured_sheet']
+        )
+      end
+    end
+  end
+
   def inventory_calculations
     records = docs(:calcs).flat_map do |(_, doc)|
       doc.is_a?(Hash) ? Array(doc['calcs'] || doc['calculations']) : Array(doc)
@@ -378,13 +406,19 @@ class SourceObjectCensus
     dashboard = fold(object['dashboard_name'])
     case object['type']
     when 'dashboard'
-      !@layout_dashboards.empty? && !@layout_dashboards.include?(fold(object['name']))
+      !@explicit_scope_dashboards.empty? &&
+        !@explicit_scope_dashboards.include?(fold(object['name']))
     when 'dashboard-zone'
-      return true if !@layout_dashboards.empty? && !@layout_dashboards.include?(dashboard)
+      return true if !@explicit_scope_dashboards.empty? &&
+                     !@explicit_scope_dashboards.include?(dashboard)
       furniture?(object)
     when 'worksheet'
       refs = @worksheet_dashboards[fold(object['name'])]
-      refs.empty? || (!@layout_dashboards.empty? && (refs & @layout_dashboards).empty?)
+      refs.empty? || (!@explicit_scope_dashboards.empty? &&
+                      (refs & @explicit_scope_dashboards).empty?)
+    when 'story-point'
+      !@explicit_scope_dashboards.empty? &&
+        !@explicit_scope_dashboards.include?(fold(object['story_name']))
     else
       false
     end
@@ -394,12 +428,15 @@ class SourceObjectCensus
     case object['type']
     when 'worksheet'
       refs = @worksheet_dashboards[fold(object['name'])]
-      refs.empty? ? 'worksheet is orphaned from every dashboard' : 'worksheet appears only on out-of-scope dashboards'
+      refs.empty? ? 'worksheet is orphaned from every dashboard' :
+                    'worksheet appears only on explicitly scoped-out dashboards'
     when 'dashboard-zone'
       furniture?(object) ? "non-data dashboard furniture (kind=#{object['zone_kind'] || 'unknown'})" :
                            'dashboard zone belongs to an out-of-scope dashboard'
+    when 'story-point'
+      'story point belongs to an explicitly scoped-out story'
     else
-      'dashboard is outside dashboard-layout scope'
+      'dashboard is outside the explicitly stated dashboard scope'
     end
   end
 
@@ -414,6 +451,8 @@ class SourceObjectCensus
     names = candidate_names(object)
     case object['type']
     when 'dashboard'
+      names.any? { |name| @built_pages.include?(fold(name)) }
+    when 'story-point'
       names.any? { |name| @built_pages.include?(fold(name)) }
     when 'parameter'
       names.any? { |name| @built_controls.include?(fold(name)) }

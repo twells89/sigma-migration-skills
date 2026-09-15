@@ -1332,6 +1332,19 @@ if opts[:finalize]
   line 'WARN: run-state chain audit found a missing phase (see above)' unless rsst.success?
   mark('assert-run-state')
 
+  relgout, relgst = run!(
+    ['ruby', File.join(HERE, 'assert-relationship-coverage.rb'), '--workdir', WORK],
+    allow_fail: true
+  )
+  dashgout, dashgst = run!(
+    ['ruby', File.join(HERE, 'dashboard-coverage.rb'), '--workdir', WORK, '--check'],
+    allow_fail: true
+  )
+  sqlpout, sqlpst = run!(
+    ['ruby', File.join(HERE, 'sql-provenance.rb'), '--workdir', WORK, '--check'],
+    allow_fail: true
+  )
+
   # The census-aware hard gate. NEVER bypassed — this command fails when it fails.
   gate = ['ruby', File.join(HERE, 'assert-phase6-ran.rb'), '--tableau', WORK, '--workbook-id', wb_id]
   # Require a RECORDED source-vs-target visual comparison (gate 8b) — not just a
@@ -1595,7 +1608,8 @@ if opts[:finalize]
   # aware gate is the parity authority — phase6's own exit stays strict-100%.
   parity_ok = p6st.success? || (opts[:min_pass_rate] && gst.success?)
   accounting_ok = census_st.success? && report_st.success? && report_verdict != 'RED'
-  all_green = parity_ok && clst.success? && gst.success? && dsfst.success? &&
+  all_green = parity_ok && clst.success? && relgst.success? && dashgst.success? && sqlpst.success? &&
+              gst.success? && dsfst.success? &&
               agst.success? && accounting_ok
 
   # ---------------------------------------------------------------------------
@@ -1732,7 +1746,7 @@ if opts[:finalize]
   else
     puts "PARITY      : #{pf['status'] || '?'} (#{pf['charts_pass']}/#{pf['charts_total']} charts#{state['extract_mode'] ? ', extract-mode' : ''})"
   end
-  puts "GATES       : phase6=#{p6st.success? ? 'PASS' : 'FAIL'} cleanup=#{clst.success? ? 'PASS' : 'FAIL'} assert-phase6-ran=#{gst.success? ? 'PASS' : "FAIL(#{gst.exitstatus})"} ds-filters=#{dsfst.success? ? 'PASS' : "FAIL(#{dsfst.exitstatus})"} action-gates=#{agst.success? ? 'PASS' : "FAIL(#{agst.exitstatus})"} source-census=#{census_st.success? ? 'PASS' : "FAIL(#{census_st.exitstatus})"} report=#{report_verdict}#{report_st.success? ? '' : "(#{report_st.exitstatus})"}"
+  puts "GATES       : phase6=#{p6st.success? ? 'PASS' : 'FAIL'} cleanup=#{clst.success? ? 'PASS' : 'FAIL'} relationships=#{relgst.success? ? 'PASS' : "FAIL(#{relgst.exitstatus})"} dashboards=#{dashgst.success? ? 'PASS' : "FAIL(#{dashgst.exitstatus})"} sql-provenance=#{sqlpst.success? ? 'PASS' : "FAIL(#{sqlpst.exitstatus})"} assert-phase6-ran=#{gst.success? ? 'PASS' : "FAIL(#{gst.exitstatus})"} ds-filters=#{dsfst.success? ? 'PASS' : "FAIL(#{dsfst.exitstatus})"} action-gates=#{agst.success? ? 'PASS' : "FAIL(#{agst.exitstatus})"} source-census=#{census_st.success? ? 'PASS' : "FAIL(#{census_st.exitstatus})"} report=#{report_verdict}#{report_st.success? ? '' : "(#{report_st.exitstatus})"}"
   puts "ENHANCE     : #{enhance_line}" if enhance_line
   puts "PUNCH LIST  : #{_pl_note}" if _pl_note
   puts "STATUS      : #{all_green ? 'GREEN' : 'NOT GREEN'}"
@@ -1740,6 +1754,9 @@ if opts[:finalize]
   quiet_event('result', 'stage' => 'finalize', 'status' => all_green ? 'GREEN' : 'NOT GREEN',
               'workbook_id' => wb_id, 'data_model_id' => state['data_model_id'],
               'gates' => { 'phase6' => p6st.exitstatus, 'cleanup' => clst.exitstatus,
+                           'relationships' => relgst.exitstatus,
+                           'dashboards' => dashgst.exitstatus,
+                           'sql_provenance' => sqlpst.exitstatus,
                            'assert_phase6_ran' => gst.exitstatus, 'ds_filters' => dsfst.exitstatus,
                            'action_gates' => agst.exitstatus, 'source_census' => census_st.exitstatus,
                            'migration_report' => report_st.exitstatus,
@@ -1770,7 +1787,10 @@ if opts[:finalize]
   # acceptable: the breaker restarts counting on the more truthful signature,
   # the same trade taken when the cleanup key was added.)
   unless all_green
-    _fail_out = if !gst.success? then gout
+    _fail_out = if !relgst.success? then relgout
+                elsif !dashgst.success? then dashgout
+                elsif !sqlpst.success? then sqlpout
+                elsif !gst.success? then gout
                 elsif !parity_ok then p6out # p6 failure NOT excused by --min-pass-rate
                 elsif !dsfst.success? then dsfout
                 elsif !agst.success? then agout
@@ -1780,7 +1800,10 @@ if opts[:finalize]
                 end
     _fregion = Offramp.error_region(_fail_out)
     _fsig = Offramp.failure_signature(script: 'migrate-tableau', context: 'finalize',
-                                      exit_code: { phase6: p6st.exitstatus, gate: gst.exitstatus,
+                                      exit_code: { phase6: p6st.exitstatus, relationships: relgst.exitstatus,
+                                                   dashboards: dashgst.exitstatus,
+                                                   sql_provenance: sqlpst.exitstatus,
+                                                   gate: gst.exitstatus,
                                                    cleanup: clst.exitstatus,
                                                    dsfilters: dsfst.exitstatus,
                                                    actiongates: agst.exitstatus,
@@ -1893,6 +1916,27 @@ if opts[:dm_spec] || opts[:wb_spec]
     if dm_json && !(dm_json.is_a?(Hash) && dm_json['pages'].is_a?(Array))
   abort 'FATAL: --wb-spec JSON is not a page-bearing workbook spec (no document.pages array)' \
     unless wb_json.is_a?(Hash) && WorkbookCode.document(wb_json)['pages'].is_a?(Array)
+  # A manual DM repair must also repair the converter's relationship ledger.
+  # Otherwise --dm-spec would be an escape around the automatic pre-POST gate.
+  _manual_source = File.join(WORK, 'workbook-content.twb')
+  _manual_meta = File.join(WORK, 'conv-meta.json')
+  _manual_has_object_graph = File.file?(_manual_source) &&
+                             File.read(_manual_source, encoding: 'bom|utf-8')
+                                 .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
+  if dm_json && (_manual_has_object_graph || File.file?(File.join(WORK, 'relationship-coverage.json')))
+    abort "FATAL: object-graph manual repair requires #{_manual_meta}; regenerate converter metadata " \
+          'with every relationship fully resolved.' unless File.file?(_manual_meta)
+    _rel_out, _rel_st = run!(
+      ['ruby', File.join(HERE, 'emit-relationship-coverage.rb'),
+       '--converter-out', _manual_meta, '--source', _manual_source,
+       '--dm-spec', opts[:dm_spec],
+       '--out', File.join(WORK, 'relationship-coverage.json'), '--strict'],
+      allow_fail: true
+    )
+    abort 'FATAL: manual --dm-spec cannot bypass incomplete relationship coverage. ' \
+          "Repair the blocker(s) in #{File.join(WORK, 'relationship-coverage.json')} and conv-meta.json." \
+      unless _rel_st.success?
+  end
   # Vendor-neutral CDW join-cost advisory (informational only; never gates). See refs/modeling-strategy.md.
   ModelingAdvisory.from_dm_spec(dm_json) if dm_json && defined?(ModelingAdvisory) && ModelingAdvisory.respond_to?(:from_dm_spec)
   Object.const_set(:Specs, Module.new do
@@ -2263,6 +2307,30 @@ if have_twb
       exit 19
     end
   end
+  _scope_dashboards = if scoped?
+                        (dash.is_a?(Array) ? dash : [dash])
+                          .map { |row| row.is_a?(Hash) ? row['dashboard'].to_s : '' }
+                          .reject(&:empty?).uniq
+                      else
+                        []
+                      end
+  _scope_provenance = if scoped? && MISSION_SCOPE &&
+                                      MISSION_SCOPE['provenance'] == 'stated'
+                        'stated'
+                      elsif scoped?
+                        'cli'
+                      else
+                        'full-workbook'
+                      end
+  File.write(
+    File.join(WORK, 'dashboard-scope.json'),
+    JSON.pretty_generate(
+      'schema_version' => 1,
+      'mode' => scoped? ? 'selected' : 'full',
+      'provenance' => _scope_provenance,
+      'dashboards' => _scope_dashboards
+    )
+  )
   zones = dash.is_a?(Array) ? dash.flat_map { |d| d['zones'] || [] } : (dash['zones'] || [])
   chart_zones = zones.select { |z| z['kind'] == 'chart' }
   kinds = chart_zones.map { |z| z['chart_kind'] }.compact
@@ -2832,6 +2900,33 @@ if mechanical
     mark('phase1-join')
     phase_summary
     exit 15
+  end
+
+  # Object-graph relationship completeness is a hard pre-POST gate. Counting
+  # only attached relationships misses both disconnected tables and
+  # wired-but-partial edges whose computed predicate was dropped.
+  rel_coverage_path = File.join(WORK, 'relationship-coverage.json')
+  _rel_out, rel_cov_st = run!(
+    ['ruby', File.join(HERE, 'emit-relationship-coverage.rb'),
+     '--converter-out', File.join(WORK, 'conv-meta.json'),
+     '--source', conv_twb, '--dm-spec', File.join(WORK, 'dm-raw.json'),
+     '--out', rel_coverage_path, '--strict'],
+    allow_fail: true
+  )
+  unless rel_cov_st.success?
+    puts
+    puts '================ RELATIONSHIP COVERAGE STOP (no Sigma writes) ================'
+    puts 'The Tableau logical model contains an unwired or partial relationship.'
+    puts 'A partial relationship is not acceptable: dropping one computed condition makes'
+    puts 'the Sigma join wider than Tableau and recreates the flattened/pre-aggregated failure.'
+    puts "Inspect #{rel_coverage_path}; repair every listed edge, then regenerate"
+    puts 'conv-meta.json/relationship-coverage.json before re-entering the gated spine.'
+    authorize_manual_path!(via: 'converter-stop',
+                           reason: 'object-graph relationship coverage incomplete',
+                           exit_code: 11)
+    mark('phase1-join')
+    phase_summary
+    exit 11
   end
 
   # ---- RLS gate (never silently drop) -------------------------------------
@@ -4237,6 +4332,14 @@ if reuse_dm_id
     end
   }
   File.write(dm_ids_path, JSON.pretty_generate(dm_ids))
+  dm_spec_path = File.join(WORK, 'dm-spec-reused.json')
+  File.write(dm_spec_path, JSON.pretty_generate(dm_spec_rb))
+  _sql_prov_out, _sql_prov_st = run!(
+    ['ruby', File.join(HERE, 'sql-provenance.rb'), '--workdir', WORK, '--dm-spec', dm_spec_path],
+    allow_fail: true
+  )
+  abort "FATAL: reused data model has unattributed Custom SQL; inspect #{File.join(WORK, 'sql-provenance.json')}" \
+    unless _sql_prov_st.success?
   dm_id = reuse_dm_id
   dm_els = dm_ids['pages'].flat_map { |p| p['elements'] }
   # The fact is the WIDEST non-dim element. Exclude both "<X> Dim" and "Dim <X>"
@@ -4466,6 +4569,21 @@ unless reuse_dm_id
   _, dvst = run!(['ruby', File.join(HERE, 'validate-spec.rb'), '--type', 'datamodel', dm_spec_path],
                  allow_fail: mechanical)
   line 'DM validate-spec flagged issues (advisory in mechanical mode — live POST is the gate)' if mechanical && !dvst.success?
+  _sql_prov_out, _sql_prov_st = run!(
+    ['ruby', File.join(HERE, 'sql-provenance.rb'), '--workdir', WORK, '--dm-spec', dm_spec_path],
+    allow_fail: true
+  )
+  unless _sql_prov_st.success?
+    puts
+    puts '================ SQL PROVENANCE STOP (no Sigma writes) ======================'
+    puts 'A Custom SQL data-model element has no source or generated-helper attribution.'
+    puts "Inspect #{File.join(WORK, 'sql-provenance.json')} and either repair the model or"
+    puts 'record a reasoned sql-provenance-overrides.json entry backed by semantic proof.'
+    authorize_manual_path!(via: 'converter-stop',
+                           reason: 'unattributed Custom SQL data-model element',
+                           exit_code: 11)
+    exit 11
+  end
   # W2.2 / v5.6-P0.4 wiring: typed-literal lint over the generated DM spec.
   # The 2026-07-13 field class: a NUMBER column compared to a quoted string
   # (If([Year] = "2014", …)) compiles clean in Sigma and renders NULL for every
@@ -5281,6 +5399,8 @@ wb_ids_path = File.join(WORK, 'wb-ids.json')
 # a clear, FRIENDLY non-zero handoff: the agent path rebuilds the workbook against
 # this DM (see SKILL.md). Never worse than the proven agent path.
 begin
+  run_wb!(['ruby', File.join(HERE, 'dashboard-coverage.rb'),
+           '--workdir', WORK, '--source', twb, '--spec', wb_spec_path])
   v_log = run_wb!(['ruby', File.join(HERE, 'validate-spec.rb'), '--type', 'workbook',
                    '--dm-context', dm_ids_path, wb_spec_path])
   # 🚧 Pre-POST ref-resolution gate: every [Element/Column] ref in the wb-spec must

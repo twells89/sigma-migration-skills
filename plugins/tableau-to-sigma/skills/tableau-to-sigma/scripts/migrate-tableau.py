@@ -720,6 +720,25 @@ def main() -> int:
         for dashboard in args.dashboard:
             layout_args += ["--dashboard", dashboard]
         run("Phase 1 layout signals", "parse-twb-layout.py", layout_args)
+    layout_scope = load(workdir / "dashboard-layout.json", []) or []
+    selected_dashboards = (
+        [
+            str(row.get("dashboard"))
+            for row in layout_scope
+            if isinstance(row, dict) and row.get("dashboard")
+        ]
+        if args.dashboard
+        else []
+    )
+    write(
+        workdir / "dashboard-scope.json",
+        {
+            "schema_version": 1,
+            "mode": "selected" if args.dashboard else "full",
+            "provenance": "cli" if args.dashboard else "full-workbook",
+            "dashboards": selected_dashboards,
+        },
+    )
     if not (workdir / "gaps.json").is_file():
         run(
             "Phase 1 gap scan",
@@ -885,7 +904,59 @@ def main() -> int:
             ],
         )
 
-    metadata = load(workdir / "conv-meta.json", {}) or {}
+    dm_spec = effective_dm_spec
+    metadata_path = workdir / "conv-meta.json"
+    metadata = load(metadata_path, {}) or {}
+    if not metadata_path.is_file():
+        write(metadata_path, {"model": raw_model})
+    relationship_artifact = workdir / "relationship-coverage.json"
+    relationship_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "emit-relationship-coverage.py"),
+            "--converter-out",
+            str(metadata_path),
+            "--source",
+            str(conversion_twb),
+            "--dm-spec",
+            str(dm_spec),
+            "--out",
+            str(relationship_artifact),
+            "--strict",
+        ],
+        check=False,
+    )
+    if relationship_gate.returncode:
+        return stop(
+            4,
+            "RELATIONSHIP COVERAGE REPAIR REQUIRED",
+            [
+                "The Tableau logical model contains an unwired or partial relationship.",
+                f"See {relationship_artifact}.",
+                "Repair every edge and regenerate conv-meta.json before any Sigma POST.",
+            ],
+        )
+    sql_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "sql-provenance.py"),
+            "--workdir",
+            str(workdir),
+            "--dm-spec",
+            str(dm_spec),
+        ],
+        check=False,
+    )
+    if sql_gate.returncode:
+        return stop(
+            4,
+            "SQL PROVENANCE REPAIR REQUIRED",
+            [
+                "A Custom SQL data-model element has no source or generated-helper attribution.",
+                f"See {workdir / 'sql-provenance.json'}.",
+                "Repair it or add a reasoned sql-provenance-overrides.json entry.",
+            ],
+        )
     security = metadata.get("security") or []
     if security and not args.security_decision:
         return stop(
@@ -931,7 +1002,6 @@ def main() -> int:
         for pattern in metadata.get("workbookPatterns") or []
         if pattern.get("kind") == "unsupported"
     ]
-    dm_spec = effective_dm_spec
     if unsupported and not args.dm_spec:
         write(workdir / "unsupported-patterns.json", unsupported)
         return stop(
@@ -1150,6 +1220,30 @@ def main() -> int:
                 f"automatic workbook builder exited {automatic.returncode}"
             )
 
+    dashboard_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "dashboard-coverage.py"),
+            "--workdir",
+            str(workdir),
+            "--source",
+            str(workdir / "workbook-content.twb"),
+            "--spec",
+            str(workdir / "wb-spec-python.json"),
+        ],
+        check=False,
+    )
+    if dashboard_gate.returncode:
+        return stop(
+            4,
+            "DASHBOARD COVERAGE REPAIR REQUIRED",
+            [
+                "A visible, in-scope Tableau dashboard has no Sigma workbook page.",
+                f"See {workdir / 'dashboard-coverage.json'}.",
+                "Repair the workbook spec before any Sigma workbook POST.",
+            ],
+        )
+
     post_args = [
         "--type",
         "workbook",
@@ -1285,6 +1379,40 @@ def main() -> int:
                 "Re-run with --blind-grade <blind-grade.json>.",
             ],
         )
+    print("── Relationship coverage gate")
+    relationship_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "assert-relationship-coverage.py"),
+            "--workdir",
+            str(workdir),
+        ],
+        check=False,
+    )
+    print("── Dashboard coverage gate")
+    dashboard_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "dashboard-coverage.py"),
+            "--workdir",
+            str(workdir),
+            "--check",
+        ],
+        check=False,
+    )
+    print("── SQL provenance gate")
+    sql_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "sql-provenance.py"),
+            "--workdir",
+            str(workdir),
+            "--dm-spec",
+            str(dm_spec),
+            "--check",
+        ],
+        check=False,
+    )
     print("── Final gate: verify-complete.py")
     completed = subprocess.run(
         [
@@ -1320,7 +1448,13 @@ def main() -> int:
             "claim exact parity with the frozen Tableau extract. See "
             f"{workdir / 'extract-landing-offramp.json'}."
         )
-    return hard_gate.returncode or completed.returncode
+    return (
+        relationship_gate.returncode
+        or dashboard_gate.returncode
+        or sql_gate.returncode
+        or hard_gate.returncode
+        or completed.returncode
+    )
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@
 #   2. multi-page fetches announce themselves on stderr (page count);
 #   3. the single-page path is byte-shape-identical to before (no pagination
 #      noise, same output JSON keys, nested type objects still flattened);
-#   4. a server that repeats the same nextPage token forever cannot spin us —
-#      the loop is bounded and says why it stopped.
+#   4. a server that repeats the same nextPage token forever cannot spin us or
+#      return a partial catalog — the command fails closed and writes nothing.
 #
 # Loopback WEBrick over http:// (same harness as test-dm-reuse-ranking.rb) —
 # offline, creds-free, invented fixture names only.
@@ -111,13 +111,15 @@ begin
   check(requests.size == 1, 'single page ⇒ single request (nil nextPage ends the loop)', fails)
   check(!err.include?('pages'), 'no pagination noise on the single-page path', fails)
 
-  # ---- 4. repeated-token server is bounded ----
+  # ---- 4. repeated-token server fails closed ----
   requests.clear
   mode = :repeat_token
   out, err, st = Open3.capture3(env, *args)
-  check(st.exitstatus.zero?, 'repeated-token run terminates (exit 0, not a hang)', fails)
+  check(!st.exitstatus.zero?, 'repeated-token run terminates nonzero (never returns partial columns)', fails)
   check(requests.size == 2, "repeated nextPage token fetched at most twice (got #{requests.size})", fails)
-  check(err.include?('repeated nextPage token'), 'the defensive stop names its cause on stderr', fails)
+  check(out.empty?, 'repeated-token failure writes no partial JSON to stdout', fails)
+  check(err.include?('repeated nextPage token') && err.include?('refusing a partial column list'),
+        'the fatal stop names the repeated cursor and partial-list risk on stderr', fails)
 ensure
   server.shutdown
 end

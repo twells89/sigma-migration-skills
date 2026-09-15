@@ -36,7 +36,78 @@ def build(workdir: Path) -> dict:
     audit = load(workdir / "formula-audit.json", {}) or {}
     builder = load(workdir / "workbook-residues.json", {}) or {}
     layout = load(workdir / "dashboard-layout.json", []) or []
+    dashboard_coverage = load(workdir / "dashboard-coverage.json", {}) or {}
     objects = []
+    visible_dashboards = dashboard_coverage.get("visible_source_dashboards") or []
+    expected_dashboards = {
+        str(name).casefold()
+        for name in dashboard_coverage.get("expected_dashboards") or []
+    }
+    built_pages = {
+        str(name).casefold() for name in dashboard_coverage.get("built_pages") or []
+    }
+    excluded_dashboards = {
+        str(name).casefold()
+        for name in dashboard_coverage.get("scope_excluded_dashboards") or []
+    }
+    for dashboard in visible_dashboards:
+        folded = str(dashboard).casefold()
+        if folded in excluded_dashboards:
+            status = "not-applicable"
+            reason = "dashboard is outside the explicitly stated dashboard scope"
+        elif folded in expected_dashboards and folded in built_pages:
+            status = "migrated"
+            reason = "visible source dashboard has a built Sigma workbook page"
+        else:
+            status = "needs-review"
+            reason = "visible in Tableau but no in-scope Sigma workbook page was proven"
+        objects.append(
+            {
+                "type": "dashboard",
+                "id": f"dashboard:{dashboard}",
+                "name": str(dashboard),
+                "status": status,
+                "evidence": [
+                    {
+                        "artifact": "dashboard-coverage.json",
+                        "reason": reason,
+                    }
+                ],
+            }
+        )
+    expected_story_points = {
+        (str(point.get("story") or ""), str(point.get("caption") or ""))
+        for point in dashboard_coverage.get("expected_story_points") or []
+    }
+    excluded_story_points = {
+        (str(point.get("story") or ""), str(point.get("caption") or ""))
+        for point in dashboard_coverage.get("scope_excluded_story_points") or []
+    }
+    for point in dashboard_coverage.get("story_points") or []:
+        identity = (
+            str(point.get("story") or ""),
+            str(point.get("caption") or ""),
+        )
+        if identity in excluded_story_points:
+            status = "not-applicable"
+            reason = "story point is outside the explicitly stated dashboard scope"
+        elif identity in expected_story_points and identity[1].casefold() in built_pages:
+            status = "migrated"
+            reason = "source story point has a built Sigma workbook page"
+        else:
+            status = "needs-review"
+            reason = "source story point has no in-scope Sigma workbook page"
+        objects.append(
+            {
+                "type": "story-point",
+                "id": f"story-point:{identity[0]}:{point.get('id') or identity[1]}",
+                "name": identity[1],
+                "status": status,
+                "evidence": [
+                    {"artifact": "dashboard-coverage.json", "reason": reason}
+                ],
+            }
+        )
     for index, formula in enumerate(audit.get("formulas") or []):
         objects.append(
             {

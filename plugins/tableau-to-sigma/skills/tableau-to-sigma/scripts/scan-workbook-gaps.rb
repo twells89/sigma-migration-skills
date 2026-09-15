@@ -650,11 +650,14 @@ def detect_object_model(content)
       base = ->(oid) { oid.sub(/_[0-9A-Fa-f]{16,}\z/, '') }
       resolves = ->(oid) { logical.any? { |l| l == base.call(oid) || oid == l || oid.start_with?("#{l}_") } }
       has_eq = b =~ /<expression\s[^>]*op='='/
+      eq_count = b.scan(/<expression\s[^>]*op='='/).size
       phys_ops = b.scan(/<expression\s[^>]*op='\[[^\]']+\]'/).size
       non_eq = b =~ /op='(?:&lt;|&gt;)=?'|op='!='|op='&lt;&gt;'/
       status =
         if first.empty? || second.empty? || !resolves.call(first) || !resolves.call(second)
           'endpoint-unresolved'
+        elsif has_eq && phys_ops >= 2 && phys_ops < eq_count * 2
+          'partial-computed-key'
         elsif has_eq && phys_ops >= 2
           'wired'
         elsif has_eq

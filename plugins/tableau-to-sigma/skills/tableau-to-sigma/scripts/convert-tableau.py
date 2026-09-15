@@ -161,7 +161,8 @@ def run_converter(args: argparse.Namespace) -> dict:
                     "model: bare, warnings: out.warnings || [], stats: out.stats || {}, "
                     "security: out.security || [], workbookPatterns: out.workbookPatterns || [], "
                     "parameters: out.parameters || [], "
-                    "relationshipCoverage: out.relationshipCoverage || null"
+                    "relationshipCoverage: out.relationshipCoverage || null, "
+                    "sqlProvenance: out.sqlProvenance || []"
                     "}, null, 2));"
                 ),
             ]

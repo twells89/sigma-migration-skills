@@ -785,6 +785,8 @@ else
     end
   }
 end
+readback_name = opts[:type] == 'datamodel' ? 'dm-readback.json' : 'wb-readback.json'
+File.write(File.join(opts[:workdir], readback_name), JSON.pretty_generate(spec))
 File.write(opts[:out], JSON.pretty_generate(out))
 puts JSON.pretty_generate(out)
 

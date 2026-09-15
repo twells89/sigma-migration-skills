@@ -4000,7 +4000,7 @@ ${joins.join("\n")}`;
   const mergedName = fact.name || (factFrom && factFrom[1] ? factFrom[1].replace(/"/g, "") : "BLEND") || "BLEND";
   warnings.push(`\u2139 Multi-source blend collapsed into one wide JOIN element: fact + ${rels.length} pre-aggregated secondary island(s) (link-grain SUM/MAX) \u2192 ${mergedColumns.length} columns. Charts can now resolve every column locally.`);
   return {
-    mergedElement: { id: fact.id, name: mergedName, kind: "table", source: { connectionId: connId, kind: "sql", statement }, columns: mergedColumns, order },
+    mergedElement: { id: fact.id, name: mergedName, kind: "table", source: { connectionId: connId, kind: "sql", statement }, columns: mergedColumns, order, _sqlOrigin: "generated-blend" },
     consumedIds: [fact.id, ...rels.map((r) => r.targetElementId)]
   };
 }
@@ -5017,6 +5017,8 @@ function convertTableauToSigma(xmlContent, options = {}) {
             warnings.push(`\u26A0 Custom SQL relation "${fullName}" has no inline SQL text \u2014 emitted as a table path "${path.join(".")}"; verify or replace with the query.`);
           }
           const el = { id: sigmaShortId(), kind: "table", source, columns, order };
+          if (source.kind === "sql")
+            el._sqlOrigin = "source-custom-sql";
           elementMap[fullName] = { element: el, colIdMap, cleanName, objId: relObjId };
           elements.push(el);
         }
@@ -5126,7 +5128,19 @@ function convertTableauToSigma(xmlContent, options = {}) {
         // a composite key \u2014 an incidental second match (e.g. both sides carrying CREATED_AT)
         // would over-constrain the join and silently drop rows. A single key-shaped candidate is
         // wired; anything else (none, or more than one) is left for manual authoring.
-        const candidateNames = (entry) => (entry.element.columns || []).map((c) => c.name || (typeof c.formula === "string" && (c.formula.match(/\/([^\]]+)\]$/) || [])[1])).filter(Boolean).map((nm) => String(nm).replace(/\s+/g, "_").toUpperCase());
+        const candidateNameIndex = (entry) => {
+          const byName = /* @__PURE__ */ new Map();
+          for (const c of entry.element.columns || []) {
+            const raw = c.name || (typeof c.formula === "string" && (c.formula.match(/\/([^\]]+)\]$/) || [])[1]);
+            if (!raw)
+              continue;
+            const normalized = String(raw).replace(/\s+/g, "_").toUpperCase();
+            if (!byName.has(normalized))
+              byName.set(normalized, /* @__PURE__ */ new Set());
+            byName.get(normalized).add(c.id || c.formula || raw);
+          }
+          return byName;
+        };
         const entityNameOf = (cleanName) => String(cleanName || "").toUpperCase().replace(/^(DIM|FACT|BRIDGE)_/, "");
         const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         // Precise, NOT `includes`: a loose substring match on the entity name wires
@@ -5151,8 +5165,10 @@ function convertTableauToSigma(xmlContent, options = {}) {
         // manufactures false ambiguity beside a genuine key.
         const INFERENCE_KEY_DENYLIST_RE = /(^|_)(EXTERNAL_ID|ROW_ID|GUID|HASH_KEY)$/;
         const inferRelationshipKeyByName = (firstEntry, secondEntry) => {
-          const leftNames = candidateNames(firstEntry);
-          const rightSet = new Set(candidateNames(secondEntry));
+          const leftIndex = candidateNameIndex(firstEntry);
+          const rightIndex = candidateNameIndex(secondEntry);
+          const leftNames = Array.from(leftIndex.keys());
+          const rightSet = new Set(rightIndex.keys());
           const seen = /* @__PURE__ */ new Set();
           const candidates = [];
           for (const n of leftNames) {
@@ -5166,11 +5182,12 @@ function convertTableauToSigma(xmlContent, options = {}) {
           const keyShapedAll = candidates.filter((n) => isKeyShapedName(n, entityName));
           const denied = keyShapedAll.filter((n) => INFERENCE_KEY_DENYLIST_RE.test(n));
           const keyShaped = keyShapedAll.filter((n) => !INFERENCE_KEY_DENYLIST_RE.test(n));
-          if (keyShaped.length === 1)
-            return { ok: true, name: keyShaped[0], candidates, keyShaped, denied };
-          return { ok: false, candidates, keyShaped, denied };
+          const collisions = keyShaped.filter((n) => leftIndex.get(n).size > 1 || rightIndex.get(n).size > 1);
+          if (keyShaped.length === 1 && collisions.length === 0)
+            return { ok: true, name: keyShaped[0], candidates, keyShaped, denied, collisions };
+          return { ok: false, candidates, keyShaped, denied, collisions };
         };
-        const unwiredReason = (inferred) => inferred.candidates.length === 0 ? "no existing column name matches on both sides" : inferred.keyShaped.length === 0 ? (inferred.denied || []).length ? `only deny-listed non-key name(s) matched (${inferred.denied.join(", ")}) - EXTERNAL_ID/ROW_ID/GUID/HASH_KEY-family columns are lineage/tech columns a probe can prove unique but never correct; author the relationship manually if one truly is the key` : "candidate name(s) matched but none look key-shaped (a _ID/_KEY/_SK/_CODE suffix, the exact target entity name, or the entity name plus that suffix)" : `ambiguous: ${inferred.keyShaped.length} key-shaped candidates \u2014 refusing to guess a composite key`;
+        const unwiredReason = (inferred) => (inferred.collisions || []).length ? `ambiguous normalized column name collision (${inferred.collisions.join(", ")}) - more than one real column on an endpoint maps to the same inference key; refusing to select whichever colIdMap entry won last` : inferred.candidates.length === 0 ? "no existing column name matches on both sides" : inferred.keyShaped.length === 0 ? (inferred.denied || []).length ? `only deny-listed non-key name(s) matched (${inferred.denied.join(", ")}) - EXTERNAL_ID/ROW_ID/GUID/HASH_KEY-family columns are lineage/tech columns a probe can prove unique but never correct; author the relationship manually if one truly is the key` : "candidate name(s) matched but none look key-shaped (a _ID/_KEY/_SK/_CODE suffix, the exact target entity name, or the entity name plus that suffix)" : `ambiguous: ${inferred.keyShaped.length} key-shaped candidates \u2014 refusing to guess a composite key`;
         const collectEqs = (expr, acc) => {
           const op = nsAttr(expr, "op");
           const kids = asArray(expr.expression || []);
@@ -5292,7 +5309,8 @@ function convertTableauToSigma(xmlContent, options = {}) {
               right: secondEntry.cleanName,
               derivedVia: "unwired",
               reason: unwiredReason(inferred),
-              candidates: inferred.candidates
+              candidates: inferred.candidates,
+              ...inferred.collisions && inferred.collisions.length > 0 ? { collisions: inferred.collisions } : {}
             });
           };
           if (eqExprs.length === 0) {
@@ -5744,7 +5762,8 @@ ${statement}
           kind: "table",
           source: { connectionId: connId, kind: "sql", statement: finalStatement },
           columns,
-          order
+          order,
+          _sqlOrigin: "source-custom-sql"
         });
         if (columns.length === 0) {
           warnings.push("\u26A0 Custom SQL element emitted with no columns (no <columns> projection or column metadata-records found) \u2014 add columns from the query output.");
@@ -5918,7 +5937,8 @@ ${stmt}
           // filled in below once aggs are known
         },
         columns: helperCols,
-        order: helperOrder
+        order: helperOrder,
+        _sqlOrigin: "generated-lod"
       };
       lodHelpers[signatureKey] = {
         element: helperEl,
@@ -6169,7 +6189,8 @@ ${joinSql}
         // No element-level name field for kind:sql elements (per spec rule 3).
         source: { connectionId: connId, kind: "sql", statement },
         columns: cols,
-        order
+        order,
+        _sqlOrigin: "generated-top-n"
       };
       helperEl.name = `${top.caption} Top-N Helper`;
       const relName = `${factTableName}_TOPN_${aliasBase}`;
@@ -6247,7 +6268,8 @@ ${joinSql}
         name: relName,
         source: { connectionId: connId, kind: "sql", statement: "__PLACEHOLDER__" },
         columns: cols,
-        order
+        order,
+        _sqlOrigin: "generated-window"
       };
       const rec = {
         element: helperEl,
@@ -7854,6 +7876,15 @@ ${suggestion}
   }
   if (!connectionId)
     warnings.unshift("\u26A0 Connection ID not set \u2014 update in JSON before saving to Sigma");
+  const sqlProvenance = elements.filter((e) => e.source?.kind === "sql").map((e) => ({
+    elementId: e.id,
+    elementName: e.name,
+    originType: e._sqlOrigin || "unattributed",
+    statement: e.source.statement
+  }));
+  elements.forEach((e) => {
+    delete e._sqlOrigin;
+  });
   const sigmaModel = {
     name: ds.name,
     schemaVersion: 1,
@@ -7869,6 +7900,7 @@ ${suggestion}
     ...workbookPatterns.length ? { workbookPatterns } : {},
     ...parameters.length ? { parameters } : {},
     ...relationshipCoverage ? { relationshipCoverage } : {},
+    ...sqlProvenance.length ? { sqlProvenance } : {},
     stats: {
       datasources: datasources.length,
       elements: elements.length,

@@ -207,8 +207,32 @@ check(out.include?('Today()'), 'CurrentDate error names the Sigma Today() fix', 
 out, _ = validate({ 'pages' => [{ 'elements' => [el('t1', 'T', formula: 'Substring([Val], 1, 2)') ] }] })
 check(!out.include?('→ Sigma Text'), 'Substring (contains "str") is NOT flagged as an STR leak', fails)
 
+puts
+puts 'Part I — element-filter ids fail locally; control targets stay exempt'
+filtered = el('bar-1', 'Bar', kind: 'bar-chart')
+filtered['filters'] = [{ 'columnId' => 'dim-1', 'kind' => 'list', 'mode' => 'include', 'values' => ['A'] }]
+out, code = validate({ 'pages' => [{ 'elements' => [filtered] }] })
+check(code == 1 && out.include?('element filter[0] is missing required id'),
+      'element filter without id fails validate-spec before POST', fails)
+
+filtered['filters'][0]['id'] = 'flt-dup'
+filtered['filters'] << filtered['filters'][0].dup
+out, code = validate({ 'pages' => [{ 'elements' => [filtered] }] })
+check(code == 1 && out.include?('element filter id "flt-dup" is duplicated 2x'),
+      'duplicate element-filter ids fail validate-spec before POST', fails)
+
+control = {
+  'id' => 'el-ctl', 'kind' => 'control', 'controlId' => 'ctl',
+  'name' => 'Filter', 'filters' => [
+    { 'source' => { 'kind' => 'table', 'elementId' => 'master' }, 'columnId' => 'm-col' }
+  ]
+}
+out, code = validate({ 'pages' => [{ 'elements' => [control] }] })
+check(!out.include?('missing required id'),
+      "control filter-target binding is exempt from element-filter ids (exit #{code})", fails)
+
 if fails.empty?
-  puts 'OK — validate-spec ID-uniqueness + function-tier + tableau-leak + envelope + null-name guards all pass'
+  puts 'OK — validate-spec ID/filter uniqueness + function-tier + tableau-leak + envelope + null-name guards all pass'
   exit 0
 else
   warn "FAIL — #{fails.size} check(s) failed:"

@@ -8,6 +8,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 GATE = HERE / "assert-phase6-ran.py"
+sys.path.insert(0, str(HERE / "lib"))
+import relationship_coverage
+import dashboard_coverage
+import sql_provenance
 
 
 class AssertPhase6RanTest(unittest.TestCase):
@@ -210,6 +214,49 @@ class AssertPhase6RanTest(unittest.TestCase):
             },
         )
         self.write_json("conv-meta.json", {"security": []})
+        (self.workdir / "workbook-content.twb").write_text(
+            "<workbook/>", encoding="utf-8"
+        )
+        self.write_json(
+            "dashboard-scope.json",
+            {"schema_version": 1, "mode": "full", "provenance": "full-workbook", "dashboards": []},
+        )
+        self.write_json(
+            "wb-spec-python.json",
+            {
+                "name": "Fixture",
+                "document": {"schemaVersion": 1, "pages": [], "elements": [], "layout": ""},
+            },
+        )
+        self.write_json(
+            "relationship-coverage.json",
+            relationship_coverage.from_files(
+                self.workdir / "conv-meta.json",
+                self.workdir / "workbook-content.twb",
+            ),
+        )
+        self.write_json(
+            "dashboard-coverage.json",
+            dashboard_coverage.evaluate(
+                self.workdir / "workbook-content.twb",
+                self.workdir / "wb-spec-python.json",
+                self.load_json("dashboard-scope.json"),
+            ),
+        )
+        self.write_json(
+            "dm-raw.json",
+            {"schemaVersion": 1, "pages": [{"id": "model", "elements": []}]},
+        )
+        self.write_json(
+            "sql-provenance.json",
+            sql_provenance.evaluate(
+                self.workdir / "dm-raw.json",
+                self.workdir / "conv-meta.json",
+                self.workdir / "workbook-content.twb",
+                self.workdir / "custom-sql.json",
+                self.workdir / "sql-provenance-overrides.json",
+            ),
+        )
         self.write_json(
             "security-decision.json",
             {"decision": "not-required", "rules_detected": 0},
@@ -299,7 +346,7 @@ class AssertPhase6RanTest(unittest.TestCase):
             hashlib.sha256(self.blind_grade.read_bytes()).hexdigest(),
             marker["blind_grade_sha256"],
         )
-        self.assertEqual(13, len(marker["gates"]))
+        self.assertEqual(16, len(marker["gates"]))
 
     def test_mission_requires_stated_nonempty_fields_exit_40(self):
         mission = self.load_json("mission.json")
@@ -500,6 +547,94 @@ class AssertPhase6RanTest(unittest.TestCase):
             },
         )
         self.assert_gate_failure(51, "semantic-edits")
+
+    def test_partial_relationship_coverage_exit_53(self):
+        metadata = self.load_json("conv-meta.json")
+        metadata["relationshipCoverage"] = {
+            "serialized": 1,
+            "wired": 1,
+            "entries": [
+                {
+                    "left": "FACT",
+                    "right": "DIM",
+                    "derivedVia": "serialized",
+                    "partial": True,
+                    "droppedConditions": 1,
+                }
+            ],
+        }
+        self.write_json("conv-meta.json", metadata)
+        self.write_json(
+            "relationship-coverage.json",
+            relationship_coverage.from_files(
+                self.workdir / "conv-meta.json",
+                self.workdir / "workbook-content.twb",
+            ),
+        )
+        self.assert_gate_failure(53, "relationship-coverage")
+
+    def test_missing_visible_dashboard_exit_54(self):
+        (self.workdir / "workbook-content.twb").write_text(
+            """
+            <workbook>
+              <dashboards><dashboard name="Overview"><zones><zone id="1"/></zones></dashboard></dashboards>
+              <windows><window class="dashboard" name="Overview"/></windows>
+            </workbook>
+            """,
+            encoding="utf-8",
+        )
+        self.write_json(
+            "relationship-coverage.json",
+            relationship_coverage.from_files(
+                self.workdir / "conv-meta.json",
+                self.workdir / "workbook-content.twb",
+            ),
+        )
+        self.write_json(
+            "dashboard-coverage.json",
+            dashboard_coverage.evaluate(
+                self.workdir / "workbook-content.twb",
+                self.workdir / "wb-spec-python.json",
+                self.load_json("dashboard-scope.json"),
+            ),
+        )
+        self.assert_gate_failure(54, "dashboard-coverage")
+
+    def test_unattributed_sql_element_exit_55(self):
+        self.write_json(
+            "dm-raw.json",
+            {
+                "schemaVersion": 1,
+                "pages": [
+                    {
+                        "id": "model",
+                        "elements": [
+                            {
+                                "id": "mystery",
+                                "name": "Mystery Aggregate",
+                                "kind": "table",
+                                "source": {
+                                    "kind": "sql",
+                                    "connectionId": "conn",
+                                    "statement": "SELECT secret FROM nowhere",
+                                },
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        self.write_json(
+            "sql-provenance.json",
+            sql_provenance.evaluate(
+                self.workdir / "dm-raw.json",
+                self.workdir / "conv-meta.json",
+                self.workdir / "workbook-content.twb",
+                self.workdir / "custom-sql.json",
+                self.workdir / "sql-provenance-overrides.json",
+            ),
+        )
+        self.assert_gate_failure(55, "sql-provenance")
 
     def test_incomplete_or_drifting_report_exit_52(self):
         result = self.load_json("migration-result.json")

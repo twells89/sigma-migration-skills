@@ -159,6 +159,39 @@ check(entries.any? { |c| c['name'] == 'COL_54' },
 check(entries.first['name'] == 'COL_1' && entries.last['name'] == 'COL_64',
       'first and last column both survive nextPageToken pagination', fails)
 
+# A defensive cursor stop must fail closed. Returning the entries collected
+# before the repeated cursor would make a corrupt/truncated catalog look valid.
+reset_state!
+ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_API_TOKEN'] = 'tok'
+repeat_http = FakeHttp.new([
+  http_res(Net::HTTPOK, 200, JSON.generate('entries' => [{ 'name' => 'A' }], 'nextPageToken' => 'same')),
+  http_res(Net::HTTPOK, 200, JSON.generate('entries' => [{ 'name' => 'B' }], 'nextPageToken' => 'same'))
+])
+repeat_error = begin
+  WarehouseColumnsPagination.list('/v2/connections/tables/inode-repeat/columns', http: repeat_http)
+  nil
+rescue Sigma::Error => e
+  e
+end
+check(repeat_error && repeat_error.message.include?('refusing a partial column list'),
+      'a repeated warehouse-column cursor raises instead of returning partial entries', fails)
+
+reset_state!
+ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_API_TOKEN'] = 'tok'
+malformed_error = begin
+  WarehouseColumnsPagination.list(
+    '/v2/connections/tables/inode-malformed/columns',
+    http: FakeHttp.new([http_res(Net::HTTPOK, 200, JSON.generate('nextPageToken' => nil))])
+  )
+  nil
+rescue Sigma::Error => e
+  e
+end
+check(malformed_error && malformed_error.message.include?('no valid entries array'),
+      'a malformed warehouse-column page raises instead of returning an empty/partial catalog', fails)
+
 # 6. WIRING PIN — post-and-readback.rb's column census paginates. The census
 #    drives the error-column quarantine decision, so a truncated read can
 #    declare a wide workbook clean while error columns sit past column 50.

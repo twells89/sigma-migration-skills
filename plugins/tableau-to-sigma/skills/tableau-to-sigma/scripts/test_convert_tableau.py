@@ -60,6 +60,73 @@ class ConvertTableauTest(unittest.TestCase):
             self.assertIn("security", meta)
             self.assertIn("workbookPatterns", meta)
             self.assertIn("relationshipCoverage", meta)
+            self.assertIn("sqlProvenance", meta)
+
+    def test_custom_sql_provenance_is_statement_bound_and_not_in_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            twb = root / "custom-sql.twb"
+            twb.write_text(
+                """
+                <workbook><datasources>
+                  <datasource name="federated.custom" caption="Custom SQL">
+                    <connection class="federated">
+                      <relation name="Custom SQL Query" type="text"><![CDATA[
+                        SELECT 1 AS X
+                      ]]><columns><column name="[X]"/></columns></relation>
+                    </connection>
+                  </datasource>
+                </datasources></workbook>
+                """,
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--twb",
+                    str(twb),
+                    "--connection",
+                    "test-connection",
+                    "--database",
+                    "TEST_DB",
+                    "--schema",
+                    "TEST_SCHEMA",
+                    "--out",
+                    str(root),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            model = json.loads((root / "dm-raw.json").read_text(encoding="utf-8"))
+            meta = json.loads((root / "conv-meta.json").read_text(encoding="utf-8"))
+            sql_elements = [
+                element
+                for page in model.get("pages") or []
+                for element in page.get("elements") or []
+                if (element.get("source") or {}).get("kind") == "sql"
+            ]
+            self.assertEqual(1, len(sql_elements))
+            self.assertNotIn("_sqlOrigin", sql_elements[0])
+            self.assertEqual(
+                [
+                    {
+                        "elementId": sql_elements[0]["id"],
+                        "originType": "source-custom-sql",
+                        "statement": sql_elements[0]["source"]["statement"],
+                    }
+                ],
+                [
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key != "elementName" or value is not None
+                    }
+                    for row in meta["sqlProvenance"]
+                ],
+            )
 
 
 if __name__ == "__main__":

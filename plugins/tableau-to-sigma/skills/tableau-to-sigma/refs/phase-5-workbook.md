@@ -263,6 +263,23 @@ Rules:
 
 See `refs/chart-patterns.md` for chart patterns and multi-series formulas and map shapes; `refs/element-kinds.md` for per-kind field requirements and controls.
 
+### 5a.1 Visible-dashboard coverage gate
+
+Before workbook POST, `dashboard-coverage.rb` / `.py` reads the source TWB's
+visible dashboard windows directly and compares them with the built Sigma page
+names. In full-workbook mode, every non-empty visible dashboard is required. A
+selected run may omit another visible dashboard only when
+`dashboard-scope.json` records `mode:"selected"` with `provenance:"stated"` or
+`"cli"`.
+
+This gate is intentionally independent of `dashboard-layout.json`: a parser or
+scope bug that omitted a tab from the layout cannot use that same omission as
+proof that the tab was out of scope. Hidden parameter-host dashboards and truly
+empty dashboard debris remain excluded; text-only visible dashboards remain
+required. When `story-plan.json` exists, every in-scope story-point caption is
+also a required Sigma page; until `build-story-pages.rb` has produced those
+pages the gate stops rather than silently dropping the story.
+
 ### 5b. Validate the workbook spec
 
 ```bash

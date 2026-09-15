@@ -19,6 +19,9 @@ Exit codes:
   50 source-security decision is absent, unsafe, or unverified
   51 structural semantic edits are unproven
   52 migration report/census accounting is incomplete or contradictory
+  53 source relationship coverage is stale, unwired, or partial
+  54 visible Tableau dashboard coverage is missing or stale
+  55 data-model Custom SQL provenance is missing or stale
   70 an unexpected filesystem failure prevented the gate from running
 
 On success, ``phase6-success-python.json`` is written atomically. On every
@@ -37,6 +40,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import relationship_coverage as relationship_coverage_lib  # noqa: E402
+import dashboard_coverage as dashboard_coverage_lib  # noqa: E402
+import sql_provenance as sql_provenance_lib  # noqa: E402
 
 MISSION_FIELDS = ("source", "sigma_connection", "destination", "landing", "scope")
 TERMINAL_STATUSES = {
@@ -68,6 +76,9 @@ EXIT_CODES = {
     "security": 50,
     "semantic-edits": 51,
     "report": 52,
+    "relationship-coverage": 53,
+    "dashboard-coverage": 54,
+    "sql-provenance": 55,
 }
 
 
@@ -532,6 +543,129 @@ def gate_semantic_edits(workdir: Path) -> None:
         fail("semantic-edits", "unproven structural edit(s): " + ", ".join(unproven))
 
 
+def gate_relationship_coverage(workdir: Path) -> None:
+    artifact = require_object(
+        workdir / "relationship-coverage.json", "relationship-coverage"
+    )
+    try:
+        model_path = next(
+            (
+                path
+                for path in (
+                    workdir / "datamodel-readback.json",
+                    workdir / "dm-remapped.json",
+                    workdir / "dm-raw.json",
+                    workdir / "dm-spec.json",
+                )
+                if path.is_file()
+            ),
+            None,
+        )
+        expected = relationship_coverage_lib.from_files(
+            workdir / "conv-meta.json",
+            workdir / "workbook-content.twb",
+            model_path,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        fail("relationship-coverage", f"could not rederive relationship coverage: {exc}")
+    if artifact != expected:
+        fail(
+            "relationship-coverage",
+            "relationship-coverage.json is stale or was edited",
+        )
+    if expected.get("status") == "fail":
+        pairs = [
+            " ↔ ".join(
+                str(value)
+                for value in (row.get("left"), row.get("right"))
+                if value is not None
+            )
+            or str(row.get("kind"))
+            for row in expected.get("blockers") or []
+        ]
+        fail(
+            "relationship-coverage",
+            "incomplete source relationship(s): " + ", ".join(pairs),
+        )
+
+
+def gate_dashboard_coverage(workdir: Path) -> None:
+    artifact = require_object(
+        workdir / "dashboard-coverage.json", "dashboard-coverage"
+    )
+    spec_path = next(
+        (
+            path
+            for path in (
+                workdir / "workbook-readback.json",
+                workdir / "wb-spec-python.json",
+                workdir / "wb-spec.resolved.json",
+                workdir / "wb-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    if spec_path is None:
+        fail("dashboard-coverage", "no built workbook spec is available")
+    try:
+        expected = dashboard_coverage_lib.evaluate(
+            workdir / "workbook-content.twb",
+            spec_path,
+            require_object(workdir / "dashboard-scope.json", "dashboard-coverage"),
+            workdir / "story-plan.json",
+        )
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        fail("dashboard-coverage", f"could not rederive dashboard coverage: {exc}")
+    if artifact != expected:
+        fail("dashboard-coverage", "dashboard-coverage.json is stale or was edited")
+    if expected.get("status") != "pass":
+        fail(
+            "dashboard-coverage",
+            "visible in-scope Tableau dashboard(s) are missing: "
+            + ", ".join(expected.get("missing_dashboards") or []),
+        )
+
+
+def gate_sql_provenance(workdir: Path) -> None:
+    artifact = require_object(workdir / "sql-provenance.json", "sql-provenance")
+    spec_path = next(
+        (
+            path
+            for path in (
+                workdir / "dm-remapped.json",
+                workdir / "dm-raw.json",
+                workdir / "dm-spec.json",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    if spec_path is None:
+        fail("sql-provenance", "no data-model spec is available")
+    try:
+        expected = sql_provenance_lib.evaluate(
+            spec_path,
+            workdir / "conv-meta.json",
+            workdir / "workbook-content.twb",
+            workdir / "custom-sql.json",
+            workdir / "sql-provenance-overrides.json",
+        )
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        fail("sql-provenance", f"could not rederive SQL provenance: {exc}")
+    if artifact != expected:
+        fail("sql-provenance", "sql-provenance.json is stale or was edited")
+    if expected.get("status") != "pass":
+        fail(
+            "sql-provenance",
+            "unattributed SQL element(s): "
+            + ", ".join(
+                str(row.get("element_name") or row.get("element_id"))
+                for row in expected.get("blockers") or []
+            ),
+        )
+
+
 def gate_report(workdir: Path) -> tuple[str, str, str]:
     census = require_object(workdir / "source-object-census.json", "report")
     census_objects = census_rows(census, "report")
@@ -694,6 +828,12 @@ def run_gates(workdir: Path, blind_grade: Path) -> dict[str, Any]:
     passed.append("security")
     gate_semantic_edits(workdir)
     passed.append("semantic-edits")
+    gate_relationship_coverage(workdir)
+    passed.append("relationship-coverage")
+    gate_dashboard_coverage(workdir)
+    passed.append("dashboard-coverage")
+    gate_sql_provenance(workdir)
+    passed.append("sql-provenance")
     verdict, data_model_id, workbook_id = gate_report(workdir)
     passed.append("report")
     return {

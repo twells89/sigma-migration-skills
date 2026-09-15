@@ -1108,7 +1108,7 @@ module MechanicalSpecs
       // this write once did) leaves the ledger existing only in memory and in
       // test fixtures, with no possible input for that script on any real run.
       // Same failure class as the security/RLS drop above: pass it through.
-      writeFileSync(#{meta_out.to_json}, JSON.stringify({ model: bare, warnings: out.warnings || [], stats: out.stats || {}, security: out.security || [], workbookPatterns: out.workbookPatterns || [], parameters: out.parameters || [], relationshipCoverage: out.relationshipCoverage || null }, null, 2));
+      writeFileSync(#{meta_out.to_json}, JSON.stringify({ model: bare, warnings: out.warnings || [], stats: out.stats || {}, security: out.security || [], workbookPatterns: out.workbookPatterns || [], parameters: out.parameters || [], relationshipCoverage: out.relationshipCoverage || null, sqlProvenance: out.sqlProvenance || [] }, null, 2));
     JS
     o, e, st = Open3.capture3('node', shim)
     raise "converter failed: #{e}#{o}" unless st.success?
@@ -1151,7 +1151,8 @@ module MechanicalSpecs
     result = { 'model' => bare, 'warnings' => out['warnings'] || [],
                'stats' => out['stats'] || {}, 'security' => out['security'] || [],
                'workbookPatterns' => out['workbookPatterns'] || [], 'parameters' => out['parameters'] || [],
-               'relationshipCoverage' => out['relationshipCoverage'] || nil }
+               'relationshipCoverage' => out['relationshipCoverage'] || nil,
+               'sqlProvenance' => out['sqlProvenance'] || [] }
     normalize_converter_parameters!(result)
     File.write(meta_out, JSON.pretty_generate(result))
     result

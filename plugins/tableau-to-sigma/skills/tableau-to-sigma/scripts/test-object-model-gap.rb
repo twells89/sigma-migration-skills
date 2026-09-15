@@ -107,6 +107,18 @@ feats, = om(noodle(rels: [
 bad = feats.find { |f| f[:status] == :unhandled }
 check(bad && bad[:blurb] =~ /computed-only-key/, 'computed-only key → ❌ with computed-only-key reason')
 
+puts 'Part C2 — mixed physical + computed keys trip as partial'
+mixed = "<expression op='AND'>" \
+        "#{EQ}" \
+        "<expression op='='><expression op='DATETRUNC([ORDER_DATE])'/><expression op='[DATE_DAY]'/></expression>" \
+        '</expression>'
+feats, = om(noodle(rels: [
+  rel_xml('FACT_VISITS_AA11BB22CC33DD44', 'DIM_DATES_1122334455667788', mixed)
+]))
+bad = feats.find { |f| f[:status] == :unhandled }
+check(bad && bad[:blurb] =~ /partial-computed-key/,
+      'mixed physical + computed relationship → ❌ instead of silently widening the join')
+
 puts 'Part D — range/inequality-only key trips as non-equality'
 feats, = om(noodle(rels: [
   rel_xml('FACT_VISITS_AA11BB22CC33DD44', 'DIM_DATES_1122334455667788',

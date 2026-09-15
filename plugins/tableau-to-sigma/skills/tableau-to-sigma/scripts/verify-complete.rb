@@ -52,11 +52,20 @@
 #   7  SOURCE ACCOUNTING INVALID — migration-result.json is absent/malformed,
 #      RED/incomplete, or disagrees with source-object-census.json. Rebuild the
 #      census and migration report from the run artifacts.
+#   8  RELATIONSHIP COVERAGE INVALID — an object-graph relationship is
+#      unwired/partial, or the coverage artifact is missing/stale.
+#   9  DASHBOARD COVERAGE INVALID — a visible in-scope Tableau dashboard has
+#      no Sigma page, or the coverage artifact is missing/stale.
+#  10  SQL PROVENANCE INVALID — a data-model SQL element is unattributed, or
+#      the provenance artifact is stale.
 
 require 'json'
 require 'optparse'
 require_relative 'lib/offramp'
 require_relative 'lib/degradation_ledger'
+require_relative 'lib/relationship_coverage'
+require_relative 'lib/dashboard_coverage'
+require_relative 'lib/sql_provenance'
 
 TERMINAL_SOURCE_STATUSES = %w[
   migrated approximated needs-review skipped not-applicable
@@ -143,6 +152,88 @@ if opts[:wb] && !sj['workbookId'].to_s.empty? && sj['workbookId'] != opts[:wb]
   warn "⛔ DONE marker is for a DIFFERENT workbook (#{sj['workbookId']}) than --workbook-id #{opts[:wb]}."
   warn '   You are likely looking at a stale workdir or the wrong run.'
   exit 4
+end
+
+source_path = File.join(wd, 'workbook-content.twb')
+metadata_path = File.join(wd, 'conv-meta.json')
+coverage_path = File.join(wd, 'relationship-coverage.json')
+source_has_graph = File.file?(source_path) &&
+                   File.read(source_path, encoding: 'bom|utf-8')
+                       .match?(/<(?:[^<>\s]*\.true\.\.\.)?object-graph[\s>\/]/)
+if source_has_graph || File.file?(coverage_path)
+  begin
+    relationship_model_path = [
+      File.join(wd, 'dm-readback.json'),
+      File.join(wd, 'dm-spec.json'),
+      File.join(wd, 'dm-raw.json')
+    ].find { |path| File.file?(path) }
+    expected_coverage = RelationshipCoverage.from_files(
+      metadata_path, source_path, relationship_model_path
+    )
+    actual_coverage = JSON.parse(File.read(coverage_path))
+    unless actual_coverage == expected_coverage && expected_coverage['status'] != 'fail'
+      warn '⛔ RELATIONSHIP COVERAGE INVALID — object-graph coverage is stale, unwired, or partial.'
+      warn "   Re-run emit-relationship-coverage.rb and resolve every blocker in #{coverage_path}."
+      exit 8
+    end
+  rescue JSON::ParserError, SystemCallError => e
+    warn "⛔ RELATIONSHIP COVERAGE INVALID — #{e.message}"
+    exit 8
+  end
+end
+
+if File.file?(source_path) || File.file?(File.join(wd, 'dashboard-coverage.json'))
+  dashboard_artifact_path = File.join(wd, 'dashboard-coverage.json')
+  dashboard_scope_path = File.join(wd, 'dashboard-scope.json')
+  dashboard_spec_path = [
+    File.join(wd, 'wb-readback.json'),
+    File.join(wd, 'wb-spec.resolved.json'),
+    File.join(wd, 'wb-spec.json')
+  ].find { |path| File.file?(path) }
+  begin
+    expected_dashboards = DashboardCoverage.evaluate(
+      twb_path: source_path,
+      spec_path: dashboard_spec_path,
+      scope: JSON.parse(File.read(dashboard_scope_path)),
+      story_plan_path: File.join(wd, 'story-plan.json')
+    )
+    actual_dashboards = JSON.parse(File.read(dashboard_artifact_path))
+    unless actual_dashboards == expected_dashboards && expected_dashboards['status'] == 'pass'
+      warn '⛔ DASHBOARD COVERAGE INVALID — a visible in-scope Tableau dashboard is missing, ' \
+           'or dashboard-coverage.json is stale.'
+      exit 9
+    end
+  rescue JSON::ParserError, ArgumentError, SystemCallError, TypeError => e
+    warn "⛔ DASHBOARD COVERAGE INVALID — #{e.message}"
+    exit 9
+  end
+end
+
+sql_provenance_path = File.join(wd, 'sql-provenance.json')
+if File.file?(sql_provenance_path)
+  sql_spec_path = [
+    File.join(wd, 'dm-spec-reused.json'),
+    File.join(wd, 'dm-spec.json'),
+    File.join(wd, 'dm-raw.json')
+  ].find { |path| File.file?(path) }
+  begin
+    expected_sql = SqlProvenance.evaluate(
+      dm_spec_path: sql_spec_path,
+      metadata_path: metadata_path,
+      twb_path: source_path,
+      custom_sql_path: File.join(wd, 'custom-sql.json'),
+      overrides_path: File.join(wd, 'sql-provenance-overrides.json')
+    )
+    actual_sql = JSON.parse(File.read(sql_provenance_path))
+    unless actual_sql == expected_sql && expected_sql['status'] == 'pass'
+      warn '⛔ SQL PROVENANCE INVALID — a data-model SQL element is unattributed, ' \
+           'or sql-provenance.json is stale.'
+      exit 10
+    end
+  rescue JSON::ParserError, SystemCallError, TypeError => e
+    warn "⛔ SQL PROVENANCE INVALID — #{e.message}"
+    exit 10
+  end
 end
 
 # Completion now requires the deterministic migration report and exact

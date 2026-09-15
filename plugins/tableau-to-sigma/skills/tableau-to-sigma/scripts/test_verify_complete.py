@@ -55,6 +55,78 @@ class VerifyCompleteTest(unittest.TestCase):
         }
         for name, value in self.docs.items():
             (self.workdir / name).write_text(json.dumps(value), encoding="utf-8")
+        (self.workdir / "conv-meta.json").write_text(
+            json.dumps({"security": []}), encoding="utf-8"
+        )
+        (self.workdir / "workbook-content.twb").write_text(
+            "<workbook/>", encoding="utf-8"
+        )
+        (self.workdir / "dashboard-scope.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "mode": "full",
+                    "provenance": "full-workbook",
+                    "dashboards": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.workdir / "wb-spec-python.json").write_text(
+            json.dumps(
+                {
+                    "name": "Fixture",
+                    "document": {
+                        "schemaVersion": 1,
+                        "pages": [],
+                        "elements": [],
+                        "layout": "",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.workdir / "relationship-coverage.json").write_text(
+            json.dumps(
+                verify_complete.relationship_coverage_lib.from_files(
+                    self.workdir / "conv-meta.json",
+                    self.workdir / "workbook-content.twb",
+                )
+            ),
+            encoding="utf-8",
+        )
+        (self.workdir / "dashboard-coverage.json").write_text(
+            json.dumps(
+                verify_complete.dashboard_coverage_lib.evaluate(
+                    self.workdir / "workbook-content.twb",
+                    self.workdir / "wb-spec-python.json",
+                    json.loads(
+                        (self.workdir / "dashboard-scope.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                )
+            ),
+            encoding="utf-8",
+        )
+        (self.workdir / "dm-raw.json").write_text(
+            json.dumps(
+                {"schemaVersion": 1, "pages": [{"id": "model", "elements": []}]}
+            ),
+            encoding="utf-8",
+        )
+        (self.workdir / "sql-provenance.json").write_text(
+            json.dumps(
+                verify_complete.sql_provenance_lib.evaluate(
+                    self.workdir / "dm-raw.json",
+                    self.workdir / "conv-meta.json",
+                    self.workdir / "workbook-content.twb",
+                    self.workdir / "custom-sql.json",
+                    self.workdir / "sql-provenance-overrides.json",
+                )
+            ),
+            encoding="utf-8",
+        )
 
     def tearDown(self):
         self.tmp.cleanup()
