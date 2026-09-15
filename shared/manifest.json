@@ -1373,6 +1373,13 @@
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/lib/ruby_compat.rb"
       ],
       "reason": "Ruby 2.6 floor polyfill (filter_map/tally/except). Required by every script that uses a 2.7+ Enumerable method; tools/lint-ruby-floor.rb enforces the require."
+    },
+    {
+      "canonical": "shared/lib/looker_api.py",
+      "targets": [
+        "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/looker_api.py",
+        "plugins/looker-to-sigma/skills/looker-assessment/scripts/looker_api.py"
+      ]
     }
   ]
 }

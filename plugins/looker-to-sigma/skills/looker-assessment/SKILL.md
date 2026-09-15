@@ -49,15 +49,20 @@ Looker API3 credentials in `~/.looker/looker.ini`:
 
 ```ini
 [Looker]
-base_url=https://<host>.cloud.looker.com:19999
+base_url=https://<host>.cloud.looker.com
 client_id=...
 client_secret=...
 verify_ssl=true
 ```
 
-The `:19999` API port matters (login there returns the bearer). `scripts/looker_api.py`
-(copied in for self-containment) reads the ini and logs in fresh per call. Confirm
-access with `python3 scripts/looker_api.py whoami`. Most counts need only a normal
+**No port needed.** Modern Google-hosted Looker serves the API on the standard **443** at
+`https://<host>.cloud.looker.com/api/4.0`. Older self-hosted instances used the legacy
+`:19999`; if your `base_url` still carries it and that port is unreachable the client
+**self-heals** — it retries on 443 and warns you to update the ini. Override the base without
+editing the ini via `LOOKER_BASE_URL`. `scripts/looker_api.py` (copied in for
+self-containment, byte-identical to the converter's copy) reads the ini and **caches the
+bearer per process** — one login per run, not one per call — re-logging in once on a 401.
+Confirm access with `python3 scripts/looker_api.py whoami`. Most counts need only a normal
 role; the **System Activity** queries need a role with permission to the
 `system__activity` model (admin or a role granted `see_system_activity`) — if that
 permission is missing, usage falls back to 0 and dashboards score on a tile-count
