@@ -97,5 +97,20 @@
       "_defaultCountSuspect": false
     },
     "filters": []
+  },
+  {
+    "id": "line_sites",
+    "title": "Revenue by Site and Month",
+    "datasetId": "ds-order-fact",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "groupBy": ["CalendarMonth", "SITE_NAME"],
+    "dateGrain": { "column": "ORDER_DATE", "dateTimeElement": "MONTH" },
+    "columns": [
+      { "column": "CalendarMonth", "alias": "Month", "calendar": true, "mapping": "ITEM" },
+      { "column": "SITE_NAME", "alias": "Site", "mapping": "SERIES" },
+      { "column": "NET_REVENUE", "alias": "Net Revenue", "aggregation": "SUM", "mapping": "VALUE" }
+    ],
+    "filters": []
   }
 ]

@@ -282,12 +282,12 @@ instance (2026-07-30 validation, 48 cards / 22 distinct chartTypes). Sigma
 | `badge_word_cloud` | `table` | ❌ **no native equivalent** | see below. |
 | `badge_calendar` | `table` | ❌ **no native equivalent** | see below. |
 | `badge_filledgauge` | `progress` or `kpi-chart` | ✅ conditional released mapping | Emit ring `progress` only when explicit `CURRENT` + `TARGET` roles ground value/max and no card-local filter/date window would be lost; otherwise retain KPI + warn. |
-| `badge_pop_bar_line` | `combo-chart` | ❌ **no native equivalent** | see below. |
+| `badge_pop_bar_line` | `combo-chart` | ✅ reconstructed | `dateRangeFilter.periods` becomes explicit current/prior measures; hidden filtered helpers reproduce Domo's synthetic `POP_PERIOD` / `POP_INDEX` alignment. |
 | `badge_vert_symbol_overlay` | `combo-chart` | ❌ **no native equivalent** | see below. |
 
 ### No native Sigma equivalent — do not silently substitute a bar chart
 
-Five observed tokens have **no true Sigma equivalent**. `CHART_TYPE_MAP` in
+Four observed tokens have **no true Sigma equivalent**. `CHART_TYPE_MAP` in
 `build-workbook.rb` still names the closest honest degradation (never a bare,
 unexplained bar chart), and `build_element` **always** emits a specific, loud
 Phase-5e warning naming the card and the gap — this is a hard requirement, not
@@ -298,8 +298,10 @@ a nice-to-have:
 | `badge_treemap` | No `treemap` kind was found anywhere in the sigma-workbooks skill (not in its documented kinds, and not in the confirmed-invalid list either — it is simply **unverified**; do not assume it exists). | `bar-chart`, sorted descending by measure — keeps relative magnitude, loses the area-proportional hierarchy. |
 | `badge_word_cloud` | No word-cloud kind exists. | A flat term + frequency `table`. |
 | `badge_calendar` | No calendar-heatmap kind exists. | A flat date + value `table`. |
-| `badge_pop_bar_line` | Sigma has no automatic period-over-period comparison primitive. | `combo-chart` (bar = current period, line = prior period) — the two periods must be modeled as two explicit measures; the automatic date-shift is lost. |
 | `badge_vert_symbol_overlay` | No actual-vs-target dial/overlay kind exists (and `gauge` itself is invalid — see above). | `combo-chart` (bar + a `scatter` marker series) approximates the visual; a true actual-vs-target dial is not representable. |
+
+`badge_pop_bar_line` reconstruction and its refusal behavior are specified in
+`refs/chart-safety.md`.
 
 **Follow-up, not handled by this converter today:** closing this gap for real —
 a genuine treemap, word cloud, calendar heatmap, or unsupported dial rendered in
@@ -411,6 +413,9 @@ labels, so a faithful port looks busier than the source. Default new charts to:
 
 Only turn marks/labels back on where the source PNG actually showed them.
 
+Category-cardinality and aggregate-color safety are specified in
+`refs/chart-safety.md`.
+
 ---
 
 ## Filtering fidelity
@@ -486,9 +491,12 @@ Add these to the mandatory layout-visual-qa gate:
 - [ ] **`chartType` was matched EXACTLY**, never by substring — spot-check a
       `badge_line_bar` (combo) and a `badge_symbol_bar` (combo) card didn't get
       mis-routed to `line-chart` / `bar-chart` respectively.
-- [ ] Every card whose `chartType` is one of the five no-native-equivalent tokens
+- [ ] Every card whose `chartType` is one of the four no-native-equivalent tokens
       (`badge_treemap`, `badge_word_cloud`, `badge_calendar`,
-      `badge_pop_bar_line`, `badge_vert_symbol_overlay`) carries a Phase-5e
+      `badge_vert_symbol_overlay`) carries a Phase-5e
       warning naming the gap — never a silent, unexplained bar chart.
+- [ ] Every `badge_pop_bar_line` with source compare metadata emits at least two
+      explicit period measures; an unresolved POP card is skipped, never
+      presented as a valid one-series comparison.
 - [ ] Every `badge_filledgauge` either has explicit `CURRENT` + `TARGET` roles
       and emitted native `progress`, or carries the named KPI-fallback warning.

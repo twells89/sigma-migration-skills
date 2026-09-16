@@ -211,7 +211,7 @@ CHART_TYPE_MAP = {
   'badge_line_bar'            => 'combo-chart',
   'badge_line_stackedbar'     => 'combo-chart',
   'badge_symbol_bar'          => 'combo-chart',
-  'badge_pop_bar_line'        => 'combo-chart', # NO_NATIVE_EQUIVALENT — no POP comparison primitive
+  'badge_pop_bar_line'        => 'combo-chart', # rebuilt as explicit period measures (build_pop_chart)
   'badge_vert_symbol_overlay' => 'combo-chart', # NO_NATIVE_EQUIVALENT — no actual-vs-target overlay
 }.freeze
 
@@ -235,9 +235,6 @@ NO_NATIVE_EQUIVALENT = {
                          'term + frequency table.',
   'badge_calendar' => 'Domo calendar heatmap — no calendar `kind` exists in Sigma; degraded to a flat ' \
                        'date + value table.',
-  'badge_pop_bar_line' => 'Domo period-over-period bar+line — combo-chart approximates the visual ' \
-                           '(bar = current period, line = prior period) but Sigma has no automatic ' \
-                           'prior-period comparison; the two periods must be modeled as two explicit measures.',
   'badge_vert_symbol_overlay' => 'Domo bar + actual/target symbol overlay — combo-chart (bar + a ' \
                                   'scatter marker series) is the closest native shape; a true ' \
                                   'actual-vs-target dial is not representable.',
@@ -307,8 +304,11 @@ DIM_MAPPINGS = %w[ITEM CATEGORY DATE].freeze
 MEASURE_MAPPINGS = %w[VALUE CURRENT TARGET BUBBLESIZE].freeze
 
 # SERIES and XTIME are AMBIGUOUS and must be disambiguated by whether the column
-# carries an aggregation. Treating aggregated XTIME as a dimension collapsed
-# the live Top Salespeople scatter to one row and dropped COUNT(IsWon).
+# carries an aggregation OR resolves to an aggregate/window Beast Mode. Treating
+# an aggregate Beast Mode as a split dimension can be much worse than a wrong
+# legend: Sigma groups by every numeric result and builds one color category per
+# value (2,013 categories on the field-found Auto-Pay chart), which can make the
+# workbook page effectively unresponsive.
 #
 # LIVE EVIDENCE (2026-07-30):
 #   * badge_line_bar / combo + two-axis cards bind every MEASURE via SERIES
@@ -321,6 +321,14 @@ MEASURE_MAPPINGS = %w[VALUE CURRENT TARGET BUBBLESIZE].freeze
 # So: SERIES + aggregation => measure; SERIES without => split dimension.
 SERIES_MAPPING = 'SERIES'
 RAW_SERIES_MEASURE_CHART_TYPES = %w[badge_line_stackedbar badge_symbol_bar].freeze
+
+def aggregate_beast_mode_column?(column)
+  return false unless column['_isCalc']
+  bm = translated_beast_modes[column['beastModeId'].to_s] ||
+       translated_beast_modes[column['column'].to_s]
+  bm.is_a?(Hash) && %w[aggregate window].include?(bm['class'].to_s) &&
+    !bm['sigmaFormula'].to_s.strip.empty?
+end
 
 def split_cols(card)
   cols = card['columns'] || []
@@ -336,9 +344,10 @@ def split_cols(card)
   # correctly instead of silently losing the untagged columns.
   cols.each do |c|
     m = c['mapping'].to_s.upcase
+    aggregate_like = !c['aggregation'].to_s.empty? || aggregate_beast_mode_column?(c)
     if m == SERIES_MAPPING || m == 'XTIME'
       # Ambiguous by design — see the role notes above.
-      if c['aggregation'].to_s.empty? && m == SERIES_MAPPING &&
+      if !aggregate_like && m == SERIES_MAPPING &&
          RAW_SERIES_MEASURE_CHART_TYPES.include?(chart_type)
         # Domo's line+bar/symbol+bar cards use a raw numeric SERIES as a
         # benchmark/overlay (live: Industry Open Rate, Unique Page Views).
@@ -346,7 +355,7 @@ def split_cols(card)
         # bucket, while treating it as an unbound dimension drops it entirely.
         meas << c.merge('aggregation' => 'MAX', '_inferredAggregation' => true)
       else
-        c['aggregation'].to_s.empty? ? dims << c : meas << c
+        aggregate_like ? meas << c : dims << c
       end
     elsif DIM_MAPPINGS.include?(m)
       dims << c
@@ -363,6 +372,42 @@ def split_cols(card)
 end
 
 def col_label(c) (c['alias'] && !c['alias'].to_s.strip.empty?) ? c['alias'] : display_name(c['column']) end
+
+AGGREGATE_FORMULA = /\b(?:Sum|Avg|Count|CountDistinct|Min|Max|Median|StdDev\w*|Var\w*)\s*\(/i
+
+# Source-side card-data is captured before workbook assembly. The presentation
+# derivation records any SERIES channel whose observed cardinality exceeds the
+# safe color budget in chart-color-overrides.json. Apply that fact here, and
+# independently reject an aggregate formula on a category channel even when the
+# sidecar is unavailable (offline/older runs).
+def apply_category_color_guard!(card, element)
+  return element unless element.is_a?(Hash)
+  color = element['color']
+  return element unless color.is_a?(Hash) && color['by'] == 'category'
+
+  color_id = color['column'] || color['columnId']
+  color_col = Array(element['columns']).find { |column| column['id'] == color_id }
+  reason = nil
+  if color_col && color_col['formula'].to_s.match?(AGGREGATE_FORMULA)
+    reason = "column '#{color_col['name'] || color_id}' is an aggregate expression, not a categorical split"
+  else
+    path = File.join(OUT, 'chart-color-overrides.json')
+    rules = (JSON.parse(File.read(path)) rescue {}) if File.exist?(path)
+    rule = rules && rules[card['id'].to_s]
+    if rule.is_a?(Hash) && rule['mode'] == 'omit'
+      observed = rule['distinctValuesObserved']
+      threshold = rule['threshold']
+      reason = "source card-data observed #{observed} distinct values" \
+               "#{threshold ? " (safe limit #{threshold})" : ''}"
+    end
+  end
+  return element unless reason
+
+  element.delete('color')
+  warn_card(card, "category color omitted: #{reason}. Rendering one color series per value can " \
+                  'overload the browser; the plotted measures remain intact.')
+  element
+end
 
 # A measure element column: <Agg>([Master/<disp>]) with a clean label + format.
 def measure_col(c, card = nil)
@@ -872,7 +917,170 @@ def build_pie_or_donut(card, kind)
   }.compact
 end
 
-# ---- combo-chart (badge_line_bar / badge_line_stackedbar / badge_pop_bar_line /
+# ---- period-over-period -----------------------------------------------------
+#
+# Domo's POP cards author only a date + one value. The compare-to periods are
+# in dateRangeFilter.periods; POP_PERIOD/POP_INDEX are synthetic query-result
+# channels and do not exist in the warehouse. Rebuild those synthetic rows with
+# one filtered helper per period, union the helpers, then expose one explicit
+# Sigma measure per period. This also duplicates overlap rows correctly (for
+# example July 1 can be index 0 of one period and index 30 of another).
+def pop_period_plan(card)
+  return nil unless card['chartType'].to_s.downcase == 'badge_pop_bar_line'
+  drf = card['dateRangeFilter']
+  return nil unless drf.is_a?(Hash)
+  rng = drf['dateTimeRange']
+  return nil unless rng.is_a?(Hash) && rng['dateTimeRangeType'] == 'INTERVAL_OFFSET'
+
+  date_column = drf['column'].is_a?(Hash) ? drf.dig('column', 'column') : drf['column']
+  value_column = Array(card['columns']).find { |column| column['mapping'].to_s.upcase == 'VALUE' } ||
+                 Array(card['columns']).find { |column| !column['aggregation'].to_s.empty? }
+  return nil if date_column.to_s.empty? || !value_column.is_a?(Hash)
+  return nil if value_column['_isCalc'] || value_column['aggregation'].to_s.empty?
+
+  interval = DOMO_DATE_INTERVAL_UNIT[rng['interval'].to_s.upcase]
+  grain = DATE_GRAIN_UNIT[card.dig('dateGrain', 'dateTimeElement').to_s.upcase]
+  grain ||= interval
+  return nil unless interval && grain
+
+  periods = drf['periods']
+  comparisons =
+    if periods.is_a?(Hash) && periods['type'].to_s.upcase == 'COMBINED'
+      Array(periods['combined'])
+    elsif periods.is_a?(Hash)
+      [periods]
+    else
+      []
+    end
+  comparisons = comparisons.filter_map do |period|
+    next unless period.is_a?(Hash) && period['type'].to_s.upcase == 'OFFSET'
+    unit = DOMO_DATE_INTERVAL_UNIT[period['interval'].to_s.upcase]
+    count = period['count'].to_i
+    next unless unit && count.positive?
+    { 'unit' => unit, 'count' => count }
+  end
+  return nil if comparisons.empty?
+
+  {
+    'date_column' => date_column,
+    'value_column' => value_column,
+    'interval' => interval,
+    'grain' => grain,
+    'offset' => rng['offset'].to_i,
+    'comparisons' => comparisons,
+  }
+end
+
+def pop_period_label(unit, count, primary: false)
+  noun = unit.capitalize
+  noun += 's' unless count == 1
+  return "This #{unit.capitalize}" if primary && count.zero?
+  "#{count} #{noun} Ago"
+end
+
+def build_pop_chart(card, plan)
+  value = plan['value_column']
+  base_start = %(DateTrunc("#{plan['interval']}", DateAdd("#{plan['interval']}", -#{plan['offset']}, Today())))
+  base_end = %(DateAdd("#{plan['interval']}", 1, #{base_start}))
+  periods = [{ 'unit' => plan['interval'], 'count' => 0, 'absolute' => plan['offset'], 'primary' => true }] +
+            plan['comparisons'].map do |period|
+              absolute = period['count']
+              absolute += plan['offset'] if period['unit'] == plan['interval']
+              period.merge('absolute' => absolute, 'primary' => false)
+            end
+  helpers = periods.each_with_index.map do |period, index|
+    start_at =
+      if period['primary']
+        base_start
+      else
+        %(DateAdd("#{period['unit']}", -#{period['count']}, #{base_start}))
+      end
+    period_length = %(DateDiff("#{plan['grain']}", #{base_start}, #{base_end}))
+    end_at = %(DateAdd("#{plan['grain']}", #{period_length}, #{start_at}))
+    raw_date = mref(display_name(plan['date_column']))
+    aligned = %(DateAdd("#{plan['grain']}", DateDiff("#{plan['grain']}", #{start_at}, DateTrunc("#{plan['grain']}", #{raw_date})), #{base_start}))
+    helper_id = "src-#{eid(card)}-pop-#{index}"
+    helper_name = "#{card['title']} (POP #{index})"
+    columns = [
+      { 'id' => 'd-aligned-date', 'name' => 'Aligned Date', 'formula' => aligned },
+      { 'id' => 'd-pop-value', 'name' => 'Value', 'formula' => mref(display_name(value['column'])) },
+      { 'id' => 'd-period-index', 'name' => 'Period Index', 'formula' => index.to_s },
+      {
+        'id' => 'f-period-window', 'name' => 'Period Window',
+        'formula' => %(If(#{raw_date} >= #{start_at} and #{raw_date} < #{end_at}, "in", "out")),
+        'hidden' => true,
+      },
+    ]
+    {
+      'id' => helper_id,
+      'kind' => 'table',
+      'name' => helper_name,
+      'visibleAsSource' => false,
+      'source' => { 'kind' => 'table', 'elementId' => 'master' },
+      'columns' => columns,
+      'order' => columns.map { |column| column['id'] },
+      'filters' => [{
+        'id' => "dw-#{helper_id}",
+        'columnId' => 'f-period-window',
+        'kind' => 'list',
+        'mode' => 'include',
+        'values' => ['in'],
+      }],
+    }
+  end
+
+  # The live workbook union source does not accept a `name` property. Its
+  # formula namespace is the server-derived "Union of N Sources" label.
+  union_name = "Union of #{helpers.size} Sources"
+  union_source = {
+    'kind' => 'union',
+    'sources' => helpers.map { |helper| { 'kind' => 'table', 'elementId' => helper['id'] } },
+    'matches' => %w[Aligned\ Date Value Period\ Index].map do |name|
+      {
+        'outputColumnName' => name.tr('\\', ''),
+        'sourceColumns' => helpers.map { "[#{name.tr('\\', '')}]" },
+      }
+    end,
+  }
+  date_col = {
+    'id' => 'd-pop-aligned-date',
+    'name' => 'Date',
+    'formula' => "[#{union_name}/Aligned Date]",
+    'format' => { 'kind' => 'datetime', 'formatString' => '%b %y' },
+  }
+  measure_columns = periods.each_with_index.map do |period, index|
+    label = pop_period_label(
+      period['unit'],
+      period['absolute'],
+      primary: period['primary'],
+    )
+    {
+      'id' => "m-pop-#{index}",
+      'name' => label,
+      'formula' => "#{sigma_agg(value['aggregation'], value['distinct'])}" \
+                   "(If([#{union_name}/Period Index] = #{index}, [#{union_name}/Value], Null))",
+      'format' => sigma_format(value['format'], label),
+    }.compact
+  end
+  {
+    'id' => eid(card),
+    'kind' => 'combo-chart',
+    'name' => card['title'],
+    'source' => union_source,
+    'columns' => [date_col] + measure_columns,
+    'xAxis' => { 'columnId' => date_col['id'], 'format' => AXIS_OFF },
+    'yAxis' => {
+      'columnIds' => measure_columns.each_with_index.map do |column, index|
+        { 'columnId' => column['id'], 'type' => index.zero? ? 'bar' : 'line' }
+      end,
+      'format' => AXIS_OFF,
+    },
+    '_dataHelpers' => helpers,
+    '_periodComparisonManaged' => true,
+  }
+end
+
+# ---- combo-chart (badge_line_bar / badge_line_stackedbar /
 # badge_symbol_bar / badge_vert_symbol_overlay) ------------------------------
 # Domo's ChartType alone doesn't say WHICH measure is the bar vs. the secondary
 # series, so this uses a documented, honest heuristic: the FIRST measure is the
@@ -883,6 +1091,14 @@ def build_combo(card)
   dims, meas = split_cols(card)
   ct = card['chartType'].to_s.downcase
   secondary = COMBO_SECONDARY_TYPE[ct] || 'line'
+  if ct == 'badge_pop_bar_line' && meas.size < 2
+    warn_card(card, "badge_pop_bar_line: SKIPPED — Domo period-over-period cards expose one authored " \
+                    'measure plus synthetic POP_PERIOD/POP_INDEX channels. Only one explicit measure ' \
+                    "resolved here, so emitting it would falsely look like a valid comparison. Supply " \
+                    'the source compare-to metadata (or explicit current/prior Beast Mode measures) ' \
+                    'and rebuild.')
+    return nil
+  end
   if meas.size != 2
     warn_card(card, "combo-chart: expected a bar measure + a #{secondary} measure (2 total) but found " \
                     "#{meas.size} — verify the series assignment against the card PNG.")
@@ -2079,7 +2295,9 @@ def build_element(card, overrides, master_ds = nil)
 
   before = $companion_elements.length
   el = build_element_body(card, overrides)
+  apply_category_color_guard!(card, el)
   scatter_helper = el && el['_scatterHelper']
+  data_helpers = Array(el && el['_dataHelpers'])
   uniquify_column_ids!(el)
   resolve_channel_collisions!(el)
   if el.nil?
@@ -2109,6 +2327,8 @@ def build_element(card, overrides, master_ds = nil)
   if routed
     if scatter_helper
       retarget_to_submaster!(scatter_helper, sm)
+    elsif data_helpers.any?
+      data_helpers.each { |helper| retarget_to_submaster!(helper, sm) }
     elsif plugin_sources.any?
       plugin_sources.each do |source|
         retarget_to_submaster!(source, sm) unless source.dig('source', 'kind') == 'sql'
@@ -2125,6 +2345,11 @@ def build_element(card, overrides, master_ds = nil)
     el.delete('_scatterHelper')
     $chart_helpers << scatter_helper
   end
+  if data_helpers.any?
+    el.delete('_dataHelpers')
+    $chart_helpers.concat(data_helpers)
+  end
+  el.delete('_periodComparisonManaged')
   $plugin_source_elements.concat(plugin_sources)
   el
 end
@@ -2235,7 +2460,9 @@ def build_element_body(card, overrides)
     el = case kind
          when 'bar-chart', 'line-chart', 'area-chart', 'scatter-chart'
            build_axis_chart(card, kind)
-         when 'combo-chart' then build_combo(card)
+         when 'combo-chart'
+           plan = pop_period_plan(card)
+           plan ? build_pop_chart(card, plan) : build_combo(card)
          when 'pie-chart', 'donut-chart' then build_pie_or_donut(card, kind)
          when 'pivot-table'  then build_pivot(card)
          when 'table'        then build_table(card)
@@ -2265,6 +2492,11 @@ def build_element_body(card, overrides)
     helper = apply_card_filters!(card, el['_scatterHelper'])
     helper = apply_card_date_window!(card, helper)
     el['_scatterHelper'] = helper
+  elsif el && Array(el['_dataHelpers']).any?
+    # POP helpers already carry one exact source-derived period window each.
+    # Card predicates still apply to every helper before the union; applying
+    # the ordinary one-window filter would discard the comparison periods.
+    el['_dataHelpers'] = Array(el['_dataHelpers']).map { |helper| apply_card_filters!(card, helper) }
   else
     # B4: this card's OWN filter clauses -> ELEMENT filters on its element (see
     # apply_card_filters! above) — never a page control (see build_controls).
@@ -2282,7 +2514,12 @@ def build_element_body(card, overrides)
       # correctly filtered chart (the exact B4 divergence this fix exists to
       # close, just one element over).
       companion = apply_card_filters!(card, companion)
-      companion = apply_card_date_window!(card, companion)
+      # A POP summary Beast Mode already carries its current/prior predicates
+      # (for example the live "% Change - Pageviews" formula). Applying the
+      # primary period window again would erase the comparison rows it needs.
+      unless el['_periodComparisonManaged'] && sn['_isCalc']
+        companion = apply_card_date_window!(card, companion)
+      end
       container_override_path = File.join(OUT, 'card-container-overrides.json')
       container_overrides = (JSON.parse(File.read(container_override_path)) rescue {}) if
         File.exist?(container_override_path)

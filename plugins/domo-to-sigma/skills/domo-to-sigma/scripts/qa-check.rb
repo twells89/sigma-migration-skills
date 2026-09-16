@@ -14,6 +14,8 @@ require 'optparse'
 require_relative 'lib/domo_sigma_util'
 include DomoSigma
 
+QA_AGGREGATE_FORMULA = /\b(?:Sum|Avg|Count|CountDistinct|Min|Max|Median|StdDev\w*|Var\w*)\s*\(/i
+
 # Pull the column display name out of a [Master/Name] ref inside a formula.
 def refs_in(formula)
   formula.to_s.scan(/\[Master\/([^\]]+)\]/).flatten
@@ -48,6 +50,17 @@ def check(spec)
         end
         # #7: a chart must not be a table carrying dataBars.
         errors << "[#{pg['name']}] chart '#{e['name']}' has dataBars — a bar chart must be a bar-chart element, not a table." if e['conditionalFormats']
+        color = e['color']
+        if color.is_a?(Hash) && color['by'] == 'category'
+          color_id = color['column'] || color['columnId']
+          color_column = Array(e['columns']).find { |column| column['id'] == color_id }
+          if color_column && color_column['formula'].to_s.match?(QA_AGGREGATE_FORMULA)
+            errors << "[#{pg['name']}] chart '#{e['name']}' uses aggregate " \
+                      "'#{color_column['name'] || color_id}' as a category color. This can create " \
+                      'one series per numeric result and overload the browser; classify it as a ' \
+                      'measure or omit the color channel.'
+          end
+        end
       when 'table'
         # #5: dimension (non-aggregated) columns should allow text wrap.
         dim_cols = (e['columns'] || []).reject { |c| c['formula'].to_s =~ /\A\s*(Sum|Avg|Count|CountDistinct|Min|Max)\s*\(/i }
