@@ -44,6 +44,18 @@ class TestCodeRep < Minitest::Test
     assert_equal({ 'name' => 'N', 'document' => api_doc }, Sigma::CodeRep.wrap(doc, extra: { 'name' => 'N' }))
   end
 
+  def test_wrap_strips_data_model_only_visible_as_source
+    doc = {
+      'schemaVersion' => 1,
+      'pages' => [{ 'id' => 'data' }],
+      'elements' => [{ 'id' => 'master', 'kind' => 'table', 'visibleAsSource' => false }],
+    }
+    emitted = Sigma::CodeRep.wrap(doc)
+    refute emitted.dig('document', 'elements', 0).key?('visibleAsSource')
+    assert_equal false, doc.dig('elements', 0, 'visibleAsSource'),
+                 'local document keeps the helper hint; only workbook emission strips it'
+  end
+
   def test_round_trip_lossless_from_both_shapes
     [LIVE, LEGACY].each do |r|
       doc = Sigma::CodeRep.document(r)
