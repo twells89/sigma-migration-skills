@@ -41,8 +41,10 @@ user-invocable: true
 - `refs/card-to-element.md` — **Domo card → Sigma element map. Read before Phase 5.** Rule 0 (Summary Number → KPI, never a table) is the #1 fidelity fix; also covers filtering + no-liberties discipline.
 <!-- /mandatory-pre-read -->
 
-Phase-scoped (read at its phase, not upfront): at **Phase 5e**, read
-`refs/layout-visual-qa.md` — the visual QA gate — before grading the layout.
+Phase-scoped (read at its phase, not upfront): at **Phase 5**, read
+`refs/chart-safety.md` for period comparisons and category-cardinality guards;
+at **Phase 5e**, read `refs/layout-visual-qa.md` — the visual QA gate — before
+grading the layout.
 
 General workbook-spec and data-model-spec authoring idioms (grid layout
 mechanics, chart/control shapes, DM column/relationship shapes) are deferred to

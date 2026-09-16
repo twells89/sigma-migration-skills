@@ -300,25 +300,8 @@ a nice-to-have:
 | `badge_calendar` | No calendar-heatmap kind exists. | A flat date + value `table`. |
 | `badge_vert_symbol_overlay` | No actual-vs-target dial/overlay kind exists (and `gauge` itself is invalid — see above). | `combo-chart` (bar + a `scatter` marker series) approximates the visual; a true actual-vs-target dial is not representable. |
 
-### Period-over-period cards
-
-Domo authors a POP card with only a date and one value. Its result adds
-`POP_PERIOD` and `POP_INDEX`, but those are synthetic query channels—not
-warehouse columns. The converter reconstructs them from the source
-`dateRangeFilter`:
-
-- `dateTimeRange.dateTimeRangeType: INTERVAL_OFFSET` defines the selected period.
-- `periods.type: COMBINED` with `OFFSET` entries defines each comparison.
-- one hidden, filtered table is emitted per period;
-- the helpers align dates by the source graph grain, then a union preserves
-  overlap rows that belong to more than one comparison;
-- the visible `combo-chart` exposes one explicit measure per period (selected
-  period as bars, comparison periods as lines).
-
-This covers month-over-month, year-over-year, and multiple comparison periods
-such as current year plus two prior years. If the compare metadata is absent or
-uses an unrecognized shape, the card is skipped with a named warning rather
-than silently emitted as a one-series chart.
+`badge_pop_bar_line` reconstruction and its refusal behavior are specified in
+`refs/chart-safety.md`.
 
 **Follow-up, not handled by this converter today:** closing this gap for real —
 a genuine treemap, word cloud, calendar heatmap, or unsupported dial rendered in
@@ -430,19 +413,8 @@ labels, so a faithful port looks busier than the source. Default new charts to:
 
 Only turn marks/labels back on where the source PNG actually showed them.
 
-### Category-color safety
-
-`color.by: category` is only valid for a bounded categorical split. Never bind
-an aggregate Beast Mode to that channel: each numeric result becomes a distinct
-series (a field-found Auto-Pay migration produced 2,013 categories and made the
-page unresponsive). Aggregate/window Beast Modes mapped as Domo `SERIES` are
-measures, even when their card-column record omits `aggregation`.
-
-The live orchestrator also counts distinct `SERIES` values in Domo card-data.
-Above 100 observed values it emits `chart-color-overrides.json`; the workbook
-builder omits the color channel and records the measured cardinality in
-`warnings.json`. `qa-check.rb` hard-fails any aggregate formula that still
-escapes onto a category-color channel.
+Category-cardinality and aggregate-color safety are specified in
+`refs/chart-safety.md`.
 
 ---
 

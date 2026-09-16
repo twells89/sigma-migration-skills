@@ -1142,6 +1142,10 @@ pop_month = build_element({
 eq(pop_month['kind'], 'combo-chart', 'Domo POP bar+line becomes a Sigma combo chart')
 eq(pop_month.dig('source', 'kind'), 'union',
    'period helpers are unioned so overlap rows can participate in more than one comparison')
+ok(!pop_month['source'].key?('name'),
+   'workbook union source omits unsupported name (the server derives its namespace)')
+ok(pop_month['columns'].first['formula'].start_with?('[Union of 3 Sources/'),
+   'visible columns use the live server-derived union namespace')
 eq(pop_month.dig('yAxis', 'columnIds').map { |series| series['type'] }, %w[bar line line],
    'selected period is bars and both comparison periods are lines')
 eq(pop_month['columns'].drop(1).map { |column| column['name'] },

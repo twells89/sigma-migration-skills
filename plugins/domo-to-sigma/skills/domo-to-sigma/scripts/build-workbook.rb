@@ -1029,10 +1029,11 @@ def build_pop_chart(card, plan)
     }
   end
 
-  union_name = "#{card['title']} POP Periods"
+  # The live workbook union source does not accept a `name` property. Its
+  # formula namespace is the server-derived "Union of N Sources" label.
+  union_name = "Union of #{helpers.size} Sources"
   union_source = {
     'kind' => 'union',
-    'name' => union_name,
     'sources' => helpers.map { |helper| { 'kind' => 'table', 'elementId' => helper['id'] } },
     'matches' => %w[Aligned\ Date Value Period\ Index].map do |name|
       {
