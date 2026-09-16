@@ -165,6 +165,13 @@ module Sigma
 
       def canonicalize_element(element)
         return element unless element.is_a?(Hash)
+        # `visibleAsSource` belongs to data-model elements only. The workbook
+        # API rejects it even on hidden data-page tables:
+        #   elements[0].visibleAsSource: only supported on data-model documents
+        # Keep accepting it in local/legacy documents because downstream
+        # readers use it as a hidden-helper hint, but never emit it across a
+        # workbook code-representation boundary.
+        element = element.reject { |key, _| key == 'visibleAsSource' } if element.key?('visibleAsSource')
         case element['kind']
         when 'text'
           mapped = LEGACY_VERTICAL_ALIGN[element['verticalAlign']]
