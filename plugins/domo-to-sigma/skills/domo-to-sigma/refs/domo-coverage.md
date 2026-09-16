@@ -55,8 +55,8 @@ Authoritative source: <https://knowledge.domo.com/Visualize/Adding_Cards_to_Domo
 | | | | | _No native word-cloud surface._ |
 | `badge_calendar` | — | `table` | 🟡 n | warn+table |
 | | | | | _No native calendar-heatmap surface._ |
-| `badge_pop_bar_line` | — | `combo-chart` | 🟡 n | warn+combo |
-| | | | | _Automatic prior-period semantics remain a gap._ |
+| `badge_pop_bar_line` | — | `combo-chart` | 🟡 n | warn+skip |
+| | | | | _INTERVAL_OFFSET + periods OFFSET metadata is reconstructed as explicit measures over aligned hidden helpers; unresolved compare shapes are skipped rather than emitted as one series._ |
 | `badge_vert_symbol_overlay` | — | `combo-chart` | 🟡 n | warn+combo |
 | | | | | _Approximate bar plus scatter marker; no dial semantics are claimed._ |
 

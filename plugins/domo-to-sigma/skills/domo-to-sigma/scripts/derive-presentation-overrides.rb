@@ -11,6 +11,7 @@
 #   card-header-overrides.json   screenshot-backed chart title/summary blocks
 #   chart-axis-overrides.json    compact currency axis display
 #   category-order-overrides.json source category order from Domo rows
+#   chart-color-overrides.json   suppress unsafe high-cardinality SERIES colors
 #
 # The existing builders consume these files. Raw-value parity twins remain the
 # builder's responsibility, so display scaling never changes the measured value.
@@ -164,8 +165,10 @@ kpi_headers = {}
 card_headers = {}
 axis_formats = {}
 category_orders = {}
+color_guards = {}
 warnings = []
 observed_layout = File.exist?(File.join(discovery, 'layout-observed.json'))
+max_category_colors = Integer(ENV.fetch('DOMO_MAX_CATEGORY_COLORS', '100'), 10) rescue 100
 
 cards.each do |card|
   next if card['_error'] || card['_tierB']
@@ -251,12 +254,44 @@ cards.each do |card|
      unique_values.size.between?(2, 20) && unique_values.none? { |value| dateish?(value) }
     category_orders[id] = unique_values
   end
+
+  # A SERIES mapping becomes Sigma `color.by: category`. Domo can return a
+  # numeric aggregate in that slot, or a genuinely high-cardinality dimension;
+  # either shape creates one browser-heavy color series per distinct value.
+  # The live orchestrator already captured these rows from Domo, so make the
+  # performance decision from source facts rather than guessing from names.
+  mappings = Array(expected['mappings'])
+  series_index = mappings.index { |mapping| mapping.to_s.upcase == 'SERIES' }
+  if series_index
+    source_columns = Array(expected['columns'])
+    source_name = source_columns[series_index].to_s
+    source_series = Array(card['columns']).find do |column|
+      column['mapping'].to_s.upcase == 'SERIES' &&
+        [column['column'], column['alias']].compact.map(&:to_s).include?(source_name)
+    end
+    # Aggregated SERIES entries are separate measures, not category colors.
+    if source_series && source_series['aggregation'].to_s.empty?
+      series_values = rows.map { |row| Array(row)[series_index] }.compact.uniq
+    end
+    if series_values && series_values.size > max_category_colors
+      color_guards[id] = {
+        'mode' => 'omit',
+        'column' => source_name,
+        'distinctValuesObserved' => series_values.size,
+        'threshold' => max_category_colors,
+        'source' => 'domo-card-data',
+      }.compact
+      warnings << "#{card['title']}: omitted SERIES category color after observing " \
+                  "#{series_values.size} distinct values (limit #{max_category_colors})"
+    end
+  end
 end
 
 files = {
   'kpi-format-overrides.json' => kpi_formats,
   'chart-axis-overrides.json' => axis_formats,
-  'category-order-overrides.json' => category_orders
+  'category-order-overrides.json' => category_orders,
+  'chart-color-overrides.json' => color_guards,
 }
 files['kpi-card-header-overrides.json'] = kpi_headers if observed_layout
 files['card-header-overrides.json'] = card_headers if observed_layout
@@ -285,7 +320,8 @@ manifest = {
     'kpi_headers' => kpi_headers.size,
     'card_headers' => card_headers.size,
     'axis_formats' => axis_formats.size,
-    'category_orders' => category_orders.size
+    'category_orders' => category_orders.size,
+    'color_guards' => color_guards.size
   },
   'written' => written,
   'preserved_existing' => skipped,

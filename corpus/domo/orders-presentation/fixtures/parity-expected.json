@@ -41,6 +41,17 @@
         ["ORD-00002", 240.0]
       ],
       "summary_value": 146737.91
+    },
+    "line_sites": {
+      "card_id": "line_sites",
+      "title": "Revenue by Site and Month",
+      "columns": ["CalendarMonth", "SITE_NAME", "NET_REVENUE"],
+      "mappings": ["ITEM", "SERIES", "VALUE"],
+      "rows": [
+        ["2024-01", "Site A", 100.0],
+        ["2024-01", "Site B", 200.0],
+        ["2024-01", "Site C", 300.0]
+      ]
     }
   }
 }

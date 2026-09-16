@@ -3,6 +3,7 @@
 #   ruby test/test-build-workbook.rb
 
 require_relative '../scripts/build-workbook'
+require_relative '../scripts/qa-check'
 require 'tmpdir'
 
 # Temporarily override a top-level constant for the duration of a block, then
@@ -1042,6 +1043,181 @@ ok(Array(overlay.dig('yAxis', 'columnIds')).any? {
      |x| (x.is_a?(Hash) ? x['columnId'] : x) == benchmark['id']
    },
    'benchmark is bound to a visible series channel')
+
+puts "== field regression: aggregate Beast Mode SERIES is a measure, never 2,013 color categories =="
+$translated_bms = {
+  'calc-ap-rate' => {
+    'id' => 'calc-ap-rate', 'name' => 'AP %', 'class' => 'aggregate',
+    'sigmaFormula' => 'Sum([On Auto Pay]) / Sum([Total Ledgers])',
+  },
+}
+auto_pay = build_element({
+  'id' => 'auto-pay-month', 'title' => 'Auto-Pay by Month', 'chartType' => 'badge_two_trendline',
+  'dateGrain' => { 'column' => 'Date', 'dateTimeElement' => 'MONTH' },
+  'columns' => [
+    { 'column' => 'CalendarMonth', 'mapping' => 'ITEM', 'calendar' => true },
+    { 'column' => 'Off Auto Pay', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => 'On Auto Pay', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => 'AP %', 'beastModeId' => 'calc-ap-rate', '_isCalc' => true, 'mapping' => 'SERIES' },
+  ],
+}, {})
+ok(!auto_pay.key?('color'),
+   'aggregate AP % is not emitted as color.by:category (the browser-locking 2,013-series bug)')
+ap_measure = auto_pay['columns'].find { |column| column['name'] == 'AP %' }
+ok(ap_measure && ap_measure['id'].start_with?('m-'), 'aggregate Beast Mode is classified as a measure')
+ok(Array(auto_pay.dig('yAxis', 'columnIds')).include?(ap_measure['id']),
+   'AP % stays visible on the value axis after the unsafe color channel is removed')
+$translated_bms = nil
+
+puts "== source-cardinality guard: observed high-cardinality SERIES color is omitted =="
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'chart-color-overrides.json'), JSON.generate(
+    'high-color' => {
+      'mode' => 'omit', 'distinctValuesObserved' => 2013, 'threshold' => 100,
+      'source' => 'domo-card-data',
+    }
+  ))
+  stub_const(:OUT, dir) do
+    $warnings = []
+    guarded = build_element({
+      'id' => 'high-color', 'title' => 'Sites by Month', 'chartType' => 'badge_two_trendline',
+      'columns' => [
+        { 'column' => 'Date', 'mapping' => 'ITEM' },
+        { 'column' => 'Site', 'mapping' => 'SERIES' },
+        { 'column' => 'Revenue', 'mapping' => 'VALUE', 'aggregation' => 'SUM' },
+      ],
+    }, {})
+    ok(!guarded.key?('color'), 'source-observed 2,013-member color channel is omitted')
+    ok($warnings.any? { |warning| warning['warning'].include?('2,013') ||
+                                   warning['warning'].include?('2013') },
+       'the omitted source color records its measured cardinality')
+  end
+end
+
+puts "== QA hard gate: aggregate formulas can never escape on a category color channel =="
+bad_color_spec = {
+  'pages' => [{
+    'name' => 'Auto Pay',
+    'elements' => [{
+      'id' => 'bad-color', 'kind' => 'line-chart', 'name' => 'Auto-Pay by Month',
+      'columns' => [
+        { 'id' => 'd-date', 'name' => 'Date', 'formula' => '[Master/Date]' },
+        { 'id' => 'd-ap', 'name' => 'AP %',
+          'formula' => 'Sum([Master/On Auto Pay]) / Sum([Master/Total Ledgers])' },
+      ],
+      'xAxis' => { 'columnId' => 'd-date', 'format' => { 'marks' => 'none' } },
+      'yAxis' => { 'columnIds' => ['d-ap'], 'format' => { 'marks' => 'none' } },
+      'color' => { 'by' => 'category', 'column' => 'd-ap' },
+    }],
+  }],
+}
+qa_errors, = check(bad_color_spec)
+ok(qa_errors.any? { |error| error.include?('uses aggregate') && error.include?('category color') },
+   'qa-check rejects an aggregate color category even if another builder emitted it')
+
+puts "== live POP contract: synthetic periods become explicit Sigma measures =="
+$chart_helpers = []
+pop_month = build_element({
+  'id' => '922919965', 'title' => 'Page Views', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'Date', 'mapping' => 'ITEM', 'calendar' => true },
+    { 'column' => 'Page Views', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+  'dateGrain' => { 'column' => 'Period', 'dateTimeElement' => 'DAY' },
+  'dateRangeFilter' => {
+    'column' => { 'column' => 'Period', 'exprType' => 'COLUMN' },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'MONTH', 'offset' => 1, 'count' => 0,
+    },
+    'periods' => {
+      'type' => 'COMBINED',
+      'combined' => [
+        { 'interval' => 'MONTH', 'type' => 'OFFSET', 'count' => 1 },
+        { 'interval' => 'MONTH', 'type' => 'OFFSET', 'count' => 2 },
+      ],
+      'count' => 0,
+    },
+  },
+}, {})
+eq(pop_month['kind'], 'combo-chart', 'Domo POP bar+line becomes a Sigma combo chart')
+eq(pop_month.dig('source', 'kind'), 'union',
+   'period helpers are unioned so overlap rows can participate in more than one comparison')
+eq(pop_month.dig('yAxis', 'columnIds').map { |series| series['type'] }, %w[bar line line],
+   'selected period is bars and both comparison periods are lines')
+eq(pop_month['columns'].drop(1).map { |column| column['name'] },
+   ['1 Month Ago', '2 Months Ago', '3 Months Ago'],
+   'all source-declared month periods become explicit measure columns')
+eq($chart_helpers.size, 3, 'one hidden helper is emitted for each Domo POP period')
+ok($chart_helpers.last['columns'].first['formula'].include?(
+     'DateDiff("day", DateAdd("month", -2, DateTrunc("month", DateAdd("month", -1, Today())))'
+   ),
+   'comparison dates align by source POP_INDEX semantics, not by a guessed calendar color split')
+ok(!pop_month.key?('color'), 'POP uses bounded explicit measures, never a high-cardinality color category')
+
+puts "== customer YoY contract: current year bars plus prior-year line =="
+$chart_helpers = []
+pop_yoy = build_element({
+  'id' => 'yoy-current-prior', 'title' => 'YoY', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'CalendarMonth', 'mapping' => 'ITEM', 'calendar' => true },
+    { 'column' => 'Revenue', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+  'dateGrain' => { 'column' => 'Date', 'dateTimeElement' => 'MONTH' },
+  'dateRangeFilter' => {
+    'column' => { 'column' => 'Date', 'exprType' => 'COLUMN' },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'YEAR', 'offset' => 0, 'count' => 0,
+    },
+    'periods' => {
+      'type' => 'COMBINED',
+      'combined' => [{ 'interval' => 'YEAR', 'type' => 'OFFSET', 'count' => 1 }],
+      'count' => 0,
+    },
+  },
+}, {})
+eq(pop_yoy['columns'].drop(1).map { |column| column['name'] }, ['This Year', '1 Year Ago'],
+   'YoY legend exposes the same two periods as the customer screenshot')
+eq(pop_yoy.dig('yAxis', 'columnIds').map { |series| series['type'] }, %w[bar line],
+   'YoY current period renders as bars and prior year as a line')
+ok($chart_helpers.first['columns'].first['formula'].include?('DateDiff("month"'),
+   'YoY points align by month before the explicit measures aggregate')
+
+puts "== unresolved POP never masquerades as a valid one-series comparison =="
+$warnings = []
+unresolved_pop = build_element({
+  'id' => 'pop-missing-periods', 'title' => 'Broken YoY', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'Date', 'mapping' => 'ITEM' },
+    { 'column' => 'Revenue', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+}, {})
+ok(unresolved_pop.nil?, 'POP with no compare metadata or explicit prior measure is skipped')
+ok($warnings.any? { |warning| warning['warning'].include?('falsely look like a valid comparison') },
+   'the skip names the missing POP semantics instead of silently degrading')
+
+puts "== explicit current/prior Beast Modes remain a deterministic POP fallback =="
+$translated_bms = {
+  'calc-current' => {
+    'id' => 'calc-current', 'name' => 'Current', 'class' => 'aggregate',
+    'sigmaFormula' => 'Sum(If([Is Current] = "Yes", [Revenue], 0))',
+  },
+  'calc-prior' => {
+    'id' => 'calc-prior', 'name' => 'Prior', 'class' => 'aggregate',
+    'sigmaFormula' => 'Sum(If([Is Prior] = "Yes", [Revenue], 0))',
+  },
+}
+explicit_pop = build_element({
+  'id' => 'pop-explicit', 'title' => 'Explicit YoY', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'Month', 'mapping' => 'ITEM' },
+    { 'column' => 'Current', 'beastModeId' => 'calc-current', '_isCalc' => true, 'mapping' => 'SERIES' },
+    { 'column' => 'Prior', 'beastModeId' => 'calc-prior', '_isCalc' => true, 'mapping' => 'SERIES' },
+  ],
+}, {})
+eq(explicit_pop.dig('yAxis', 'columnIds').size, 2,
+   'two explicit aggregate Beast Modes become two comparison measures')
+ok(!explicit_pop.key?('color'), 'explicit period measures never become categorical colors')
+$translated_bms = nil
 
 puts "== live parity: split SERIES binds to color while ITEM remains x-axis =="
 revenue = build_element({

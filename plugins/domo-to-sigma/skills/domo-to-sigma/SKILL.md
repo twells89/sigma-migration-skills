@@ -465,6 +465,9 @@ formatting that the chartType string alone misses.
 
 Then translate the rest per the ref:
 - Domo chart type → Sigma chart kind (full table in `refs/card-to-element.md`)
+- Domo period-over-period `dateRangeFilter.periods` → explicit current/prior
+  Sigma measures over aligned hidden helpers (including multiple prior periods);
+  never ship an unresolved POP card as a misleading one-series chart
 - **KPI value guard:** a KPI's value is the summary number's aggregate of the
   authored **measure** (with a source prefix, e.g. `Sum([Master/Sales Amount])`) —
   **never `Count`/`CountDistinct` of the DM primary/row-key column** (that's Domo's
@@ -477,6 +480,10 @@ Then translate the rest per the ref:
   (port **both** levels — see the ref's Filtering fidelity section)
 - **No liberties:** one card → one element; reproduce labels/formats/layout; every
   unsupported/dropped item → a Phase-5e warning, never a silent substitution
+- **Category-color guard:** aggregate Beast Modes are never categorical color
+  splits, and source-observed `SERIES` cardinality above 100 suppresses the
+  color channel with a measured warning instead of creating thousands of
+  browser-heavy series
 
 **Workbook-as-code release contract:** read
 `refs/workbook-code-release-gaps.md` and the machine-readable

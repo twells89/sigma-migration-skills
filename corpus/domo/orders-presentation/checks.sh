@@ -6,12 +6,13 @@
 # the gold acceptance run first reached through hand-authored sidecars — the
 # gap that made gold non-transferable to other customers. derive-presentation-
 # overrides.rb reads only discovery metadata + a Domo card-data snapshot and
-# emits the four sidecars build-workbook.rb consumes. This asserts:
+# emits the sidecars build-workbook.rb consumes. This asserts:
 #   1. currency KPI  -> compact scale/suffix/prefix + font size
 #   2. percent  KPI  -> font size only (never a bogus $ scale)
 #   3. chart w/ summary -> source-value header + compact currency axis
 #   4. categorical order -> Domo row order, preserved
 #   5. KPI cards get NO chart-header override (their value IS the tile)
+#   6. high-cardinality SERIES colors are suppressed from measured card data
 set -uo pipefail
 CASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$CASE_DIR/../../.." && pwd)"
@@ -29,7 +30,7 @@ cp "$CASE_DIR/fixtures/cards.json" "$TMP/discovery/cards.json"
 cp "$CASE_DIR/fixtures/parity-expected.json" "$TMP/parity-expected.json"
 printf '{}\n' > "$TMP/discovery/layout-observed.json"
 
-ruby "$SCRIPTS/derive-presentation-overrides.rb" --workdir "$TMP" --discovery "$TMP/discovery" --force \
+DOMO_MAX_CATEGORY_COLORS=2 ruby "$SCRIPTS/derive-presentation-overrides.rb" --workdir "$TMP" --discovery "$TMP/discovery" --force \
   >"$TMP/derive.out" 2>&1 || { note "FAIL: derive-presentation-overrides.rb exited nonzero"; sed -n '1,20p' "$TMP/derive.out"; exit 1; }
 
 ruby -rjson -e '
@@ -37,6 +38,7 @@ ruby -rjson -e '
   kpi   = JSON.parse(File.read(File.join(dir, "kpi-format-overrides.json")))
   axis  = JSON.parse(File.read(File.join(dir, "chart-axis-overrides.json")))
   order = JSON.parse(File.read(File.join(dir, "category-order-overrides.json")))
+  color = JSON.parse(File.read(File.join(dir, "chart-color-overrides.json")))
   headers = JSON.parse(File.read(File.join(dir, "kpi-card-header-overrides.json")))
   card_headers = JSON.parse(File.read(File.join(dir, "card-header-overrides.json")))
   errs = []
@@ -62,6 +64,9 @@ ruby -rjson -e '
   errs << "categorical order not preserved from Domo rows" unless order["bar_channel"] == ["In-Store", "Online", "App"]
   errs << "date axis wrongly treated as a category" if order.key?("line_month")
   errs << "table wrongly given a categorical order" if order.key?("table_detail")
+  guard = color["line_sites"] || {}
+  errs << "high-cardinality SERIES color was not suppressed" unless
+    guard["mode"] == "omit" && guard["distinctValuesObserved"] == 3 && guard["threshold"] == 2
   errs << "screenshot-backed KPI header missing dynamic full value" unless
     headers.dig("kpi_rev", "body").to_s.include?("{{Sum([Master/NET REVENUE]) | $,.1f}}")
   errs << "screenshot-backed chart header missing title/full value" unless
@@ -85,10 +90,10 @@ ruby -rjson -e '
   m = JSON.parse(File.read(ARGV[0]))
   abort "manifest schema wrong" unless m["schema"] == "domo-presentation-overrides/v1"
   c = m["counts"] || {}
-  abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 5 && c["kpi_formats"] == 5 &&
+  abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 6 && c["kpi_formats"] == 5 &&
     c["kpi_headers"] == 2 &&
     c["card_headers"] == 3 &&
-    c["axis_formats"] == 2 && c["category_orders"] == 1
+    c["axis_formats"] == 3 && c["category_orders"] == 1 && c["color_guards"] == 1
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }
 
