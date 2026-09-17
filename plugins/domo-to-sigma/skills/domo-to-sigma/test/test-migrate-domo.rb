@@ -23,6 +23,9 @@ require_relative '../scripts/lib/ruby_compat'
 SKILL   = File.expand_path('..', __dir__)
 SCRIPTS = File.join(SKILL, 'scripts')
 FIXTURE = File.join(__dir__, 'fixtures', 'domo-estate')
+PLUGIN_VERSION = JSON.parse(
+  File.read(File.expand_path('../../.claude-plugin/plugin.json', SKILL))
+)['version']
 
 $failures = 0
 def ok(c, m) if c then puts "  ok: #{m}" else $failures += 1; puts "  FAIL: #{m}" end end
@@ -281,7 +284,7 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
   missing = required_phases.reject { |p| run_state['phases'].key?(p) }
   ok(missing.empty?, "run-state.json accounts for every phase in the chain (missing: #{missing.join(', ')})")
   eq(run_state['mode'], 'offline', 'run-state.json records mode=offline')
-  eq(run_state['plugin_version'], '0.16.108',
+  eq(run_state['plugin_version'], PLUGIN_VERSION,
      'run-state.json records the exact converter plugin version for stale-install diagnosis')
 
   # ---- bead B5: the render + verdict-recording phases are never silently ---
