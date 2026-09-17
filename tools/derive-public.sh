@@ -46,7 +46,11 @@ echo "=== derive-public.sh: $DEVROOT -> $DEST ==="
 # STEP 1 — sync dev content into <dest>
 # ─────────────────────────────────────────────────────────────────────────
 echo "[1/6] rsync dev tree -> dest"
-rsync -a --delete --exclude=.git "$DEVROOT"/ "$DEST"/
+# --checksum (not the default size+mtime quick-check): dev and dest are freshly
+# checked-out worktrees, so a file can have an identical size AND mtime in both
+# yet different content — e.g. a same-length golden edit ("middle" -> "center").
+# Without --checksum rsync silently skips it and the scrub ships stale content.
+rsync -a --checksum --delete --exclude=.git "$DEVROOT"/ "$DEST"/
 
 cd "$DEST"
 
