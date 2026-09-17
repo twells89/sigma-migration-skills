@@ -6,8 +6,9 @@
 # (schemaVersion 1) with:
 #   - one warehouse-table element per USED DataSet (clean display names — fixes
 #     the raw snake_case-labels complaint at the source)
-#   - PROJECTION (row-level) Beast Modes as DM calc columns (aggregate/window/LOD
-#     Beast Modes are handled at the workbook layer by build-workbook.rb)
+#   - PROJECTION (row-level) Beast Modes as DM calc columns
+#   - AGGREGATE dataset Beast Modes as first-class Sigma metrics
+#   - WINDOW/LOD formulas as explicit deferred accounting outcomes
 #
 # Domo data lands in a warehouse Sigma reads; that mapping is customer-specific and
 # CANNOT be guessed IN GENERAL. Supply discovery/dataset-map.json:

@@ -44,25 +44,36 @@
               "formula": "[ORDER_FACT/Customer Id]"
             },
             {
-              "id": "id0008",
+              "id": "inode-NORM0008/TECHNICAL_ERROR_TYPE",
+              "formula": "[ORDER_FACT/Technical Error Type]"
+            },
+            {
+              "id": "id0009",
               "name": "Order Year",
               "formula": "Year([Order Date])"
             }
           ],
-          "metrics": [],
+          "metrics": [
+            {
+              "id": "id0010",
+              "name": "Total Sales Beast Mode",
+              "formula": "Sum([Sales Amount])"
+            }
+          ],
           "order": [
             "inode-NORM0003/ORDER_ID",
             "inode-NORM0004/ORDER_DATE",
             "inode-NORM0005/REGION",
             "inode-NORM0006/SALES_AMOUNT",
             "inode-NORM0007/CUSTOMER_ID",
-            "id0008"
+            "inode-NORM0008/TECHNICAL_ERROR_TYPE",
+            "id0009"
           ],
           "relationships": [],
           "_datasetId": "ds-order-fact"
         },
         {
-          "id": "id0009",
+          "id": "id0011",
           "kind": "table",
           "source": {
             "connectionId": "conn-demo-warehouse",
@@ -75,28 +86,29 @@
           },
           "columns": [
             {
-              "id": "inode-NORM0010/CUSTOMER_ID",
+              "id": "inode-NORM0012/CUSTOMER_ID",
               "formula": "[CUSTOMER_DIM/Customer Id]"
             },
             {
-              "id": "inode-NORM0011/CUSTOMER_NAME",
+              "id": "inode-NORM0013/CUSTOMER_NAME",
               "formula": "[CUSTOMER_DIM/Customer Name]"
             },
             {
-              "id": "inode-NORM0012/SEGMENT",
+              "id": "inode-NORM0014/SEGMENT",
               "formula": "[CUSTOMER_DIM/Segment]"
             }
           ],
           "metrics": [],
           "order": [
-            "inode-NORM0010/CUSTOMER_ID",
-            "inode-NORM0011/CUSTOMER_NAME",
-            "inode-NORM0012/SEGMENT"
+            "inode-NORM0012/CUSTOMER_ID",
+            "inode-NORM0013/CUSTOMER_NAME",
+            "inode-NORM0014/SEGMENT"
           ],
           "relationships": [],
           "_datasetId": "ds-customer-dim"
         }
       ]
     }
-  ]
+  ],
+  "folderId": "id0015"
 }
