@@ -524,6 +524,9 @@ The local workbook spec keeps `visibleAsSource:false` hints for parity/census
 analysis. `migrate-domo.rb` writes a separate `workbook-post-spec.json` transport
 copy and strips that field recursively before invoking the POST script; Sigma
 accepts it only on data-model documents.
+When a run resumes under a newer plugin version, the orchestrator rebuilds
+presentation/workbook/layout artifacts and updates the existing workbook while
+reusing the already-posted data model.
 
 ### Phase 5d — Layout
 `ruby scripts/build-domo-layout.rb` turns `discovery/cards.json` geometry (from

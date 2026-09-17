@@ -138,11 +138,21 @@ BASE_ENV = {
 
 PLUGIN_MANIFEST_PATH = File.expand_path('../../../.claude-plugin/plugin.json', __dir__)
 PLUGIN_MANIFEST = JSON.parse(File.read(PLUGIN_MANIFEST_PATH)) rescue {}
+PRIOR_RUN_STATE = JSON.parse(File.read(File.join(OUT, 'run-state.json'))) rescue {}
+PRIOR_PLUGIN_VERSION = PRIOR_RUN_STATE['plugin_version']
+PLUGIN_VERSION_CHANGED = !PRIOR_PLUGIN_VERSION.to_s.empty? &&
+                         !PLUGIN_MANIFEST['version'].to_s.empty? &&
+                         PRIOR_PLUGIN_VERSION != PLUGIN_MANIFEST['version']
 DomoRunState.record(
   OUT,
   'plugin_version' => PLUGIN_MANIFEST['version'],
   'plugin_manifest' => PLUGIN_MANIFEST_PATH,
+  'resumed_from_plugin_version' => (PLUGIN_VERSION_CHANGED ? PRIOR_PLUGIN_VERSION : nil),
 )
+
+def rebuild_workbook_artifacts?(opts)
+  opts[:force] || PLUGIN_VERSION_CHANGED
+end
 
 class VisualGradePending < StandardError
   attr_reader :request_path
@@ -636,7 +646,7 @@ end
 def phase_build_workbook!(opts)
   hr('build-workbook')
   cs_path = File.join(DISCOVERY, 'chart-specs.json')
-  if !opts[:force] && File.exist?(cs_path)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(cs_path)
     log 'discovery/chart-specs.json already present — skip (idempotent; pass --force to rebuild)'
     skip_phase!('build-workbook', 'already built (idempotent skip)')
     return
@@ -661,14 +671,14 @@ end
 def phase_derive_presentation!(opts, collect_expected:)
   hr('derive-presentation-overrides')
   manifest = File.join(DISCOVERY, 'presentation-overrides.json')
-  if !opts[:force] && File.exist?(manifest)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(manifest)
     log 'discovery/presentation-overrides.json already present — skip (idempotent; pass --force to rederive)'
     skip_phase!('derive-presentation-overrides', 'already derived (idempotent skip)')
     return
   end
   if collect_expected
     expected_path = File.join(OUT, 'parity-expected.json')
-    if opts[:force] || !File.exist?(expected_path)
+    if rebuild_workbook_artifacts?(opts) || !File.exist?(expected_path)
       ok_e, code_e, _e = run_script!('collect-parity-expected.rb', '--workdir', OUT)
       log "collect-parity-expected exited #{code_e} — deriving from metadata only" unless ok_e
     end
@@ -688,7 +698,7 @@ end
 def phase_build_domo_layout!(opts)
   hr('build-domo-layout')
   layout_path = File.join(DISCOVERY, 'dashboard-layout.json')
-  if !opts[:force] && File.exist?(layout_path)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(layout_path)
     log 'discovery/dashboard-layout.json already present — skip (idempotent; pass --force to rebuild)'
     skip_phase!('build-domo-layout', 'already built (idempotent skip)')
     return
@@ -701,7 +711,7 @@ end
 def phase_build_dashboard_layout!(opts, wb_ids_path)
   hr('build-dashboard-layout')
   layout_xml = File.join(OUT, 'layout.xml')
-  if !opts[:force] && File.exist?(layout_xml)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(layout_xml)
     log 'layout.xml already present — skip (idempotent; pass --force to rebuild)'
     skip_phase!('build-dashboard-layout', 'already built (idempotent skip)')
     return layout_xml
@@ -737,7 +747,7 @@ end
 def phase_render_visual!(opts, workbook_id, wb_ids)
   hr('render-visual (Phase 6f render — gate 8)')
   render_path = File.join(OUT, 'sigma-render.png')
-  if !opts[:force] && File.exist?(render_path)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(render_path)
     log 'sigma-render.png already present — skip (idempotent; pass --force to re-render)'
     skip_phase!('render-visual', 'already rendered (idempotent skip)')
     return
@@ -874,7 +884,7 @@ def run_offline!(opts)
 
   hr('build-workbook-spec')
   spec_path = File.join(OUT, 'workbook-spec.json')
-  if !opts[:force] && File.exist?(spec_path)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(spec_path)
     log 'workbook-spec.json already present — skip (idempotent; pass --force to rebuild)'
     skip_phase!('build-workbook-spec', 'already built (idempotent skip)')
   else
@@ -898,7 +908,7 @@ def run_offline!(opts)
 
   hr('put-layout')
   existing_document = Sigma::CodeRep.document(JSON.parse(File.read(spec_path)))
-  if !opts[:force] && !existing_document['layout'].to_s.strip.empty?
+  if !rebuild_workbook_artifacts?(opts) && !existing_document['layout'].to_s.strip.empty?
     log 'workbook-spec.json already has a layout — skip (idempotent; pass --force to rebuild)'
     skip_phase!('put-layout', 'already merged (idempotent skip)')
   else
@@ -933,6 +943,10 @@ def run_live!(opts)
     'not an API/service account My Documents folder',
   ) if opts[:folder_id].to_s.empty?
   DomoRunState.record(OUT, 'destination_folder_id' => opts[:folder_id])
+  if PLUGIN_VERSION_CHANGED
+    log "plugin updated #{PRIOR_PLUGIN_VERSION} -> #{PLUGIN_MANIFEST['version']}: rebuilding " \
+        'presentation/workbook/layout artifacts while reusing the posted data model'
+  end
 
   tier_b = ENV['DOMO_DEV_TOKEN'].to_s.strip.empty?
   hr('tier probe')
@@ -1095,7 +1109,7 @@ def run_live!(opts)
 
   hr('build-workbook-spec')
   spec_path = File.join(OUT, 'workbook-spec.json')
-  if !opts[:force] && File.exist?(spec_path)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(spec_path)
     log 'workbook-spec.json already present — skip (idempotent; pass --force to rebuild)'
     skip_phase!('build-workbook-spec', 'already built (idempotent skip)')
   else
@@ -1111,7 +1125,7 @@ def run_live!(opts)
 
   hr('post-and-readback (workbook)')
   wb_ids_path = File.join(OUT, 'wb-ids.json')
-  if !opts[:force] && File.exist?(wb_ids_path)
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(wb_ids_path)
     log 'wb-ids.json already present — skip (idempotent; pass --force to re-post)'
     skip_phase!('post-and-readback-wb', 'already posted (idempotent skip)')
   else
@@ -1120,7 +1134,12 @@ def run_live!(opts)
     log "workbook POST boundary: removed #{sanitized[:removed]} data-model-only " \
         "visibleAsSource field(s) -> #{post_spec}"
     args = ['--type', 'workbook', '--spec', post_spec, '--out', wb_ids_path, '--workdir', OUT]
-    args += ['--update-id', opts[:workbook_id]] if opts[:workbook_id]
+    update_wb_id = opts[:workbook_id]
+    if !update_wb_id && PLUGIN_VERSION_CHANGED && File.exist?(wb_ids_path)
+      prior_ids = JSON.parse(File.read(wb_ids_path)) rescue {}
+      update_wb_id = prior_ids['workbookId']
+    end
+    args += ['--update-id', update_wb_id] if update_wb_id
     ok, code, _out = run_script!('post-and-readback.rb', *args)
     fail_phase!('post-and-readback-wb', "post-and-readback.rb --type workbook exited #{code}") unless ok
     done_phase!('post-and-readback-wb')

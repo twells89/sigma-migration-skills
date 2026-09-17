@@ -240,6 +240,12 @@ ok(sanitize_at && workbook_post_at && sanitize_at < workbook_post_at,
    'live workbook path sanitizes a dedicated transport spec before post-and-readback')
 ok(migrate_src.include?("File.join(OUT, 'workbook-post-spec.json')"),
    'sanitized POST payload is retained as an inspectable run artifact')
+ok(migrate_src.include?('PRIOR_PLUGIN_VERSION') &&
+   migrate_src.include?('PLUGIN_VERSION_CHANGED') &&
+   migrate_src.include?('rebuild_workbook_artifacts?(opts)'),
+   'plugin-version changes invalidate workbook/presentation artifacts without forcing data-model rebuild')
+ok(migrate_src.include?("update_wb_id = prior_ids['workbookId']"),
+   'plugin-update rebuild reuses an existing workbook id instead of orphaning a new workbook')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
    migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
    migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&
