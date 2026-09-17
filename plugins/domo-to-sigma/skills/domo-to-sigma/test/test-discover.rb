@@ -184,6 +184,79 @@ eq(bms.map { |x| x['scope'] }.sort, %w[card dataset], 'both dataset + card beast
 eq(bms.find { |x| x['scope'] == 'dataset' }['class'], 'aggregate', 'dataset SUM classified aggregate')
 eq(bms.find { |x| x['scope'] == 'card' }['class'], 'projection', 'card CONCAT classified projection')
 
+puts "== dataset formula payload normalization preserves empty vs missing =="
+eq(dataset_formula_entries({ 'a' => { 'id' => 'a' } }), [{ 'id' => 'a' }],
+   'map payload normalizes through its values')
+eq(dataset_formula_entries([{ 'id' => 'a' }]), [{ 'id' => 'a' }],
+   'array payload normalizes directly')
+eq(dataset_formula_entries({}), [], 'empty map is a genuine empty formula collection')
+eq(dataset_formula_entries(nil), nil, 'missing formula block remains distinguishable from empty')
+eq(dataset_formula_map({ 'properties' => { 'formulas' => { 'formulas' => {} } } }), {},
+   'present empty API block becomes an empty map, not an extraction error')
+eq(dataset_formula_map({}), nil, 'missing API block is an extraction error signal')
+
+puts "== normalize_card resolves dataset-only calculation references =="
+dataset_only = {
+  'calculation_dataset_only' => {
+    'id' => 'calculation_dataset_only',
+    'name' => 'Technical Error Type',
+    'formula' => 'IFNULL(`error_type`, -3)',
+    'persistedOnDataSource' => true,
+    'dataType' => 'LONG',
+  },
+}
+dataset_ref_card = normalize_card({
+  'chartType' => 'badge_table',
+  'definition' => {
+    'title' => 'Abandon Rate',
+    'subscriptions' => {
+      'main' => {
+        'columns' => [{ 'column' => 'calculation_dataset_only' }],
+        'filters' => [{
+          'column' => 'calculation_dataset_only',
+          'operand' => 'NOT_IN',
+          'values' => ['-3'],
+        }],
+      },
+    },
+    'formulas' => [],
+  },
+}, 'card-dataset-ref', dataset_formulas: dataset_only)
+eq(dataset_ref_card['columns'].first['column'], 'Technical Error Type',
+   'dataset-only calculated chart column resolves to its authored name')
+eq(dataset_ref_card['filters'].first['column'], 'Technical Error Type',
+   'dataset-only calculated filter resolves to its authored name')
+
+puts "== dig_beast_modes backfills missing SQL from the template endpoint =="
+template_dev_token = ENV['DOMO_DEV_TOKEN']
+ENV['DOMO_DEV_TOKEN'] = 'fake-token-for-offline-test'
+with_domo_stub(:beast_mode_template, ->(*_a) {
+  { 'expression' => 'SUM(`Amount`)', 'aggregated' => true }
+}) do
+  modes = dig_beast_modes(
+    { 'id' => 'c-template', 'datasetId' => 'ds-template', 'cardFormulas' => [] },
+    { 'calculation_template' => {
+      'id' => 'calculation_template', 'name' => 'Template Only', 'templateId' => 'template-1',
+    } },
+    {}
+  )
+  eq(modes.first['sql'], 'SUM(`Amount`)', 'template expression supplies missing inline SQL')
+  eq(modes.first['dataSourceId'], 'ds-template', 'backfilled dataset formula keeps dataset identity')
+end
+template_dev_token ? ENV['DOMO_DEV_TOKEN'] = template_dev_token : ENV.delete('DOMO_DEV_TOKEN')
+
+puts "== divergent dataset/card copies are surfaced =="
+divergent_warning = capture_stderr do
+  divergent = dedupe_beast_modes([
+    { 'id' => 'calculation_conflict', 'name' => 'Rate', 'scope' => 'dataset', 'sql' => 'SUM(`A`)' },
+    { 'id' => 'calculation_conflict', 'name' => 'Rate', 'scope' => 'card', 'sql' => 'SUM(`B`)' },
+  ])
+  eq(divergent.size, 1, 'duplicate id still emits exactly one canonical formula')
+  eq(divergent.first['definitionConflict'], true, 'kept formula is marked for parity review')
+end
+ok(divergent_warning.include?('divergent') && divergent_warning.include?('calculation_conflict'),
+   'divergence warning names the conflicting Beast Mode')
+
 puts "== merge_dataset_permissions: C9 wiring (dataset_formulas permission -> datasets.json) =="
 # Synthetic response shaped like Domo.dataset_formulas(dsid) — the SAME call
 # already made per-card for Beast Modes (parts=core,permission,formulas). Only

@@ -129,7 +129,8 @@ grid is only 6 wide, so widths scale ×4).
 | `scripts/convert-beast-modes.rb` | 2 | Beast Mode → Sigma: Domo-specific normalize + classify + POST-lint around the vendored `converter/sql.mjs` (`--convert`) |
 | `scripts/find-or-pick-dm.rb` *(vendored)* | 2.5 | Score existing Sigma data models against a signature and recommend reuse (non-destructive) |
 | `scripts/preflight-columns.rb` | 2.9 | Check every mapped dataset's Domo columns against the REAL warehouse table schema (live Sigma catalog lookup); reports gaps + auto-suggests (never auto-applies) a derivation formula for a known pattern |
-| `scripts/build-dm.rb` | 3 | DataSet schema + projection calc columns → Sigma DM spec (clean display names); honors a Phase-2.5 reuse decision |
+| `scripts/build-dm.rb` | 3 | DataSet schema + projection calc columns + aggregate metrics → Sigma DM spec; writes Beast Mode dispositions and refuses unproven reuse |
+| `scripts/assert-beast-modes-accounted.rb` | 3/4 | Gate every dataset Beast Mode to a DM column, metric, or named deferral; verify emitted names survive live readback |
 | `post-and-readback.rb` *(vendored)* | 4 | POST DM/WB + capture server element IDs / column labels |
 | `scripts/derive-presentation-overrides.rb` | 5 (pre) | Source facts (discovery + early Domo card-data) → **layout-safe** styling sidecars (`kpi-format-overrides.json`, `chart-axis-overrides.json`, `category-order-overrides.json`) so Domo-faithful compact KPIs / axes / category order are automatic, not hand-authored. Preserves any operator-authored sidecar already on disk. |
 | `scripts/build-workbook.rb` | 5 | Cards → Sigma chart/table/KPI element specs (`chart-specs.json`) + controls |
@@ -352,6 +353,8 @@ day-numbering mismatch (MySQL vs. Sigma disagree — override to
 `Mod(Weekday([col])+5,7)`), flag aggregate `CEILING`/`FLOOR`, reject
 unsupported `SQRT`/`CONVERT_TZ`).
 Outputs `discovery/formulas.json` (Beast Mode id → Sigma formula).
+Dataset/card provenance and output type survive every step; a SHA-256 source
+manifest invalidates stale `formulas.json` when discovery changes.
 
 ---
 
@@ -378,9 +381,13 @@ metrics before committing to reuse.
 
 ## Phase 3 — Data model
 
-`ruby scripts/build-dm.rb` → one DM element per DataSet (flat table) + calc
-columns from translated Beast Modes. No star schema unless a DataFlow join is in
-scope (out of scope for v1 — DataSets are treated as opaque source tables).
+`ruby scripts/build-dm.rb` → one DM element per DataSet (flat table), projection
+Beast Modes as calculated columns, and aggregate Beast Modes as first-class
+Sigma metrics. Window/LOD and unreliable formulas receive explicit blocked or
+deferred dispositions. `assert-beast-modes-accounted.rb` runs before POST and
+again against the live readback, so an extracted formula represented nowhere
+cannot silently pass. No star schema unless a DataFlow join is in scope (out of
+scope for v1 — DataSets are treated as opaque source tables).
 
 **Pre-flight (Phase 2.9, runs automatically via `migrate-domo.rb`):**
 `ruby scripts/preflight-columns.rb` checks every mapped dataset's Domo columns against the

@@ -39,10 +39,10 @@ Beast Mode by *where it lives*, which decides where it goes in Sigma:
 
 | Domo query structure | What it is | Sigma target |
 |---|---|---|
-| **Projection** (row-level, non-aggregated) | lands in the query's `projection` list | a Sigma **data-model calc column** |
-| **Aggregate** (top-level `SUM`/`COUNT`/`AVG`/…) | wraps the whole expression | a Sigma **workbook / element aggregate** |
-| **Window / analytic** (`… OVER (…)`) | ranks / running totals | Sigma window function — place deliberately, see below |
-| **FIXED / LOD** (`FIXED (BY …)`) | level-of-detail | Sigma level-of-detail — do NOT flatten |
+| **Projection** (row-level, non-aggregated) | lands in the query's `projection` list | dataset scope → Sigma **data-model calc column**; card scope → inline workbook formula |
+| **Aggregate** (top-level `SUM`/`COUNT`/`AVG`/…) | wraps the whole expression | dataset scope → Sigma **data-model metric**; referenced cards keep an inline aggregate for parity |
+| **Window / analytic** (`… OVER (…)`) | ranks / running totals | named deferral unless an explicit supported Sigma placement is supplied |
+| **FIXED / LOD** (`FIXED (BY …)`) | level-of-detail | named deferral — do NOT flatten |
 
 The discovery step classifies each Beast Mode via the standalone Beast Mode
 template's API flags — **no SQL parsing** (see `refs/connection.md`):
@@ -50,6 +50,12 @@ template's API flags — **no SQL parsing** (see `refs/connection.md`):
 - `aggregated: true` → aggregate
 - neither → projection (row-level calc column)
 - expression contains `FIXED(…)` → LOD
+
+`dataSourceId` is load-bearing provenance, not optional metadata. It must
+survive `beast-modes.json` → `formulas.pending.json` → `formulas.json`, because
+the data-model builder uses it to attach each dataset formula to the correct
+element. `assert-beast-modes-accounted.rb` checks the final one-to-one
+disposition and live readback.
 
 ### Window / analytic Beast Modes
 Domo window functions — `RANK() OVER`, `SUM() OVER (PARTITION BY …)`, running

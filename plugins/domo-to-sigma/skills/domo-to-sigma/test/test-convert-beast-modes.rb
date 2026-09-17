@@ -617,5 +617,52 @@ Dir.mktmpdir('convert-mode-node-absent') do |dir|
   ok(File.read(pending_path) == before, 'no formulas were translated — pending file is untouched by the aborted attempt')
 end
 
+puts '== CLI pipeline preserves dataset provenance and fingerprints its source =='
+Dir.mktmpdir('convert-provenance') do |dir|
+  beast_path = File.join(dir, 'beast-modes.json')
+  pending_path = File.join(dir, 'formulas.pending.json')
+  final_path = File.join(dir, 'formulas.json')
+  File.write(beast_path, JSON.generate([{
+    'id' => 'calculation_projection',
+    'name' => 'Technical Group',
+    'sql' => 'CONCAT(`Type`, "-", `Code`)',
+    'scope' => 'dataset',
+    'class' => 'projection',
+    'dataSourceId' => 'dataset-99',
+    'cardId' => 'card-7',
+    'dataType' => 'STRING',
+    'persistedOnDataSource' => true,
+    'sourceFormulaScope' => 'dataset-api',
+  }]))
+  output = IO.popen(
+    ['ruby', SCRIPT, '--in', beast_path, '--out', pending_path],
+    err: [:child, :out],
+    &:read
+  )
+  ok($?.success?, "normalize with provenance exits 0\n#{output unless $?.success?}")
+  pending = JSON.parse(File.read(pending_path)).first
+  ok(pending['dataSourceId'] == 'dataset-99', 'dataSourceId survives normalize (was silently dropped)')
+  ok(pending['cardId'] == 'card-7', 'cardId survives normalize')
+  ok(pending['dataType'] == 'STRING', 'formula output type survives normalize')
+  ok(pending['persistedOnDataSource'] == true, 'dataset persistence survives normalize')
+
+  pending['sigmaFormula'] = '[Type] & "-" & [Code]'
+  pending['converted'] = true
+  File.write(pending_path, JSON.pretty_generate([pending]))
+  output = IO.popen(
+    ['ruby', SCRIPT, '--lint', '--in', pending_path, '--out', final_path],
+    err: [:child, :out],
+    &:read
+  )
+  ok($?.success?, "lint with provenance exits 0\n#{output unless $?.success?}")
+  final = JSON.parse(File.read(final_path)).first
+  ok(final['dataSourceId'] == 'dataset-99', 'dataSourceId survives through final formulas.json')
+  meta = JSON.parse(File.read(File.join(dir, 'formulas.meta.json')))
+  ok(meta['sourceSha256'] == formula_source_fingerprint(beast_path),
+     'formulas metadata fingerprints the exact discovery source')
+  ok(meta['sourceCount'] == 1 && meta['formulasCount'] == 1,
+     'fingerprint manifest records source and final counts')
+end
+
 puts
 if $failures.zero? then puts "ALL PASS"; exit 0 else puts "#{$failures} FAILURE(S)"; exit 1 end

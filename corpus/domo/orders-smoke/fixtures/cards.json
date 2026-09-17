@@ -21,7 +21,13 @@
    },
    "_defaultCountSuspect": false
   },
-  "filters": []
+  "filters": [
+   {
+    "column": "technical_error_type",
+    "operator": "NOT_IN",
+    "values": ["-3"]
+   }
+  ]
  },
  {
   "id": "card-sales-by-region",

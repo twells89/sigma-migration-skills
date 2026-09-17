@@ -54,6 +54,54 @@ eq(!calc.nil?, true, 'projection Beast Mode added as DM calc column')
 eq(calc['formula'], 'Concat([City], ", ", [State])', 'calc column carries translated sigmaFormula')
 eq(el['order'].size, el['columns'].size, 'order lists every column')
 
+puts "== dataset Beast Mode promotion matrix =="
+outcomes = []
+bm_element = build_element(ds, map, [
+  {
+    'id' => 'calculation_projection', 'name' => 'Project Label', 'class' => 'projection',
+    'scope' => 'dataset', 'dataSourceId' => 'ds-1', 'sigmaFormula' => '[Project Id] & " label"',
+    'converted' => true, 'lintErrors' => [],
+  },
+  {
+    'id' => 'calculation_revenue', 'name' => 'Total Revenue', 'class' => 'aggregate',
+    'scope' => 'dataset', 'dataSourceId' => 'ds-1', 'sigmaFormula' => 'Sum([Sales Amount])',
+    'converted' => true, 'lintErrors' => [],
+  },
+  {
+    'id' => 'calculation_window', 'name' => 'Running Revenue', 'class' => 'window',
+    'scope' => 'dataset', 'dataSourceId' => 'ds-1', 'sigmaFormula' => 'CumulativeSum([Sales Amount])',
+    'converted' => true, 'lintErrors' => [],
+  },
+  {
+    'id' => 'calculation_bad', 'name' => 'Broken Metric', 'class' => 'aggregate',
+    'scope' => 'dataset', 'dataSourceId' => 'ds-1', 'sigmaFormula' => 'Raw SQL',
+    'converted' => false, 'lintErrors' => [],
+  },
+], outcomes: outcomes)
+project_label = bm_element['columns'].find { |column| column['name'] == 'Project Label' }
+ok(project_label, 'dataset projection becomes a data-model calculated column')
+eq(project_label['id'], 'bm-col-calculation-projection', 'projection id is deterministic')
+metric = bm_element['metrics'].find { |item| item['name'] == 'Total Revenue' }
+ok(metric, 'dataset aggregate becomes a first-class Sigma metric')
+eq(metric['formula'], 'Sum([Sales Amount])', 'metric keeps the translated aggregate formula')
+eq(metric['id'], 'bm-metric-calculation-revenue', 'metric id is deterministic')
+eq(outcomes.find { |item| item['id'] == 'calculation_window' }['status'], 'deferred',
+   'window formula receives an explicit deferred outcome')
+eq(outcomes.find { |item| item['id'] == 'calculation_bad' }['status'], 'blocked',
+   'converted:false formula is blocked rather than emitted')
+
+puts "== Beast Mode name collisions are deterministic and visible =="
+collision_outcomes = []
+collision_element = build_element(ds, map, [{
+  'id' => 'calculation_project_id', 'name' => 'Project Id', 'class' => 'aggregate',
+  'scope' => 'dataset', 'sigmaFormula' => 'CountDistinct([Project Id])',
+  'converted' => true, 'lintErrors' => [],
+}], outcomes: collision_outcomes)
+eq(collision_element['metrics'].first['name'], 'Project Id (Beast Mode)',
+   'metric colliding with a physical column gets a deterministic suffix')
+eq(collision_outcomes.first['sigmaName'], 'Project Id (Beast Mode)',
+   'accounting records the emitted collision-safe name')
+
 puts "== connection-id placeholder when unmapped =="
 el2 = build_element(ds, {}, [])
 eq(el2['source']['connectionId'], '<CONNECTION_ID>', 'unmapped → placeholder connectionId (flagged, not guessed)')

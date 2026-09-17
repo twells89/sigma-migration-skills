@@ -6,8 +6,9 @@
 # (schemaVersion 1) with:
 #   - one warehouse-table element per USED DataSet (clean display names — fixes
 #     the raw snake_case-labels complaint at the source)
-#   - PROJECTION (row-level) Beast Modes as DM calc columns (aggregate/window/LOD
-#     Beast Modes are handled at the workbook layer by build-workbook.rb)
+#   - PROJECTION (row-level) Beast Modes as DM calc columns
+#   - AGGREGATE dataset Beast Modes as first-class Sigma metrics
+#   - WINDOW/LOD formulas as explicit deferred accounting outcomes
 #
 # Domo data lands in a warehouse Sigma reads; that mapping is customer-specific and
 # CANNOT be guessed IN GENERAL. Supply discovery/dataset-map.json:
@@ -183,8 +184,36 @@ def type_format(domo_type)
   end
 end
 
+def beast_mode_spec_id(prefix, bm)
+  token = (bm['id'] || bm['name'] || 'calc').to_s.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/\A-|-\z/, '')
+  "#{prefix}-#{token}"
+end
+
+def unique_semantic_name(raw_name, used_names)
+  base = display_name(raw_name.to_s.empty? ? 'Calc' : raw_name)
+  candidate = base
+  if used_names.include?(candidate.downcase)
+    candidate = "#{base} (Beast Mode)"
+    n = 2
+    while used_names.include?(candidate.downcase)
+      candidate = "#{base} (Beast Mode #{n})"
+      n += 1
+    end
+  end
+  used_names << candidate.downcase
+  candidate
+end
+
+def beast_mode_block_reason(bm)
+  return 'no translated Sigma formula' if bm['sigmaFormula'].to_s.strip.empty?
+  return 'automated translation was flagged converted:false; add formula-overrides.json' if bm['converted'] == false
+  return "formula lint errors: #{Array(bm['lintErrors']).join('; ')}" unless Array(bm['lintErrors']).empty?
+  return 'dataset/card definitions for this id contain divergent SQL' if bm['definitionConflict']
+  nil
+end
+
 # Build one warehouse-table element for a DataSet.
-def build_element(ds, map_entry, projection_bms)
+def build_element(ds, map_entry, dataset_bms, outcomes: [])
   table = map_entry['table'] || placeholder_table(map_entry) || map_entry['name'] || ds['name'] || 'TABLE'
   el_id = rand_id
   cols = []
@@ -237,6 +266,7 @@ def build_element(ds, map_entry, projection_bms)
   end
   dropped = []
   derived = []
+  used_names = []
 
   schema_cols.each do |c|
     raw = c['name'] || c['id']
@@ -263,6 +293,7 @@ def build_element(ds, map_entry, projection_bms)
     col['format'] = fmt if fmt
     cols << col
     order << id
+    used_names << display_name(raw).downcase
   end
 
   # Surface both resolutions — a declared gap the operator can audit, never silent.
@@ -271,14 +302,43 @@ def build_element(ds, map_entry, projection_bms)
   warn "  dataset #{ds['id']}: derived #{derived.size} column(s) via columnOverrides " \
        "(not present in #{table}): #{derived.join(', ')}" unless derived.empty?
 
-  # PROJECTION (row-level) Beast Modes → DM calc columns. Sibling refs are by
-  # display name (no table prefix). sigmaFormula comes from convert-beast-modes.rb.
-  projection_bms.each do |bm|
-    next if bm['sigmaFormula'].to_s.strip.empty?
-    id = rand_id
-    cols << { 'id' => id, 'name' => display_name(bm['name'] || 'Calc'),
-              'formula' => bm['sigmaFormula'] }
-    order << id
+  metrics = []
+  Array(dataset_bms).each do |bm|
+    common = {
+      'id' => bm['id'],
+      'name' => bm['name'],
+      'class' => bm['class'],
+      'scope' => bm['scope'],
+      'dataSourceId' => ds['id'],
+    }.compact
+    if (reason = beast_mode_block_reason(bm))
+      outcomes << common.merge('status' => 'blocked', 'reason' => reason)
+      next
+    end
+
+    case bm['class']
+    when 'projection'
+      name = unique_semantic_name(bm['name'], used_names)
+      id = beast_mode_spec_id('bm-col', bm)
+      cols << { 'id' => id, 'name' => name, 'formula' => bm['sigmaFormula'] }
+      order << id
+      outcomes << common.merge('status' => 'emitted', 'target' => 'data-model-column',
+                               'targetId' => id, 'sigmaName' => name)
+    when 'aggregate'
+      name = unique_semantic_name(bm['name'], used_names)
+      id = beast_mode_spec_id('bm-metric', bm)
+      metrics << { 'id' => id, 'name' => name, 'formula' => bm['sigmaFormula'] }
+      outcomes << common.merge('status' => 'emitted', 'target' => 'data-model-metric',
+                               'targetId' => id, 'sigmaName' => name)
+    when 'window', 'lod'
+      outcomes << common.merge(
+        'status' => 'deferred',
+        'reason' => "#{bm['class']} Beast Modes require an explicit Sigma placement/override",
+      )
+    else
+      outcomes << common.merge('status' => 'blocked',
+                               'reason' => "unknown Beast Mode class #{bm['class'].inspect}")
+    end
   end
 
   {
@@ -288,7 +348,7 @@ def build_element(ds, map_entry, projection_bms)
       'kind' => 'warehouse-table',
       'path' => [map_entry['database'], map_entry['schema'], table].compact,
     },
-    'columns' => cols, 'metrics' => [], 'order' => order, 'relationships' => [],
+    'columns' => cols, 'metrics' => metrics, 'order' => order, 'relationships' => [],
     '_datasetId' => ds['id'],
   }
 end
@@ -315,14 +375,20 @@ if $PROGRAM_NAME == __FILE__
   # through to building a fresh DM, same as the cognos/looker converters.
   m = reuse_decision(OUT)
   if m && m['auto_picked'] && m['recommended_dm_id']
-    # NOTE: this short-circuits BEFORE the C9 PDP/RLS scan below — intentional,
-    # not an oversight. Row-level security travels with the reused data model
-    # itself (whatever RLS policy already exists on recommended_dm_id applies),
-    # so there is nothing new for this run to detect or stub on the reuse path.
-    FileUtils.mkdir_p(OUT)
-    File.write(File.join(OUT, 'dm-reuse.json'), JSON.generate({ 'reused' => m['recommended_dm_id'] }))
-    warn "  reuse-check: reusing existing data model #{m['recommended_dm_id']} (find-or-pick-dm auto-pick) — skipping DM creation."
-    exit 0
+    formula_catalog = JSON.parse(File.read(File.join(OUT, 'formulas.json'))) rescue []
+    required_semantics = Array(formula_catalog).select { |formula| formula['scope'] == 'dataset' }
+    if required_semantics.any?
+      warn "  reuse-check: candidate #{m['recommended_dm_id']} covers source tables/columns but this " \
+           "migration requires #{required_semantics.size} dataset Beast Mode(s). Automatic reuse is " \
+           'refused until metric/calc coverage is proven; building a fresh data model instead.'
+    else
+      # NOTE: this short-circuits BEFORE the C9 PDP/RLS scan below — intentional,
+      # not an oversight. Row-level security travels with the reused data model.
+      FileUtils.mkdir_p(OUT)
+      File.write(File.join(OUT, 'dm-reuse.json'), JSON.generate({ 'reused' => m['recommended_dm_id'] }))
+      warn "  reuse-check: reusing existing data model #{m['recommended_dm_id']} (find-or-pick-dm auto-pick) — skipping DM creation."
+      exit 0
+    end
   end
 
   datasets = JSON.parse(File.read(File.join(OUT, 'datasets.json'))) rescue []
@@ -426,17 +492,30 @@ if $PROGRAM_NAME == __FILE__
          'unresolved columns may still 400 at DM POST time.'
   end
 
-  # Projection Beast Modes grouped by dataset (only these become DM calc columns).
-  proj_by_ds = Hash.new { |h, k| h[k] = [] }
+  # Dataset-scoped Beast Modes grouped by source. Projection formulas become
+  # calculated columns; aggregate formulas become first-class Sigma metrics.
+  # Window/LOD/unreliable formulas are recorded with explicit dispositions.
+  bms_by_ds = Hash.new { |h, k| h[k] = [] }
   formulas.each do |f|
-    next unless f['class'] == 'projection' && f['scope'] == 'dataset'
-    proj_by_ds[f['dataSourceId'] || f['_dataSourceId']] << f
+    next unless f['scope'] == 'dataset'
+    bms_by_ds[f['dataSourceId'] || f['_dataSourceId']] << f
   end
 
+  bm_outcomes = []
   elements = used.map do |id|
     ds = ds_by_id[id] || { 'id' => id, 'name' => id }
     entry = ds_map[id] || {}
-    build_element(ds, entry, proj_by_ds[id])
+    build_element(ds, entry, bms_by_ds[id], outcomes: bm_outcomes)
+  end
+  # A translated dataset formula with no source id cannot be attached to any
+  # model element. Record it as blocked rather than silently losing it under
+  # Hash[nil].
+  Array(bms_by_ds[nil]).each do |bm|
+    bm_outcomes << {
+      'id' => bm['id'], 'name' => bm['name'], 'class' => bm['class'],
+      'scope' => bm['scope'], 'status' => 'blocked',
+      'reason' => 'dataset-scoped formula has no dataSourceId',
+    }.compact
   end
 
   # LIVE-VALIDATED FIX (2026-07-30): the DM spec MUST carry a folderId or
@@ -465,7 +544,17 @@ if $PROGRAM_NAME == __FILE__
   end
   FileUtils.mkdir_p(OUT)
   File.write(File.join(OUT, 'dm-spec.json'), JSON.pretty_generate(spec))
+  File.write(File.join(OUT, 'beast-mode-dm-outcomes.json'), JSON.pretty_generate(
+    'sourceCount' => formulas.count { |formula| formula['scope'] == 'dataset' },
+    'outcomes' => bm_outcomes,
+  ))
   warn "  wrote #{File.join(OUT, 'dm-spec.json')} (#{elements.size} element(s))"
+  emitted_metrics = bm_outcomes.count { |outcome| outcome['target'] == 'data-model-metric' }
+  emitted_columns = bm_outcomes.count { |outcome| outcome['target'] == 'data-model-column' }
+  blocked_bms = bm_outcomes.count { |outcome| outcome['status'] == 'blocked' }
+  deferred_bms = bm_outcomes.count { |outcome| outcome['status'] == 'deferred' }
+  warn "  Beast Modes: #{emitted_columns} calc column(s), #{emitted_metrics} metric(s), " \
+       "#{deferred_bms} deferred, #{blocked_bms} blocked — see beast-mode-dm-outcomes.json"
   missing = ds_map.select { |_, v| v['connectionId'].to_s.empty? }.keys
   warn "  ⚠ #{missing.size} dataset(s) have no connectionId — fill dataset-map.json: #{missing.join(', ')}" unless missing.empty?
   needs_review = ds_map.select { |_, v| ColumnPreflight::SENTINEL_SOURCES.include?(v['_source']) }.keys
