@@ -38,5 +38,25 @@
     "sigmaFormula": "Sum([Sales Amount])",
     "converted": true,
     "lintErrors": []
+  },
+  {
+    "id": "bm-card-region-label",
+    "name": "region_label",
+    "class": "projection",
+    "scope": "card",
+    "cardId": "card-region-label",
+    "sigmaFormula": "[Region] & \" Region\"",
+    "converted": true,
+    "lintErrors": []
+  },
+  {
+    "id": "bm-card-unused",
+    "name": "unused_card_helper",
+    "class": "projection",
+    "scope": "card",
+    "cardId": "card-region-label",
+    "sigmaFormula": "[Region] & \" Unused\"",
+    "converted": true,
+    "lintErrors": []
   }
 ]

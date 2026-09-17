@@ -965,6 +965,7 @@ def run_live!(opts)
   ok, code, _out = run_script!(
     'assert-beast-modes-accounted.rb',
     '--discovery', DISCOVERY,
+    '--stage', 'data-model',
     '--out', File.join(DISCOVERY, 'beast-mode-accounting.json'),
   )
   fail_phase!('beast-mode-accounting',
@@ -1000,6 +1001,7 @@ def run_live!(opts)
   ok, code, _out = run_script!(
     'assert-beast-modes-accounted.rb',
     '--discovery', DISCOVERY,
+    '--stage', 'data-model',
     '--data-model-id', live_dm_id,
     '--out', File.join(DISCOVERY, 'beast-mode-accounting.json'),
   )
@@ -1009,6 +1011,18 @@ def run_live!(opts)
 
   phase_derive_presentation!(opts, collect_expected: !tier_b)
   phase_build_workbook!(opts)
+
+  hr('beast-mode-accounting (complete workbook)')
+  ok, code, _out = run_script!(
+    'assert-beast-modes-accounted.rb',
+    '--discovery', DISCOVERY,
+    '--stage', 'workbook',
+    '--data-model-id', live_dm_id,
+    '--out', File.join(DISCOVERY, 'beast-mode-accounting.json'),
+  )
+  fail_phase!('beast-mode-accounting-workbook',
+              "assert-beast-modes-accounted.rb exited #{code} after workbook build") unless ok
+  done_phase!('beast-mode-accounting-workbook')
 
   hr('build-workbook-spec')
   spec_path = File.join(OUT, 'workbook-spec.json')

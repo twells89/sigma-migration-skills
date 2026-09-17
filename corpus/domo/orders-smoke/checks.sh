@@ -16,9 +16,13 @@ SIGMA_FOLDER_ID="00000000-0000-0000-0000-000000000000" \
   ruby "$SKILL/scripts/build-dm.rb" >/dev/null
 
 DOMO_DISCOVERY_DIR="$TMP" \
-  ruby "$SKILL/scripts/assert-beast-modes-accounted.rb" --discovery "$TMP" >/dev/null
+  ruby "$SKILL/scripts/assert-beast-modes-accounted.rb" --discovery "$TMP" \
+    --stage data-model >/dev/null
 
 DOMO_DISCOVERY_DIR="$TMP" ruby "$SKILL/scripts/build-workbook.rb" >/dev/null
+DOMO_DISCOVERY_DIR="$TMP" \
+  ruby "$SKILL/scripts/assert-beast-modes-accounted.rb" --discovery "$TMP" \
+    --stage workbook >/dev/null
 
 ruby -rjson -e '
   dir = ARGV[0]
@@ -33,8 +37,11 @@ ruby -rjson -e '
 
   accounting = JSON.parse(File.read(File.join(dir, "beast-mode-accounting.json")))
   abort "accounting counts wrong: #{accounting.inspect}" unless
+    accounting["sourceBeastModes"] == 6 &&
     accounting["sourceDatasetBeastModes"] == 4 &&
-    accounting["emitted"] == 2 && accounting["deferred"] == 2 && accounting["blocked"] == 0
+    accounting["sourceCardBeastModes"] == 2 &&
+    accounting["emitted"] == 3 && accounting["deferred"] == 2 &&
+    accounting["notUsed"] == 1 && accounting["blocked"] == 0
 
   chart_specs = JSON.parse(File.read(File.join(dir, "chart-specs.json")))
   elements = chart_specs.fetch("pages").flat_map { |page| page.fetch("elements") }
@@ -42,6 +49,10 @@ ruby -rjson -e '
   filter = Array(kpi && kpi["filters"]).find { |item| item["mode"] == "exclude" }
   abort "numeric exclude filter missing" unless filter
   abort "numeric exclude stayed a string: #{filter.inspect}" unless filter["values"] == [-3]
+  regional = elements.find { |element| element["id"] == "el-card-region-label" }
+  label = Array(regional && regional["columns"]).find { |column| column["name"] == "Region Label" }
+  abort "card-local projection not inlined" unless
+    label && label["formula"] == "[Master/Region] & \" Region\""
 
   audit = JSON.parse(File.read(File.join(dir, "filter-type-audit.json")))
   typed = audit.fetch("filters").find { |entry| entry["column"] == "technical_error_type" }

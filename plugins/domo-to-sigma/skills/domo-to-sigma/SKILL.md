@@ -130,7 +130,7 @@ grid is only 6 wide, so widths scale ×4).
 | `scripts/find-or-pick-dm.rb` *(vendored)* | 2.5 | Score existing Sigma data models against a signature and recommend reuse (non-destructive) |
 | `scripts/preflight-columns.rb` | 2.9 | Check every mapped dataset's Domo columns against the REAL warehouse table schema (live Sigma catalog lookup); reports gaps + auto-suggests (never auto-applies) a derivation formula for a known pattern |
 | `scripts/build-dm.rb` | 3 | DataSet schema + projection calc columns + aggregate metrics → Sigma DM spec; writes Beast Mode dispositions and refuses unproven reuse |
-| `scripts/assert-beast-modes-accounted.rb` | 3/4 | Gate every dataset Beast Mode to a DM column, metric, or named deferral; verify emitted names survive live readback |
+| `scripts/assert-beast-modes-accounted.rb` | 3–5 | Reconcile every dataset/card Beast Mode to a DM column, metric, workbook formula, named deferral, or explicit not-used status |
 | `post-and-readback.rb` *(vendored)* | 4 | POST DM/WB + capture server element IDs / column labels |
 | `scripts/derive-presentation-overrides.rb` | 5 (pre) | Source facts (discovery + early Domo card-data) → **layout-safe** styling sidecars (`kpi-format-overrides.json`, `chart-axis-overrides.json`, `category-order-overrides.json`) so Domo-faithful compact KPIs / axes / category order are automatic, not hand-authored. Preserves any operator-authored sidecar already on disk. |
 | `scripts/build-workbook.rb` | 5 | Cards → Sigma chart/table/KPI element specs (`chart-specs.json`) + controls |
@@ -239,7 +239,10 @@ Run `ruby scripts/domo-discover.rb --probe` to detect the tier.
 - Page layout (collections + card geometry)
 
 Outputs `discovery/datasets.json`, `discovery/cards.json`, `discovery/pages.json`,
-`discovery/beast-modes.json`.
+`discovery/beast-modes.json`, and `discovery/beast-mode-discovery.json`.
+The discovery ledger reconciles every formula id reported by each used dataset
+to the emitted inventory and hard-fails missing SQL/template bodies; API errors
+are never reclassified as an empty formula set.
 
 ---
 
@@ -385,8 +388,9 @@ metrics before committing to reuse.
 Beast Modes as calculated columns, and aggregate Beast Modes as first-class
 Sigma metrics. Window/LOD and unreliable formulas receive explicit blocked or
 deferred dispositions. `assert-beast-modes-accounted.rb` runs before POST and
-again against the live readback, so an extracted formula represented nowhere
-cannot silently pass. No star schema unless a DataFlow join is in scope (out of
+again after workbook build, so an extracted formula represented nowhere cannot
+silently pass. Unreferenced card-local helpers are recorded as `not-used` rather
+than counted as migrated. No star schema unless a DataFlow join is in scope (out of
 scope for v1 — DataSets are treated as opaque source tables).
 
 **Pre-flight (Phase 2.9, runs automatically via `migrate-domo.rb`):**

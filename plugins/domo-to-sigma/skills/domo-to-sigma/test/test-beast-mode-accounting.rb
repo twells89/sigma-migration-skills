@@ -29,9 +29,25 @@ Dir.mktmpdir('bm-accounting') do |dir|
       'dataSourceId' => 'ds-1' },
     { 'id' => 'w1', 'name' => 'Running Revenue', 'scope' => 'dataset', 'class' => 'window',
       'dataSourceId' => 'ds-1' },
+    { 'id' => 'c1', 'name' => 'Card Label', 'scope' => 'card', 'class' => 'projection',
+      'cardId' => 'card-1' },
+    { 'id' => 'c2', 'name' => 'Unused Helper', 'scope' => 'card', 'class' => 'projection',
+      'cardId' => 'card-1' },
   ]
   write_json(dir, 'beast-modes.json', source)
   write_json(dir, 'formulas.json', source.map { |item| item.merge('sigmaFormula' => '[x]') })
+  write_json(dir, 'cards.json', [{
+    'id' => 'card-1',
+    'columns' => [{
+      'column' => 'Card Label', 'beastModeId' => 'c1', '_isCalc' => true,
+    }],
+  }])
+  write_json(dir, 'beast-mode-workbook-usage.json', {
+    'usages' => [{
+      'id' => 'c1', 'name' => 'Card Label', 'scope' => 'card',
+      'cardId' => 'card-1', 'target' => 'workbook-dimension-formula',
+    }],
+  })
   write_json(dir, 'dm-spec.json', {
     'pages' => [{ 'elements' => [{
       'columns' => [{ 'id' => 'bm-col-p1', 'name' => 'Row Label' }],
@@ -51,9 +67,11 @@ Dir.mktmpdir('bm-accounting') do |dir|
   out, status = Open3.capture2e('ruby', SCRIPT, '--discovery', dir)
   ok(status.success?, "accounted inventory exits 0\n#{out unless status.success?}")
   report = JSON.parse(File.read(File.join(dir, 'beast-mode-accounting.json')))
-  ok(report['sourceDatasetBeastModes'] == 3, 'all dataset formulas counted')
-  ok(report['emitted'] == 2 && report['deferred'] == 1 && report['blocked'] == 0,
-     'columns, metrics, and named deferrals are distinguished')
+  ok(report['sourceBeastModes'] == 5 && report['sourceDatasetBeastModes'] == 3 &&
+     report['sourceCardBeastModes'] == 2, 'dataset and card-local formulas are all counted')
+  ok(report['emitted'] == 3 && report['deferred'] == 1 &&
+     report['notUsed'] == 1 && report['blocked'] == 0,
+     'columns, metrics, workbook use, named deferrals, and unused locals are distinguished')
 end
 
 puts '== translated but unplaced dataset Beast Mode is blocked =='
@@ -70,6 +88,31 @@ Dir.mktmpdir('bm-accounting') do |dir|
   ok(!status.success?, 'unplaced translated formula fails the accounting gate')
   ok(out.include?('Lost Formula') && out.include?('no data-model disposition'),
      'failure names the formula and exact missing disposition')
+end
+
+puts '== missing and ambiguous card references are blocked =='
+Dir.mktmpdir('bm-accounting') do |dir|
+  source = [
+    { 'id' => 'dup-a', 'name' => 'Duplicate', 'scope' => 'card', 'class' => 'projection',
+      'cardId' => 'card-1' },
+    { 'id' => 'dup-b', 'name' => 'Duplicate', 'scope' => 'card', 'class' => 'projection',
+      'cardId' => 'card-1' },
+  ]
+  write_json(dir, 'beast-modes.json', source)
+  write_json(dir, 'formulas.json', source.map { |item| item.merge('sigmaFormula' => '[x]') })
+  write_json(dir, 'cards.json', [{
+    'id' => 'card-1',
+    'columns' => [
+      { 'column' => 'Duplicate', '_isCalc' => true },
+      { 'column' => 'Missing', 'beastModeId' => 'missing-id', '_isCalc' => true },
+    ],
+  }])
+  write_json(dir, 'dm-spec.json', { 'pages' => [{ 'elements' => [] }] })
+  write_json(dir, 'beast-mode-dm-outcomes.json', { 'outcomes' => [] })
+  out, status = Open3.capture2e('ruby', SCRIPT, '--discovery', dir)
+  ok(!status.success?, 'ambiguous name-only and missing-id references fail the gate')
+  ok(out.include?('matches multiple Beast Mode ids'), 'ambiguous name-only reference is explained')
+  ok(out.include?('missing from beast-modes.json'), 'missing stable id is explained')
 end
 
 puts
