@@ -435,6 +435,12 @@ inconsistent handling of the two filter levels — port **both**, every time:
    `or` equalities** — Sigma has no `IsIn` (`feedback_sigma_formula_isin`); a raw
    `IN` silently blanks the column.
 
+Domo serializes list-filter values as strings even for numeric columns. Type
+them from `datasets.json` before emitting Sigma: `LONG`/`DECIMAL`/`DOUBLE`
+values become JSON numbers (`["-3"]` → `[-3]`), booleans become JSON booleans,
+and numeric-looking values on `STRING` columns remain strings. Never infer from
+the literal alone.
+
 Watch the known silent-drop traps so a filter doesn't vanish:
 - **pivot-table** element filters are silently dropped — apply the filter on the
   source instead (`feedback_sigma_pivot_filter_silently_dropped`).

@@ -1044,6 +1044,32 @@ ok(Array(overlay.dig('yAxis', 'columnIds')).any? {
    },
    'benchmark is bound to a visible series channel')
 
+puts "== projection Beast Modes resolve by scope and emitted DM name =="
+$translated_bms = {
+  'calc-card-projection' => {
+    'id' => 'calc-card-projection', 'name' => 'Technical Label',
+    'class' => 'projection', 'scope' => 'card',
+    'sigmaFormula' => '[Technical Error Type] & " / " & [Video Queue]',
+  },
+  'calc-dataset-projection' => {
+    'id' => 'calc-dataset-projection', 'name' => 'Project Id',
+    'sigmaName' => 'Project Id (Beast Mode)',
+    'class' => 'projection', 'scope' => 'dataset',
+    'sigmaFormula' => '[Project Id] & " label"',
+  },
+}
+card_projection = dim_col({
+  'column' => 'Technical Label', 'beastModeId' => 'calc-card-projection', '_isCalc' => true,
+})
+eq(card_projection['formula'], '[Master/Technical Error Type] & " / " & [Master/Video Queue]',
+   'card-local projection is inlined at workbook row scope')
+dataset_projection = dim_col({
+  'column' => 'Project Id', 'beastModeId' => 'calc-dataset-projection', '_isCalc' => true,
+})
+eq(dataset_projection['formula'], '[Master/Project Id (Beast Mode)]',
+   'dataset projection binds the collision-safe name emitted by build-dm')
+$translated_bms = nil
+
 puts "== field regression: aggregate Beast Mode SERIES is a measure, never 2,013 color categories =="
 $translated_bms = {
   'calc-ap-rate' => {
@@ -1114,6 +1140,15 @@ bad_color_spec = {
 qa_errors, = check(bad_color_spec)
 ok(qa_errors.any? { |error| error.include?('uses aggregate') && error.include?('category color') },
    'qa-check rejects an aggregate color category even if another builder emitted it')
+audit_errors, audit_warnings = check_filter_type_audit(
+  'filters' => [{
+    'cardId' => 'bad-filter', 'column' => 'Technical Error Type',
+    'sourceType' => 'LONG', 'outputTypes' => ['String'], 'status' => 'typed',
+  }]
+)
+ok(audit_errors.any? { |error| error.include?('numeric LONG') && error.include?('string values') },
+   'qa-check rejects string literals on a known numeric list filter')
+eq(audit_warnings, [], 'known numeric mismatch is an error, not an advisory warning')
 
 puts "== live POP contract: synthetic periods become explicit Sigma measures =="
 $chart_helpers = []
@@ -1263,6 +1298,49 @@ eq(helper['groupings'].first['groupBy'], ['d-subject'], 'helper groups to one po
 eq(helper['groupings'].first['calculations'], %w[m-delivered m-opens m-clicks],
    'helper pre-aggregates every scatter measure')
 eq(helper['filters'].first['rowCount'], 10, 'source top-N is enforced on the grouped helper')
+
+puts "== numeric Domo EXCLUDES values are typed from dataset schema =="
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'datasets.json'), JSON.generate([
+    {
+      'id' => 'ds-errors',
+      'schema' => { 'columns' => [
+        { 'name' => 'Video Queue', 'type' => 'STRING' },
+        { 'name' => 'Abandon Rate', 'type' => 'DOUBLE' },
+        { 'name' => 'Technical Error Type', 'type' => 'LONG' },
+      ] },
+    },
+  ]))
+  stub_const(:OUT, dir) do
+    $dataset_schema_by_id = nil
+    $filter_type_audit = []
+    numeric_exclude = build_element({
+      'id' => 'c-numeric-exclude', 'title' => 'Average Abandon Rate',
+      'chartType' => 'badge_table', 'datasetId' => 'ds-errors',
+      'columns' => [
+        { 'column' => 'Video Queue', 'mapping' => 'ITEM' },
+        { 'column' => 'Abandon Rate', 'aggregation' => 'AVG', 'mapping' => 'VALUE' },
+      ],
+      'filters' => [{
+        'column' => 'Technical Error Type',
+        'operator' => 'NOT_IN',
+        'values' => ['-3'],
+      }],
+    }, {})
+    filter = Array(numeric_exclude['filters']).find { |item| item['mode'] == 'exclude' }
+    eq(filter['values'], [-3], 'LONG exclude literal is emitted as JSON number -3, not string "-3"')
+    eq($filter_type_audit.first['sourceType'], 'LONG', 'typing audit records source schema evidence')
+    eq($filter_type_audit.first['outputTypes'], ['Integer'], 'typing audit records numeric output')
+
+    string_card = {
+      'id' => 'c-string-code', 'datasetId' => 'ds-errors',
+      'filters' => [{ 'column' => 'Video Queue', 'values' => ['-3'] }],
+    }
+    values, error, = coerce_filter_values(string_card, 'Video Queue', ['-3'])
+    eq(error, nil, 'string code coercion succeeds')
+    eq(values, ['-3'], 'numeric-looking STRING values stay strings')
+  end
+end
 
 puts "== live parity: numeric comparison filters compile to hidden boolean predicates =="
 compared = build_element({

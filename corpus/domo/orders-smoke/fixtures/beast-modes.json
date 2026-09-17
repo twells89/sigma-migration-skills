@@ -5,9 +5,7 @@
     "class": "projection",
     "scope": "dataset",
     "dataSourceId": "ds-order-fact",
-    "sigmaFormula": "Year([Order Date])",
-    "converted": true,
-    "lintErrors": []
+    "sql": "YEAR(`order_date`)"
   },
   {
     "id": "bm-total-sales",
@@ -15,9 +13,7 @@
     "class": "aggregate",
     "scope": "dataset",
     "dataSourceId": "ds-order-fact",
-    "sigmaFormula": "Sum([Sales Amount])",
-    "converted": true,
-    "lintErrors": []
+    "sql": "SUM(`sales_amount`)"
   },
   {
     "id": "bm-running-sales",
@@ -25,9 +21,7 @@
     "class": "window",
     "scope": "dataset",
     "dataSourceId": "ds-order-fact",
-    "sigmaFormula": "CumulativeSum([Sales Amount])",
-    "converted": true,
-    "lintErrors": []
+    "sql": "SUM(`sales_amount`) OVER (ORDER BY `order_date`)"
   },
   {
     "id": "bm-regional-sales",
@@ -35,8 +29,6 @@
     "class": "lod",
     "scope": "dataset",
     "dataSourceId": "ds-order-fact",
-    "sigmaFormula": "Sum([Sales Amount])",
-    "converted": true,
-    "lintErrors": []
+    "sql": "SUM(SUM(`sales_amount`) FIXED (BY `region`))"
   }
 ]

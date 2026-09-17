@@ -63,6 +63,7 @@ $plugin_source_elements = [] # hidden live sources for hosted no-native plugin v
 $kpi_verification_elements = [] # raw-value twins when visible KPI display is scaled/formatted
 $chart_verification_elements = [] # raw-value twins when visible axes are display-scaled
 $table_verification_elements = [] # export-stable twins when visible table styling is presentation-only
+$filter_type_audit = [] # source-schema typing evidence for Domo list filters
 
 # bead ziht: dm-spec.json is build-dm.rb's PRE-post spec (already at this
 # script's own OUT dir — build-dm.rb writes it to discovery/, same as
@@ -456,11 +457,18 @@ def inline_beast_mode_dimension(card, c)
   bm = translated_beast_modes[c['beastModeId'].to_s] ||
        translated_beast_modes[c['column'].to_s]
   return nil unless bm.is_a?(Hash)
-  return nil unless %w[aggregate window].include?(bm['class'].to_s)
   return nil if bm['sigmaFormula'].to_s.strip.empty?
+  formula =
+    if %w[aggregate window].include?(bm['class'].to_s) ||
+       (bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card')
+      masterize_formula(bm['sigmaFormula'])
+    elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
+      mref(bm['sigmaName'] || bm['name'] || c['column'])
+    end
+  return nil unless formula
   { 'id' => "d-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
-    'formula' => masterize_formula(bm['sigmaFormula']) }.compact
+    'formula' => formula }.compact
 end
 
 def dim_col(c, card = nil)
@@ -1642,12 +1650,18 @@ def translated_beast_modes
   return $translated_bms if defined?($translated_bms) && $translated_bms
   path = File.join(OUT, 'formulas.json')
   list = (JSON.parse(File.read(path)) rescue nil)
+  outcomes_path = File.join(OUT, 'beast-mode-dm-outcomes.json')
+  outcomes_doc = (JSON.parse(File.read(outcomes_path)) rescue {}) if File.exist?(outcomes_path)
+  outcome_by_id = Array(outcomes_doc && outcomes_doc['outcomes']).each_with_object({}) do |outcome, out|
+    out[outcome['id'].to_s] = outcome if outcome.is_a?(Hash) && outcome['id']
+  end
   by_id = {}
   Array(list).each do |f|
     next unless f.is_a?(Hash)
     next if f['sigmaFormula'].to_s.strip.empty?
-    by_id[f['id'].to_s] = f
-    by_id[f['name'].to_s] = f unless f['name'].to_s.empty?
+    resolved = f.merge('sigmaName' => outcome_by_id.dig(f['id'].to_s, 'sigmaName')).compact
+    by_id[f['id'].to_s] = resolved
+    by_id[f['name'].to_s] = resolved unless f['name'].to_s.empty?
   end
   $translated_bms = by_id
 end
@@ -1692,10 +1706,22 @@ def inline_beast_mode_measure(card, c)
   bm = translated_beast_modes[c['beastModeId'].to_s] ||
        translated_beast_modes[c['column'].to_s]
   return nil unless bm.is_a?(Hash)
-  return nil unless %w[aggregate window].include?(bm['class'].to_s)
+  formula =
+    if %w[aggregate window].include?(bm['class'].to_s)
+      masterize_formula(bm['sigmaFormula'])
+    elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card'
+      row_formula = masterize_formula(bm['sigmaFormula'])
+      c['aggregation'].to_s.empty? ? row_formula :
+        "#{sigma_agg(c['aggregation'], c['distinct'])}(#{row_formula})"
+    elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
+      ref = mref(bm['sigmaName'] || bm['name'] || c['column'])
+      c['aggregation'].to_s.empty? ? ref :
+        "#{sigma_agg(c['aggregation'], c['distinct'])}(#{ref})"
+    end
+  return nil unless formula
   { 'id' => "m-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
-    'formula' => masterize_formula(bm['sigmaFormula']),
+    'formula' => formula,
     'format' => sigma_format(c['format'], col_label(c)) }.compact
 end
 
@@ -1780,6 +1806,69 @@ DOMO_FILTER_COMPARISON = {
   'LESS_THAN' => '<', 'LESS_THAN_OR_EQUAL' => '<=',
 }.freeze
 
+NUMERIC_DOMO_TYPES = %w[LONG DECIMAL DOUBLE INTEGER NUMBER].freeze
+BOOLEAN_DOMO_TYPES = %w[BOOLEAN BOOL].freeze
+
+def dataset_schema_by_id
+  return $dataset_schema_by_id if defined?($dataset_schema_by_id) && $dataset_schema_by_id
+  path = File.join(OUT, 'datasets.json')
+  datasets = (JSON.parse(File.read(path)) rescue []) if File.exist?(path)
+  $dataset_schema_by_id = Array(datasets).each_with_object({}) do |dataset, out|
+    out[dataset['id'].to_s] = dataset if dataset.is_a?(Hash) && dataset['id']
+  end
+end
+
+def domo_filter_column_type(card, column_name)
+  dataset = dataset_schema_by_id[card['datasetId'].to_s]
+  schema_column = Array(dataset&.dig('schema', 'columns')).find do |column|
+    raw = column['name'] || column['id']
+    raw.to_s.casecmp?(column_name.to_s) || display_name(raw).casecmp?(display_name(column_name))
+  end
+  return schema_column['type'].to_s.upcase if schema_column && schema_column['type']
+
+  bm = translated_beast_modes[column_name.to_s]
+  bm && bm['dataType'].to_s.upcase
+end
+
+def coerce_filter_values(card, column_name, values)
+  source_type = domo_filter_column_type(card, column_name)
+  raw_values = Array(values)
+  coerced =
+    if NUMERIC_DOMO_TYPES.include?(source_type)
+      raw_values.map do |value|
+        source_type == 'LONG' || source_type == 'INTEGER' ? Integer(value.to_s, 10) : Float(value)
+      end
+    elsif BOOLEAN_DOMO_TYPES.include?(source_type)
+      raw_values.map do |value|
+        case value
+        when true, false then value
+        else
+          normalized = value.to_s.strip.downcase
+          raise ArgumentError, "not a boolean literal: #{value.inspect}" unless %w[true false].include?(normalized)
+          normalized == 'true'
+        end
+      end
+    else
+      raw_values
+    end
+  audit = {
+    'cardId' => card['id'].to_s,
+    'column' => column_name,
+    'sourceType' => source_type,
+    'rawTypes' => raw_values.map { |value| value.class.name }.uniq,
+    'outputTypes' => coerced.map { |value| value.class.name }.uniq,
+    'status' => (source_type.to_s.empty? ? 'untyped' : 'typed'),
+  }
+  $filter_type_audit << audit
+  [coerced, nil, source_type]
+rescue ArgumentError, TypeError => e
+  $filter_type_audit << {
+    'cardId' => card['id'].to_s, 'column' => column_name,
+    'sourceType' => source_type, 'status' => 'error', 'error' => e.message,
+  }
+  [nil, e.message, source_type]
+end
+
 # Resolve a filter clause's `column` to a [name, formula] pair for a NEW
 # element column — the same resolution measure_col/dim_col apply to an
 # ordinary data column, extended to cover a Beast-Mode calc id
@@ -1795,7 +1884,12 @@ def resolve_filter_column(col)
     bm = translated_beast_modes[col]
     return nil unless bm.is_a?(Hash) && !bm['sigmaFormula'].to_s.strip.empty?
     disp = (bm['name'] && !bm['name'].to_s.empty?) ? bm['name'] : display_name(col)
-    [disp, masterize_formula(bm['sigmaFormula'])]
+    formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
+                mref(bm['sigmaName'] || disp)
+              else
+                masterize_formula(bm['sigmaFormula'])
+              end
+    [disp, formula]
   else
     disp = display_name(col)
     # The column may already be a RESOLVED Beast Mode NAME rather than a raw
@@ -1812,9 +1906,13 @@ def resolve_filter_column(col)
     #   'Dependency not found: master (pdp_example_dataset)/us regions'
     # (live, 36-card cold run — 'US Regions' is class=aggregate).
     bm = translated_beast_modes[disp] || translated_beast_modes[col]
-    if bm.is_a?(Hash) && bm['class'].to_s != 'projection' &&
-       !bm['sigmaFormula'].to_s.strip.empty?
-      [disp, masterize_formula(bm['sigmaFormula'])]
+    if bm.is_a?(Hash) && !bm['sigmaFormula'].to_s.strip.empty?
+      formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
+                  mref(bm['sigmaName'] || disp)
+                else
+                  masterize_formula(bm['sigmaFormula'])
+                end
+      [disp, formula]
     else
       [disp, mref(disp)]
     end
@@ -2119,8 +2217,18 @@ def apply_card_filters!(card, el)
                       'formula, so no such data-model column exists (mirrors prune_unresolvable_columns!).')
       next
     end
+    typed_values, type_error, source_type = coerce_filter_values(card, col, f['values'])
+    if type_error
+      warn_card(card, "card filter on '#{col}' dropped: values could not be coerced to the " \
+                      "source type (#{type_error}).")
+      next
+    end
+    if source_type.to_s.empty? && typed_values.any? { |value| value.is_a?(String) && value.match?(/\A-?\d+(?:\.\d+)?\z/) }
+      warn_card(card, "card filter on '#{col}' has numeric-looking string values but no source type; " \
+                      'values were preserved as strings. Verify the dataset schema before posting.')
+    end
     added << { 'id' => "cf-#{el['id']}-#{added.size}", 'columnId' => cid,
-               'kind' => 'list', 'mode' => mode, 'values' => Array(f['values']) }
+               'kind' => 'list', 'mode' => mode, 'values' => typed_values }
   end
   el['filters'] = Array(el['filters']) + added unless added.empty?
   el
@@ -2723,8 +2831,15 @@ if $PROGRAM_NAME == __FILE__
   warn "  ⚠ could not resolve the dominant dataset's warehouse table — build-workbook-spec.rb " \
        "will fall back to positional DM-element selection (bead 0ku5)" if dominant_table.to_s.empty?
   File.write(File.join(OUT, 'warnings.json'), JSON.pretty_generate($warnings))
+  File.write(File.join(OUT, 'filter-type-audit.json'), JSON.pretty_generate(
+    'filters' => $filter_type_audit,
+    'typed' => $filter_type_audit.count { |entry| entry['status'] == 'typed' },
+    'untyped' => $filter_type_audit.count { |entry| entry['status'] == 'untyped' },
+    'errors' => $filter_type_audit.count { |entry| entry['status'] == 'error' },
+  ))
   warn "  wrote #{File.join(OUT, 'chart-specs.json')} (#{out_pages.sum { |p| p['elements'].size }} elements across #{out_pages.size} page(s), #{$sub_masters.size} sub-master(s), #{$chart_helpers.size} grouped chart helper(s), #{$plugin_source_elements.size} plugin source element(s), #{$kpi_verification_elements.size} KPI parity twin(s), #{$chart_verification_elements.size} chart parity twin(s), #{$table_verification_elements.size} table parity twin(s))"
   warn "  wrote #{File.join(OUT, 'warnings.json')} (#{$warnings.size} warning(s))"
+  warn "  wrote #{File.join(OUT, 'filter-type-audit.json')} (#{$filter_type_audit.size} list filter(s))"
   $warnings.first(20).each { |w| warn "    ⚠ #{w['card']}: #{w['warning']}" }
   warn "\n  Next: build-workbook-spec.rb --chart-specs discovery/chart-specs.json --dm-ids discovery/dm-ids.json ..."
 end

@@ -114,6 +114,8 @@ require 'json'
 require 'optparse'
 require 'open3'
 require 'tmpdir'
+require 'digest'
+require 'time'
 
 OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
 
@@ -214,6 +216,14 @@ def normalize_bm(sql, klass = nil)
 end
 
 NEEDS_REVIEW = %w[window lod].freeze
+PROVENANCE_KEYS = %w[
+  dataSourceId _dataSourceId cardId dataType persistedOnDataSource saveToDataSet
+  sourceFormulaScope definitionConflict
+].freeze
+
+def formula_source_fingerprint(path)
+  Digest::SHA256.file(path).hexdigest
+end
 
 # Is this `IN(`/`in(` occurrence a raw SQL INFIX construct (`x IN (a, b)`,
 # unsupported by Sigma) rather than Sigma's own `In([col], "a", "b")`
@@ -614,6 +624,11 @@ elsif opts[:lint]
 
   out = opts[:out] || File.join(OUT, 'formulas.json')
   File.write(out, JSON.pretty_generate(final))
+  pending_meta = File.join(File.dirname(path), 'formulas.pending.meta.json')
+  meta = JSON.parse(File.read(pending_meta)) rescue {}
+  File.write(File.join(File.dirname(out), 'formulas.meta.json'), JSON.pretty_generate(
+    meta.merge('formulasCount' => final.size, 'writtenAt' => Time.now.utc.iso8601)
+  ))
   warn "  wrote #{out} (#{final.size} formulas)"
   bad = final.select { |e| !e['lintErrors'].empty? }
   unless bad.empty?
@@ -643,6 +658,7 @@ else
   pending = beast.map do |b|
     sql = b['sql'] || b['formula'] || b['expression']
     norm, warns = normalize_bm(sql, b['class'])
+    provenance = b.select { |key, _| PROVENANCE_KEYS.include?(key) }
     {
       'id'           => b['id'],
       'name'         => b['name'],
@@ -653,11 +669,17 @@ else
       'preWarnings'  => warns,
       'needsReview'  => NEEDS_REVIEW.include?(b['class']) || warns.any? { |w| w.include?('AGGREGATE') },
       'sigmaFormula' => nil,   # ← filled by convert_sql_to_sigma_formula in Phase 2
-    }
+    }.merge(provenance)
   end
   out = opts[:out] || File.join(OUT, 'formulas.pending.json')
   require 'fileutils'; FileUtils.mkdir_p(OUT)
   File.write(out, JSON.pretty_generate(pending))
+  File.write(File.join(File.dirname(out), 'formulas.pending.meta.json'), JSON.pretty_generate(
+    'source' => File.expand_path(path),
+    'sourceSha256' => formula_source_fingerprint(path),
+    'sourceCount' => beast.size,
+    'writtenAt' => Time.now.utc.iso8601
+  ))
   warn "  wrote #{out} (#{pending.size} Beast Modes to translate)"
   warn "\n  Next (Phase 2): ruby scripts/convert-beast-modes.rb --convert   # local node, no MCP call"
   warn "  then:            ruby scripts/convert-beast-modes.rb --lint"

@@ -8,7 +8,8 @@
         { "name": "order_date", "type": "DATE" },
         { "name": "region", "type": "STRING" },
         { "name": "sales_amount", "type": "DECIMAL" },
-        { "name": "customer_id", "type": "STRING" }
+        { "name": "customer_id", "type": "STRING" },
+        { "name": "technical_error_type", "type": "LONG" }
       ]
     }
   },

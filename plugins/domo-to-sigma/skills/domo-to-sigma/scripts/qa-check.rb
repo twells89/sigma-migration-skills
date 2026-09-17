@@ -21,6 +21,23 @@ def refs_in(formula)
   formula.to_s.scan(/\[Master\/([^\]]+)\]/).flatten
 end
 
+def check_filter_type_audit(audit)
+  errors = []
+  warns = []
+  Array(audit && audit['filters']).each do |entry|
+    label = "#{entry['cardId']}/#{entry['column']}"
+    if entry['status'] == 'error'
+      errors << "filter #{label} failed source-type coercion: #{entry['error']}"
+    elsif %w[LONG DECIMAL DOUBLE INTEGER NUMBER].include?(entry['sourceType'].to_s.upcase) &&
+          Array(entry['outputTypes']).include?('String')
+      errors << "filter #{label} targets numeric #{entry['sourceType']} but still emits string values"
+    elsif entry['status'] == 'untyped'
+      warns << "filter #{label} has no source type; literal typing was not verified"
+    end
+  end
+  [errors, warns]
+end
+
 def check(spec)
   errors = []
   warns  = []
@@ -89,6 +106,12 @@ if $PROGRAM_NAME == __FILE__
   path = opts[:in] || File.expand_path('../discovery/chart-specs.json', __dir__)
   spec = JSON.parse(File.read(path))
   errors, warns = check(spec)
+  audit_path = File.join(File.dirname(path), 'filter-type-audit.json')
+  if File.exist?(audit_path)
+    audit_errors, audit_warns = check_filter_type_audit(JSON.parse(File.read(audit_path)))
+    errors.concat(audit_errors)
+    warns.concat(audit_warns)
+  end
   warns.each  { |w| warn "  ⚠ #{w}" }
   errors.each { |e| warn "  ✗ #{e}" }
   if errors.empty?
