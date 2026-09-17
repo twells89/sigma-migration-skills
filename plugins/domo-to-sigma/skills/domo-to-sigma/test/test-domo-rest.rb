@@ -24,11 +24,27 @@ Domo.cards_for_page('90210001')
 eq(captured[0], '/api/content/v3/stacks/90210001/cards', 'hits the stacks endpoint for the given page id')
 ok(captured[1].is_a?(Hash) && captured[1][:includeV4PageLayouts] == true,
    "query includes includeV4PageLayouts: true (got #{captured[1].inspect})")
-eq(captured[1][:parts], 'metadata,datasources', 'default parts unchanged')
+eq(captured[1][:parts], 'metadata,datasources,dateInfo,subscriptions,slicers',
+   'default parts include the filter/date bindings needed for faithful tables')
 
 puts '== Domo.cards_for_page still honors an explicit parts: override =='
 Domo.cards_for_page('90210001', parts: 'metadata')
 eq(captured[1][:parts], 'metadata', 'parts: override still passed through')
+
+puts '== Domo.card_definition public fallback requests quickFilters-capable shape =='
+captured = nil
+Domo.define_singleton_method(:private_get) { |_path, query: nil| nil }
+Domo.define_singleton_method(:public_get) { |path, query: nil, **_kw| captured = [path, query]; {} }
+Domo.card_definition('700000010')
+eq(captured[0], '/v1/cards/chart/700000010',
+   'public fallback uses the documented chart-definition endpoint')
+
+puts '== Domo.card_definition falls back when the private parts read errors =='
+captured = nil
+Domo.define_singleton_method(:private_get) { |_path, query: nil| raise Domo::Error, 'private unavailable' }
+Domo.card_definition('700000011')
+eq(captured[0], '/v1/cards/chart/700000011',
+   'a private endpoint error does not suppress the public definition fallback')
 
 puts
 if $failures.zero?

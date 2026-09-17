@@ -1071,7 +1071,10 @@ def group_cards_by_page_for_layout(cards, pages)
   by_page = Hash.new { |h, k| h[k] = [] }
   card_page = {}
   pages.each do |p|
-    Array(p['cardIds'] || p['cards']).each { |cid| card_page[cid.to_s] = p['title'] || p['name'] || p['id'] }
+    Array(p['cardIds'] || p['cards']).each do |cid|
+      card_page[[cid.to_s, p['id'].to_s]] = p['title'] || p['name'] || p['id']
+      card_page[cid.to_s] ||= p['title'] || p['name'] || p['id']
+    end
   end
   default_name =
     if pages.size == 1
@@ -1079,7 +1082,10 @@ def group_cards_by_page_for_layout(cards, pages)
     else
       'Overview'
     end
-  cards.each { |c| by_page[card_page[c['id'].to_s] || default_name] << c }
+  cards.each do |c|
+    key = [c['id'].to_s, c['_pageId'].to_s]
+    by_page[card_page[key] || card_page[c['id'].to_s] || default_name] << c
+  end
   by_page
 end
 

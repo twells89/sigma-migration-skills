@@ -16,7 +16,19 @@
     "inputTable": false,
     "modified": 1780955925000,
     "annotations": [],
-    "slicers": [],
+    "slicers": [
+      {
+        "type": "string",
+        "displayType": "multiple_select",
+        "name": "Category",
+        "column": "category_col",
+        "columnDisplayName": "category_col",
+        "operator": "IN",
+        "values": [],
+        "collapsed": false,
+        "controlType": "SLICER"
+      }
+    ],
     "segments": { "active": [], "definitions": [] },
     "conditionalFormats": [],
     "charts": {

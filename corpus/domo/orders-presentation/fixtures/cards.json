@@ -96,7 +96,17 @@
       "format": { "type": "currency", "precision": 1 },
       "_defaultCountSuspect": false
     },
-    "filters": []
+    "filters": [],
+    "quickFilters": [
+      {
+        "type": "string",
+        "displayType": "multiple_select",
+        "name": "Order ID",
+        "column": "ORDER_ID",
+        "operator": "IN",
+        "values": []
+      }
+    ]
   },
   {
     "id": "line_sites",

@@ -185,7 +185,12 @@ module Domo
   #    chartType is a free string. groupBy/orderBy/filters/projection nest INSIDE
   #    the Component, not at top level.
   def card_definition(card_id, parts: 'metadata,properties,datasources')
-    private_get('/api/content/v1/cards', query: { urns: card_id, parts: parts })
+    private = begin
+      private_get('/api/content/v1/cards', query: { urns: card_id, parts: parts })
+    rescue Error
+      nil
+    end
+    private || public_get("/v1/cards/chart/#{card_id}")
   end
 
   #  Shape B — internal analyzer definition (what the app + production tools pull).
@@ -234,7 +239,7 @@ module Domo
   #    grouping cards BY INDEX into this response's own `cards[]`) — see Bug 5 /
   #    DomoSigma.merge_geometry. This method already existed; nothing called it
   #    until this fix.
-  def cards_for_page(page_id, parts: 'metadata,datasources')
+  def cards_for_page(page_id, parts: 'metadata,datasources,dateInfo,subscriptions,slicers')
     private_get("/api/content/v3/stacks/#{page_id}/cards",
                 query: { parts: parts, includeV4PageLayouts: true })
   end

@@ -229,6 +229,21 @@ ok(!migrate_src.include?("'--agent-vision', 'false'"),
    'visual handoff: orchestrator no longer records a guaranteed not-executable verdict')
 ok(migrate_src.include?('DomoVisualHandoff.record_args'),
    'visual handoff: a completed blind grade is consumed and recorded automatically')
+ok(migrate_src.include?("'plugin_version' => PLUGIN_MANIFEST['version']"),
+   'run evidence records the exact Domo plugin version')
+ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
+   migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
+   migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&
+   migrate_src.include?("ids['url']") && migrate_src.include?("ids['path']"),
+   'live handoff reads back and records the canonical Sigma URL and destination path')
+ok(migrate_src.include?('/v2/files/#{workbook_id}') && migrate_src.include?('actual_folder_id'),
+   'live handoff verifies the workbook actually landed in the requested folder')
+ok(migrate_src.include?('use a shared Sigma folder the customer can browse'),
+   'live migration requires an explicit customer-visible destination folder')
+ok(migrate_src.include?("done_phase!('workbook-handoff'"),
+   'live run ledger records the successful canonical workbook handoff')
+ok(migrate_src.include?('assert_live_control_coverage!(OUT)'),
+   'live migration fails closed when a discovered Domo Quick Filter is not emitted')
 
 # Track E: the fixture's discovery/beast-modes.json (see test/fixtures/domo-estate/
 # beast-modes.json) drives migrate-domo.rb's convert-beast-modes phase through its
@@ -260,12 +275,14 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
   ok(File.exist?(run_state_path), 'wrote run-state.json')
   run_state = JSON.parse(File.read(run_state_path))
   required_phases = %w[discover capture-visuals convert-beast-modes build-workbook
-                       build-workbook-spec post-and-readback build-domo-layout
+                       control-coverage build-workbook-spec post-and-readback build-domo-layout
                        build-dashboard-layout put-layout layout-2d-flag render-visual
                        verify-parity record-visual-check assert-phase6-ran]
   missing = required_phases.reject { |p| run_state['phases'].key?(p) }
   ok(missing.empty?, "run-state.json accounts for every phase in the chain (missing: #{missing.join(', ')})")
   eq(run_state['mode'], 'offline', 'run-state.json records mode=offline')
+  eq(run_state['plugin_version'], '0.16.108',
+     'run-state.json records the exact converter plugin version for stale-install diagnosis')
 
   # ---- bead B5: the render + verdict-recording phases are never silently ---
   # omitted offline (no live workbook to render / no parity-final.json to

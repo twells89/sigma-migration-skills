@@ -419,8 +419,12 @@ own `dataSourceId`. Note the shape differs slightly (a LIST of
 `{cardId, componentName, subscription}` envelopes here, vs a dict keyed by
 subscription name on the PUT), so normalize both.
 
-Unexplored parts worth a look: `slicers` (Domo's card-level slicer controls),
-`dateInfo` (likely the date-grain/range summary), `metadataOverrides`, and
+`slicers` is now live-confirmed on `badge_table`: entries carry
+`{type,displayType,dataSourceId,name,column,columnDisplayName,operator,values,
+collapsed,controlType}` and represent Analyzer Quick Filters, distinct from
+`subscriptions.main.filters`. The public `/v1/cards/chart/{id}` response calls
+the same list `quickFilters`. `dateInfo` is also present and summarizes the
+card date grain/range. Unexplored parts worth a look: `metadataOverrides`, and
 `drillPathURNs` (drill hierarchies — currently dropped entirely).
 
 ## Render endpoint — confirmed, with a correction
