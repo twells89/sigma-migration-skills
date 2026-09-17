@@ -41,6 +41,7 @@ require 'set'
 require 'optparse'
 require 'time'
 require 'date'
+require_relative 'lib/ruby_compat'
 
 opts = {}
 OptionParser.new do |p|
