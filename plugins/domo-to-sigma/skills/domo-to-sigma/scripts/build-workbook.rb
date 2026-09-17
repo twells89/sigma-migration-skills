@@ -1968,10 +1968,17 @@ def filter_target_column(el, col, beast_mode_id: nil, card: nil)
     c['id'].to_s.start_with?('m-') &&
       c['formula'].to_s !~ /\A(?:Sum|Avg|Count|CountDistinct|Min|Max)\(/
   }
-  return existing['id'] if existing
+  return existing['id'] if existing && beast_mode_id.to_s.empty?
   name, formula = resolve_filter_column(col, beast_mode_id: beast_mode_id, card: card)
   return nil unless formula
-  new_col = { 'id' => "f-#{slug}", 'name' => name, 'formula' => formula, 'hidden' => true }
+  return existing['id'] if existing && existing['formula'] == formula
+  new_id = "f-#{slug}"
+  suffix = 1
+  while Array(el['columns']).any? { |column| column['id'] == new_id }
+    suffix += 1
+    new_id = "f-#{slug}-#{suffix}"
+  end
+  new_col = { 'id' => new_id, 'name' => name, 'formula' => formula, 'hidden' => true }
   el['columns'] = Array(el['columns']) + [new_col]
   el['order'] = Array(el['order']) + [new_col['id']] if el.key?('order')
   new_col['id']
