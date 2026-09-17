@@ -23,6 +23,7 @@
 require 'json'
 require 'fileutils'
 require 'base64'
+require 'digest'
 require_relative 'lib/domo_sigma_util'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
@@ -77,6 +78,8 @@ $table_verification_elements = [] # export-stable twins when visible table styli
 $filter_type_audit = [] # source-schema typing evidence for Domo list filters
 $beast_mode_usage = [] # formula-id-level workbook consumption evidence
 $ambiguous_beast_mode_names = []
+$card_controls = [] # Analyzer Quick Filters emitted as card-scoped Sigma controls
+$control_scope_entries = [] # durable control-lint evidence written to control-scope.json
 
 # bead ziht: dm-spec.json is build-dm.rb's PRE-post spec (already at this
 # script's own OUT dir — build-dm.rb writes it to discovery/, same as
@@ -443,6 +446,18 @@ DATE_GRAIN_UNIT = {
   'DAY' => 'day', 'DATE' => 'day', 'HOUR' => 'hour', 'MINUTE' => 'minute',
 }.freeze
 
+def calendar_dimension_format(card, unit = nil)
+  unit ||= DATE_GRAIN_UNIT[card.dig('dateGrain', 'dateTimeElement').to_s.upcase]
+  format =
+    case unit
+    when 'day', 'week' then '%b %-d, %Y'
+    when 'year'        then '%Y'
+    when 'hour', 'minute' then '%b %-d, %Y %H:%M'
+    else '%b %y'
+    end
+  { 'kind' => 'datetime', 'formatString' => format }
+end
+
 # A dimension element column: [Master/<disp>].
 #
 # LIVE-VALIDATED FIX (2026-07-30): when a Domo card applies a date grain, the
@@ -670,7 +685,7 @@ def build_scatter_chart(card, dims, meas)
   mcols = meas.map { |m| measure_col(m, card) }
   dims.each_with_index do |source, i|
     if source['calendar'] || source['column'].to_s == card.dig('dateGrain', 'column').to_s
-      dcols[i]['format'] = { 'kind' => 'datetime', 'formatString' => '%b %y' }
+      dcols[i]['format'] = calendar_dimension_format(card)
     end
   end
   meas.each_with_index do |source, i|
@@ -808,7 +823,7 @@ def build_axis_chart(card, kind)
   mcols = meas.map { |m| measure_col(m, card) }
   dims.each_with_index do |source, i|
     if source['calendar'] || source['column'].to_s == card.dig('dateGrain', 'column').to_s
-      dcols[i]['format'] = { 'kind' => 'datetime', 'formatString' => '%b %y' }
+      dcols[i]['format'] = calendar_dimension_format(card)
     end
   end
   meas.each_with_index do |source, i|
@@ -1068,7 +1083,7 @@ def build_pop_chart(card, plan)
     'id' => 'd-pop-aligned-date',
     'name' => 'Date',
     'formula' => "[#{union_name}/Aligned Date]",
-    'format' => { 'kind' => 'datetime', 'formatString' => '%b %y' },
+    'format' => calendar_dimension_format(card, plan['grain']),
   }
   measure_columns = periods.each_with_index.map do |period, index|
     label = pop_period_label(
@@ -1392,6 +1407,20 @@ PLUGIN_VISUAL_MODE = {
   'badge_filledgauge' => 'gauge',
 }.freeze
 
+def plugin_id_for_mode(mode)
+  key = case mode
+        when 'calendar' then 'calendar_plugin_id'
+        when 'gauge' then 'gauge_plugin_id'
+        else 'visual_plugin_id'
+        end
+  plugin_config[key].to_s
+end
+
+def plugin_enabled_for_card?(card)
+  mode = PLUGIN_VISUAL_MODE[card['chartType'].to_s.downcase]
+  mode && !plugin_id_for_mode(mode).empty?
+end
+
 def plugin_config
   return $plugin_config if defined?($plugin_config) && $plugin_config.is_a?(Hash)
   path = File.join(OUT, 'plugin-config.json')
@@ -1582,12 +1611,7 @@ end
 
 def pluginize_visual(card, live_el)
   mode = PLUGIN_VISUAL_MODE[card['chartType'].to_s.downcase]
-  plugin_id =
-    case mode
-    when 'calendar' then plugin_config['calendar_plugin_id']
-    when 'gauge' then plugin_config['gauge_plugin_id']
-    else plugin_config['visual_plugin_id']
-    end.to_s
+  plugin_id = plugin_id_for_mode(mode)
   return nil unless mode && !plugin_id.empty? && live_el.is_a?(Hash)
 
   if mode == 'gauge'
@@ -2277,6 +2301,222 @@ def apply_card_filters!(card, el)
   el
 end
 
+# Table and pivot Quick Filters must be card-scoped, not workbook-wide. Build a
+# hidden row source carrying every referenced column, apply permanent card
+# predicates there, and point the visible table/pivot at it. This is mandatory
+# for pivots because Sigma silently drops pivot-table.filters; it also gives
+# table Quick Filters a non-cyclic value source and target.
+def card_filter_source(card, element, extra_elements: [])
+  return nil unless Array(card['filters']).any? || card['dateRangeFilter'].is_a?(Hash) ||
+                    Array(card['quickFilters']).any?
+
+  helper_id = "src-#{element['id']}-filters"
+  helper_name = "Domo Filter Source #{card['id']}"
+  refs = ([element] + Array(extra_elements)).flat_map do |source_element|
+    Array(source_element && source_element['columns']).flat_map do |column|
+      column['formula'].to_s.scan(/\[Master\/([^\]]+)\]/).flatten
+    end
+  end
+  refs = refs.reject(&:empty?).uniq
+  columns = refs.map do |name|
+    { 'id' => mcol_id(name), 'name' => name, 'formula' => mref(name) }
+  end
+  helper = {
+    'id' => helper_id, 'kind' => 'table', 'name' => helper_name,
+    'visibleAsSource' => false,
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => columns, 'order' => columns.map { |column| column['id'] },
+  }
+  apply_card_filters!(card, helper)
+end
+
+def rebind_to_filter_source!(element, helper)
+  return element unless helper
+  helper_by_name = Array(helper['columns']).each_with_object({}) do |column, out|
+    out[column['name']] = column
+  end
+  Array(element['columns']).each do |column|
+    column['formula'] = column['formula'].to_s.gsub(/\[Master\/([^\]]+)\]/) do
+      name = Regexp.last_match(1)
+      helper_by_name[name] ? "[#{helper['name']}/#{name}]" : Regexp.last_match(0)
+    end
+  end
+  element['source'] = { 'kind' => 'table', 'elementId' => helper['id'] }
+  element
+end
+
+def quick_filter_type(card, quick_filter, column_name = nil, beast_mode_id = nil)
+  source_type = domo_filter_column_type(
+    card, column_name || quick_filter['column'], beast_mode_id || quick_filter['beastModeId']
+  )
+  declared = quick_filter['type'].to_s.upcase
+  return 'date-range' if %w[DATE DATETIME TIMESTAMP].include?(source_type) || declared.include?('DATE')
+  # A numeric multi-select remains a list with typed values. Range/slider
+  # controls require measured bounds, which discovery does not capture yet.
+  'list'
+end
+
+def quick_filter_unsupported_reason(quick_filter)
+  if quick_filter['displayType'].to_s.match?(/range|slider/i)
+    return "displayType #{quick_filter['displayType'].inspect} needs source min/max bounds"
+  end
+  operator = quick_filter['operator'].to_s.upcase
+  return nil if operator.empty? || %w[IN EQUALS LEGACY NOT_IN NOT_EQUALS].include?(operator)
+  "operator #{quick_filter['operator'].inspect} has no faithful Sigma control translation"
+end
+
+def quick_filter_supported?(quick_filter)
+  quick_filter_unsupported_reason(quick_filter).nil?
+end
+
+def quick_filter_card_supported?(card)
+  kind = chart_kind_for(card) || card['sigmaKindHint']
+  %w[table pivot-table].include?(kind) && !plugin_enabled_for_card?(card)
+end
+
+def sigma_safe_id(prefix, raw)
+  digest = Digest::SHA1.hexdigest(raw.to_s)[0, 10]
+  body = raw.to_s.downcase.gsub(/[^a-z0-9_-]+/, '-').gsub(/-+/, '-').gsub(/\A-+|-+\z/, '')
+  room = 64 - prefix.length - digest.length - 1
+  body = 'control' if body.empty?
+  "#{prefix}#{body[0, room]}-#{digest}"
+end
+
+def domo_control_ids(card, role, index: nil, column: nil)
+  identity = [card['id'], card['_pageId'], role, index, column].compact.join('|')
+  [sigma_safe_id('ctl-domo-', identity), sigma_safe_id('el-domo-ctl-', identity)]
+end
+
+def quick_filter_source_column(card, quick_filter)
+  raw = quick_filter['column'] || quick_filter['columnName']
+  calc_id = if raw.to_s.start_with?('calculation_')
+              raw
+            else
+              quick_filter['beastModeId'] || quick_filter['formulaId']
+            end
+  bm = translated_beast_modes[calc_id.to_s]
+  column = bm && bm['name'] || raw
+  [column, calc_id]
+end
+
+def build_card_quick_filters!(card, target, visible_id: target['id'])
+  Array(card['quickFilters']).each_with_index.filter_map do |quick_filter, index|
+    if (unsupported = quick_filter_unsupported_reason(quick_filter))
+      warn_card(card, "Quick Filter '#{quick_filter['name'] || index + 1}' deferred: #{unsupported}.")
+      next
+    end
+    column_name, beast_mode_id = quick_filter_source_column(card, quick_filter)
+    if column_name.to_s.strip.empty?
+      warn_card(card, "Quick Filter #{quick_filter['name'] || index + 1} dropped: no source column.")
+      next
+    end
+    column_id = filter_target_column(
+      target, column_name,
+      beast_mode_id: beast_mode_id, card: card
+    )
+    unless column_id
+      warn_card(card, "Quick Filter '#{quick_filter['name'] || column_name}' dropped: column did not resolve.")
+      next
+    end
+
+    label = quick_filter['name'].to_s.strip
+    label = display_name(column_name) if label.empty?
+    control_id, element_id = domo_control_ids(
+      card, 'quick-filter', index: index, column: column_name
+    )
+    control = {
+      'id' => element_id, 'kind' => 'control', 'controlId' => control_id,
+      'name' => label,
+      'controlType' => quick_filter_type(card, quick_filter, column_name, beast_mode_id),
+      'filters' => [{
+        'source' => { 'kind' => 'table', 'elementId' => target['id'] },
+        'columnId' => column_id,
+      }],
+    }
+    case control['controlType']
+    when 'list'
+      typed_values, error, = coerce_filter_values(
+        card, column_name, quick_filter['values'], beast_mode_id
+      )
+      if error
+        warn_card(card, "Quick Filter '#{label}' dropped: values could not be typed (#{error}).")
+        next
+      end
+      control.merge!(
+        'mode' => (quick_filter['operator'].to_s.upcase.start_with?('NOT') ? 'exclude' : 'include'),
+        'selectionMode' => (quick_filter['displayType'].to_s.include?('single') ? 'single' : 'multiple'),
+      )
+      if control['selectionMode'] == 'single'
+        control['value'] = typed_values.first unless typed_values.empty?
+      else
+        control['values'] = typed_values
+      end
+      control['source'] = {
+        'kind' => 'source',
+        'source' => { 'kind' => 'table', 'elementId' => target['id'] },
+        'columnId' => column_id,
+      }
+    when 'date-range'
+      control['mode'] = 'between'
+      control['includeNulls'] = 'when-no-value-is-selected'
+    end
+    $card_controls << control
+    $control_scope_entries << {
+      'controlId' => control_id, 'sourceName' => label,
+      'scope' => [visible_id], 'mustReach' => [visible_id], 'status' => 'emitted',
+      'cardId' => card['id'].to_s, 'pageId' => card['_pageId'].to_s,
+      'sourceIndex' => index,
+    }
+    control
+  end
+end
+
+def build_card_date_control!(card, target, visible_id: target['id'])
+  drf = card['dateRangeFilter'] || card['dateTimeRange']
+  return unless drf.is_a?(Hash) && drf['dateTimeRange'].is_a?(Hash)
+  raw_column = drf['column'].is_a?(Hash) ? drf.dig('column', 'column') : drf['column']
+  return if raw_column.to_s.empty?
+  column_id = filter_target_column(target, raw_column, card: card)
+  return unless column_id
+
+  range = drf['dateTimeRange']
+  type = range['dateTimeRangeType'].to_s
+  interval = DOMO_DATE_INTERVAL_UNIT[range['interval'].to_s.upcase]
+  control_id, element_id = domo_control_ids(card, 'date-range')
+  control = {
+    'id' => element_id, 'kind' => 'control', 'controlId' => control_id,
+    'name' => 'Date', 'controlType' => 'date-range',
+    'includeNulls' => 'when-no-value-is-selected',
+    'filters' => [{
+      'source' => { 'kind' => 'table', 'elementId' => target['id'] },
+      'columnId' => column_id,
+    }],
+  }
+  control_unit = interval == 'week' ? 'week-starting-sunday' : interval
+  if type == 'ROLLING_PERIOD' && control_unit && range['count'].to_i.positive? && range['offset'].to_i.zero?
+    control.merge!('mode' => 'last', 'value' => range['count'].to_i,
+                   'unit' => control_unit, 'includeToday' => true)
+  elsif type == 'INTERVAL_OFFSET' && control_unit && range['offset'].to_i.zero?
+    control.merge!('mode' => 'current', 'unit' => control_unit)
+  elsif type == 'INTERVAL_OFFSET' && control_unit && range['offset'].to_i == 1
+    control.merge!(
+      'mode' => 'last', 'value' => 1,
+      'unit' => control_unit, 'includeToday' => false,
+    )
+  else
+    warn_card(card, "date selector default omitted: #{type}/#{range['interval']} is not safely mapped.")
+    return nil
+  end
+  $card_controls << control
+  $control_scope_entries << {
+    'controlId' => control_id, 'sourceName' => 'Domo card date range',
+    'scope' => [visible_id], 'mustReach' => [visible_id], 'status' => 'emitted',
+    'cardId' => card['id'].to_s, 'pageId' => card['_pageId'].to_s,
+    'sourceKind' => 'date-range',
+  }
+  control
+end
+
 # The dataset the single shared `master` element is built from — every element
 # emitted here sources `master`, and build-workbook-spec.rb builds that master
 # from ONE data-model element. Cards bound to any OTHER DataSet would reference
@@ -2447,6 +2687,7 @@ def build_element(card, overrides, master_ds = nil)
   before = $companion_elements.length
   usage_before = $beast_mode_usage.length
   el = build_element_body(card, overrides)
+  filter_helper = el && el['_filterHelper']
   apply_category_color_guard!(card, el)
   scatter_helper = el && el['_scatterHelper']
   data_helpers = Array(el && el['_dataHelpers'])
@@ -2472,6 +2713,7 @@ def build_element(card, overrides, master_ds = nil)
 
   plugin_sources = []
   if (pluginized = pluginize_visual(card, el))
+    raise "INTERNAL: pluginized card #{card['id']} already emitted a table/pivot filter helper" if filter_helper
     el, plugin_sources = pluginized
     warn_card(card, "recreated #{card['chartType']} as hosted Sigma plugin '#{el['pluginId']}' " \
                     'bound to a live hidden source element; no captured source pixels are embedded.')
@@ -2482,6 +2724,8 @@ def build_element(card, overrides, master_ds = nil)
       retarget_to_submaster!(scatter_helper, sm)
     elsif data_helpers.any?
       data_helpers.each { |helper| retarget_to_submaster!(helper, sm) }
+    elsif filter_helper
+      retarget_to_submaster!(filter_helper, sm)
     elsif plugin_sources.any?
       plugin_sources.each do |source|
         retarget_to_submaster!(source, sm) unless source.dig('source', 'kind') == 'sql'
@@ -2489,7 +2733,10 @@ def build_element(card, overrides, master_ds = nil)
     else
       retarget_to_submaster!(el, sm)
     end
-    $companion_elements[before..-1].each { |c| retarget_to_submaster!(c, sm) }
+    $companion_elements[before..-1].each do |companion|
+      next if filter_helper && companion.dig('source', 'elementId') == filter_helper['id']
+      retarget_to_submaster!(companion, sm)
+    end
     warn_card(card, "routed to sub-master '#{sm['name']}' for DataSet #{ds} (bead ziht) — " \
                     'verify column coverage against the card PNG; the sub-master passes through ' \
                     "every column of #{sm['name']}, not just the ones this card uses.")
@@ -2501,6 +2748,10 @@ def build_element(card, overrides, master_ds = nil)
   if data_helpers.any?
     el.delete('_dataHelpers')
     $chart_helpers.concat(data_helpers)
+  end
+  if filter_helper
+    el.delete('_filterHelper')
+    $chart_helpers << filter_helper
   end
   el.delete('_periodComparisonManaged')
   $plugin_source_elements.concat(plugin_sources)
@@ -2650,11 +2901,31 @@ def build_element_body(card, overrides)
     # Card predicates still apply to every helper before the union; applying
     # the ordinary one-window filter would discard the comparison periods.
     el['_dataHelpers'] = Array(el['_dataHelpers']).map { |helper| apply_card_filters!(card, helper) }
+  elsif el && %w[table pivot-table].include?(el['kind']) &&
+        (Array(card['quickFilters']).any? || card['dateRangeFilter'].is_a?(Hash) ||
+         el['kind'] == 'pivot-table') && !plugin_enabled_for_card?(card)
+    helper = card_filter_source(card, el, extra_elements: [companion].compact)
+    if helper
+      el = rebind_to_filter_source!(el, helper)
+      el['_filterHelper'] = helper
+      build_card_quick_filters!(card, helper, visible_id: el['id'])
+      helper = apply_card_date_window!(card, helper) unless
+        build_card_date_control!(card, helper, visible_id: el['id'])
+      el['_filterHelper'] = helper
+    else
+      el = apply_card_filters!(card, el)
+      el = apply_card_date_window!(card, el)
+    end
   else
     # B4: this card's OWN filter clauses -> ELEMENT filters on its element (see
     # apply_card_filters! above) — never a page control (see build_controls).
     el = apply_card_filters!(card, el)
     el = apply_card_date_window!(card, el)
+  end
+  if plugin_enabled_for_card?(card) &&
+     (Array(card['quickFilters']).any? || card['dateRangeFilter'].is_a?(Hash))
+    warn_card(card, 'card-scoped Quick Filter/date controls are deferred for this hosted-plugin visual; ' \
+                    'the plugin uses an independent source and cannot safely inherit the table-helper wiring.')
   end
   el = apply_chart_axis_override!(card, el) if el
 
@@ -2666,11 +2937,15 @@ def build_element_body(card, overrides)
       # must carry them too, or it would show an unfiltered total next to a
       # correctly filtered chart (the exact B4 divergence this fix exists to
       # close, just one element over).
-      companion = apply_card_filters!(card, companion)
+      if el['_filterHelper']
+        companion = rebind_to_filter_source!(companion, el['_filterHelper'])
+      else
+        companion = apply_card_filters!(card, companion)
+      end
       # A POP summary Beast Mode already carries its current/prior predicates
       # (for example the live "% Change - Pageviews" formula). Applying the
       # primary period window again would erase the comparison rows it needs.
-      unless el['_periodComparisonManaged'] && sn['_isCalc']
+      unless el['_filterHelper'] || (el['_periodComparisonManaged'] && sn['_isCalc'])
         companion = apply_card_date_window!(card, companion)
       end
       container_override_path = File.join(OUT, 'card-container-overrides.json')
@@ -2769,7 +3044,10 @@ def group_cards_by_page(cards, pages)
   by_page = Hash.new { |h, k| h[k] = [] }
   card_page = {}
   pages.each do |p|
-    Array(p['cardIds'] || p['cards']).each { |cid| card_page[cid.to_s] = p['title'] || p['name'] || p['id'] }
+    Array(p['cardIds'] || p['cards']).each do |cid|
+      card_page[[cid.to_s, p['id'].to_s]] = p['title'] || p['name'] || p['id']
+      card_page[cid.to_s] ||= p['title'] || p['name'] || p['id']
+    end
   end
   default_name =
     if pages.size == 1
@@ -2777,8 +3055,86 @@ def group_cards_by_page(cards, pages)
     else
       'Overview'
     end
-  cards.each { |c| by_page[card_page[c['id'].to_s] || default_name] << c }
+  cards.each do |c|
+    key = [c['id'].to_s, c['_pageId'].to_s]
+    by_page[card_page[key] || card_page[c['id'].to_s] || default_name] << c
+  end
   by_page
+end
+
+def assert_unique_card_instances!(cards)
+  duplicates = Array(cards).group_by { |card| card['id'].to_s }
+                           .select { |id, instances| !id.empty? && instances.length > 1 }
+  return if duplicates.empty?
+
+  detail = duplicates.map do |id, instances|
+    pages = instances.map { |card| card['_pageId'].to_s }.reject(&:empty?).uniq
+    "#{id} (pages #{pages.empty? ? 'unknown' : pages.join(', ')})"
+  end.join('; ')
+  raise ArgumentError,
+        "duplicate Domo card instances would emit duplicate Sigma element IDs: #{detail}. " \
+        'Page-qualified card element IDs are not implemented; migrate the affected pages separately.'
+end
+
+def control_coverage_for(cards)
+  Array(cards).flat_map do |card|
+    quick = Array(card['quickFilters']).each_with_index.map do |filter, index|
+      emitted = $control_scope_entries.find do |entry|
+        entry['cardId'] == card['id'].to_s && entry['pageId'].to_s == card['_pageId'].to_s &&
+          entry['sourceIndex'] == index
+      end
+      supported = quick_filter_card_supported?(card) && quick_filter_supported?(filter)
+      {
+        'kind' => 'quick-filter',
+        'name' => filter['name'] || filter['column'] || "Quick Filter #{index + 1}",
+        'cardId' => card['id'].to_s, 'pageId' => card['_pageId'].to_s,
+        'status' => (emitted ? 'emitted' : (supported ? 'dropped' : 'deferred')),
+        'controlId' => emitted && emitted['controlId'],
+        'reason' => (emitted ? nil :
+                     (supported ? 'table/pivot Quick Filter was not emitted' :
+                      (quick_filter_unsupported_reason(filter) ||
+                       'this card kind does not support automated Quick Filters'))),
+      }.compact
+    end
+
+    kind = chart_kind_for(card) || card['sigmaKindHint']
+    date = if %w[table pivot-table].include?(kind) && card['dateRangeFilter'].is_a?(Hash)
+             emitted = $control_scope_entries.find do |entry|
+               entry['cardId'] == card['id'].to_s &&
+                 entry['pageId'].to_s == card['_pageId'].to_s &&
+                 entry['sourceKind'] == 'date-range'
+             end
+             supported = !plugin_enabled_for_card?(card)
+             [{
+               'kind' => 'date-range', 'name' => 'Date',
+               'cardId' => card['id'].to_s, 'pageId' => card['_pageId'].to_s,
+               'status' => (emitted ? 'emitted' : (supported ? 'dropped' : 'deferred')),
+               'controlId' => emitted && emitted['controlId'],
+               'reason' => (emitted ? nil :
+                            (supported ? 'table/pivot date selector was not emitted' :
+                             'hosted-plugin date controls are not yet automated')),
+             }.compact]
+           else
+             []
+           end
+    quick + date
+  end
+end
+
+def control_scope_document(control_coverage)
+  deferred = Array(control_coverage).select { |row| row['status'] == 'deferred' }.map do |row|
+    {
+      'name' => row['name'], 'kind' => row['kind'], 'cardId' => row['cardId'],
+      'pageId' => row['pageId'], 'status' => 'needs-wiring', 'reason' => row['reason'],
+    }.compact
+  end
+  {
+    'version' => 1,
+    'source' => 'domo',
+    'sourceFilterSignals' => Array(control_coverage).size,
+    'controls' => $control_scope_entries + deferred,
+    'dropped' => deferred,
+  }
 end
 
 def page_name(page)
@@ -2833,6 +3189,11 @@ if $PROGRAM_NAME == __FILE__
   overrides = (JSON.parse(File.read(File.join(OUT, 'kpi-overrides.json'))) rescue {}) || {}
 
   cards = cards.reject { |c| c['_error'] || c['_tierB'] }
+  begin
+    assert_unique_card_instances!(cards)
+  rescue ArgumentError => e
+    abort("  REFUSED: #{e.message}")
+  end
   by_page = group_cards_by_page(cards, pages)
   pages.each { |page| by_page[page_name(page)] ||= [] }
   master_ds = dominant_dataset_id(cards)
@@ -2842,6 +3203,11 @@ if $PROGRAM_NAME == __FILE__
     before = $companion_elements.length
     els = pcards.map { |c| build_element(c, overrides, master_ds) }.compact
     els += $companion_elements[before..]
+    page_card_ids = pcards.map { |card| card['id'].to_s }
+    els += $control_scope_entries.filter_map do |entry|
+      next unless page_card_ids.include?(entry['cardId'])
+      $card_controls.find { |control| control['controlId'] == entry['controlId'] }
+    end.uniq { |control| control['id'] }
     title_element = observed_page_title_element(pname)
     els.unshift(title_element) if title_element
     els += build_controls(pcards, master_ds)
@@ -2888,11 +3254,23 @@ if $PROGRAM_NAME == __FILE__
     },
     'ambiguousNames' => $ambiguous_beast_mode_names,
   ))
+  artifact_root = ENV['DOMO_RUN_DIR'] || File.dirname(OUT)
+  control_scope_path = File.join(artifact_root, 'control-scope.json')
+  control_coverage = control_coverage_for(cards)
+  coverage_path = File.join(artifact_root, 'domo-controls-coverage.json')
+  File.write(coverage_path, JSON.pretty_generate(
+    'source' => 'domo', 'expected' => control_coverage.size,
+    'emitted' => control_coverage.count { |row| row['status'] == 'emitted' },
+    'detail' => control_coverage,
+  ))
+  File.write(control_scope_path, JSON.pretty_generate(control_scope_document(control_coverage)))
   warn "  wrote #{File.join(OUT, 'chart-specs.json')} (#{out_pages.sum { |p| p['elements'].size }} elements across #{out_pages.size} page(s), #{$sub_masters.size} sub-master(s), #{$chart_helpers.size} grouped chart helper(s), #{$plugin_source_elements.size} plugin source element(s), #{$kpi_verification_elements.size} KPI parity twin(s), #{$chart_verification_elements.size} chart parity twin(s), #{$table_verification_elements.size} table parity twin(s))"
   warn "  wrote #{File.join(OUT, 'warnings.json')} (#{$warnings.size} warning(s))"
   warn "  wrote #{File.join(OUT, 'filter-type-audit.json')} (#{$filter_type_audit.size} list filter(s))"
   warn "  wrote #{File.join(OUT, 'beast-mode-workbook-usage.json')} " \
-       "(#{$beast_mode_usage.map { |usage| usage['id'] }.uniq.size} Beast Mode(s) used)"
+        "(#{$beast_mode_usage.map { |usage| usage['id'] }.uniq.size} Beast Mode(s) used)"
+  warn "  wrote #{control_scope_path} (#{$control_scope_entries.size} card-scoped control(s))"
+  warn "  wrote #{coverage_path} (#{control_coverage.count { |row| row['status'] == 'emitted' }}/#{control_coverage.size} source control(s) emitted)"
   $warnings.first(20).each { |w| warn "    ⚠ #{w['card']}: #{w['warning']}" }
   warn "\n  Next: build-workbook-spec.rb --chart-specs discovery/chart-specs.json --dm-ids discovery/dm-ids.json ..."
 end

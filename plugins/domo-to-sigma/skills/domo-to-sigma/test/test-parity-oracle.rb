@@ -138,6 +138,10 @@ oracle_src = File.read(File.join(SCRIPTS, 'build-parity-oracle.rb'))
 ok(oracle_src.include?("'kind' => 'domo-card-data-cap'") &&
    oracle_src.include?("card['num_rows'].to_i == 500"),
    'oracle records exact-500 Domo collector truncation instead of scoring extra Sigma rows')
+compat_index = oracle_src.index("require_relative 'lib/ruby_compat'")
+filter_map_index = oracle_src.index('filter_map')
+ok(compat_index && filter_map_index && compat_index < filter_map_index,
+   'Ruby 2.6 compatibility shim loads before the oracle uses filter_map')
 cid_src = oracle_src[/^def card_id_for\(element_id\)\n.*?\nend\n/m]
 ok(cid_src, 'extracted card_id_for(element_id) from build-parity-oracle.rb')
 eval(cid_src, TOPLEVEL_BINDING) if cid_src # rubocop:disable Security/Eval
@@ -188,6 +192,44 @@ if canon_src
   eq(compact_months, [['2024-01', 10], ['2026-12', 20]],
      'compact Sigma month labels canonicalise to Domo ISO month buckets')
   eq(compact_count, 2, 'each compact month rewrite is counted')
+
+  readable_days, readable_count = canonicalise_dim([['Jul 23, 2026', 0.4]])
+  eq(readable_days, [['2026-07-23', 0.4]],
+     'readable day labels retain full day precision for parity')
+  eq(readable_count, 1, 'the readable day rewrite is counted')
+end
+
+display_src = oracle_src[/^def canonicalise_numeric_display\(rows, expected_rows = nil\)\n.*?\nend\n/m]
+ok(display_src, 'extracted canonicalise_numeric_display(rows) from build-parity-oracle.rb')
+eval(display_src, TOPLEVEL_BINDING) if display_src # rubocop:disable Security/Eval
+if display_src
+  eq(canonicalise_numeric_display([['2026-07-23', '41%', '$9.7M']]),
+     [['2026-07-23', 0.41, 9_700_000.0]],
+     'formatted Sigma percentages/currency compare to Domo raw numeric values')
+  eq(canonicalise_numeric_display([['1,234', '41%']], [['1,234', 0.41]]),
+     [['1,234', 0.41]],
+     'text dimensions that look numeric are never coerced when source truth is text')
+  eq(canonicalise_numeric_display([['2026-09-17', '38%']], [['2026-09-17', 0.375]]),
+     [['2026-09-17', 0.375]],
+     'a displayed percent adopts the exact source value only when it rounds to the printed precision')
+  eq(canonicalise_numeric_display([['2026-09-17', '40%']], [['2026-09-17', 0.375]]),
+     [['2026-09-17', 0.4]],
+     'a materially different displayed percent is not laundered into a match')
+  eq(canonicalise_numeric_display([['38%']], [[0.375]]),
+     [[0.375]],
+     'a one-cell KPI percent also recovers its exact source value at printed precision')
+  duplicate_keys = canonicalise_numeric_display(
+    [['Same', '38%'], ['Same', '37%']],
+    [['Same', 0.365], ['Same', 0.375]]
+  )
+  eq(duplicate_keys, [['Same', 0.375], ['Same', 0.365]],
+     'duplicate dimension keys match rounded values one-to-one instead of reusing the first source row')
+  eq(canonicalise_numeric_display(
+       [['Same', '37%'], ['Same', '38%']],
+       [['Same', 0.365], ['Same', 0.375]]
+     ),
+     [['Same', 0.365], ['Same', 0.375]],
+     'duplicate-key normalization remains correct when Sigma row order changes')
 end
 
 dedupe_src = oracle_src[/^def same_parity_value\?\(left, right\)\n.*?(?=^stale_evidence =)/m]

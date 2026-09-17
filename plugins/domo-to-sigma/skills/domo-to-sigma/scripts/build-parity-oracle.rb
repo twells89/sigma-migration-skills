@@ -41,6 +41,7 @@ require 'set'
 require 'optparse'
 require 'time'
 require 'date'
+require_relative 'lib/ruby_compat'
 
 opts = {}
 OptionParser.new do |p|
@@ -165,6 +166,9 @@ def canonicalise_dim(rows)
     elsif (m = /\A([A-Z][a-z]{2})\s+(\d{2})\z/.match(s)) && MONTH_ABBR[m[1]]
       a[0] = format('20%s-%02d', m[2], MONTH_ABBR[m[1]])
       n += 1
+    elsif (m = /\A([A-Z][a-z]{2})\s+(\d{1,2}),\s*(\d{4})\z/.match(s)) && MONTH_ABBR[m[1]]
+      a[0] = format('%s-%02d-%02d', m[3], MONTH_ABBR[m[1]], m[2].to_i)
+      n += 1
     elsif (m = /\A(\d{4})-Q([1-4])\z/.match(s))
       a[0] = format('%s-%02d', m[1], ((m[2].to_i - 1) * 3) + 1)
       n += 1
@@ -207,6 +211,126 @@ def canonicalise_dim(rows)
   end
   out = out.each_with_index.reject { |_row, idx| removed[idx] }.map(&:first)
   [out, n]
+end
+
+# Sigma element CSV exports use display formatting. Canonicalize only strings
+# that unambiguously carry numeric decoration so strict parity compares Domo's
+# raw numbers to their displayed equivalents without weakening plain strings.
+def canonicalise_numeric_display(rows, expected_rows = nil)
+  numeric_positions = nil
+  expected = Array(expected_rows).map { |row| Array(row) }
+  if expected_rows
+    width = expected.map(&:length).max.to_i
+    numeric_positions = (0...width).select do |index|
+      expected.any? { |row| row[index].is_a?(Numeric) }
+    end
+  end
+  actual_rows = Array(rows).map { |row| Array(row) }
+  parsed_rows = actual_rows.map do |actual|
+    actual.each_with_index.map do |value, index|
+      next value if numeric_positions && !numeric_positions.include?(index)
+      next value unless value.is_a?(String)
+      s = value.strip
+      next value if s.empty?
+      negative = s.start_with?('(') && s.end_with?(')')
+      s = s[1..-2].to_s.strip if negative
+      percent = s.end_with?('%')
+      suffix = percent ? nil : s[/([kKmMbBtT])\z/, 1]
+      decorated = percent || suffix || s.match?(/\A[$€£¥]/) || s.include?(',')
+      next value unless decorated
+      body = s.gsub(/[,$€£¥\s]/, '').sub(/%\z/, '').sub(/[kKmMbBtT]\z/, '')
+      begin
+        number = Float(body)
+      rescue ArgumentError, TypeError
+        next value
+      end
+      multiplier = suffix ? { 'k' => 1e3, 'm' => 1e6, 'b' => 1e9, 't' => 1e12 }[suffix.downcase] : 1.0
+      decimals = body.include?('.') ? body.split('.', 2).last.length : 0
+      number *= multiplier
+      tolerance = (10.0**-decimals) * multiplier / 2.0
+      if percent
+        number /= 100.0
+        tolerance /= 100.0
+      end
+      number = -number if negative
+      { 'value' => number, 'tolerance' => tolerance }
+    end
+  end
+
+  unless numeric_positions
+    return parsed_rows.map do |row|
+      row.map { |value| value.is_a?(Hash) ? value['value'] : value }
+    end
+  end
+
+  # Match rounded display values to source rows one-to-one within each complete
+  # dimension key. A repeated key is valid (for example, a pivot with multiple
+  # measures); independently taking the first candidate can assign one expected
+  # row twice and make the result depend on row order.
+  dim_positions = (0...[actual_rows.map(&:length).max, expected.map(&:length).max].max).to_a -
+                  numeric_positions
+  expected_by_key = Hash.new { |hash, key| hash[key] = [] }
+  expected.each_with_index do |row, index|
+    expected_by_key[dim_positions.map { |position| row[position] }] << index
+  end
+  actual_by_key = Hash.new { |hash, key| hash[key] = [] }
+  actual_rows.each_with_index do |row, index|
+    actual_by_key[dim_positions.map { |position| row[position] }] << index
+  end
+
+  actual_to_expected = {}
+  actual_by_key.each do |key, actual_indices|
+    expected_indices = expected_by_key[key]
+    next if expected_indices.empty?
+    edges = actual_indices.each_with_object({}) do |actual_index, out|
+      parsed = parsed_rows[actual_index]
+      decorated = numeric_positions.select { |position| parsed[position].is_a?(Hash) }
+      next if decorated.empty?
+      out[actual_index] = expected_indices.filter_map do |expected_index|
+        candidate = expected[expected_index]
+        next unless decorated.all? do |position|
+          value = parsed[position]
+          candidate[position].is_a?(Numeric) &&
+            (candidate[position].to_f - value['value']).abs <=
+              value['tolerance'] + (1e-9 * [candidate[position].to_f.abs, 1.0].max)
+        end
+        distance = decorated.sum do |position|
+          (candidate[position].to_f - parsed[position]['value']).abs
+        end
+        [expected_index, distance]
+      end.sort_by { |expected_index, distance| [distance, expected_index] }
+    end
+
+    expected_to_actual = {}
+    assign = lambda do |actual_index, seen|
+      Array(edges[actual_index]).each do |expected_index, _distance|
+        next if seen[expected_index]
+        seen[expected_index] = true
+        prior = expected_to_actual[expected_index]
+        if prior.nil? || assign.call(prior, seen)
+          expected_to_actual[expected_index] = actual_index
+          actual_to_expected[actual_index] = expected_index
+          return true
+        end
+      end
+      false
+    end
+    actual_indices.sort_by { |index| [Array(edges[index]).length, index] }
+                  .each { |index| assign.call(index, {}) }
+  end
+
+  parsed_rows.each_with_index.map do |parsed, row_index|
+    exact_index = actual_to_expected[row_index]
+    exact = expected[exact_index] if exact_index
+    parsed.each_with_index.map do |value, index|
+      next value unless value.is_a?(Hash)
+      if exact && exact[index].is_a?(Numeric)
+        exact[index]
+      else
+        value['value']
+      end
+    end
+  end
 end
 
 # The newest date appearing in a row set's FIRST column, or nil if that column is
@@ -425,6 +549,7 @@ charts.each do |c|
   # bug this comment exists to stop recurring.
   exp_rows, expected_canon_n = canonicalise_dim(exp_rows)
   act_rows, actual_canon_n = canonicalise_dim(act_rows)
+  act_rows = canonicalise_numeric_display(act_rows, exp_rows)
   canonicalised += expected_canon_n + actual_canon_n
 
   verified << {

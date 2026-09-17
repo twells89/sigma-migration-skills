@@ -237,6 +237,8 @@ Run `ruby scripts/domo-discover.rb --probe` to detect the tier.
 - Card list per page + per-card definition (Tier A) or PNG (Tier B)
 - Beast Mode formulas (Tier A)
 - Page layout (collections + card geometry)
+- Analyzer Quick Filters (`definition.slicers` / public `quickFilters`) and
+  card date-range metadata. These are separate from permanent `main.filters`.
 
 Outputs `discovery/datasets.json`, `discovery/cards.json`, `discovery/pages.json`,
 `discovery/beast-modes.json`, and `discovery/beast-mode-discovery.json`.
@@ -491,6 +493,9 @@ Then translate the rest per the ref:
 - pivot cards → `rowsBy` + `columnsBy` arrays
 - page filters → workbook controls; card-level filter clauses → element filters
   (port **both** levels — see the ref's Filtering fidelity section)
+- table/pivot Analyzer Quick Filters → card-scoped controls backed by a hidden
+  table source; pivot permanent/date predicates also live on that source because
+  Sigma silently drops `pivot-table.filters`
 - **No liberties:** one card → one element; reproduce labels/formats/layout; every
   unsupported/dropped item → a Phase-5e warning, never a silent substitution
 - **Category-color guard:** aggregate Beast Modes are never categorical color

@@ -141,6 +141,223 @@ ctrls = build_controls([
 ])
 eq(ctrls, [], 'no spurious page control emitted for card-level filters (B4)')
 
+puts "== table Quick Filter becomes a card-scoped Sigma control =="
+$warnings = []
+$card_controls = []
+$control_scope_entries = []
+quick_table = build_element({
+  'id' => 'table-quick', 'title' => 'Daily Category Detail',
+  'chartType' => 'badge_table', 'sigmaKindHint' => 'table',
+  'datasetId' => 'ds-quick',
+  'columns' => [
+    { 'column' => 'CATEGORY_NAME', 'mapping' => 'ITEM' },
+    { 'column' => 'CONV_PCT', 'aggregation' => 'AVG', 'mapping' => 'VALUE' },
+  ],
+  'quickFilters' => [{
+    'type' => 'string', 'displayType' => 'multiple_select',
+    'name' => 'Category', 'column' => 'CATEGORY_NAME', 'operator' => 'IN', 'values' => [],
+  }],
+}, {})
+quick_control = $card_controls.last
+eq(quick_table['kind'], 'table', 'the source table remains a table')
+eq(quick_control && quick_control['controlType'], 'list',
+   'the Domo string slicer becomes a Sigma list control')
+quick_table_helper = $chart_helpers.find { |helper| helper['id'] == 'src-el-table-quick-filters' }
+eq(quick_control && quick_control.dig('source', 'source', 'elementId'), quick_table_helper && quick_table_helper['id'],
+   'the picker reads values from the table card hidden source')
+eq(quick_control && quick_control.dig('filters', 0, 'source', 'elementId'), quick_table_helper && quick_table_helper['id'],
+   'the control filters only its source table chain, not every card on the page')
+eq(quick_control && quick_control.dig('filters', 0, 'columnId'), 'f-category_name',
+   'the control targets the helper column resolved from the Domo slicer')
+eq($control_scope_entries.last && $control_scope_entries.last['scope'], [quick_table['id']],
+   'the control-scope ledger records the intentionally card-local reach')
+
+puts "== card control IDs remain unique and within Sigma's 64-character limit =="
+$card_controls = []
+$control_scope_entries = []
+$chart_helpers = []
+long_column = 'THIS_IS_A_VERY_LONG_SOURCE_COLUMN_NAME_THAT_WOULD_PREVIOUSLY_OVERFLOW_SIGMA_IDS'
+collision_table = build_element({
+  'id' => 'control-collisions', 'title' => 'Filterable Detail',
+  'chartType' => 'badge_table', 'sigmaKindHint' => 'table', '_pageId' => 'page-a',
+  'columns' => [{ 'column' => long_column }, { 'column' => 'Amount', 'aggregation' => 'SUM' }],
+  'quickFilters' => [
+    { 'name' => 'First', 'column' => long_column, 'operator' => 'IN', 'values' => [] },
+    { 'name' => 'Second', 'column' => long_column, 'operator' => 'IN', 'values' => [] },
+  ],
+  'dateRangeFilter' => {
+    'column' => { 'column' => long_column },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'ROLLING_PERIOD', 'interval' => 'DAY', 'offset' => 0, 'count' => 7,
+    },
+  },
+}, {})
+collision_controls = $card_controls.select do |control|
+  Array(control['filters']).any? do |filter|
+    filter.dig('source', 'elementId') == collision_table.dig('source', 'elementId')
+  end
+end
+eq(collision_controls.map { |control| control['id'] }.uniq.length, 3,
+   'two same-column Quick Filters and a date selector get distinct element IDs')
+eq(collision_controls.map { |control| control['controlId'] }.uniq.length, 3,
+   'two same-column Quick Filters and a date selector get distinct control IDs')
+ok(collision_controls.flat_map { |control| [control['id'], control['controlId']] }
+                     .all? { |id| id.length <= 64 },
+   'every generated control ID is capped at 64 characters')
+eq(quick_filter_unsupported_reason(
+     'displayType' => 'range_slider', 'operator' => 'IN'
+   ),
+   'displayType "range_slider" needs source min/max bounds',
+   'range Quick Filters are deferred with the missing-bound reason')
+eq(quick_filter_unsupported_reason(
+     'displayType' => 'multiple_select', 'operator' => 'BETWEEN'
+   ),
+   'operator "BETWEEN" has no faithful Sigma control translation',
+   'unsupported operators are not mislabeled as missing range bounds')
+
+puts "== calculated Quick Filter and calculated Summary Number share valid helper columns =="
+$card_controls = []
+$control_scope_entries = []
+$chart_helpers = []
+$companion_elements = []
+$translated_bms = {
+  'calculation_segment' => {
+    'id' => 'calculation_segment', 'name' => 'Customer Segment',
+    'class' => 'projection', 'scope' => 'card', 'dataType' => 'STRING',
+    'sigmaFormula' => 'If([Amount] >= 100, "High", "Standard")',
+  },
+  'calculation_margin' => {
+    'id' => 'calculation_margin', 'name' => 'Margin Rate',
+    'class' => 'aggregate', 'scope' => 'card', 'dataType' => 'DECIMAL',
+    'sigmaFormula' => 'Sum([Margin]) / Sum([Revenue])',
+  },
+}
+calc_table = build_element({
+  'id' => 'calculated-controls', 'title' => 'Calculated Detail',
+  'chartType' => 'badge_table', 'sigmaKindHint' => 'table',
+  'columns' => [{ 'column' => 'Account' }, { 'column' => 'Revenue', 'aggregation' => 'SUM' }],
+  'summaryNumber' => {
+    'column' => 'Margin Rate', 'beastModeId' => 'calculation_margin',
+    '_isCalc' => true, 'label' => 'Margin Rate',
+  },
+  'filters' => [{
+    'column' => 'Customer Segment', 'beastModeId' => 'calculation_segment',
+    '_isCalc' => true, 'operator' => 'IN', 'values' => ['High'],
+  }],
+  'quickFilters' => [{
+    'name' => 'Segment', 'column' => 'Customer Segment',
+    'formulaId' => 'calculation_segment', 'operator' => 'IN', 'values' => [],
+  }],
+}, {})
+calc_helper = $chart_helpers.find { |helper| helper['id'] == 'src-el-calculated-controls-filters' }
+calc_control = $card_controls.find { |control| control['name'] == 'Segment' }
+ok(calc_helper && Array(calc_helper['columns']).none? do |column|
+     column['formula'].to_s.include?('[Master/Customer Segment]')
+   end,
+   'helper never fabricates a passthrough for a calculated field absent from the data model')
+ok(calc_helper && Array(calc_helper['columns']).any? do |column|
+     column['formula'].to_s.include?('If([Master/Amount]')
+   end,
+   'calculated filter is inlined on the helper source')
+ok(calc_control && Array(calc_helper['columns']).any? do |column|
+     column['id'] == calc_control.dig('filters', 0, 'columnId')
+   end,
+   'calculated Quick Filter targets a real helper column')
+calc_summary = $companion_elements.find { |element| element['id'] == 'el-calculated-controls-summary' }
+ok(calc_summary && calc_summary.dig('source', 'elementId') == calc_helper['id'],
+   'calculated Summary Number is rebound to the same filtered helper')
+ok(calc_summary && Array(calc_summary['columns']).any? do |column|
+     column['formula'].to_s.include?("[#{calc_helper['name']}/Margin]")
+   end,
+   'calculated Summary Number keeps its aggregate formula after helper rebinding')
+$translated_bms = nil
+
+puts "== pivot filters are applied on a hidden pre-filter source =="
+$warnings = []
+$card_controls = []
+$control_scope_entries = []
+$chart_helpers = []
+pivot = build_element({
+  'id' => 'pivot-filtered', 'title' => 'Category Performance Pivot',
+  'chartType' => 'badge_pivot_table', 'sigmaKindHint' => 'pivot-table',
+  'datasetId' => 'ds-pivot',
+  'columns' => [
+    { 'column' => 'CATEGORY_NAME', 'mapping' => 'ITEM' },
+    { 'column' => 'IMG_TYPE', 'mapping' => 'ITEM' },
+    { 'column' => 'CONV_PCT', 'aggregation' => 'AVG', 'mapping' => 'VALUE' },
+  ],
+  'filters' => [{ 'column' => 'CATEGORY_NAME', 'operator' => 'IN', 'values' => ['Premium'] }],
+  'dateRangeFilter' => {
+    'column' => { 'column' => 'EVENT_DATE' },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'DAY', 'offset' => 1, 'count' => 0,
+    },
+  },
+  'quickFilters' => [{
+    'type' => 'string', 'displayType' => 'multiple_select',
+    'name' => 'Category', 'column' => 'CATEGORY_NAME', 'operator' => 'IN', 'values' => [],
+  }],
+}, {})
+pivot_helper = $chart_helpers.find { |helper| helper['id'] == 'src-el-pivot-filtered-filters' }
+pivot_control = $card_controls.find { |control| control['name'] == 'Category' }
+eq(pivot['kind'], 'pivot-table', 'the source pivot remains a pivot-table')
+eq(pivot.dig('source', 'elementId'), pivot_helper && pivot_helper['id'],
+   'the pivot reads through its hidden pre-filter source')
+eq(pivot_helper && pivot_helper['name'], 'Domo Filter Source pivot-filtered',
+   'the hidden source gets a card-id-derived unique namespace')
+ok(!pivot.key?('filters'), 'no ignored filters are attached directly to the pivot')
+ok(pivot_helper && Array(pivot_helper['filters']).any? { |filter| filter['id'].to_s.start_with?('cf-') },
+   'the permanent Category predicate is applied to the hidden source')
+date_control = $card_controls.find { |control| control['controlType'] == 'date-range' }
+eq(date_control && date_control.dig('filters', 0, 'source', 'elementId'),
+   pivot_helper && pivot_helper['id'],
+   'the Yesterday date selector remains interactive over the hidden source')
+eq(date_control && date_control['mode'], 'last',
+   'the INTERVAL_OFFSET date selector keeps a relative default')
+eq(date_control && date_control['includeToday'], false,
+   'Yesterday excludes the current day')
+eq(pivot_control && pivot_control.dig('filters', 0, 'source', 'elementId'),
+   pivot_helper && pivot_helper['id'],
+   'the interactive Category Quick Filter targets the same hidden source')
+eq(pivot_control && pivot_control.dig('source', 'source', 'elementId'),
+   pivot_helper && pivot_helper['id'],
+   'the pivot Quick Filter picker is populated from a table, never from the pivot')
+
+puts "== duplicate card instances fail closed before duplicate element IDs are emitted =="
+begin
+  assert_unique_card_instances!([
+    { 'id' => 'pinned-card', '_pageId' => 'page-1' },
+    { 'id' => 'pinned-card', '_pageId' => 'page-2' },
+  ])
+  duplicate_card_refused = false
+rescue ArgumentError => e
+  duplicate_card_refused = e.message.include?('migrate the affected pages separately') &&
+                           e.message.include?('page-1') && e.message.include?('page-2')
+end
+ok(duplicate_card_refused,
+   'a card pinned to multiple pages is refused explicitly instead of creating duplicate element IDs')
+begin
+  assert_unique_card_instances!([{ 'id' => 'one' }, { 'id' => 'two' }])
+  unique_cards_allowed = true
+rescue ArgumentError
+  unique_cards_allowed = false
+end
+ok(unique_cards_allowed, 'distinct card IDs remain valid')
+
+puts "== day/week calendar labels preserve bucket identity =="
+day_line = build_element({
+  'id' => 'day-line', 'title' => 'Daily Conversion',
+  'chartType' => 'badge_symbolline', 'sigmaKindHint' => 'line-chart',
+  'dateGrain' => { 'column' => 'EVENT_DATE', 'dateTimeElement' => 'DAY' },
+  'columns' => [
+    { 'column' => 'CalendarDay', 'mapping' => 'ITEM', 'calendar' => true },
+    { 'column' => 'CONV_PCT', 'aggregation' => 'AVG', 'mapping' => 'VALUE' },
+  ],
+}, {})
+eq(day_line['columns'].first['format'],
+   { 'kind' => 'datetime', 'formatString' => '%b %-d, %Y' },
+   'day-grain labels do not collapse every date to a month/year string')
+
 puts "== Phase-5 geometry gate: warn when a page's cards carry no x/y =="
 $warnings = []
 warn_missing_geometry('Overview', [{ 'id' => 'c7', 'title' => 'No Geometry' }, { 'id' => 'c8' }])
@@ -787,10 +1004,10 @@ ok($warnings.any? { |w| w['warning'].include?("card filter on 'Missing Calc' dro
    'dropped loudly, naming the reason (never a silent loss)')
 $translated_bms = nil
 
-puts "== B4: pivot-table element filters are a documented Sigma silent-drop trap — " \
-     'warn and do NOT emit rather than ship a filter Sigma will ignore =='
+puts "== B4: pivot-table filters move to a hidden source because Sigma drops them on the pivot =="
 $warnings = []
 $companion_elements = []
+$chart_helpers = []
 pivot_card = build_element({
   'id' => 'c42', 'title' => 'Sales Pivot', 'chartType' => 'badge_pivottable', 'sigmaKindHint' => 'pivot-table',
   'columns' => [ { 'column' => 'region' }, { 'column' => 'quarter' }, { 'column' => 'amount', 'aggregation' => 'SUM' } ],
@@ -798,8 +1015,9 @@ pivot_card = build_element({
 }, {})
 eq(pivot_card['kind'], 'pivot-table', 'still a pivot-table element')
 ok(!pivot_card.key?('filters'), 'the filter was NOT attached to the pivot-table element (Sigma silently drops it there)')
-ok($warnings.any? { |w| w['warning'].include?('NOT applied') && w['warning'].include?('pivot-table') },
-   'the pivot-table trap is flagged loudly instead of shipping an ignored filter')
+pivot_source = $chart_helpers.find { |helper| helper['id'] == 'src-el-c42-filters' }
+ok(pivot_source && Array(pivot_source['filters']).any? { |filter| filter['values'] == ['West'] },
+   'the pivot predicate is applied to its hidden table source instead')
 
 puts "== B4: the companion KPI (bead 08sf) carries the SAME card filters as its primary " \
      'element — Domo\'s Summary Number is scoped to the same card-level filters =='
@@ -1502,10 +1720,20 @@ Dir.mktmpdir do |dir|
       'id' => 'c52', 'title' => 'Activity Calendar', 'chartType' => 'badge_calendar',
       'datasetId' => 'ds-plugin',
       'dateGrain' => { 'column' => 'Activity Date', 'dateTimeElement' => 'DAY' },
+      'dateRangeFilter' => {
+        'column' => { 'column' => 'Activity Date' },
+        'dateTimeRange' => {
+          'dateTimeRangeType' => 'ROLLING_PERIOD', 'interval' => 'DAY', 'offset' => 0, 'count' => 14,
+        },
+      },
       'columns' => [
         { 'column' => 'Activity Date', 'mapping' => 'DATE' },
         { 'column' => 'Description', 'mapping' => 'EVENT' },
       ],
+      'quickFilters' => [{
+        'name' => 'Description', 'column' => 'Description',
+        'displayType' => 'multiple_select', 'operator' => 'IN', 'values' => [],
+      }],
     }, {})
     eq(calendar['pluginId'], 'calendar-test-id',
        'calendar card reuses the proven live calendar registration')
@@ -1515,6 +1743,28 @@ Dir.mktmpdir do |dir|
     eq(calendar.dig('config', 'valueColumn'),
        { 'kind' => 'column', 'columnId' => 'm-value', 'source' => 'source' },
        'calendar value uses the working plugin column config shape')
+    ok(!calendar.key?('_filterHelper') &&
+       $chart_helpers.none? { |helper| helper['id'].to_s.include?('c52') },
+       'pluginized calendar never leaks a table filter helper')
+    ok($card_controls.none? { |control| control['name'] == 'Description' },
+       'pluginized calendar Quick Filter is deferred rather than wired to the wrong source')
+    calendar_coverage = control_coverage_for([{
+      'id' => 'c52', 'title' => 'Activity Calendar', 'chartType' => 'badge_calendar',
+      'sigmaKindHint' => 'table',
+      'dateRangeFilter' => {
+        'column' => { 'column' => 'Activity Date' }, 'dateTimeRange' => {},
+      },
+      'quickFilters' => [{ 'name' => 'Description', 'column' => 'Description' }],
+    }])
+    eq(calendar_coverage.map { |row| row['status'] }, %w[deferred deferred],
+       'pluginized calendar Quick Filter and date selector are recorded as deferred, not dropped')
+    calendar_scope = control_scope_document(calendar_coverage)
+    eq(calendar_scope['controls'].select { |row| row['status'] == 'needs-wiring' }
+                                 .map { |row| row['name'] },
+       %w[Description Date],
+       'deferred plugin controls are declared to the shared control gate with evidence')
+    eq(calendar_scope['dropped'].map { |row| row['name'] }, %w[Description Date],
+       'deferred plugin controls are visible to degradation reporting')
 
     $companion_elements = []
     gauge = build_element({

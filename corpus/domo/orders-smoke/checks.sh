@@ -19,7 +19,7 @@ DOMO_DISCOVERY_DIR="$TMP" \
   ruby "$SKILL/scripts/assert-beast-modes-accounted.rb" --discovery "$TMP" \
     --stage data-model >/dev/null
 
-DOMO_DISCOVERY_DIR="$TMP" ruby "$SKILL/scripts/build-workbook.rb" >/dev/null
+DOMO_DISCOVERY_DIR="$TMP" DOMO_RUN_DIR="$TMP" ruby "$SKILL/scripts/build-workbook.rb" >/dev/null
 DOMO_DISCOVERY_DIR="$TMP" \
   ruby "$SKILL/scripts/assert-beast-modes-accounted.rb" --discovery "$TMP" \
     --stage workbook >/dev/null

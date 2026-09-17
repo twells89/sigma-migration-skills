@@ -1,12 +1,13 @@
 # domo / orders-presentation
 
 Synthetic Domo discovery + card-data snapshot (no live Domo instance, no
-customer data): five cards on one `Order Fact` DataSet — a currency KPI, a
+customer data): six cards on one `Order Fact` DataSet — a currency KPI, a
 percent KPI, a bar chart with a source Summary Number + categorical axis, a
-month line chart, and a detail table. Regression-pins the **presentation
-automation** (`derive-presentation-overrides.rb`) that makes the gold-path
-styling reproducible for every customer instead of relying on hand-authored
-sidecars.
+month line chart, and a detail table with an Analyzer Quick Filter.
+Regression-pins the **presentation automation**
+(`derive-presentation-overrides.rb`) and the table Quick Filter control/source
+contract that make the gold path reproducible for every customer instead of
+relying on hand-authored sidecars.
 
 ## The gap this closes
 
@@ -22,7 +23,7 @@ now collects and runs automatically before `build-workbook.rb`.
 
 | File | What it is |
 |---|---|
-| `fixtures/cards.json` | 5 cards: currency KPI, percent KPI, bar+summary+categorical, month line, detail table |
+| `fixtures/cards.json` | 6 cards: currency KPI, percent KPI, bar+summary+categorical, two line charts, detail table + Quick Filter |
 | `fixtures/parity-expected.json` | Domo card-data snapshot (summary values + rows) the derivation reads |
 | `checks.sh` | Executable expectations, run by `run-corpus.sh --check` |
 
@@ -41,6 +42,9 @@ now collects and runs automatically before `build-workbook.rb`.
    Summary Number is already surfaced by the companion-KPI mechanism).
 6. `presentation-overrides.json` records provenance + counts (never silently
    absent).
+7. The detail table's Quick Filter becomes a card-scoped Sigma list control,
+   populated from and filtering a hidden table source recorded in
+   `control-scope.json`.
 
 ## Converter
 

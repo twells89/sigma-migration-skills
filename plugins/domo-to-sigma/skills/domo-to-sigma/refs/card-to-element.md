@@ -228,24 +228,10 @@ upstream hint → warned bar-chart default.)
 
 ### Four previously-documented tokens do not exist
 
-This map used to carry `badge_datagrid`, `badge_pivottable`, `badge_stackedarea`,
-and `badge_line` as "plausible-but-unconfirmed" tokens. Probing card creation
-proved all four are **invalid** — `ChartType` has no such members:
-
-| Documented (WRONG) | Verdict | Real token |
-|---|---|---|
-| `badge_datagrid` | ❌ invalid | `badge_table` |
-| `badge_pivottable` | ❌ invalid | none confirmed yet — see note below |
-| `badge_stackedarea` | ❌ invalid | none confirmed yet — see note below |
-| `badge_line` | ❌ invalid | `badge_symbolline` / `badge_curved_symbolline` / `badge_trendline` |
-
-If a card in extracted data carries one of these four, **that is an upstream
-extraction bug** (or stale/synthetic test data) — `build-workbook.rb` flags it
-loudly rather than mapping it, and the extraction path should be checked.
-Neither a valid pivot-table nor a valid stacked-area `ChartType` token has been
-observed yet (live or via probing); don't invent one — if/when a real instance
-produces a pivot or area-family card, capture the actual token before adding a
-row for it.
+Probing proved `badge_datagrid`, `badge_pivottable`, `badge_stackedarea`, and
+`badge_line` invalid. Use `badge_table` for tables and the verified line tokens
+below; no pivot or stacked-area token is confirmed. Treat these values as an
+extraction/fixture defect. The builder warns and falls back, never maps silently.
 
 ### The verified map (exact match on the full token)
 
@@ -430,10 +416,16 @@ inconsistent handling of the two filter levels — port **both**, every time:
    `feedback_sigma_control_filter_target_must_be_table`).
 2. **Card-level filters** (the filter clauses inside each card definition) →
    element/source filters on that element. Translate the Domo filter object
-   (`{column, operator, values}`; operators `IN/NOT_IN/EQUALS/…/BETWEEN/CONTAINS`
-   — see `refs/connection.md`) to a Sigma filter. Remember **`IN` → a chain of
-   `or` equalities** — Sigma has no `IsIn` (`feedback_sigma_formula_isin`); a raw
-   `IN` silently blanks the column.
+   (`{column, operator, values}`; currently automated operators are
+   `LEGACY/IN/EQUALS/NOT_IN/NOT_EQUALS/GREATER_THAN/GREATER_THAN_OR_EQUAL/
+   LESS_THAN/LESS_THAN_OR_EQUAL`) to a Sigma element filter. List predicates use
+   Sigma's native `kind: list`; numeric comparisons use a hidden boolean helper
+   column plus a list filter. Unsupported operators are warned and dropped,
+   never guessed.
+3. **Analyzer Quick Filters** (`definition.slicers[]`; public `quickFilters[]`)
+   → card-scoped Sigma controls. They are not permanent `main.filters`.
+   Tables/pivots need a hidden table source so the picker populates and filters
+   the visible element without a source cycle.
 
 Domo serializes list-filter values as strings even for numeric columns. Type
 them from `datasets.json`: `LONG`/`DECIMAL`/`DOUBLE` values become JSON numbers
@@ -441,8 +433,9 @@ them from `datasets.json`: `LONG`/`DECIMAL`/`DOUBLE` values become JSON numbers
 on `STRING` columns remain strings. Never infer from the literal alone.
 
 Watch the known silent-drop traps so a filter doesn't vanish:
-- **pivot-table** element filters are silently dropped — apply the filter on the
-  source instead (`feedback_sigma_pivot_filter_silently_dropped`).
+- **pivot-table** element filters are silently dropped — apply permanent/date
+  predicates and Quick Filter controls to a hidden table source, then source the
+  pivot from it (`feedback_sigma_pivot_filter_silently_dropped`).
 - A top-N / element filter on a source element **propagates** to dependents
   (`feedback_sigma_source_element_filter_propagates`) — place it deliberately.
 

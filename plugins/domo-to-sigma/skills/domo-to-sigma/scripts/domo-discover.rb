@@ -395,6 +395,9 @@ def normalize_card(raw, card_id, card_meta: nil, dataset_formulas: nil)
         'values' => f['values'], 'beastModeId' => calc_id,
         '_isCalc' => (calc_id ? true : nil) }.compact
     end
+    quick_filters = Array(defn['slicers'])
+    quick_filters = Array(card_meta['slicers']) if quick_filters.empty? && card_meta.is_a?(Hash)
+    quick_filters = nil if quick_filters.empty?
     {
       'id'                 => card_id,
       'title'              => title,
@@ -418,6 +421,11 @@ def normalize_card(raw, card_id, card_meta: nil, dataset_formulas: nil)
       'orderBy'            => Array(main['orderBy']).map { |c| c['column'] }.compact,
       'limit'              => main['limit'],
       'filters'            => filters,
+      # Analyzer Quick Filters are distinct from permanent main.filters. The
+      # private v3 definition calls them slicers; the public Card API calls the
+      # same objects quickFilters. Preserve one normalized key so workbook
+      # generation can emit real interactive controls instead of a static table.
+      'quickFilters'       => quick_filters,
       'conditionalFormats' => Array(defn['conditionalFormats']),
       'cardFormulas'       => Array(defn['formulas']),  # {id,name,columnPositions,...}
       'allowTableDrill'     => defn['allowTableDrill'] || raw['allowTableDrill'],
@@ -439,6 +447,9 @@ def normalize_card(raw, card_id, card_meta: nil, dataset_formulas: nil)
         'operator' => f['operand'] || f['operator'], 'values' => f['values'],
         'beastModeId' => calc_id, '_isCalc' => (calc_id ? true : nil) }.compact
     end
+    quick_filters = Array(raw['quickFilters'] || raw['slicers'])
+    quick_filters = Array(card_meta['slicers']) if quick_filters.empty? && card_meta.is_a?(Hash)
+    quick_filters = nil if quick_filters.empty?
     {
       'id'                 => card_id,
       # Same title-resolution fix as Shape B above — also consult the /stacks
@@ -458,6 +469,7 @@ def normalize_card(raw, card_id, card_meta: nil, dataset_formulas: nil)
       'orderBy'            => norm_columns({ 'columns' => body['orderBy'] }).map { |c| c['column'] },
       'limit'              => body['limit'],
       'filters'            => filters,
+      'quickFilters'       => quick_filters,
       'conditionalFormats' => Array(raw['conditionalFormats']),
       'cardFormulas'       => Array(raw['calculatedFields']),  # {formula,id,name,saveToDataSet}
       'allowTableDrill'     => raw['allowTableDrill'],
@@ -999,6 +1011,10 @@ if opts[:pages]
     # also carries this page's sizes[]/collections[] for the Bug 5 geometry
     # merge below.
     card_ids, card_meta_by_id, stacks = enumerate_page_cards(pid)
+    # Persist the exact page membership the stacks route just established.
+    # Public page.cardIds is routinely empty; without this annotation a
+    # multi-page run collapses every card into the synthetic Overview page.
+    page['cardIds'] = card_ids.map(&:to_s)
     if stacks.is_a?(Hash)
       layout_content = pagelayoutv4_content(stacks, pid)
       page['_layoutContent'] = layout_content unless layout_content.empty?
@@ -1015,6 +1031,7 @@ if opts[:pages]
           next
         end
         card = normalize_card(raw, cid, card_meta: card_meta_by_id[cid.to_s])
+        card['_pageId'] = pid.to_s
 
         # Fetch + cache dataset-level Beast Modes for this card's dataset. This
         # SAME response (parts=core,permission,formulas) also carries the C9
@@ -1073,6 +1090,7 @@ if opts[:pages]
           card_meta: card_meta_by_id[cid.to_s],
           dataset_formulas: ds_formula_cache[dsid],
         )
+        card['_pageId'] = pid.to_s
         card['beastModes'] = dig_beast_modes(card, ds_formula_cache[dsid], template_cache)
         beast_out.concat(card['beastModes'])
         page_cards << card
@@ -1084,6 +1102,7 @@ if opts[:pages]
         meta = card_meta_by_id[cid.to_s] || {}
         page_cards << {
           'id' => cid, '_tierB' => true,
+          '_pageId' => pid.to_s,
           'title' => meta['cardTitle'] || meta['title'],
           '_note' => 'no private API — capture PNG + transcribe Beast Modes manually',
         }.compact

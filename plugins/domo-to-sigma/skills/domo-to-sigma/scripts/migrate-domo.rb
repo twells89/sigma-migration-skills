@@ -129,7 +129,19 @@ FileUtils.mkdir_p(OUT)
 DISCOVERY = File.join(OUT, 'discovery')
 FileUtils.mkdir_p(DISCOVERY)
 SCRIPTS = __dir__
-BASE_ENV = { 'DOMO_DISCOVERY_DIR' => DISCOVERY, 'DOMO_DM_IDS_PATH' => File.join(OUT, 'dm-ids.json') }.freeze
+BASE_ENV = {
+  'DOMO_DISCOVERY_DIR' => DISCOVERY,
+  'DOMO_DM_IDS_PATH' => File.join(OUT, 'dm-ids.json'),
+  'DOMO_RUN_DIR' => OUT,
+}.freeze
+
+PLUGIN_MANIFEST_PATH = File.expand_path('../../../.claude-plugin/plugin.json', __dir__)
+PLUGIN_MANIFEST = JSON.parse(File.read(PLUGIN_MANIFEST_PATH)) rescue {}
+DomoRunState.record(
+  OUT,
+  'plugin_version' => PLUGIN_MANIFEST['version'],
+  'plugin_manifest' => PLUGIN_MANIFEST_PATH,
+)
 
 class VisualGradePending < StandardError
   attr_reader :request_path
@@ -501,6 +513,50 @@ def compute_2d_flag(dashboard_layout_path)
   grid ? 'grid' : 'stack'
 end
 
+def enrich_workbook_handoff!(path, workbook_id, requested_folder_id)
+  ids = JSON.parse(File.read(path))
+  metadata = Sigma.request(:get, "/v2/workbooks/#{workbook_id}")
+  inode = Sigma.request(:get, "/v2/files/#{workbook_id}")
+  actual_folder_id = inode.is_a?(Hash) ? inode['parentId'] : nil
+  if actual_folder_id.to_s != requested_folder_id.to_s
+    fail_phase!(
+      'workbook-handoff',
+      "workbook #{workbook_id} is in folder #{actual_folder_id.inspect}, not requested " \
+      "--folder-id #{requested_folder_id.inspect}; do not hand off a workbook in the wrong location",
+    )
+  end
+  url_id = metadata['workbookUrlId'] || inode['urlId'] if metadata.is_a?(Hash) && inode.is_a?(Hash)
+  fail_phase!('workbook-handoff', "workbook #{workbook_id} readback has no URL id") if url_id.to_s.empty?
+  ids['name'] = inode['name'] || metadata['name']
+  ids['path'] = inode['path'] || metadata['path']
+  fail_phase!('workbook-handoff', "workbook #{workbook_id} readback has no destination path") if
+    ids['path'].to_s.empty?
+  ids['urlId'] = url_id
+  app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
+  ids['url'] = "#{app_base}/workbook/#{url_id}"
+  File.write(path, JSON.pretty_generate(ids) + "\n")
+  ids
+rescue StandardError => e
+  fail_phase!('workbook-handoff',
+              "workbook #{workbook_id} posted but canonical URL/destination readback failed: #{e.message}")
+end
+
+def assert_live_control_coverage!(workdir)
+  path = File.join(workdir, 'domo-controls-coverage.json')
+  fail_phase!('control-coverage', "#{path} missing after build-workbook") unless File.exist?(path)
+  doc = JSON.parse(File.read(path))
+  expected = doc['expected'].to_i
+  emitted = doc['emitted'].to_i
+  missing = Array(doc['detail']).select { |row| row['status'] == 'dropped' }
+  return "#{emitted}/#{expected} Domo source control(s) emitted; 0 supported controls dropped" if missing.empty?
+  fail_phase!(
+    'control-coverage',
+    "#{missing.size} supported Domo source control(s) were not emitted " \
+    "(#{emitted}/#{expected} emitted overall): " \
+    "#{missing.map { |row| "#{row['cardId']}/#{row['name']}" }.join(', ')}",
+  )
+end
+
 # ---------------------------------------------------------------------------
 # phases shared by both modes
 
@@ -586,6 +642,8 @@ def phase_build_workbook!(opts)
   end
   ok, code, _out = run_script!('build-workbook.rb')
   fail_phase!('build-workbook', "build-workbook.rb exited #{code}") unless ok
+  ok, code, _out = run_script!('qa-check.rb', '--in', cs_path)
+  fail_phase!('build-workbook', "qa-check.rb exited #{code}") unless ok
   done_phase!('build-workbook')
 end
 
@@ -810,6 +868,8 @@ def run_offline!(opts)
   phase_convert_beast_modes!(opts)
   phase_derive_presentation!(opts, collect_expected: false)
   phase_build_workbook!(opts)
+  control_note = assert_live_control_coverage!(OUT)
+  done_phase!('control-coverage', "offline: #{control_note}")
 
   hr('build-workbook-spec')
   spec_path = File.join(OUT, 'workbook-spec.json')
@@ -866,6 +926,12 @@ end
 
 def run_live!(opts)
   abort('FATAL: --pages IDS is required in live mode (or pass --offline DIR)') unless opts[:pages]
+  fail_phase!(
+    'destination',
+    '--folder-id is required in live mode; use a shared Sigma folder the customer can browse, ' \
+    'not an API/service account My Documents folder',
+  ) if opts[:folder_id].to_s.empty?
+  DomoRunState.record(OUT, 'destination_folder_id' => opts[:folder_id])
 
   tier_b = ENV['DOMO_DEV_TOKEN'].to_s.strip.empty?
   hr('tier probe')
@@ -1011,6 +1077,8 @@ def run_live!(opts)
 
   phase_derive_presentation!(opts, collect_expected: !tier_b)
   phase_build_workbook!(opts)
+  control_note = assert_live_control_coverage!(OUT)
+  done_phase!('control-coverage', control_note)
 
   hr('beast-mode-accounting (complete workbook)')
   ok, code, _out = run_script!(
@@ -1058,11 +1126,24 @@ def run_live!(opts)
 
   hr('put-layout')
   wb_ids = JSON.parse(File.read(wb_ids_path))
-  workbook_id = wb_ids['workbookId'] || opts[:workbook_id]
+  workbook_id = opts[:workbook_id] || wb_ids['workbookId']
   fail_phase!('put-layout', 'no workbookId in wb-ids.json and no --workbook-id given') unless workbook_id
+  if opts[:workbook_id] && wb_ids['workbookId'].to_s != opts[:workbook_id].to_s
+    fail_phase!('workbook-handoff',
+                "wb-ids.json points to #{wb_ids['workbookId']}, not requested --workbook-id #{opts[:workbook_id]}; " \
+                'remove stale run artifacts or use a fresh --out directory')
+  end
+  wb_ids = enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])
+  done_phase!('workbook-handoff', "#{wb_ids['path']} — #{wb_ids['url']}")
   ok, code, _out = run_script!('put-layout.rb', '--workbook', workbook_id, '--layout', layout_xml)
   fail_phase!('put-layout', "put-layout.rb exited #{code}") unless ok
   done_phase!('put-layout')
+  DomoRunState.record(
+    OUT,
+    'workbook_id' => workbook_id,
+    'workbook_url' => wb_ids['url'],
+    'workbook_path' => wb_ids['path'],
+  )
 
   phase_write_2d_flag!
   phase_render_visual!(opts, workbook_id, wb_ids)
@@ -1298,3 +1379,9 @@ hr('DONE')
 log "run-state: #{DomoRunState.path(OUT)}"
 log "workbook-spec: #{File.join(OUT, 'workbook-spec.json')}"
 log "layout-2d.flag: #{File.read(File.join(OUT, 'layout-2d.flag')).inspect}" if File.exist?(File.join(OUT, 'layout-2d.flag'))
+if File.exist?(File.join(OUT, 'wb-ids.json'))
+  final_workbook = JSON.parse(File.read(File.join(OUT, 'wb-ids.json'))) rescue {}
+  log "plugin version: #{PLUGIN_MANIFEST['version'] || '(unknown)'}"
+  log "Sigma destination: #{final_workbook['path'] || '(path unavailable)'}"
+  log "workbook URL: #{final_workbook['url'] || '(URL unavailable)'}"
+end

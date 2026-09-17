@@ -509,6 +509,11 @@ jobs:
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-green-gates.rb
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-assert-phase6.rb
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-verify-parity.rb
+            plugins/domo-to-sigma/skills/domo-to-sigma/test/test-domo-rest.rb
+            plugins/domo-to-sigma/skills/domo-to-sigma/test/test-migrate-domo.rb
+            plugins/domo-to-sigma/skills/domo-to-sigma/test/test-parity-oracle.rb
+            plugins/domo-to-sigma/skills/domo-to-sigma/test/test-parity-oracle-dupenames.rb
+            plugins/domo-to-sigma/skills/domo-to-sigma/test/test-parity-freshness.rb
             plugins/domo-to-sigma/skills/domo-import-to-snowflake/test/test-snowflake-ddl.rb
             plugins/domo-to-sigma/skills/domo-import-to-snowflake/test/test-landing-manifest.rb
             plugins/domo-to-sigma/skills/domo-import-to-snowflake/test/test-domo-extract.rb

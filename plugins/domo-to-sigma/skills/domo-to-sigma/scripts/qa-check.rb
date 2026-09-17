@@ -38,7 +38,7 @@ def check_filter_type_audit(audit)
   [errors, warns]
 end
 
-def check(spec)
+def check(spec, scope: nil)
   errors = []
   warns  = []
   pages = spec['pages'] || []
@@ -86,13 +86,19 @@ def check(spec)
       end
     end
 
-    # #2: every control must fan out via the shared master (or every chart), not
-    # a single element — the "filters fall off after the first element" bug.
+    scope_by_id = Array(scope && scope['controls']).each_with_object({}) do |entry, out|
+      out[entry['controlId']] = entry if entry.is_a?(Hash) && entry['controlId']
+    end
+    # Page controls fan out through master/every chart. A source-declared narrow
+    # scope is valid when control-scope.json explicitly names the card-local
+    # target; the shared control lint verifies transitive reach after assembly.
     controls.each do |c|
       targets = Array(c['filters']).map { |fl| fl.dig('source', 'elementId') }
       to_master = targets.include?('master')
       covers_all = charts.any? && (charts.map { |ch| ch['id'] } - targets).empty?
-      unless to_master || covers_all
+      declared_scope = scope_by_id.dig(c['controlId'], 'scope')
+      narrow = declared_scope.is_a?(Array) && !declared_scope.empty?
+      unless to_master || covers_all || narrow
         errors << "[#{pg['name']}] control '#{c['name']}' targets #{targets.inspect} — bind to 'master' (or every element) so the filter reaches all elements."
       end
     end
@@ -103,9 +109,13 @@ end
 if $PROGRAM_NAME == __FILE__
   opts = {}
   OptionParser.new { |o| o.on('--in PATH') { |v| opts[:in] = v } }.parse!(ARGV)
-  path = opts[:in] || File.expand_path('../discovery/chart-specs.json', __dir__)
+  discovery_dir = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
+  path = opts[:in] || File.join(discovery_dir, 'chart-specs.json')
   spec = JSON.parse(File.read(path))
-  errors, warns = check(spec)
+  run_root = ENV['DOMO_RUN_DIR'] || File.dirname(File.dirname(path))
+  scope_path = File.join(run_root, 'control-scope.json')
+  scope = JSON.parse(File.read(scope_path)) rescue nil
+  errors, warns = check(spec, scope: scope)
   audit_path = File.join(File.dirname(path), 'filter-type-audit.json')
   if File.exist?(audit_path)
     audit_errors, audit_warns = check_filter_type_audit(JSON.parse(File.read(audit_path)))

@@ -97,4 +97,28 @@ ruby -rjson -e '
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }
 
+DOMO_DISCOVERY_DIR="$TMP/discovery" DOMO_RUN_DIR="$TMP" ruby "$SCRIPTS/build-workbook.rb" >"$TMP/build.out" 2>&1 \
+  || { note "FAIL: build-workbook.rb exited nonzero"; fail=1; }
+DOMO_DISCOVERY_DIR="$TMP/discovery" DOMO_RUN_DIR="$TMP" ruby "$SCRIPTS/qa-check.rb" >"$TMP/qa.out" 2>&1 \
+  || { note "FAIL: qa-check.rb rejected the card-scoped control"; fail=1; }
+ruby -rjson -e '
+  dir = ARGV[0]
+  specs = JSON.parse(File.read(File.join(dir, "discovery", "chart-specs.json")))
+  elements = specs.fetch("pages").flat_map { |page| page.fetch("elements") }
+  control = elements.find { |element| element["kind"] == "control" && element["name"] == "Order ID" }
+  abort "table Quick Filter control missing" unless control && control["controlType"] == "list"
+  helper_id = control.dig("filters", 0, "source", "elementId")
+  helper = specs.fetch("data_elements").find { |element| element["id"] == helper_id }
+  abort "table Quick Filter helper missing" unless helper && helper["kind"] == "table"
+  abort "table Quick Filter picker not sourced from helper" unless
+    control.dig("source", "source", "elementId") == helper["id"]
+  scope = JSON.parse(File.read(File.join(dir, "control-scope.json")))
+  abort "control scope did not count source Quick Filter" unless scope["sourceFilterSignals"] == 1
+  coverage = JSON.parse(File.read(File.join(dir, "domo-controls-coverage.json")))
+  abort "Quick Filter coverage was not emitted" unless
+    coverage["expected"] == 1 && coverage["emitted"] == 1 &&
+    coverage.dig("detail", 0, "status") == "emitted"
+' "$TMP" && note "ok: table Quick Filter becomes a card-scoped Sigma control over a hidden table source" \
+  || { note "FAIL: table Quick Filter control/helper contract missing"; fail=1; }
+
 exit "$fail"

@@ -238,6 +238,42 @@ eq(dataset_ref_card['columns'].first['column'], 'Technical Error Type',
 eq(dataset_ref_card['filters'].first['column'], 'Technical Error Type',
    'dataset-only calculated filter resolves to its authored name')
 
+puts "== normalize_card preserves Analyzer Quick Filters / slicers =="
+quick_filter = {
+  'type' => 'string', 'displayType' => 'multiple_select',
+  'name' => 'Category', 'column' => 'CATEGORY_NAME', 'operator' => 'IN',
+  'values' => [], 'collapsed' => false, 'controlType' => 'SLICER',
+}
+shape_b_quick = normalize_card({
+  'definition' => {
+    'title' => 'Daily Category Detail',
+    'charts' => { 'main' => { 'chartType' => 'badge_table' } },
+    'subscriptions' => { 'main' => { 'columns' => [{ 'column' => 'CATEGORY_NAME' }] } },
+    'slicers' => [quick_filter],
+  },
+}, 'quick-b')
+eq(shape_b_quick['quickFilters'], [quick_filter],
+   'Shape B definition.slicers survives discovery as quickFilters')
+
+shape_a_quick = normalize_card({
+  'title' => 'Daily Category Detail', 'chartType' => 'badge_table',
+  'chartBody' => { 'columns' => [{ 'column' => 'CATEGORY_NAME' }] },
+  'quickFilters' => [quick_filter],
+}, 'quick-a')
+eq(shape_a_quick['quickFilters'], [quick_filter],
+   'Shape A quickFilters survives discovery under the same normalized key')
+
+shape_b_stack_quick = normalize_card({
+  'definition' => {
+    'title' => 'Daily Category Detail',
+    'charts' => { 'main' => { 'chartType' => 'badge_table' } },
+    'subscriptions' => { 'main' => { 'columns' => [{ 'column' => 'CATEGORY_NAME' }] } },
+    'slicers' => [],
+  },
+}, 'quick-stack', card_meta: { 'slicers' => [quick_filter] })
+eq(shape_b_stack_quick['quickFilters'], [quick_filter],
+   'stacks-response slicers are retained when the analyzer definition omits them')
+
 puts "== dig_beast_modes backfills missing SQL from the template endpoint =="
 template_dev_token = ENV['DOMO_DEV_TOKEN']
 ENV['DOMO_DEV_TOKEN'] = 'fake-token-for-offline-test'
