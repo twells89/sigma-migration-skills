@@ -234,6 +234,12 @@ ok(migrate_src.include?('DomoVisualHandoff.record_args'),
    'visual handoff: a completed blind grade is consumed and recorded automatically')
 ok(migrate_src.include?("'plugin_version' => PLUGIN_MANIFEST['version']"),
    'run evidence records the exact Domo plugin version')
+sanitize_at = migrate_src.index('DomoSigma::WorkbookPostSanitizer.build')
+workbook_post_at = migrate_src.index("args = ['--type', 'workbook', '--spec', post_spec")
+ok(sanitize_at && workbook_post_at && sanitize_at < workbook_post_at,
+   'live workbook path sanitizes a dedicated transport spec before post-and-readback')
+ok(migrate_src.include?("File.join(OUT, 'workbook-post-spec.json')"),
+   'sanitized POST payload is retained as an inspectable run artifact')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
    migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
    migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&
