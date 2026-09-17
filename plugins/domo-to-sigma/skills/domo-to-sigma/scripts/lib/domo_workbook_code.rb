@@ -11,7 +11,13 @@ module DomoSigma
     # Normalize both shapes for Domo-owned validation without changing shared
     # parity tooling.
     def normalized_document(spec)
-      Sigma::CodeRep.wrap(Sigma::CodeRep.document(spec))['document']
+      document = Sigma::CodeRep.document(spec)
+      pages = Array(document['pages']).map { |page| page.reject { |key, _| key == 'elements' } }
+      document.merge(
+        'pages' => pages,
+        'elements' => Sigma::CodeRep.workbook_elements(document).map(&:dup),
+        'layout' => Sigma::CodeRep.canonicalize_layout(document['layout']),
+      )
     end
   end
 end

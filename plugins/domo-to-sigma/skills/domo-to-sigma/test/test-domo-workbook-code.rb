@@ -39,4 +39,23 @@ class TestDomoWorkbookCode < Minitest::Test
 
     assert_equal released_document, DomoSigma::WorkbookCode.normalized_document(envelope)
   end
+
+  def test_preserves_local_hidden_helper_hint_during_analysis
+    document = {
+      'schemaVersion' => 1,
+      'kind' => 'workbook',
+      'pages' => [{
+        'id' => 'data',
+        'elements' => [{
+          'id' => 'master', 'kind' => 'table', 'visibleAsSource' => false,
+          'columns' => [{ 'id' => 'value', 'name' => 'Value' }],
+        }],
+      }],
+      'layout' => '<Page id="data"><Element elementId="master"/></Page>',
+    }
+
+    normalized = DomoSigma::WorkbookCode.normalized_document(document)
+    assert_equal false, normalized['elements'].first['visibleAsSource'],
+                 'analysis normalization must retain the hidden-helper hint'
+  end
 end
