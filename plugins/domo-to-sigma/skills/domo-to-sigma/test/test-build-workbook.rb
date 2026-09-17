@@ -746,6 +746,7 @@ puts "== B4: a filter on a translated (even mis-classified) Beast Mode inlines i
 # "calculation_ea1150fd-..." ("State"), values [""].
 $warnings = []
 $companion_elements = []
+$beast_mode_usage = []
 $translated_bms = {
   'calculation_ea1150fd' => { 'id' => 'calculation_ea1150fd', 'name' => 'State', 'class' => 'aggregate',
                               'sigmaFormula' => 'If(Equals([Account.BillingState], "CA"), "California", "Other")' },
@@ -753,7 +754,8 @@ $translated_bms = {
 calc_filter_card = build_element({
   'id' => '1267439679', 'title' => 'PDP Example', 'chartType' => 'badge_map', 'sigmaKindHint' => nil,
   'columns' => [ { 'column' => 'State' }, { 'column' => 'Name' } ],
-  'filters' => [ { 'column' => 'calculation_ea1150fd', 'operator' => 'LEGACY', 'values' => [''] } ],
+  'filters' => [ { 'column' => 'State', 'beastModeId' => 'calculation_ea1150fd',
+                   '_isCalc' => true, 'operator' => 'LEGACY', 'values' => [''] } ],
 }, {})
 ok(!calc_filter_card.nil?, 'card still builds (State classifies as a us-state region-map geography)')
 flt3 = calc_filter_card['filters'].find { |f| f['values'] == [''] }
@@ -762,6 +764,8 @@ calc_col = calc_filter_card['columns'].find { |c| c['id'] == flt3['columnId'] }
 eq(calc_col['name'], 'State', 'the new column takes the Beast Mode\'s real name, not the raw calc id')
 eq(calc_col['formula'], 'If(Equals([Master/Account Billing State], "CA"), "California", "Other")',
    'the Beast Mode formula is INLINED, masterized, and display_name-normalized (the master column is "Account Billing State", not the raw dotted Domo name)')
+eq($beast_mode_usage.first['id'], 'calculation_ea1150fd',
+   'filter usage is recorded by stable id even after discovery resolves its display name')
 $translated_bms = nil
 
 puts "== B4: a filter on an UNTRANSLATED Beast Mode is dropped LOUDLY, mirroring " \
@@ -772,12 +776,13 @@ $translated_bms = {}
 untranslated = build_element({
   'id' => 'c41', 'title' => 'US Leads', 'chartType' => 'badge_map', 'sigmaKindHint' => nil,
   'columns' => [ { 'column' => 'Account.BillingState' }, { 'column' => 'Name' } ],
-  'filters' => [ { 'column' => 'calculation_deadbeef', 'operator' => 'LEGACY', 'values' => ['x'] } ],
+  'filters' => [ { 'column' => 'Missing Calc', 'beastModeId' => 'calculation_deadbeef',
+                   '_isCalc' => true, 'operator' => 'LEGACY', 'values' => ['x'] } ],
 }, {})
 ok(!untranslated.nil?, 'card still builds')
 ok(!untranslated.key?('filters') || untranslated['filters'].none? { |f| f['values'] == ['x'] },
    'the untranslated calc filter was never emitted')
-ok($warnings.any? { |w| w['warning'].include?("card filter on 'calculation_deadbeef' dropped") &&
+ok($warnings.any? { |w| w['warning'].include?("card filter on 'Missing Calc' dropped") &&
                         w['warning'].include?('Beast Mode did not translate') },
    'dropped loudly, naming the reason (never a silent loss)')
 $translated_bms = nil
@@ -1045,6 +1050,7 @@ ok(Array(overlay.dig('yAxis', 'columnIds')).any? {
    'benchmark is bound to a visible series channel')
 
 puts "== projection Beast Modes resolve by scope and emitted DM name =="
+$beast_mode_usage = []
 $translated_bms = {
   'calc-card-projection' => {
     'id' => 'calc-card-projection', 'name' => 'Technical Label',
@@ -1068,6 +1074,28 @@ dataset_projection = dim_col({
 })
 eq(dataset_projection['formula'], '[Master/Project Id (Beast Mode)]',
    'dataset projection binds the collision-safe name emitted by build-dm')
+eq($beast_mode_usage.map { |usage| usage['id'] }.sort,
+   %w[calc-card-projection calc-dataset-projection],
+   'workbook usage is recorded by stable formula id for accounting')
+$translated_bms = nil
+
+puts "== duplicate Beast Mode names require stable-id lookup =="
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'formulas.json'), JSON.generate([
+    { 'id' => 'duplicate-a', 'name' => 'Duplicate', 'scope' => 'card',
+      'class' => 'projection', 'sigmaFormula' => '[A]' },
+    { 'id' => 'duplicate-b', 'name' => 'Duplicate', 'scope' => 'card',
+      'class' => 'projection', 'sigmaFormula' => '[B]' },
+  ]))
+  stub_const(:OUT, dir) do
+    $translated_bms = nil
+    index = translated_beast_modes
+    ok(index.key?('duplicate-a') && index.key?('duplicate-b'),
+       'both duplicate-name formulas remain addressable by id')
+    ok(!index.key?('Duplicate'), 'ambiguous display name is not indexed to an arbitrary formula')
+    eq($ambiguous_beast_mode_names, ['Duplicate'], 'ambiguous name is recorded for accounting')
+  end
+end
 $translated_bms = nil
 
 puts "== field regression: aggregate Beast Mode SERIES is a measure, never 2,013 color categories =="

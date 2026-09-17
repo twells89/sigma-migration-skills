@@ -205,6 +205,7 @@ def unique_semantic_name(raw_name, used_names)
 end
 
 def beast_mode_block_reason(bm)
+  return "source extraction failed: #{bm['extractionError']}" if bm['extractionError']
   return 'no translated Sigma formula' if bm['sigmaFormula'].to_s.strip.empty?
   return 'automated translation was flagged converted:false; add formula-overrides.json' if bm['converted'] == false
   return "formula lint errors: #{Array(bm['lintErrors']).join('; ')}" unless Array(bm['lintErrors']).empty?

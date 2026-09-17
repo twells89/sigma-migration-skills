@@ -56,6 +56,14 @@ survive `beast-modes.json` → `formulas.pending.json` → `formulas.json`, beca
 the data-model builder uses it to attach each dataset formula to the correct
 element. `assert-beast-modes-accounted.rb` checks the final one-to-one
 disposition and live readback.
+Card-local formulas are reconciled separately after workbook build: referenced
+formulas must record an element usage by stable id; unreferenced helpers are
+retained in the accounting report as `not-used`.
+
+Formula names are not identifiers. Columns, filters, and summary bindings retain
+their `calculation_*` id after resolving the display name. Duplicate names remain
+addressable by id but are removed from the name-only lookup; an ambiguous
+name-only reference blocks the accounting gate.
 
 ### Window / analytic Beast Modes
 Domo window functions — `RANK() OVER`, `SUM() OVER (PARTITION BY …)`, running

@@ -30,5 +30,21 @@
     "scope": "dataset",
     "dataSourceId": "ds-order-fact",
     "sql": "SUM(SUM(`sales_amount`) FIXED (BY `region`))"
+  },
+  {
+    "id": "bm-card-region-label",
+    "name": "region_label",
+    "class": "projection",
+    "scope": "card",
+    "cardId": "card-region-label",
+    "sql": "CONCAT(`region`, ' Region')"
+  },
+  {
+    "id": "bm-card-unused",
+    "name": "unused_card_helper",
+    "class": "projection",
+    "scope": "card",
+    "cardId": "card-region-label",
+    "sql": "CONCAT(`region`, ' Unused')"
   }
 ]

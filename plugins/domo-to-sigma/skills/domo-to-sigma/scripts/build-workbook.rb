@@ -56,6 +56,17 @@ def warn_card(card, msg)
   $warnings << { 'card' => card['title'] || card['id'], 'card_id' => card['id'].to_s, 'warning' => msg }
 end
 
+def record_beast_mode_usage(card, bm, target)
+  return unless bm.is_a?(Hash) && bm['id']
+  $beast_mode_usage << {
+    'id' => bm['id'],
+    'name' => bm['name'],
+    'scope' => bm['scope'],
+    'cardId' => card && card['id'].to_s,
+    'target' => target,
+  }.compact
+end
+
 $companion_elements = [] # bead 08sf — Task 5 populates this
 $sub_masters = {}        # bead ziht — datasetId => sub-master element Hash
 $chart_helpers = []      # hidden grouped source tables for scatter/bubble charts
@@ -64,6 +75,8 @@ $kpi_verification_elements = [] # raw-value twins when visible KPI display is sc
 $chart_verification_elements = [] # raw-value twins when visible axes are display-scaled
 $table_verification_elements = [] # export-stable twins when visible table styling is presentation-only
 $filter_type_audit = [] # source-schema typing evidence for Domo list filters
+$beast_mode_usage = [] # formula-id-level workbook consumption evidence
+$ambiguous_beast_mode_names = []
 
 # bead ziht: dm-spec.json is build-dm.rb's PRE-post spec (already at this
 # script's own OUT dir — build-dm.rb writes it to discovery/, same as
@@ -466,6 +479,7 @@ def inline_beast_mode_dimension(card, c)
       mref(bm['sigmaName'] || bm['name'] || c['column'])
     end
   return nil unless formula
+  record_beast_mode_usage(card, bm, 'workbook-dimension-formula')
   { 'id' => "d-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
     'formula' => formula }.compact
@@ -1656,12 +1670,24 @@ def translated_beast_modes
     out[outcome['id'].to_s] = outcome if outcome.is_a?(Hash) && outcome['id']
   end
   by_id = {}
-  Array(list).each do |f|
-    next unless f.is_a?(Hash)
-    next if f['sigmaFormula'].to_s.strip.empty?
+  usable = Array(list).select do |formula|
+    formula.is_a?(Hash) &&
+      !formula['sigmaFormula'].to_s.strip.empty? &&
+      formula['converted'] != false &&
+      Array(formula['lintErrors']).empty? &&
+      !formula['extractionError'] &&
+      !formula['definitionConflict']
+  end
+  name_counts = usable.each_with_object(Hash.new(0)) do |formula, counts|
+    counts[formula['name'].to_s] += 1 unless formula['name'].to_s.empty?
+  end
+  $ambiguous_beast_mode_names = name_counts.select { |_, count| count > 1 }.keys
+  usable.each do |f|
     resolved = f.merge('sigmaName' => outcome_by_id.dig(f['id'].to_s, 'sigmaName')).compact
     by_id[f['id'].to_s] = resolved
-    by_id[f['name'].to_s] = resolved unless f['name'].to_s.empty?
+    if !f['name'].to_s.empty? && name_counts[f['name'].to_s] == 1
+      by_id[f['name'].to_s] = resolved
+    end
   end
   $translated_bms = by_id
 end
@@ -1702,7 +1728,7 @@ end
 # already-aggregating expression in another aggregate is wrong anyway. Before this
 # existed, an aggregate Beast Mode had NOWHERE to go: build-dm skipped it (not
 # projection) and build-workbook dropped the column, so the card lost its measure.
-def inline_beast_mode_measure(card, c)
+def inline_beast_mode_measure(card, c, record: true)
   bm = translated_beast_modes[c['beastModeId'].to_s] ||
        translated_beast_modes[c['column'].to_s]
   return nil unless bm.is_a?(Hash)
@@ -1719,6 +1745,7 @@ def inline_beast_mode_measure(card, c)
         "#{sigma_agg(c['aggregation'], c['distinct'])}(#{ref})"
     end
   return nil unless formula
+  record_beast_mode_usage(card, bm, 'workbook-measure-formula') if record
   { 'id' => "m-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
     'formula' => formula,
@@ -1761,7 +1788,7 @@ def prune_unresolvable_columns!(card)
     # An aggregate/window Beast Mode with a translated formula is legitimately
     # NOT a data-model column — it gets inlined as the element's measure formula
     # instead (inline_beast_mode_measure), so do not prune it here.
-    if c['_isCalc'] && inline_beast_mode_measure(card, c)
+    if c['_isCalc'] && inline_beast_mode_measure(card, c, record: false)
       ok << c
       next
     end
@@ -1818,7 +1845,7 @@ def dataset_schema_by_id
   end
 end
 
-def domo_filter_column_type(card, column_name)
+def domo_filter_column_type(card, column_name, beast_mode_id = nil)
   dataset = dataset_schema_by_id[card['datasetId'].to_s]
   schema_column = Array(dataset&.dig('schema', 'columns')).find do |column|
     raw = column['name'] || column['id']
@@ -1826,12 +1853,12 @@ def domo_filter_column_type(card, column_name)
   end
   return schema_column['type'].to_s.upcase if schema_column && schema_column['type']
 
-  bm = translated_beast_modes[column_name.to_s]
+  bm = translated_beast_modes[beast_mode_id.to_s] || translated_beast_modes[column_name.to_s]
   bm && bm['dataType'].to_s.upcase
 end
 
-def coerce_filter_values(card, column_name, values)
-  source_type = domo_filter_column_type(card, column_name)
+def coerce_filter_values(card, column_name, values, beast_mode_id = nil)
+  source_type = domo_filter_column_type(card, column_name, beast_mode_id)
   raw_values = Array(values)
   coerced =
     if NUMERIC_DOMO_TYPES.include?(source_type)
@@ -1878,10 +1905,11 @@ end
 # and 400 the ENTIRE workbook POST, exactly the failure
 # prune_unresolvable_columns! exists to prevent for ordinary data columns.
 # Returns nil (never a broken formula) when a calc id never translated.
-def resolve_filter_column(col)
+def resolve_filter_column(col, beast_mode_id: nil, card: nil)
   col = col.to_s
-  if col.start_with?('calculation_')
-    bm = translated_beast_modes[col]
+  lookup_id = beast_mode_id.to_s.empty? ? nil : beast_mode_id.to_s
+  if lookup_id || col.start_with?('calculation_')
+    bm = translated_beast_modes[lookup_id || col]
     return nil unless bm.is_a?(Hash) && !bm['sigmaFormula'].to_s.strip.empty?
     disp = (bm['name'] && !bm['name'].to_s.empty?) ? bm['name'] : display_name(col)
     formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
@@ -1889,6 +1917,7 @@ def resolve_filter_column(col)
               else
                 masterize_formula(bm['sigmaFormula'])
               end
+    record_beast_mode_usage(card, bm, 'workbook-filter-formula')
     [disp, formula]
   else
     disp = display_name(col)
@@ -1912,6 +1941,7 @@ def resolve_filter_column(col)
                 else
                   masterize_formula(bm['sigmaFormula'])
                 end
+      record_beast_mode_usage(card, bm, 'workbook-filter-formula')
       [disp, formula]
     else
       [disp, mref(disp)]
@@ -1930,7 +1960,7 @@ end
 # — a filter-only column has no reason to also show up as a visible table/
 # chart column the source card never rendered. Mutates `el['columns']` (and
 # `el['order']`, when the element kind has one — only `table` does) in place.
-def filter_target_column(el, col)
+def filter_target_column(el, col, beast_mode_id: nil, card: nil)
   slug = col.to_s.downcase.gsub(/\W+/, '-')
   candidates = Array(el['columns']).select { |c| %W[d-#{slug} m-#{slug} f-#{slug}].include?(c['id']) }
   existing = candidates.find { |c| c['id'].to_s.start_with?('d-', 'f-') }
@@ -1939,7 +1969,7 @@ def filter_target_column(el, col)
       c['formula'].to_s !~ /\A(?:Sum|Avg|Count|CountDistinct|Min|Max)\(/
   }
   return existing['id'] if existing
-  name, formula = resolve_filter_column(col)
+  name, formula = resolve_filter_column(col, beast_mode_id: beast_mode_id, card: card)
   return nil unless formula
   new_col = { 'id' => "f-#{slug}", 'name' => name, 'formula' => formula, 'hidden' => true }
   el['columns'] = Array(el['columns']) + [new_col]
@@ -2186,7 +2216,9 @@ def apply_card_filters!(card, el)
                         "but got #{raw_value.inspect}.")
         next
       end
-      _name, formula = resolve_filter_column(col)
+      _name, formula = resolve_filter_column(
+        col, beast_mode_id: f['beastModeId'], card: card
+      )
       unless formula
         warn_card(card, "card filter on '#{col}' dropped: its column did not resolve.")
         next
@@ -2211,13 +2243,17 @@ def apply_card_filters!(card, el)
                       'hand-author the equivalent element filter and re-run.')
       next
     end
-    cid = filter_target_column(el, col)
+    cid = filter_target_column(
+      el, col, beast_mode_id: f['beastModeId'], card: card
+    )
     unless cid
       warn_card(card, "card filter on '#{col}' dropped: its Beast Mode did not translate to a Sigma " \
                       'formula, so no such data-model column exists (mirrors prune_unresolvable_columns!).')
       next
     end
-    typed_values, type_error, source_type = coerce_filter_values(card, col, f['values'])
+    typed_values, type_error, source_type = coerce_filter_values(
+      card, col, f['values'], f['beastModeId']
+    )
     if type_error
       warn_card(card, "card filter on '#{col}' dropped: values could not be coerced to the " \
                       "source type (#{type_error}).")
@@ -2402,6 +2438,7 @@ def build_element(card, overrides, master_ds = nil)
   end
 
   before = $companion_elements.length
+  usage_before = $beast_mode_usage.length
   el = build_element_body(card, overrides)
   apply_category_color_guard!(card, el)
   scatter_helper = el && el['_scatterHelper']
@@ -2422,6 +2459,7 @@ def build_element(card, overrides, master_ds = nil)
     # instead of the sub-master's — reintroducing the exact "Dependency not
     # found" whole-workbook-POST failure bead ziht exists to prevent.
     $companion_elements.slice!(before..-1)
+    $beast_mode_usage.slice!(usage_before..-1)
     return nil
   end
 
@@ -2837,9 +2875,17 @@ if $PROGRAM_NAME == __FILE__
     'untyped' => $filter_type_audit.count { |entry| entry['status'] == 'untyped' },
     'errors' => $filter_type_audit.count { |entry| entry['status'] == 'error' },
   ))
+  File.write(File.join(OUT, 'beast-mode-workbook-usage.json'), JSON.pretty_generate(
+    'usages' => $beast_mode_usage.uniq { |usage|
+      [usage['id'], usage['cardId'], usage['target']]
+    },
+    'ambiguousNames' => $ambiguous_beast_mode_names,
+  ))
   warn "  wrote #{File.join(OUT, 'chart-specs.json')} (#{out_pages.sum { |p| p['elements'].size }} elements across #{out_pages.size} page(s), #{$sub_masters.size} sub-master(s), #{$chart_helpers.size} grouped chart helper(s), #{$plugin_source_elements.size} plugin source element(s), #{$kpi_verification_elements.size} KPI parity twin(s), #{$chart_verification_elements.size} chart parity twin(s), #{$table_verification_elements.size} table parity twin(s))"
   warn "  wrote #{File.join(OUT, 'warnings.json')} (#{$warnings.size} warning(s))"
   warn "  wrote #{File.join(OUT, 'filter-type-audit.json')} (#{$filter_type_audit.size} list filter(s))"
+  warn "  wrote #{File.join(OUT, 'beast-mode-workbook-usage.json')} " \
+       "(#{$beast_mode_usage.map { |usage| usage['id'] }.uniq.size} Beast Mode(s) used)"
   $warnings.first(20).each { |w| warn "    ⚠ #{w['card']}: #{w['warning']}" }
   warn "\n  Next: build-workbook-spec.rb --chart-specs discovery/chart-specs.json --dm-ids discovery/dm-ids.json ..."
 end

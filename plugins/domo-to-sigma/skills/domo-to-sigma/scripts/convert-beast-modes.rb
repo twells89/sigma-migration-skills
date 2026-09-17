@@ -218,7 +218,7 @@ end
 NEEDS_REVIEW = %w[window lod].freeze
 PROVENANCE_KEYS = %w[
   dataSourceId _dataSourceId cardId dataType persistedOnDataSource saveToDataSet
-  sourceFormulaScope definitionConflict
+  sourceFormulaScope definitionConflict extractionError nameConflictIds
 ].freeze
 
 def formula_source_fingerprint(path)
