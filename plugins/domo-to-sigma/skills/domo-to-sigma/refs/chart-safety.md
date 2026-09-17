@@ -27,7 +27,9 @@ warehouse columns. The converter reconstructs them from the source
 `dateRangeFilter`:
 
 - `dateTimeRange.dateTimeRangeType: INTERVAL_OFFSET` defines the selected period.
-- `periods.type: COMBINED` with `OFFSET` entries defines each comparison.
+- `periods.type: COMBINED` with `OFFSET` entries defines each comparison. When
+  this block is absent, the early Domo card-data snapshot reconstructs offsets
+  from its `POP_PERIOD`/`POP_INDEX` channels and records a warning.
 - One hidden, filtered table is emitted per period.
 - Helpers align dates by the source graph grain, then a union preserves overlap
   rows that belong to more than one comparison.
@@ -38,6 +40,7 @@ Workbook union sources do not accept a custom `name`; formulas use Sigma's
 server-derived `Union of N Sources` namespace.
 
 This covers month-over-month, year-over-year, and multiple comparison periods
-such as current year plus two prior years. If the compare metadata is absent or
-uses an unrecognized shape, the card is skipped with a named warning rather
-than silently emitted as a one-series chart.
+such as current year plus three prior years. Explicit POP cards with two or
+more authored measures are valid too: first measure renders as bars and every
+comparison as a line. A card is skipped only when neither authored measures,
+`dateRangeFilter.periods`, nor card-data channels establish a comparison.

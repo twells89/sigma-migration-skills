@@ -24,6 +24,7 @@ require 'json'
 require 'fileutils'
 require 'base64'
 require 'digest'
+require 'date'
 require_relative 'lib/domo_sigma_util'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
@@ -962,6 +963,56 @@ end
 # one filtered helper per period, union the helpers, then expose one explicit
 # Sigma measure per period. This also duplicates overlap rows correctly (for
 # example July 1 can be index 0 of one period and index 30 of another).
+def pop_card_data(card)
+  candidates = [
+    File.join(OUT, 'parity-expected.json'),
+    File.join(File.dirname(OUT), 'parity-expected.json'),
+  ].uniq
+  path = candidates.find { |candidate| File.exist?(candidate) }
+  return nil unless path
+  document = JSON.parse(File.read(path)) rescue {}
+  cards = document['cards']
+  cards.is_a?(Hash) ? cards[card['id'].to_s] : nil
+end
+
+def infer_pop_offset(primary_start, comparison_start)
+  months = (primary_start.year - comparison_start.year) * 12 +
+           primary_start.month - comparison_start.month
+  if months.positive? && primary_start.day == comparison_start.day
+    return { 'unit' => 'year', 'count' => months / 12 } if (months % 12).zero?
+    return { 'unit' => 'month', 'count' => months }
+  end
+  days = (primary_start - comparison_start).to_i
+  return nil unless days.positive?
+  return { 'unit' => 'week', 'count' => days / 7 } if (days % 7).zero?
+  { 'unit' => 'day', 'count' => days }
+end
+
+def pop_comparisons_from_card_data(card)
+  expected = pop_card_data(card)
+  return [] unless expected.is_a?(Hash)
+  mappings = Array(expected['mappings']).map { |mapping| mapping.to_s.upcase }
+  item_index = mappings.index('ITEM')
+  period_index = mappings.index('POP_PERIOD')
+  alignment_index = mappings.index('POP_INDEX')
+  return [] unless item_index && period_index
+
+  groups = Array(expected['rows']).group_by { |row| Array(row)[period_index] }
+  return [] if groups.size < 2
+  starts = groups.each_with_object({}) do |(period, rows), out|
+    ordered = alignment_index ? rows.sort_by { |row| Array(row)[alignment_index].to_i } : rows
+    raw = Array(ordered.first)[item_index]
+    out[period] = Date.parse(raw.to_s) rescue nil
+  end
+  primary_key = starts.key?(0) ? 0 : (starts.key?('0') ? '0' : starts.max_by { |_, date| date || Date.new(1, 1, 1) }&.first)
+  primary_start = starts[primary_key]
+  return [] unless primary_start
+  starts.reject { |period, _| period == primary_key }.values.compact
+        .map { |start| infer_pop_offset(primary_start, start) }
+        .compact
+        .uniq
+end
+
 def pop_period_plan(card)
   return nil unless card['chartType'].to_s.downcase == 'badge_pop_bar_line'
   drf = card['dateRangeFilter']
@@ -996,6 +1047,11 @@ def pop_period_plan(card)
     next unless unit && count.positive?
     { 'unit' => unit, 'count' => count }
   end
+  comparison_source = 'dateRangeFilter.periods'
+  if comparisons.empty?
+    comparisons = pop_comparisons_from_card_data(card)
+    comparison_source = 'domo-card-data'
+  end
   return nil if comparisons.empty?
 
   {
@@ -1005,6 +1061,7 @@ def pop_period_plan(card)
     'grain' => grain,
     'offset' => rng['offset'].to_i,
     'comparisons' => comparisons,
+    'comparison_source' => comparison_source,
   }
 end
 
@@ -1016,6 +1073,10 @@ def pop_period_label(unit, count, primary: false)
 end
 
 def build_pop_chart(card, plan)
+  if plan['comparison_source'] == 'domo-card-data'
+    warn_card(card, 'period-over-period compare offsets reconstructed from Domo card-data ' \
+                    'POP_PERIOD/POP_INDEX channels because dateRangeFilter.periods was absent.')
+  end
   value = plan['value_column']
   base_start = %(DateTrunc("#{plan['interval']}", DateAdd("#{plan['interval']}", -#{plan['offset']}, Today())))
   base_end = %(DateAdd("#{plan['interval']}", 1, #{base_start}))
@@ -1122,8 +1183,8 @@ end
 # Domo's ChartType alone doesn't say WHICH measure is the bar vs. the secondary
 # series, so this uses a documented, honest heuristic: the FIRST measure is the
 # primary (bar) series; every other measure takes the secondary shape (line or
-# scatter, per COMBO_SECONDARY_TYPE). Flagged for review when the measure count
-# isn't the expected 2.
+# scatter, per COMBO_SECONDARY_TYPE). POP cards legitimately carry one current
+# measure plus multiple prior-period measures.
 def build_combo(card)
   dims, meas = split_cols(card)
   ct = card['chartType'].to_s.downcase
@@ -1136,7 +1197,7 @@ def build_combo(card)
                     'and rebuild.')
     return nil
   end
-  if meas.size != 2
+  if meas.size != 2 && !(ct == 'badge_pop_bar_line' && meas.size >= 2)
     warn_card(card, "combo-chart: expected a bar measure + a #{secondary} measure (2 total) but found " \
                     "#{meas.size} — verify the series assignment against the card PNG.")
   end

@@ -84,6 +84,7 @@ require_relative 'lib/layout'
 require_relative 'lib/sigma_rest'
 require_relative 'lib/domo_warehouse_column_refs'
 require_relative 'lib/visual_handoff'
+require_relative 'lib/workbook_post_sanitizer'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -1114,7 +1115,11 @@ def run_live!(opts)
     log 'wb-ids.json already present — skip (idempotent; pass --force to re-post)'
     skip_phase!('post-and-readback-wb', 'already posted (idempotent skip)')
   else
-    args = ['--type', 'workbook', '--spec', spec_path, '--out', wb_ids_path, '--workdir', OUT]
+    post_spec = File.join(OUT, 'workbook-post-spec.json')
+    sanitized = DomoSigma::WorkbookPostSanitizer.build(spec_path, post_spec)
+    log "workbook POST boundary: removed #{sanitized[:removed]} data-model-only " \
+        "visibleAsSource field(s) -> #{post_spec}"
+    args = ['--type', 'workbook', '--spec', post_spec, '--out', wb_ids_path, '--workdir', OUT]
     args += ['--update-id', opts[:workbook_id]] if opts[:workbook_id]
     ok, code, _out = run_script!('post-and-readback.rb', *args)
     fail_phase!('post-and-readback-wb', "post-and-readback.rb --type workbook exited #{code}") unless ok
