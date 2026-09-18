@@ -565,8 +565,8 @@ if plan_entries.empty? && sigma_charts.any?
     plan_status = 'oracle_required' unless unresolved_hf.any?
     warn "COMPOSITE dashboard: #{dashboard_csv_views.size} dashboard-level CSV(s), " \
          "0 usable worksheet CSVs for #{sigma_charts.size} Sigma chart(s)."
-    warn '  Phase 6 source parity routes to exact-target anchors + live warehouse exports; MCP is optional.'
-    warn '  No expected:null stubs were emitted, so this plan cannot report vacuous 0/0 = 100% parity.'
+    warn '  Phase 6 source parity routes to exact-target anchors + warehouse exports; MCP is optional.'
+    warn '  No expected:null stubs were emitted, so this plan cannot report vacuous empty-plan parity.'
   else
     names = worksheet_csv_views.map { |view| view['name'] }.sort
     abort("auto-parity-plan.rb: matched 0 charts even though worksheet CSV(s) exist: " \
