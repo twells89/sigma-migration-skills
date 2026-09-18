@@ -1262,9 +1262,16 @@ else
            "#{_n_waived.positive? ? " (#{_n_waived} coverage-waived at Phase 1d)" : ''}." \
            "#{anchors_tol_note.call(_av)}"
     else
-      warn "[FAIL] parity-final.json reports charts_total=#{total} — no charts were verified."
-      warn "       This usually means auto-parity-plan.rb matched zero Tableau views."
-      warn "       Phase 6 must verify at least one chart to declare GREEN."
+      if summary['oracle_mode'] == 'anchors-warehouse'
+        warn "[FAIL] parity-final.json records the anchors+warehouse oracle route — " \
+             'no source worksheet CSV charts were available.'
+        warn '       This is not an MCP failure. Exact-target anchors and live element exports'
+        warn '       must satisfy the substitution requirements below.'
+      else
+        warn "[FAIL] parity-final.json reports charts_total=#{total} — no charts were verified."
+        warn '       This usually means auto-parity-plan.rb matched zero Tableau views.'
+        warn '       Phase 6 must verify at least one chart to declare GREEN.'
+      end
       warn '       If every worksheet is dashboard-embedded (no exportable view CSVs), the'
       warn '       anchors oracle can stand in — ALL FOUR must hold:'
       warn "         a) verify-anchors.rb pass with EVERY anchor matched (#{_av ? "currently #{_av['matched']}/#{_av['checked']}" : 'anchors-verdict.json missing'})"

@@ -221,6 +221,55 @@ def ranked_tile_names(anchor: dict[str, Any], names: list[str]) -> list[str]:
     return hits + [name for name in names if name not in hits]
 
 
+def resolve_target_scopes(
+    anchors: list[dict[str, Any]],
+    tiles: list[dict[str, Any]],
+    provenance: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    """Resolve hints to exact Sigma tiles, preferring chart provenance."""
+    if isinstance(provenance, dict) and isinstance(provenance.get("elements"), dict):
+        provenance = provenance["elements"]
+    provenance = provenance if isinstance(provenance, dict) else {}
+    by_id = {str(tile.get("id") or ""): tile for tile in tiles}
+    scopes: dict[str, dict[str, Any]] = {}
+    for anchor in anchors:
+        hint = str(anchor.get("sigma_element_hint") or "").strip()
+        if not hint:
+            continue
+        provenance_ids = []
+        for element_id, entry in provenance.items():
+            if not isinstance(entry, dict):
+                continue
+            worksheet = str(entry.get("worksheet") or "").strip()
+            if worksheet and worksheet.casefold() == hint.casefold():
+                provenance_ids.append(str(element_id))
+        provenance_names = [
+            str(by_id[element_id]["name"])
+            for element_id in provenance_ids
+            if element_id in by_id
+        ]
+        exact_names = [
+            str(tile["name"])
+            for tile in tiles
+            if str(tile["name"]).strip().casefold() == hint.casefold()
+        ]
+        names = list(dict.fromkeys(provenance_names or exact_names))
+        via = (
+            "chart-provenance"
+            if provenance_names
+            else "exact-element-name"
+            if exact_names
+            else "unresolved"
+        )
+        result: dict[str, Any] = {"names": names, "via": via}
+        if not names:
+            result["error"] = (
+                "hint matched no exact Sigma tile or chart-provenance worksheet"
+            )
+        scopes[str(anchor["id"])] = result
+    return scopes
+
+
 def _tile_rows(payload: Any) -> tuple[Any, bool]:
     """Return tile data and whether an explicit data field was present."""
     if not isinstance(payload, dict):
@@ -401,6 +450,7 @@ def verify(
     *,
     relative_tolerance: float | None = None,
     absolute_tolerance: float | None = None,
+    target_scopes: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if isinstance(tiles, dict):
         tiles = normalize_actuals(tiles)
@@ -415,12 +465,41 @@ def verify(
         raw = str(anchor["raw"])
         order = ranked_tile_names(anchor, names)
         hint = str(anchor.get("sigma_element_hint") or "").strip()
-        scoped = [name for name in order if element_score(anchor, name) > 0] if hint else order
-        search_order = scoped or order
+        supplied = (
+            target_scopes.get(str(anchor["id"]))
+            if hint and isinstance(target_scopes, dict)
+            else None
+        )
+        if hint and isinstance(supplied, dict):
+            search_order = [
+                name for name in supplied.get("names", []) if name in by_name
+            ]
+            target = {**supplied, "names": search_order}
+        elif hint:
+            exact = [
+                name for name in names if name.strip().casefold() == hint.casefold()
+            ]
+            search_order = exact
+            target = {
+                "names": exact,
+                "via": "exact-element-name" if exact else "unresolved",
+            }
+            if not exact:
+                target["error"] = (
+                    "hint matched no exact tile name and no provenance scope was supplied"
+                )
+        else:
+            search_order = order
+            target = {"names": order, "via": "unhinted"}
         base = {"id": anchor["id"], "raw": raw}
         for key in ("kind", "provenance"):
             if anchor.get(key) is not None:
                 base[key] = anchor[key]
+        if hint:
+            base["target_resolution"] = target["via"]
+            base["target_names"] = target["names"]
+            if target.get("error"):
+                base["target_error"] = target["error"]
 
         name_only = str(anchor.get("kind") or "") in NAME_ONLY_KINDS
         if name_only:
@@ -467,8 +546,10 @@ def verify(
                         str(anchor.get("provenance") or "") in VALUED_PROVENANCE
                     ),
                 }
-                if found != order[0]:
-                    row["note"] = f"found outside best-match tile {order[0]!r}"
+                if found != search_order[0]:
+                    row["note"] = (
+                        f"found outside best-match tile {search_order[0]!r}"
+                    )
                 if tolerance_used:
                     row["tolerance_used"] = tolerance_used
                     row["drift"] = round(
@@ -478,7 +559,7 @@ def verify(
                 continue
 
             best = None
-            for name in order:
+            for name in search_order:
                 if numbers[name]:
                     value = min(numbers[name], key=lambda item: relative_distance(raw, item))
                     best = {
@@ -530,19 +611,7 @@ def verify(
         if row.get("kind") not in NAME_ONLY_KINDS
         and row.get("provenance") != "png-eyeball"
     }
-    eligible_hints = [
-        anchor
-        for anchor in anchors
-        if anchor.get("sigma_element_hint")
-        and str(anchor.get("kind") or "") not in NAME_ONLY_KINDS
-        and anchor.get("provenance") != "png-eyeball"
-    ]
-    covered = {
-        name
-        for name in displayed_names
-        if name in matched_names
-        or any(element_score(anchor, name) > 0 for anchor in eligible_hints)
-    }
+    covered = {name for name in displayed_names if name in matched_names}
 
     values_pass = not missing
     tiles_pass = not empty and not unavailable
@@ -707,11 +776,28 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         tiles = normalize_actuals(read_json(actuals_path))
+        plan_path = (workdir or anchors_path.parent) / "parity-plan.json"
+        if plan_path.is_file():
+            plan = read_json(plan_path)
+            chart_ids = {
+                str(chart.get("chart") or chart.get("name") or ""): str(
+                    chart.get("sigma_element_id") or chart.get("id") or ""
+                )
+                for chart in (plan.get("charts") or [])
+                if isinstance(chart, dict)
+            }
+            for tile in tiles:
+                if chart_ids.get(tile["name"]):
+                    tile["id"] = chart_ids[tile["name"]]
+        provenance_path = (workdir or anchors_path.parent) / "chart-provenance.json"
+        provenance = read_json(provenance_path) if provenance_path.is_file() else {}
+        target_scopes = resolve_target_scopes(anchors, tiles, provenance)
         verdict = verify(
             anchors,
             tiles,
             relative_tolerance=args.relative_tolerance,
             absolute_tolerance=args.absolute_tolerance,
+            target_scopes=target_scopes,
         )
         verdict.update(
             {

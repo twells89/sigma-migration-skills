@@ -410,22 +410,13 @@ rescue StandardError => e
   warn "collision guard error (non-fatal): #{e.message}"
 end
 
-# NOTE: an earlier version of this script tried to pre-fetch actuals via
-# POST /v2/workbooks/{wb}/query (REST). That endpoint does NOT exist on
-# Sigma's public REST API — it returns `errorcause: UnmatchedHandler` with
-# an empty body, which was silently swallowed by the rescue clause. The
-# canonical path to fetch chart actuals is the MCP tool
-# `mcp__sigma-mcp-v2__query` (Sigma's official MCP server, which goes
-# through the internal query layer). Fire it from the agent's conversation
-# layer — see phase6-parity.rb for the call shape per chart, and the
-# Phase 6c documentation in SKILL.md for parallel-batch guidance.
-#
-# This script intentionally leaves entry['actual'] unset; the agent fills
-# it after running the MCP queries in parallel (single tool-use message
-# with N parallel tool calls). beads-sigma-s04.
-puts "  NOTE: actuals must be fetched via mcp__sigma-mcp-v2__query (MCP), not REST."
-puts "        Fire all #{plan_entries.size} per-chart queries in ONE parallel tool-use batch,"
-puts "        then merge the rows into the parity plan's actual.rows arrays."
+# Actuals are collected by collect-parity-actuals.rb through Sigma's supported
+# workbook export REST endpoints. Sigma MCP remains an OPTIONAL fallback for
+# the small remainder the exporter cannot serve (for example an aggregate
+# query over a row-limit-bounded pivot); its absence never blocks the normal
+# REST/anchors/warehouse path.
+puts '  NOTE: collect-parity-actuals.rb uses Sigma REST export first; MCP is optional'
+puts '        and is only a fallback for charts the pooled exporter cannot serve.'
 
 # ---- Hidden calc-filter gate -----------------------------------------------
 # Worksheet-level filters on calc fields (Calculation_* refs) are invisible in
@@ -541,26 +532,46 @@ warn "plan status: #{plan_status}" \
 require 'time'
 csv_mtime = Dir.glob(File.join(opts[:tab], 'views', '*.csv'))
                .map { |f| File.mtime(f).to_i }.max || 0
-# Composite-dashboard fallback (bead: composite-parity-plan): a SINGLE composite
-# dashboard view has no per-worksheet views/CSVs, so every Sigma chart `next`s
-# above and plan_entries is empty — which then dead-ends the gate on
-# charts_total==0. Emit a STUB entry per Sigma chart (expected:null, needs_source
-# marker) so the census is non-empty and the operator fills `actual` from a live
-# Sigma MCP query while the visual gate (8/8b) carries fidelity. Only triggers
-# when there is genuinely no CSV oracle — never masks a real rename mismatch
-# (which leaves CSVs present).
-composite_stub = false
-if plan_entries.empty? && csv_mtime.zero?
-  composite_stub = true
-  plan_entries = sigma_charts.map do |el|
-    { 'id' => el['id'], 'chart' => el_display_name(el), 'name' => el_display_name(el), 'expected' => nil,
-      'needs_source' => 'composite-dashboard: no per-worksheet CSV oracle — fill `actual` via a live ' \
-                        'Sigma MCP query if a value oracle exists; fidelity is otherwise carried by the ' \
-                        'visual gate (assert-phase6-ran.rb 8/8b).' }
+# Composite-dashboard route. Tableau commonly exposes ONE dashboard-level CSV
+# while all plotted worksheets remain embedded. Checking `csv_mtime.zero?`
+# misclassified that shape because the dashboard CSV made views/*.csv non-empty
+# even though ZERO CSVs were usable as per-chart source oracles. Classify CSVs
+# by whether they name a scoped dashboard/page. When no worksheet CSV exists,
+# keep charts empty and explicitly route the final gate to anchors + warehouse
+# exports. Do NOT emit expected:null stubs: empty expected + empty actual rows
+# compare equal and can manufacture vacuous 100% parity.
+csv_backed_views = views.select do |view|
+  File.exist?(File.join(opts[:tab], 'views', "#{view['id']}.csv"))
+end
+dashboard_names = pages.map { |page| page['name'].to_s }.reject(&:empty?)
+if defined?(dash_layout) && dash_layout.is_a?(Array)
+  selected = dash_layout
+  if opts[:dashboards]&.any?
+    wanted = opts[:dashboards].map(&:downcase)
+    selected = selected.select do |dashboard|
+      wanted.any? { |name| dashboard['dashboard'].to_s.downcase.include?(name) }
+    end
   end
-  plan_status = 'composite-stub'
-  warn "COMPOSITE fallback: no per-worksheet CSVs found — emitted #{plan_entries.size} stub chart(s) " \
-       '(expected:null). Value parity is manual (fill actual via Sigma MCP); visual gate carries fidelity.'
+  dashboard_names.concat(selected.map { |dashboard| dashboard['dashboard'].to_s })
+end
+dashboard_norms = dashboard_names.map { |name| normalize(name) }.reject(&:empty?).to_set
+dashboard_csv_views, worksheet_csv_views = csv_backed_views.partition do |view|
+  dashboard_norms.include?(normalize(view['name']))
+end
+oracle_mode = nil
+if plan_entries.empty? && sigma_charts.any?
+  if worksheet_csv_views.empty?
+    oracle_mode = 'anchors-warehouse'
+    plan_status = 'oracle_required' unless unresolved_hf.any?
+    warn "COMPOSITE dashboard: #{dashboard_csv_views.size} dashboard-level CSV(s), " \
+         "0 usable worksheet CSVs for #{sigma_charts.size} Sigma chart(s)."
+    warn '  Phase 6 source parity routes to exact-target anchors + live warehouse exports; MCP is optional.'
+    warn '  No expected:null stubs were emitted, so this plan cannot report vacuous 0/0 = 100% parity.'
+  else
+    names = worksheet_csv_views.map { |view| view['name'] }.sort
+    abort("auto-parity-plan.rb: matched 0 charts even though worksheet CSV(s) exist: " \
+          "#{names.join(', ')}. This is a provenance/rename mismatch, not a composite-dashboard case.")
+  end
 end
 
 output = {
@@ -568,7 +579,10 @@ output = {
   'charts'               => plan_entries,
   'hidden_filters'       => hidden_filters_gate,
   'plan_status'          => plan_status,
-  'composite_stub'       => composite_stub,
+  'composite_stub'       => false,
+  'oracle_mode'          => oracle_mode,
+  'dashboard_csv_views'  => dashboard_csv_views.map { |view| view['name'] }.sort,
+  'worksheet_csv_views'  => worksheet_csv_views.map { |view| view['name'] }.sort,
   'generated_at'         => Time.now.utc.iso8601,
   'source_csv_max_mtime' => csv_mtime
 }
@@ -577,5 +591,10 @@ File.write(opts[:out], JSON.pretty_generate(output))
 puts "wrote #{opts[:out]}"
 puts "  charts matched: #{plan_entries.size}"
 puts "  extract flag:   #{extract}"
-puts "  next: fire mcp__sigma-mcp-v2__query for each chart in parallel (one tool-use batch),"
-puts "        then merge the result rows into the parity plan and run verify-parity.rb."
+if oracle_mode
+  puts '  next: verify exact-target source anchors and live warehouse-backed element exports.'
+  puts '        MCP is optional; do not synthesize chart parity without a source worksheet CSV.'
+else
+  puts '  next: collect chart actuals with collect-parity-actuals.rb (Sigma REST export).'
+  puts '        Use Sigma MCP only for any explicitly reported remainder.'
+end
