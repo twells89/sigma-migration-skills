@@ -111,6 +111,30 @@ class PostAndReadbackTest(unittest.TestCase):
         self.assertEqual("/v2/workbooks/spec/verify", api.calls[0][1])
         self.assertTrue(result["pass"])
 
+    def test_workbook_create_strips_data_model_only_visibility_fields(self):
+        workbook = {
+            "name": "Workbook",
+            "folderId": "folder",
+            "document": {
+                "schemaVersion": 1,
+                "kind": "workbook",
+                "pages": [{"id": "data", "name": "Data", "visibility": "hidden"}],
+                "elements": [{
+                    "id": "master",
+                    "kind": "table",
+                    "visibleAsSource": False,
+                    "columns": [],
+                }],
+            },
+        }
+        api = FakeApi(copy.deepcopy(workbook))
+        post_and_readback.post_and_readback("workbook", workbook, api=api)
+        verify_body = api.calls[0][2]
+        post_body = api.calls[1][2]
+        self.assertNotIn("visibleAsSource", verify_body["document"]["elements"][0])
+        self.assertNotIn("visibleAsSource", post_body["document"]["elements"][0])
+        self.assertFalse(workbook["document"]["elements"][0]["visibleAsSource"])
+
     def test_workbook_readback_keys_elements_by_preserved_id(self):
         posted = {
             "document": {
