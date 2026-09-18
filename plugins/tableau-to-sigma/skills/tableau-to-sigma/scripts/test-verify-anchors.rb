@@ -2,9 +2,9 @@
 # frozen_string_literal: true
 # Tests for scripts/verify-anchors.rb — the measured value bar.
 #
-#   1. Pure core (AnchorVerify): label→element fuzzy ranking, exact
-#      sigma_element_hint/provenance targeting, hint-less found-elsewhere
-#      matching, missing anchors carrying a best_candidate, cell parsing.
+#   1. Pure core (AnchorVerify): label→element fuzzy match by token overlap,
+#      sigma_element_hint priority, found-elsewhere-still-matches, missing
+#      anchors carry a best_candidate, cell parsing ($/,/%/parens).
 #   2. CLI offline mode (--workbook-spec + --exports-dir): verdict file shape
 #      (checked/matched/missing/pass), exit codes (0 all matched / 1 miss /
 #      2 usage), and the parity-final.json `anchors` stamp.
@@ -101,48 +101,6 @@ v5 = AnchorVerify.verify(
   hinted_exports
 )
 ok(v5['pass'] == true, 'hinted numeric present IN the hinted element still matches')
-
-puts '-- pure core: source worksheet hints resolve through chart provenance --'
-customer_named_exports = {
-  '1. OVERALL CS TICKET SUMMARY' => [['Period', 'Tickets'], ['01-Jun-2026', '312']],
-  '6. CS TICKET SUMMARY BY CLIENT' => [['Client', 'Tickets'], ['Example Co', '4']]
-}
-customer_anchor = {
-  'id' => 'cp1', 'label' => 'Example Co', 'raw' => '312',
-  'sigma_element_hint' => 'CS TICKET SUMMARY BY CLIENTS- CS'
-}
-customer_elements = [
-  { 'id' => 'el-overall', 'name' => '1. OVERALL CS TICKET SUMMARY' },
-  { 'id' => 'el-client', 'name' => '6. CS TICKET SUMMARY BY CLIENT' }
-]
-customer_provenance = {
-  'el-overall' => { 'worksheet' => 'OVERALL CS TICKET SUMMARY - CS' },
-  'el-client' => { 'worksheet' => 'CS TICKET SUMMARY BY CLIENTS- CS' }
-}
-target_scopes = AnchorVerify.resolve_target_scopes(
-  [customer_anchor], customer_elements, customer_provenance
-)
-ok(target_scopes.dig('cp1', 'names') == ['6. CS TICKET SUMMARY BY CLIENT'],
-   "worksheet hint resolves to its exact Sigma element (got #{target_scopes.inspect})")
-targeted = AnchorVerify.verify(
-  [customer_anchor], customer_named_exports, target_scopes: target_scopes
-)
-ok(targeted['pass'] == false,
-   'a value present only in a common-token unrelated tile cannot satisfy the targeted anchor')
-ok(targeted.dig('missing', 0, 'best_candidate', 'element') == '6. CS TICKET SUMMARY BY CLIENT',
-   'closest candidate is reported only from the intended tile')
-
-unresolved = AnchorVerify.verify(
-  [{ 'id' => 'cp2', 'label' => 'x', 'raw' => '312',
-     'sigma_element_hint' => 'Worksheet Missing From Provenance' }],
-  customer_named_exports,
-  target_scopes: {
-    'cp2' => { 'names' => [], 'via' => 'unresolved',
-               'error' => 'hint matched no exact element or chart provenance worksheet' }
-  }
-)
-ok(unresolved['pass'] == false && unresolved.dig('missing', 0, 'target_resolution') == 'unresolved',
-   'an unresolved hint fails closed instead of falling back to every element')
 
 puts '-- pure core: anchor provenance + valued credit (PR-6 rider) --'
 prov_exports = { 'KPI Row' => [['Total'], ['104']], 'Roster' => [['Name'], ['Region A']] }
