@@ -92,6 +92,7 @@ def run_plan(dir)
     '--tableau', dir,
     '--workbook-spec', File.join(dir, 'wb.json'),
     '--out', out,
+    '--workbook-id', 'wb-test',
     '--dashboard', 'Operations Dashboard'
   )
   [File.exist?(out) ? JSON.parse(File.read(out)) : nil, stdout + stderr, status]
@@ -102,6 +103,8 @@ Dir.mktmpdir do |dir|
   plan, log, status = run_plan(dir)
   check.call(status.success?, "dashboard-only CSV selects the oracle route (exit #{status.exitstatus})")
   check.call(plan && plan['charts'] == [], 'no expected:null chart stubs are emitted')
+  check.call(plan && plan['workbook_id'] == 'wb-test',
+             'top-level workbook id survives a zero-chart plan')
   check.call(plan && plan['oracle_mode'] == 'anchors-warehouse',
              'plan explicitly records the anchors+warehouse oracle')
   check.call(plan && plan['dashboard_csv_views'] == ['Operations Dashboard'],
