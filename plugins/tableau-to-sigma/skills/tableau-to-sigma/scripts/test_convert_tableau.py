@@ -155,6 +155,8 @@ class ConvertTableauTest(unittest.TestCase):
             self.assertIn("security", meta)
             self.assertIn("workbookPatterns", meta)
             self.assertIn("relationshipCoverage", meta)
+            self.assertIsInstance(meta["relationshipCoverage"], dict)
+            self.assertGreater(meta["relationshipCoverage"]["serialized"], 0)
             self.assertIn("sqlProvenance", meta)
 
     def test_custom_sql_provenance_is_statement_bound_and_not_in_model(self):
