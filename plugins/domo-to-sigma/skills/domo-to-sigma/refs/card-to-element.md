@@ -268,7 +268,7 @@ instance (2026-07-30 validation, 48 cards / 22 distinct chartTypes). Sigma
 | `badge_word_cloud` | `table` | ❌ **no native equivalent** | see below. |
 | `badge_calendar` | `table` | ❌ **no native equivalent** | see below. |
 | `badge_filledgauge` | `progress` or `kpi-chart` | ✅ conditional released mapping | Emit ring `progress` only when explicit `CURRENT` + `TARGET` roles ground value/max and no card-local filter/date window would be lost; otherwise retain KPI + warn. |
-| `badge_pop_bar_line` | `combo-chart`, or `bar-chart` when only one source series is proven | ✅ reconstructed when comparison evidence exists | Backfill private `dateRangeFilter.periods` from the public CardDefinition, then reconstruct explicit current/prior measures; hidden filtered helpers reproduce Domo's synthetic `POP_PERIOD` / `POP_INDEX` alignment. Preserve authored selected-period series only after public/card-data evidence proves no comparison. |
+| `badge_pop_bar_line` | `combo-chart` / proven single-series `bar-chart` | ✅ evidence-based | Backfill private `periods` from the public CardDefinition, then reconstruct current/prior measures. Preserve selected-period series only when public/card-data evidence proves no comparison. |
 | `badge_vert_symbol_overlay` | `combo-chart` | ❌ **no native equivalent** | see below. |
 
 ### No native Sigma equivalent — do not silently substitute a bar chart
@@ -494,9 +494,7 @@ Add these to the mandatory layout-visual-qa gate:
       `badge_vert_symbol_overlay`) carries a Phase-5e
       warning naming the gap — never a silent, unexplained bar chart.
 - [ ] Every `badge_pop_bar_line` with source compare metadata emits at least two
-      explicit period measures; a source card with no compare metadata or POP
-      card-data channels is preserved as an explicitly warned selected-period
-      chart only after a completed probe. An unresolved one-measure shape is
-      skipped, never flattened or presented as a reconstructed comparison.
+      period measures. Preserve a no-comparison card only after a completed
+      probe; skip an unresolved one-measure shape rather than flattening it.
 - [ ] Every `badge_filledgauge` either has explicit `CURRENT` + `TARGET` roles
       and emitted native `progress`, or carries the named KPI-fallback warning.
