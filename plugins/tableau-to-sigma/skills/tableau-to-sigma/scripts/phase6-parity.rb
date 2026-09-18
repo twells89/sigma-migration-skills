@@ -2,10 +2,12 @@
 # Phase 6 (MANDATORY) — verify Sigma chart values match Tableau view CSVs.
 #
 # Two-pass workflow because Sigma's REST API doesn't expose a synchronous
-# chart-data endpoint (filed as a separate Sigma API gap ticket). The skill
-# uses the MCP V2 query tool to fetch actuals, then the script verifies.
+# chart-data endpoint. The skill pools asynchronous workbook REST exports for
+# actuals; Sigma MCP is an optional fallback for an explicitly reported
+# remainder, never a prerequisite.
 #
-# PASS 1 — emit the parity plan + per-chart MCP query instructions:
+# PASS 1 — emit the parity plan + collect REST actuals (and, only when needed,
+# optional per-chart MCP fallback instructions):
 #
 #   ruby scripts/phase6-parity.rb --tableau /tmp/<name> --workbook-id <wb>
 #     [--rename "Tableau name=Sigma name" ...]
@@ -128,7 +130,8 @@ if !opts[:finalize]
     plan_args = ['ruby', File.join(__dir__, 'auto-parity-plan.rb'),
                  '--tableau', opts[:tab],
                  '--workbook-spec', File.join(opts[:tab], 'wb-readback.json'),
-                 '--out', plan_path]
+                 '--out', plan_path,
+                 '--workbook-id', opts[:wb]]
     opts[:renames].each { |r| plan_args.concat(['--rename', r]) }
     # Thread --dashboard scoping through to the parity plan so both the chart
     # matching and the hidden_filters gate operate on the same tile set.
@@ -188,6 +191,28 @@ if !opts[:finalize]
   # under sigma_rest's auto-refresh. Only the genuinely agent-mediated charts
   # (pivot grids) are printed as MCP instructions below.
   actuals_path = File.join(opts[:tab], 'parity-actuals.json')
+  if plan['oracle_mode'] == 'anchors-warehouse'
+    File.write(actuals_path, JSON.pretty_generate({}))
+    puts
+    puts '=' * 70
+    puts 'PHASE 6 PASS 1 OUTPUT — composite dashboard oracle route'
+    puts '=' * 70
+    puts
+    puts 'Tableau exposed dashboard-level CSV output but no usable embedded-worksheet CSVs.'
+    puts 'Per-chart source CSV parity is unavailable; no expected:null stubs were created.'
+    puts 'Verify exact-target source anchors and live warehouse-backed element exports instead.'
+    puts 'Sigma MCP is optional and is NOT required for this route.'
+    puts
+    puts 'Then re-run:'
+    puts "  ruby scripts/phase6-parity.rb --tableau #{opts[:tab]} \\"
+    puts "    --finalize --actuals #{actuals_path}"
+    puts
+    puts 'The final gate accepts this route only when every anchor matches its intended tile,'
+    puts 'every displayed tile returns data, visual verification passes, and coverage is complete.'
+    puts '=' * 70
+    exit 0
+  end
+
   t_collect = Time.now
   coll_out, coll_err, coll_st = Open3.capture3(
     'ruby', File.join(__dir__, 'collect-parity-actuals.rb'),
@@ -347,7 +372,8 @@ else
   warn "tile census skipped: no dashboard layout at #{dash_layout_path} (pass --dashboard-layout to enable)"
 end
 summary = {
-  'workbook_id'  => plan.dig('charts', 0, 'workbook_id') ||
+  'workbook_id'  => plan['workbook_id'] ||
+                    plan.dig('charts', 0, 'workbook_id') ||
                     (File.exist?(File.join(opts[:tab], 'wb-readback.json')) ?
                        JSON.parse(File.read(File.join(opts[:tab], 'wb-readback.json')))['workbookId'] : nil),
   'ran_at'       => Time.now.utc.iso8601,
@@ -360,6 +386,7 @@ summary = {
   'fail_names'   => failed_chart_names,
   'status'       => (status.success? && total > 0 && passed_chart_names.size == total) ? 'PASS' : 'FAIL'
 }
+summary['oracle_mode'] = plan['oracle_mode'] if plan['oracle_mode']
 # Render-verify pendings (pivot-export 500/empty fallback) are surfaced by NAME
 # so the gate's failure message can say exactly what to resolve — they block
 # GREEN (status stays FAIL) but are pending-manual, not divergences.
@@ -382,7 +409,11 @@ if File.exist?(score_out_path)
   if score_doc
     summary['value_parity_score'] = score_doc['value_parity_score']
     summary['per_tile_scores'] = score_doc['tiles']
-    warn "value-parity score: #{(score_doc['value_parity_score'].to_f * 100).round(1)}% (#{score_doc['tiles_pass']}/#{score_doc['tiles_total']} tiles exact)"
+    if score_doc['value_parity_score'].nil?
+      warn 'value-parity score: unavailable (0 source-CSV tiles; anchors + warehouse oracle required)'
+    else
+      warn "value-parity score: #{(score_doc['value_parity_score'].to_f * 100).round(1)}% (#{score_doc['tiles_pass']}/#{score_doc['tiles_total']} tiles exact)"
+    end
   end
 end
 coverage_path = opts[:coverage] || File.join(opts[:tab], 'coverage.json')
@@ -469,4 +500,8 @@ end
 File.write(summary_path, JSON.pretty_generate(summary))
 warn "wrote #{summary_path} (status=#{summary['status']} #{summary['charts_pass']}/#{summary['charts_total']}" \
      "#{summary['value_parity_score'] ? format(' parity=%.1f%%', summary['value_parity_score'].to_f * 100) : ''})"
+if plan['oracle_mode'] == 'anchors-warehouse' && total.zero?
+  warn 'phase6-parity finalize: source-CSV parity unavailable; anchors+warehouse hard gate decides completion'
+  exit 0
+end
 exit(status.success? ? 0 : 2)
