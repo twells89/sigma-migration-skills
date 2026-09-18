@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline regression tests for the converter — runs against the bundled
 fixtures (no network). Run: python3 tests/test_convert.py"""
-import sys, os, json
+import sys, os, json, inspect
 HERE = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
 import convert as C
@@ -56,6 +56,10 @@ ok("wb: current document wrapper", "document" in wb and "pages" not in wb and wb
 ok("wb: metadata-only pages", all("elements" not in p for p in doc["pages"]))
 ok("wb: flat elements", len(doc["elements"]) == len(all_els))
 ok("wb: master data element present", master["id"] == "master")
+convert_dashboard_source = inspect.getsource(C.convert_dashboard)
+ok("wb: local master is a hidden helper before transport stripping",
+   '"visibleAsSource": False' in convert_dashboard_source and
+   '"visibleAsSource": True' not in convert_dashboard_source)
 ok("wb: 6 viz elements", len(viz) == 6)
 ok("wb: has kpi-chart", "kpi-chart" in kinds)
 ok("wb: has bar-chart", "bar-chart" in kinds)
