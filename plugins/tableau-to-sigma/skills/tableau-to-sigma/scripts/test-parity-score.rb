@@ -51,6 +51,24 @@ Dir.mktmpdir do |d|
   ok('drift measure col reflects the 9% drift (~0.95)', (dr[1]['score'] - 0.9545).abs < 0.01)
 end
 
+# An embedded-only dashboard has no source-CSV chart scores. That is
+# unavailable evidence, never a vacuous 100%.
+Dir.mktmpdir do |d|
+  plan = File.join(d, 'empty-plan.json')
+  score = File.join(d, 'empty-score.json')
+  File.write(plan, JSON.generate('extract' => false, 'charts' => [],
+                                 'oracle_mode' => 'anchors-warehouse'))
+  output = IO.popen([RUBY, VP, '--plan', plan, '--score-out', score],
+                    err: %i[child out], &:read)
+  empty_exit = $?.exitstatus
+  doc = JSON.parse(File.read(score))
+  ok('empty chart plan fails closed with exit 2', empty_exit == 2)
+  ok('zero source-CSV tiles have a null parity score', doc['value_parity_score'].nil?)
+  ok('zero-tile output routes to the oracle instead of printing 0/0 or 100%',
+     output.include?('anchors + warehouse') &&
+       !output.include?('0/0') && !output.include?('100.0%'))
+end
+
 # ── assert-phase6-ran.rb --min-parity-score gate ────────────────────────────
 FINAL = { 'mode' => 'strict', 'status' => 'PASS', 'charts_total' => 2, 'charts_pass' => 2,
           'charts_fail' => 0, 'value_parity_score' => 0.70,
