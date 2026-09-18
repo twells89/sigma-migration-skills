@@ -322,7 +322,7 @@ class CollectParityActualsTest(unittest.TestCase):
                 collector.Deadline(5),
             )
 
-    def test_main_writes_name_keyed_rows_and_markers_and_returns_nonzero(self):
+    def test_main_writes_current_plan_only_and_returns_nonzero(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -364,7 +364,7 @@ class CollectParityActualsTest(unittest.TestCase):
 
         self.assertEqual(1, code)
         artifact = json.loads(out_path.read_text(encoding="utf-8"))
-        self.assertEqual([["keep"]], artifact["Old"])
+        self.assertNotIn("Old", artifact)
         self.assertEqual([["East", 10.0]], artifact["Good"])
         self.assertEqual("empty-displayed-tile", artifact["Empty"]["status"])
 

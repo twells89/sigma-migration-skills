@@ -605,6 +605,17 @@ def main(argv: list[str] | None = None) -> int:
         existing = load_json(out_path) if out_path.is_file() else {}
         if not isinstance(existing, dict):
             raise CollectionError("existing actuals artifact must be an object")
+        plan_names = {
+            str(chart.get("chart") or chart.get("name") or "")
+            for chart in plan.get("charts") or []
+            if isinstance(chart, dict)
+        }
+        # Preserve agent-mediated rows for charts still in this plan, but prune
+        # stale names left by a rename/regenerated plan. Those rows otherwise
+        # surface as false "unexpected chart" parity differences.
+        existing = {
+            name: value for name, value in existing.items() if name in plan_names
+        }
         existing.update(actuals)
         # Current failures overwrite stale rows: live emptiness/errors must not
         # be hidden by a successful artifact from an older workbook state.
