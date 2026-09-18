@@ -178,6 +178,19 @@ module AnchorVerify
         worksheet = entry['worksheet'].to_s.strip
         ids << element_id.to_s if !worksheet.empty? && worksheet.casecmp?(hint)
       end
+      if provenance_ids.length > 1
+        dashboard_hint = [anchor['dashboard'], anchor['panel']]
+                         .map { |value| value.to_s.strip }.find { |value| !value.empty? }
+        if dashboard_hint
+          narrowed = provenance_ids.select do |element_id|
+            dashboard = provenance.dig(element_id, 'dashboard').to_s.strip
+            !dashboard.empty? &&
+              (dashboard.casecmp?(dashboard_hint) ||
+               dashboard_hint.downcase.include?(dashboard.downcase))
+          end
+          provenance_ids = narrowed if narrowed.length == 1
+        end
+      end
       provenance_names = provenance_ids.map do |element_id|
         element = by_id[element_id]
         element_display_name(element) if element
@@ -186,13 +199,16 @@ module AnchorVerify
         name = element_display_name(element)
         name if name.strip.casecmp?(hint)
       end.compact
-      names = (provenance_names.empty? ? exact_names : provenance_names).uniq
+      ambiguous = provenance_ids.length > 1
+      names = ambiguous ? [] : (provenance_names.empty? ? exact_names : provenance_names).uniq
       # Non-Tableau converters and legacy workdirs have no chart provenance.
       # Preserve their historic fuzzy hint behavior unless the hint itself is
       # already an exact element name. A present provenance map is an explicit
       # targeting contract, so unresolved worksheet hints fail closed.
       next if names.empty? && !strict_provenance
-      via = if provenance_names.any?
+      via = if ambiguous
+              'ambiguous'
+            elsif provenance_names.any?
               'chart-provenance'
             elsif exact_names.any?
               'exact-element-name'
@@ -200,7 +216,9 @@ module AnchorVerify
               'unresolved'
             end
       result = { 'names' => names, 'via' => via }
-      if names.empty?
+      if ambiguous
+        result['error'] = 'hint matched multiple chart-provenance elements; add an exact dashboard/panel discriminator'
+      elsif names.empty?
         result['error'] = 'hint matched no exact Sigma element or chart-provenance worksheet'
       end
       out[anchor['id'].to_s] = result

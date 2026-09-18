@@ -144,6 +144,30 @@ unresolved = AnchorVerify.verify(
 ok(unresolved['pass'] == false && unresolved.dig('missing', 0, 'target_resolution') == 'unresolved',
    'an unresolved hint fails closed instead of falling back to every element')
 
+duplicate_elements = [
+  { 'id' => 'el-copy-a', 'name' => 'Revenue — Executive' },
+  { 'id' => 'el-copy-b', 'name' => 'Revenue — Operations' }
+]
+duplicate_provenance = {
+  'el-copy-a' => { 'worksheet' => 'Revenue', 'dashboard' => 'Executive' },
+  'el-copy-b' => { 'worksheet' => 'Revenue', 'dashboard' => 'Operations' }
+}
+ambiguous_scopes = AnchorVerify.resolve_target_scopes(
+  [{ 'id' => 'dup1', 'sigma_element_hint' => 'Revenue' }],
+  duplicate_elements,
+  duplicate_provenance
+)
+ok(ambiguous_scopes.dig('dup1', 'via') == 'ambiguous' &&
+   ambiguous_scopes.dig('dup1', 'names') == [],
+   'a worksheet placed on multiple dashboards is ambiguous without a discriminator')
+dashboard_scopes = AnchorVerify.resolve_target_scopes(
+  [{ 'id' => 'dup2', 'sigma_element_hint' => 'Revenue', 'dashboard' => 'Operations' }],
+  duplicate_elements,
+  duplicate_provenance
+)
+ok(dashboard_scopes.dig('dup2', 'names') == ['Revenue — Operations'],
+   'an exact dashboard discriminator resolves a repeated worksheet to one element')
+
 puts '-- pure core: anchor provenance + valued credit (PR-6 rider) --'
 prov_exports = { 'KPI Row' => [['Total'], ['104']], 'Roster' => [['Name'], ['Region A']] }
 prov_anchors = [
