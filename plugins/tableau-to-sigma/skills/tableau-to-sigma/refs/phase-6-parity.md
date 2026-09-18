@@ -360,6 +360,18 @@ against real warehouse data). **`--skip-parity-gate` alone is no longer a valid
 combination:** the gate **rejects it (exit 18)** unless `anchors-verdict.json`
 exists and passes. The anchors oracle replaces parity — never nothing.
 
+**A dashboard-level CSV does not change this classification.** Tableau can
+write `views/<dashboard-id>.csv` while all chart worksheets remain embedded.
+`auto-parity-plan.rb` separates dashboard CSVs from usable worksheet CSVs and
+records `oracle_mode:"anchors-warehouse"` when the latter count is zero. It
+does not emit `expected:null` chart stubs (empty expected and actual arrays can
+compare equal) and never reports `0/0` as 100% parity.
+
+**MCP remains optional.** The normal path collects Sigma actuals through REST
+workbook exports. The embedded-only route verifies anchors and warehouse-backed
+element exports through the same REST path; Sigma MCP is merely a fallback for
+an explicitly reported remainder, never a prerequisite for Phase 6.
+
 ### Visual-similarity floor (measured)
 
 present, the gate runs
