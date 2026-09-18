@@ -39,19 +39,19 @@ class ConvertTableauTest(unittest.TestCase):
                             "id": "employees",
                             "source": {
                                 "kind": "warehouse-table",
-                                "path": ["CSA", "TJ", "EMPLOYEES"],
+                                "path": ["TEST_DB", "PUBLIC", "PEOPLE_DIM"],
                             },
                             "columns": [
                                 {
                                     "id": "employee",
                                     "name": "Employee Id",
-                                    "formula": "[EMPLOYEES/Employee Id]",
+                                    "formula": "[PEOPLE_DIM/Person Id]",
                                 },
                                 {
                                     "id": "wrong",
                                     "formula": (
-                                        "[EMPLOYEES/Employee Id "
-                                        "(TIME_ENTRIES (CSA.TIME_ENTRIES))]"
+                                        "[PEOPLE_DIM/Person Id "
+                                        "(WORK_LOG (TEST_DB.PUBLIC.WORK_LOG))]"
                                     ),
                                 },
                             ],
@@ -69,7 +69,7 @@ class ConvertTableauTest(unittest.TestCase):
         self.assertEqual(1, removed)
         self.assertEqual(["employee"], [column["id"] for column in element["columns"]])
         self.assertEqual(["employee"], element["order"])
-        self.assertIn("TIME_ENTRIES", warnings[0])
+        self.assertIn("WORK_LOG", warnings[0])
 
     def test_relationship_coverage_recovers_only_on_exact_source_model_count(self):
         model = {
@@ -80,14 +80,14 @@ class ConvertTableauTest(unittest.TestCase):
                             "id": "employees",
                             "source": {
                                 "kind": "warehouse-table",
-                                "path": ["CSA", "TJ", "EMPLOYEES"],
+                                "path": ["TEST_DB", "PUBLIC", "PEOPLE_DIM"],
                             },
                         },
                         {
                             "id": "absence",
                             "source": {
                                 "kind": "warehouse-table",
-                                "path": ["CSA", "TJ", "ABSENCE_RECORDS"],
+                                "path": ["TEST_DB", "PUBLIC", "EVENT_FACT"],
                             },
                             "relationships": [
                                 {
@@ -114,8 +114,8 @@ class ConvertTableauTest(unittest.TestCase):
         recovered = convert_tableau.recover_relationship_coverage(model, source)
         self.assertEqual(1, recovered["serialized"])
         self.assertEqual(1, recovered["wired"])
-        self.assertEqual("ABSENCE_RECORDS", recovered["entries"][0]["left"])
-        self.assertEqual("EMPLOYEES", recovered["entries"][0]["right"])
+        self.assertEqual("EVENT_FACT", recovered["entries"][0]["left"])
+        self.assertEqual("PEOPLE_DIM", recovered["entries"][0]["right"])
 
         mismatch = source.replace(
             "</relationships>",
