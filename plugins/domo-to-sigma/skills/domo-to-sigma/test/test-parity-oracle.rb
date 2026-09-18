@@ -163,6 +163,38 @@ if cid_src
      'the pattern is anchored — a longer suffix is not mistaken for a summary tile')
 end
 
+pop_src = oracle_src[/^def pop_grain_key\(date, grain\)\n.*?(?=^stale_evidence =)/m]
+ok(pop_src, 'extracted Domo POP transport normalizer from build-parity-oracle.rb')
+eval(pop_src, TOPLEVEL_BINDING) if pop_src # rubocop:disable Security/Eval
+
+if pop_src
+  pop_card_data = {
+    'mappings' => %w[ITEM VALUE POP_PERIOD POP_INDEX],
+    'rows' => [
+      ['2026-01-01', 93_000, 0, 0],
+      ['2026-01-02', nil, 0, 1],
+      ['2026-02-01', 96_000, 0, 31],
+      ['2025-01-01', 82_000, 1, 0],
+      ['2025-02-01', 84_000, 1, 31],
+    ],
+  }
+  source_pop = {
+    'chartType' => 'badge_pop_bar_line',
+    'dateGrain' => { 'dateTimeElement' => 'MONTH' },
+    'columns' => [{ 'mapping' => 'VALUE', 'aggregation' => 'SUM' }],
+  }
+  normalized = normalize_pop_expected(pop_card_data, source_pop)
+  eq(normalized['rows'],
+     [['2026-01', 93_000, 82_000], ['2026-02', 96_000, 84_000]],
+     'POP_PERIOD/POP_INDEX rows pivot to one current/prior measure pair per visible month')
+  eq(normalized['columns'], ['Date', 'Current period', 'Period 1'],
+     'normalized POP transport has the same three-column arity as the Sigma combo export')
+  eq(normalized['transform'], 'domo-pop-aligned-grain',
+     'oracle records the source-shape transformation instead of applying it silently')
+  ok(normalize_pop_expected(pop_card_data, source_pop.merge('chartType' => 'badge_line_bar')).nil?,
+     'ordinary combo charts never take the POP-specific transport transform')
+end
+
 canon_src = oracle_src[/^def canonicalise_dim\(rows\)\n.*?(?=^def max_date\(rows\))/m]
 ok(canon_src, 'extracted canonicalise_dim(rows) from build-parity-oracle.rb')
 month_abbr_src = oracle_src[/^MONTH_ABBR = .*?\.freeze\n/m]

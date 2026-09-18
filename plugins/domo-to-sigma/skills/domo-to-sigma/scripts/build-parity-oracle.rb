@@ -91,6 +91,10 @@ end
 
 # ---- lookups ---------------------------------------------------------------
 exp_cards = expected['cards'] || {}
+source_cards_path = File.join(wd, 'discovery', 'cards.json')
+source_cards = (JSON.parse(File.read(source_cards_path)) rescue []).each_with_object({}) do |card, out|
+  out[card['id'].to_s] = card if card.is_a?(Hash) && card['id']
+end
 # reasons the Domo side already recorded, keyed by card id
 exp_unavail = (expected['unavailable'] || []).each_with_object({}) { |u, h| h[u['card_id'].to_s] = u['reason'] }
 # Actuals are keyed by ELEMENT ID, never by display name. Domo reuses generic
@@ -390,8 +394,97 @@ def realign_actual_columns(rows, actual_columns, expected_columns)
    order.map { |idx| actual_columns[idx] }]
 end
 
+def pop_grain_key(date, grain)
+  case grain.to_s.downcase
+  when 'day'
+    date.to_s
+  when 'week'
+    (date - date.wday).to_s
+  when 'month'
+    date.strftime('%Y-%m')
+  when 'year'
+    date.year.to_s
+  end
+end
+
+# Domo's POP card-data is a query transport, not the rendered chart table. It
+# carries ITEM/VALUE/POP_PERIOD/POP_INDEX and may densify the selected interval
+# to one row per day even when the chart grain is month (null VALUE on the
+# filler days). Sigma exports the visible chart after alignment and pivoting:
+# one row per display grain and one measure column per period. Reconstruct that
+# visual table before strict parity so equivalent bars/lines do not fail solely
+# on the two APIs' different transport shapes.
+def normalize_pop_expected(card_data, source_card)
+  return nil unless card_data.is_a?(Hash) && source_card.is_a?(Hash)
+  return nil unless source_card['chartType'].to_s.downcase == 'badge_pop_bar_line'
+
+  mappings = Array(card_data['mappings']).map { |mapping| mapping.to_s.upcase }
+  item_idx = mappings.index('ITEM')
+  value_idx = mappings.index('VALUE')
+  period_idx = mappings.index('POP_PERIOD')
+  alignment_idx = mappings.index('POP_INDEX')
+  return nil unless item_idx && value_idx && period_idx && alignment_idx
+  return nil unless mappings.count('VALUE') == 1
+
+  grain = source_card.dig('dateGrain', 'dateTimeElement').to_s.downcase
+  return nil unless %w[day week month year].include?(grain)
+
+  rows = Array(card_data['rows']).map { |row| Array(row) }
+  periods = rows.map { |row| row[period_idx] }.compact.map(&:to_i).uniq.sort
+  return nil unless periods.include?(0) && periods.length >= 2
+
+  primary_dates = {}
+  rows.each do |row|
+    next unless row[period_idx].to_i.zero?
+    date = Date.parse(row[item_idx].to_s) rescue nil
+    primary_dates[row[alignment_idx].to_i] = date if date
+  end
+  return nil if primary_dates.empty?
+
+  aggregation = Array(source_card['columns']).find {
+    |column| column['mapping'].to_s.upcase == 'VALUE'
+  }.to_h['aggregation'].to_s.upcase
+  aggregation = 'SUM' if aggregation.empty?
+  values_by_bucket = Hash.new { |hash, key| hash[key] = Hash.new { |h, period| h[period] = [] } }
+  bucket_dates = {}
+  rows.each do |row|
+    next if row[period_idx].nil?
+    period = row[period_idx].to_i
+    aligned_date = primary_dates[row[alignment_idx].to_i]
+    next unless aligned_date
+    bucket = pop_grain_key(aligned_date, grain)
+    next unless bucket
+    bucket_dates[bucket] ||= aligned_date
+    value = row[value_idx]
+    values_by_bucket[bucket][period] << value if value.is_a?(Numeric)
+  end
+  if %w[AVG AVERAGE COUNT_DISTINCT DISTINCT_COUNT COUNT\ DISTINCT].include?(aggregation) &&
+     values_by_bucket.any? { |_bucket, by_period| by_period.any? { |_period, values| values.length > 1 } }
+    return nil
+  end
+
+  output_rows = bucket_dates.keys.sort_by { |bucket| bucket_dates[bucket] }.map do |bucket|
+    [bucket] + periods.map do |period|
+      values = values_by_bucket[bucket][period]
+      next nil if values.empty?
+      case aggregation
+      when 'AVG', 'AVERAGE' then values.sum.to_f / values.length
+      when 'MIN' then values.min
+      when 'MAX' then values.max
+      else values.sum
+      end
+    end
+  end
+  {
+    'rows' => output_rows,
+    'columns' => ['Date'] + periods.map { |period| period.zero? ? 'Current period' : "Period #{period}" },
+    'transform' => 'domo-pop-aligned-grain',
+  }
+end
+
 stale_evidence = []
 canonicalised = 0
+pop_normalized = 0
 
 # PRIOR exclusions, loaded BEFORE the loop and honoured over verification.
 #
@@ -491,6 +584,8 @@ charts.each do |c|
   # export: a shape mismatch that reads as a value divergence, exactly the bug
   # already fixed once for the companions below.
   is_kpi = is_summary || c['sigma_kind'].to_s == 'kpi-chart'
+  exp_columns = card['columns']
+  expected_transform = nil
 
   if is_kpi
     sv = card['summary_value']
@@ -516,6 +611,13 @@ charts.each do |c|
                       'reason' => 'Domo card returned no rows' }
       next
     end
+    normalized_pop = normalize_pop_expected(card, source_cards[cid])
+    if normalized_pop
+      exp_rows = normalized_pop['rows']
+      exp_columns = normalized_pop['columns']
+      expected_transform = normalized_pop['transform']
+      pop_normalized += 1
+    end
   end
 
   # --- the Sigma (actual) side ---
@@ -540,7 +642,7 @@ charts.each do |c|
     }
     next
   end
-  act_rows, act_columns = realign_actual_columns(act['rows'], act['columns'], card['columns'])
+  act_rows, act_columns = realign_actual_columns(act['rows'], act['columns'], exp_columns)
   act_rows, act_columns, _dropped_actual_columns =
     dedupe_identical_columns(act_rows, act_columns)
 
@@ -552,7 +654,7 @@ charts.each do |c|
   act_rows = canonicalise_numeric_display(act_rows, exp_rows)
   canonicalised += expected_canon_n + actual_canon_n
 
-  verified << {
+  verified_entry = {
     'chart'          => name,
     'sigma_element_id' => eid,
     'sigma_kind'     => c['sigma_kind'],
@@ -570,6 +672,8 @@ charts.each do |c|
     # element's plotted order. `columns` is still carried for diagnostics.
     'actual'         => { 'rows' => act_rows, 'columns' => act_columns },
   }
+  verified_entry['expected_transform'] = expected_transform if expected_transform
+  verified << verified_entry
 
   # ---- warehouse-freshness evidence, collected as we go -------------------
   # See the guard below. Recorded per tile whose first column parses as a date
@@ -668,6 +772,7 @@ File.write(out_path, JSON.pretty_generate('charts' => verified))
 File.write(excl_path, JSON.pretty_generate('exclusions' => exclusions))
 
 warn "wrote #{out_path}      #{verified.size} tile(s) to verify"
+warn "normalized #{pop_normalized} Domo POP transport(s) to aligned visual-grain tables" if pop_normalized.positive?
 warn "wrote #{excl_path}  #{exclusions.size} tile(s) excluded WITH a reason"
 warn "coverage: #{verified.size} + #{exclusions.size} = #{charts.size} plan tiles (complete)"
 unless exclusions.empty?

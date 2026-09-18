@@ -37,6 +37,10 @@ warehouse columns. The converter reconstructs them from the source
   rows that belong to more than one comparison.
 - The visible `combo-chart` exposes one explicit measure per period: selected
   period as bars and comparison periods as lines.
+- Parity pivots Domo's synthetic transport (`ITEM`, `VALUE`, `POP_PERIOD`,
+  `POP_INDEX`, including null date-density rows) to that same visible
+  grain-by-period table before strict comparison; raw card-data and a rendered
+  Sigma combo have intentionally different row/column shapes.
 
 Workbook union sources do not accept a custom `name`; formulas use Sigma's
 server-derived `Union of N Sources` namespace.
