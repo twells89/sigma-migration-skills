@@ -158,6 +158,19 @@ def _layout_field_rows(layout: list) -> list[dict]:
     return rows
 
 
+def _internal_object_table(field: dict) -> str | None:
+    raw = str(field.get("raw") or "")
+    guid = str(field.get("guid") or "")
+    if not (
+        "__tableau_internal_object_id__" in raw
+        or re.search(r"\s*\([^)]*\)_[0-9A-F]{32}\Z", guid, re.IGNORECASE)
+        is not None
+    ):
+        return None
+    match = re.match(r"^\s*([^()]+?)\s*\(", guid)
+    return match.group(1).strip() if match else None
+
+
 def _canonical_visual(kind: Any, name: Any) -> str | None:
     normalized_kind = str(kind or "").lower().replace("_", "-")
     if normalized_kind.endswith("-chart"):
@@ -176,8 +189,16 @@ def derive_signature(model: dict, layout: list, layout_meta: dict) -> dict:
     columns_by_guid = layout_meta.get("columns_by_guid") or {}
     required_columns: dict[str, str] = {}
     measures: dict[tuple[str, str], dict] = {}
+    required_table_hints: set[str] = set()
 
     for field in _layout_field_rows(layout):
+        # Tableau's COUNT(table) pill serializes a logical object id in the
+        # field slot. It is a row-count measure, not a physical column
+        # requirement; treating it as one makes compatible DMs fail reuse.
+        internal_table = _internal_object_table(field)
+        if internal_table:
+            required_table_hints.add(normalize_name(internal_table))
+            continue
         guid = str(field.get("guid") or "").strip()
         metadata = columns_by_guid.get(guid) if isinstance(columns_by_guid, dict) else {}
         caption = field.get("caption") or (metadata or {}).get("caption")
@@ -209,25 +230,29 @@ def derive_signature(model: dict, layout: list, layout_meta: dict) -> dict:
     tables: set[str] = set()
     for element in iter_dm_elements(model):
         source = element.get("source") or {}
-        if source.get("kind") in {"warehouse-table", "table"}:
+        if source.get("kind") == "warehouse-table":
             fqn = normalize_fqn(
                 source.get("path")
                 or [source.get("database"), source.get("schema"), source.get("name")]
             )
-            if fqn:
+            table_name = normalize_name(fqn.rsplit(".", 1)[-1]) if fqn else ""
+            if fqn and (
+                not required_table_hints or table_name in required_table_hints
+            ):
                 tables.add(fqn)
         elif source.get("kind") == "sql":
             tables.add("CUSTOM_SQL")
-        for metric in element.get("metrics") or []:
-            if not isinstance(metric, dict) or not metric.get("name"):
-                continue
-            derivation = str(
-                metric.get("aggregation") or metric.get("derivation") or ""
-            )
-            key = (normalize_name(metric["name"]), derivation.upper())
-            measures.setdefault(
-                key, {"col": metric["name"], "derivation": derivation}
-            )
+        if column_basis == "conversion-fallback":
+            for metric in element.get("metrics") or []:
+                if not isinstance(metric, dict) or not metric.get("name"):
+                    continue
+                derivation = str(
+                    metric.get("aggregation") or metric.get("derivation") or ""
+                )
+                key = (normalize_name(metric["name"]), derivation.upper())
+                measures.setdefault(
+                    key, {"col": metric["name"], "derivation": derivation}
+                )
 
     dashboard_names: list[str] = []
     visuals: list[str] = []

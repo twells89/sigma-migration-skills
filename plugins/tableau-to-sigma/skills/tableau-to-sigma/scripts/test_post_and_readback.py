@@ -92,6 +92,48 @@ class PostAndReadbackTest(unittest.TestCase):
             result["dropped_columns"]["ORDER_FACT"],
         )
 
+    def test_datamodel_census_handles_duplicate_paths_and_formula_case(self):
+        posted = {
+            "pages": [
+                {
+                    "elements": [
+                        {
+                            "id": "employees-base",
+                            "kind": "table",
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["CSA", "TJ", "EMPLOYEES"],
+                            },
+                            "columns": [
+                                {"id": "zip", "formula": "[EMPLOYEES/ZIP]"}
+                            ],
+                        },
+                        {
+                            "id": "employees-copy",
+                            "kind": "table",
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["CSA", "TJ", "EMPLOYEES"],
+                            },
+                            "columns": [
+                                {"id": "dept", "formula": "[EMPLOYEES/Department]"}
+                            ],
+                        },
+                    ]
+                }
+            ]
+        }
+        readback = copy.deepcopy(posted)
+        readback["pages"][0]["elements"].reverse()
+        readback["pages"][0]["elements"][1]["columns"][0]["formula"] = (
+            "[EMPLOYEES/Zip]"
+        )
+
+        result = post_and_readback.verify_census(
+            posted, readback, "datamodel"
+        )
+        self.assertTrue(result["pass"], result)
+
     def test_workbook_create_calls_server_verify_first(self):
         workbook = {
             "name": "Workbook",

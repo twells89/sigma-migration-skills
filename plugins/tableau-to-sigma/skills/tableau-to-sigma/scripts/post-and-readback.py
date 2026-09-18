@@ -55,20 +55,32 @@ def element_key(element: dict, kind: str) -> str:
 
 
 def column_signature(column: dict) -> str:
-    return (
-        str(column.get("name") or "").strip()
-        or str(column.get("formula") or "").strip()
-    )
+    name = str(column.get("name") or "").strip()
+    if name:
+        return name
+    # Sigma canonicalizes physical path casing on readback (`ZIP` -> `Zip`).
+    # Formula-only columns must compare semantically, not byte-for-byte.
+    return str(column.get("formula") or "").strip().casefold()
 
 
 def census(spec: dict, kind: str) -> dict[str, set[str]]:
-    return {
-        element_key(element, kind): {
+    elements = [
+        element for element in iter_elements(spec, kind) if isinstance(element, dict)
+    ]
+    base_keys = [element_key(element, kind) for element in elements]
+    counts = {key: base_keys.count(key) for key in set(base_keys)}
+    result = {}
+    for element, base_key in zip(elements, base_keys):
+        key = base_key
+        if counts[base_key] > 1 and element.get("id"):
+            # Multiple logical elements may intentionally source the same
+            # warehouse table. Preserve each by stable element id instead of
+            # silently overwriting the earlier census row.
+            key = f"{base_key} [{element['id']}]"
+        result[key] = {
             column_signature(column) for column in element.get("columns") or []
         }
-        for element in iter_elements(spec, kind)
-        if isinstance(element, dict)
-    }
+    return result
 
 
 def error_columns(spec: dict, kind: str) -> list[dict]:

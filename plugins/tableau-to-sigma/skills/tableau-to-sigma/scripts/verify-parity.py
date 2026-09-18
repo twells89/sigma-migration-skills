@@ -15,6 +15,46 @@ def load(path: str):
         return json.load(handle)
 
 
+def compare_row_multiset(expected, actual, path, *, abs_tol, rel_tol):
+    """Compare chart rows without treating export ordering as data."""
+    remaining = list(enumerate(actual))
+    differences = []
+    for expected_index, expected_row in enumerate(expected):
+        match_at = next(
+            (
+                index
+                for index, (_actual_index, actual_row) in enumerate(remaining)
+                if not compare(
+                    expected_row,
+                    actual_row,
+                    f"{path}[{expected_index}]",
+                    abs_tol=abs_tol,
+                    rel_tol=rel_tol,
+                )
+            ),
+            None,
+        )
+        if match_at is None:
+            differences.append(
+                {
+                    "path": f"{path}[{expected_index}]",
+                    "expected": expected_row,
+                    "kind": "missing-row",
+                }
+            )
+        else:
+            remaining.pop(match_at)
+    differences.extend(
+        {
+            "path": f"{path}[{actual_index}]",
+            "actual": actual_row,
+            "kind": "unexpected-row",
+        }
+        for actual_index, actual_row in remaining
+    )
+    return differences
+
+
 def compare(expected, actual, path="$", *, abs_tol=1e-6, rel_tol=1e-9):
     differences = []
     if (
@@ -47,6 +87,16 @@ def compare(expected, actual, path="$", *, abs_tol=1e-6, rel_tol=1e-9):
                 )
         return differences
     if isinstance(expected, list) and isinstance(actual, list):
+        if all(isinstance(row, list) for row in expected) and all(
+            isinstance(row, list) for row in actual
+        ):
+            return compare_row_multiset(
+                expected,
+                actual,
+                path,
+                abs_tol=abs_tol,
+                rel_tol=rel_tol,
+            )
         if len(expected) != len(actual):
             differences.append(
                 {

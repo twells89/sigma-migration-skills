@@ -148,6 +148,47 @@ class DiscoverTableauReuseTest(unittest.TestCase):
         )
         self.assertEqual("layout", self.signature["evidence"]["column_basis"])
 
+    def test_internal_object_count_is_not_treated_as_a_column(self):
+        model, layout, meta = source_artifacts()
+        model["pages"][0]["elements"].append(
+            {
+                "name": "Helper View",
+                "source": {"kind": "table", "elementId": "fact"},
+                "columns": [{"name": "REGION"}],
+            }
+        )
+        layout[0]["zones"][0]["rows_shelf"]["fields"].append(
+            {
+                "raw": (
+                    "[federated.x].[__tableau_internal_object_id__]."
+                    "[cnt:ORDER_FACT (ACME.ORDER_FACT)_"
+                    "C668FBD11FD74193BE1A8FFD57F9CFBF:qk]"
+                ),
+                "guid": (
+                    "ORDER_FACT (ACME.ORDER_FACT)_"
+                    "C668FBD11FD74193BE1A8FFD57F9CFBF"
+                ),
+                "role": "dim",
+                "derivation": "cnt",
+            }
+        )
+
+        signature = reuse.derive_signature(model, layout, meta)
+        self.assertEqual(["REGION", "SALES"], signature["referenced_columns"])
+        self.assertEqual(
+            ["ACME.SALES.ORDER_FACT"], signature["warehouse_tables"]
+        )
+
+    def test_layout_signature_does_not_require_unplotted_model_metrics(self):
+        model, layout, meta = source_artifacts()
+        model["pages"][0]["elements"][0]["metrics"] = [
+            {"name": "Total Annual Salary", "aggregation": "Sum"}
+        ]
+        layout[0]["zones"][0]["rows_shelf"]["fields"][0]["role"] = "dim"
+
+        signature = reuse.derive_signature(model, layout, meta)
+        self.assertEqual([], signature["measures"])
+
     def test_unique_compatible_dm_and_workbook_are_selected_with_gets_only(self):
         api = FakeApi(
             {

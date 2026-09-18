@@ -13,6 +13,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DEFAULT_CONVERTER = HERE.parent / "converter" / "tableau.mjs"
 CASE_VALUE = r'(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[-+]?(?:\d+(?:\.\d*)?|\.\d+)|true|false)'
+CROSS_TABLE_SUFFIX = re.compile(
+    r"\((?P<table>[A-Za-z0-9_]+)\s+\([^)]+\)\)\]\s*$"
+)
 
 
 def parameter_case_value(raw: str) -> str:
@@ -121,6 +124,90 @@ def normalize_converter_parameters(result: dict) -> dict:
     return result
 
 
+def remove_cross_table_provenance_columns(model: dict, warnings: list[str]) -> int:
+    """Drop fields that the converter attached to the wrong physical table."""
+    removed = 0
+    for page in model.get("pages") or []:
+        for element in page.get("elements") or []:
+            source = element.get("source") or {}
+            path = source.get("path") or []
+            if source.get("kind") != "warehouse-table" or not path:
+                continue
+            source_table = str(path[-1]).upper()
+            kept = []
+            for column in element.get("columns") or []:
+                formula = str(column.get("formula") or "")
+                match = CROSS_TABLE_SUFFIX.search(formula)
+                foreign_table = match.group("table").upper() if match else None
+                if foreign_table and foreign_table != source_table:
+                    removed += 1
+                    warnings.append(
+                        "Removed cross-table provenance field from "
+                        f"{source_table}: {foreign_table} column was serialized "
+                        "under the wrong physical element."
+                    )
+                    continue
+                kept.append(column)
+            if len(kept) != len(element.get("columns") or []):
+                element["columns"] = kept
+                kept_ids = {column.get("id") for column in kept}
+                element["order"] = [
+                    column_id
+                    for column_id in element.get("order") or []
+                    if column_id in kept_ids
+                ]
+    return removed
+
+
+def recover_relationship_coverage(model: dict, source_text: str) -> dict | None:
+    """Recover a missing ledger only when source/model edge counts agree."""
+    source_count = len(re.findall(r"<relationship(?:\s|>)", source_text))
+    has_object_graph = "<object-graph" in source_text
+    if not has_object_graph:
+        return None
+    elements = [
+        element
+        for page in model.get("pages") or []
+        for element in page.get("elements") or []
+        if isinstance(element, dict)
+    ]
+    by_id = {str(element.get("id")): element for element in elements}
+    relationships = [
+        (element, relationship)
+        for element in elements
+        for relationship in element.get("relationships") or []
+        if isinstance(relationship, dict)
+    ]
+    if source_count != len(relationships):
+        return None
+    if any(not relationship.get("keys") for _element, relationship in relationships):
+        return None
+
+    def table_name(element: dict | None) -> str:
+        if not element:
+            return ""
+        source = element.get("source") or {}
+        path = source.get("path") or []
+        return str(path[-1] if path else element.get("name") or element.get("id"))
+
+    entries = []
+    for source_element, relationship in relationships:
+        target = by_id.get(str(relationship.get("targetElementId")))
+        entries.append(
+            {
+                "left": table_name(source_element),
+                "right": table_name(target),
+                "derivedVia": relationship.get("derivedVia") or "serialized",
+                "keyCount": len(relationship.get("keys") or []),
+            }
+        )
+    return {
+        "serialized": source_count,
+        "wired": len(relationships),
+        "entries": entries,
+    }
+
+
 def run_converter(args: argparse.Namespace) -> dict:
     converter = Path(args.converter).expanduser().resolve()
     twb = Path(args.twb).expanduser().resolve()
@@ -183,6 +270,18 @@ def run_converter(args: argparse.Namespace) -> dict:
         )
     with meta_out.open(encoding="utf-8") as handle:
         result = normalize_converter_parameters(json.load(handle))
+    warnings = result.setdefault("warnings", [])
+    remove_cross_table_provenance_columns(result["model"], warnings)
+    if not isinstance(result.get("relationshipCoverage"), dict):
+        source_text = twb.read_text(encoding="utf-8-sig")
+        recovered = recover_relationship_coverage(result["model"], source_text)
+        if recovered is not None:
+            result["relationshipCoverage"] = recovered
+            warnings.append(
+                "Recovered relationship coverage from the emitted model after "
+                "confirming its edge count and keyed relationships exactly match "
+                "the serialized Tableau object graph."
+            )
     meta_out.write_text(
         json.dumps(result, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
