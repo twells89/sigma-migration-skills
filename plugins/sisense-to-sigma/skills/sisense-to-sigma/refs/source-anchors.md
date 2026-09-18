@@ -80,6 +80,9 @@ what the source *renders*.
   fails closed, and a coincidental value in a similarly named tile never
   counts. Legacy/non-Tableau workdirs without a provenance sidecar retain
   fuzzy hint matching for compatibility; use an exact element name there.
+- `dashboard` — optional disambiguator when the same Tableau worksheet is
+  placed on multiple dashboards. Use the exact source dashboard name; without
+  it, a multi-target provenance match fails closed as ambiguous.
 - **Minimum anchors (the gate requires ≥ 5):** every KPI value, the **top 3
   values of every ranked list/table**, **one representative bucket value
   per chart**, and — for every ranked/top-N tile — **2–3 `text` roster anchors**
