@@ -1,6 +1,7 @@
 # GET → POST asymmetries, and the error catalog
 
-`GET /v2/workbooks/{id}/spec` is **not** a valid create body. Three classes of
+A workbook readback (`GET /v2/workbooks/{id}?includeContents=true`, or legacy
+`GET /v2/workbooks/{id}/spec`) is **not** a valid create body. Three classes of
 difference bite, in this order: envelope, emitted-but-rejected fields, and
 normalizations the API applies on write. Then there is a fourth class that has
 nothing to do with the API — latent defects the source org tolerates and
@@ -8,18 +9,31 @@ create-validation does not.
 
 ## 1. Envelope
 
-`GET` returns response-only metadata alongside the document:
+`GET …?includeContents=true` returns response-only metadata alongside the doc —
+and the doc is under **`contents`**, not `document`:
 
 ```
-workbookId, name, url, documentVersion, latestDocumentVersion, ownerId,
-folderId, createdBy, updatedBy, createdAt, updatedAt, description, document
+workbookId, workbookUrlId, name, url, path, latestVersion, documentVersion,
+ownerId, createdBy, updatedBy, createdAt, updatedAt, description, isArchived,
+tags, contents
 ```
 
-- **CREATE** takes `{name, folderId, description?, document}`. Drop everything
-  else — `ownerId`/`createdBy`/`updatedBy` are source-org user ids and must not
-  be carried over.
-- **UPDATE** takes `{document}` **only**. Sending the outer `name`/`folderId`
-  alongside it 400s.
+- **CREATE** — `POST /v2/workbooks` — takes `{name, folderId, description?,
+  contents}`, **JSON only** (no `application/yaml`). Drop everything else —
+  `ownerId`/`createdBy`/`updatedBy` are source-org user ids and must not be
+  carried over. The response is bare metadata: `{workbookId, url, latestVersion,
+  …}`, with **no `success` key**.
+- **UPDATE** — `PUT /v2/workbooks/{id}/contents` — takes `{contents}` (optionally
+  `documentVersion`) **only**. Sending the outer `name`/`folderId` alongside it 400s.
+- **VALIDATE** — `POST /v2/workbooks` with `dryRun: true` — persists nothing and
+  resolves dependencies, so it catches `Dependency not found` that the old
+  shape-only `/spec/verify` passed. Clean → **HTTP 200** with `valid` **omitted**;
+  failing → **HTTP 400** with `{valid:false, errors:[…]}`. Test the body's
+  `valid`/`errors`, not the HTTP status. (The `sigma` CLI surfaces a failing
+  dryRun as exit 1 with the whole payload embedded in the error `message` string.)
+
+The legacy `/v2/workbooks/spec*` family (doc under `document`, YAML accepted) is
+still supported; these scripts read either envelope but write the `contents` one.
 
 ## 2. Emitted by GET, rejected by POST
 

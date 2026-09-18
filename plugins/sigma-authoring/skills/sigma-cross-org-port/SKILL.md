@@ -33,6 +33,23 @@ Read both before porting anything:
   two silent write-time normalizations, and the error → cause table.
 <!-- /mandatory-pre-read -->
 
+## Endpoint surface
+
+This skill uses the current workbook **contents** endpoints. The doc travels
+under a `contents` key (was `document`), and the bodies are **JSON only** — the
+old `application/yaml` content type is not accepted here.
+
+| Step | Endpoint |
+|---|---|
+| Read source | `GET /v2/workbooks/{id}?includeContents=true` — doc under `.contents` |
+| Validate | `POST /v2/workbooks` with `dryRun: true` (replaces `/spec/verify`) |
+| Create | `POST /v2/workbooks` with `{name, folderId, contents}` |
+| Update | `PUT /v2/workbooks/{id}/contents` with `{contents}` |
+
+The legacy `/v2/workbooks/spec*` family (doc under `document`, YAML accepted) is
+still supported; the port scripts still *read* a legacy `document` envelope, but
+everything they *write* targets the endpoints above.
+
 ## Scope
 
 **In scope:** Sigma org A → Sigma org B, where the warehouse tables the workbook
@@ -88,11 +105,11 @@ the target — same path **and** same column set.
 
 ```bash
 curl -s -H "Authorization: Bearer $SRC_TOKEN" \
-  "$SRC_BASE/v2/workbooks/<SRC_WB_ID>/spec" > src-spec.yaml
+  "$SRC_BASE/v2/workbooks/<SRC_WB_ID>?includeContents=true" > src.json
 
-grep -o 'connectionId: [0-9a-f-]\{36\}' src-spec.yaml | sort -u
-python3 -c "import yaml,sys
-d=yaml.safe_load(open('src-spec.yaml'))['document']
+grep -oE '"connectionId": *"[0-9a-f-]{36}"' src.json | sort -u
+python3 -c "import json,sys
+s=json.load(open('src.json')); d=s.get('contents') or s.get('document')
 seen=set()
 def w(o):
     if isinstance(o,dict):
@@ -121,7 +138,7 @@ columns — but they are a decision the user has to make, so surface them.
 ## Phase 3 — Audit before rewriting
 
 ```bash
-python3 scripts/port_workbook.py --src-spec src-spec.yaml \
+python3 scripts/port_workbook.py --src-spec src.json \
   --out /dev/null --report audit.json --audit-only
 ```
 
@@ -205,7 +222,7 @@ Two effects are only partly authorable — check before promising a rebuild:
   (`_self` / `_blank` / `_parent`) and exposes **no `url` property**. A
   spec-authored open-url button therefore opens nothing; the destination is
   UI-only. Sending a `url` key fails the whole element with the unhelpful
-  `document.elements[N]: Invalid kind: "button"`. Leave such buttons unwired and
+  `elements[N]: Invalid kind: "button"`. Leave such buttons unwired and
   say so.
 - **`open-document`** likewise carries only what its schema lists — verify the
   fields you need are there rather than assuming parity with the UI.
@@ -228,7 +245,7 @@ Upload keys are org-scoped and the spec API cannot create an upload, so the byte
 must be recovered and re-hosted. A PDF export embeds the originals losslessly.
 
 ```bash
-python3 scripts/recover_images.py plan --spec src-spec.yaml
+python3 scripts/recover_images.py plan --spec src.json
 ```
 
 `plan` tells you which pages hold image elements, in export order, and which
@@ -254,7 +271,7 @@ curl -s -o out.pdf -w '%{http_code}\n' -H "Authorization: Bearer $SRC_TOKEN" \
 Then map, shrink, and **look at the files**:
 
 ```bash
-python3 scripts/recover_images.py map --spec src-spec.yaml --pdf out.pdf \
+python3 scripts/recover_images.py map --spec src.json --pdf out.pdf \
   --images imgs --out images.tsv
 python3 scripts/recover_images.py shrink --map images.tsv --out-dir web
 ```
@@ -275,8 +292,8 @@ images omitted and drag the recovered files onto the elements in the UI.
 ## Phase 5 — Port and create
 
 ```bash
-python3 scripts/port_workbook.py --src-spec src-spec.yaml \
-  --out dst-spec.yaml --report port.json \
+python3 scripts/port_workbook.py --src-spec src.json \
+  --out dst.json --report port.json \
   --folder-id <DST_HOME_FOLDER_ID> --name "<Name>" \
   --map-connection <SRC_CONN>=<DST_CONN> \
   --map-column <TBL>:<STALE>=<REAL> \
@@ -289,17 +306,28 @@ stale write-columns repaired from your explicit mapping; container row-spans
 pre-expanded with their siblings.
 
 ```bash
+# Dry-run first. dryRun validates SHAPE and resolves DEPENDENCIES without
+# persisting, so it catches 'Dependency not found' that the old shape-only
+# verify passed. Clean run = HTTP 200 with the `valid` key OMITTED; a failing
+# run = HTTP 400 with {valid:false, errors:[…]}. Test the body, not the status.
+jq '. + {dryRun:true}' dst.json \
+  | curl -s -X POST -H "Authorization: Bearer $DST_TOKEN" \
+      -H "Content-Type: application/json" --data-binary @- \
+      "$DST_BASE/v2/workbooks" | jq '{valid, errors, warnings}'
+
+# Create for real (no dryRun). Response is bare metadata — {workbookId, url, …},
+# NO `success` key; the version is under `latestVersion`.
 curl -s -X POST -H "Authorization: Bearer $DST_TOKEN" \
-  -H "Content-Type: application/yaml" -H "Accept: application/json" \
-  --data-binary @dst-spec.yaml "$DST_BASE/v2/workbooks/spec" | jq .
+  -H "Content-Type: application/json" \
+  --data-binary @dst.json "$DST_BASE/v2/workbooks" | jq '{workbookId, url}'
 ```
 
 On a 400, read the message against the error table in
 `refs/spec-asymmetries.md` — every one seen in practice maps to a known cause.
 Fix the spec, re-run, retry. Do not start hand-editing the readback.
 
-Iterate afterwards with `PUT /v2/workbooks/{id}/spec` and a body of
-`{document: …}` **only**.
+Iterate afterwards with `PUT /v2/workbooks/{id}/contents` and a JSON body of
+`{contents: …}` (optionally `documentVersion`) — no outer `name`/`folderId`.
 
 ## Phase 6 — Verify (gate; a 2xx proves nothing)
 
@@ -308,8 +336,8 @@ Three checks, all required.
 ```bash
 # 1. structure — offline, source vs live readback
 curl -s -H "Authorization: Bearer $DST_TOKEN" \
-  "$DST_BASE/v2/workbooks/<DST_WB_ID>/spec" > dst-readback.yaml
-python3 scripts/verify_port.py structure --src-spec src-spec.yaml --dst-spec dst-readback.yaml
+  "$DST_BASE/v2/workbooks/<DST_WB_ID>?includeContents=true" > dst-readback.json
+python3 scripts/verify_port.py structure --src-spec src.json --dst-spec dst-readback.json
 
 # 2. compile — every data element, live
 python3 scripts/verify_port.py compile --base-url "$DST_BASE" --workbook-id <DST_WB_ID>

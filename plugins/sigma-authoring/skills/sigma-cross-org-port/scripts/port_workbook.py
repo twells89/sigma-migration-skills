@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Rewrite a Sigma workbook spec so it can be created in a DIFFERENT org.
 
-Input  : a spec exactly as returned by GET /v2/workbooks/{id}/spec (YAML or JSON).
-Output : a create body {name, folderId, description?, document} for
-         POST /v2/workbooks/spec, plus a JSON report.
+Input  : a workbook as returned by GET /v2/workbooks/{id}?includeContents=true
+         (the workbook doc under `contents`). A legacy GET /v2/workbooks/{id}/spec
+         body (doc under `document`) or a bare document are also accepted.
+Output : a JSON create body {name, folderId, description?, contents} for
+         POST /v2/workbooks, plus a JSON report. The new endpoints are
+         JSON-only, so the create body is written as JSON (not YAML).
 
 Run with no --map-* flags first (audit mode): the report lists every org-scoped
 reference that needs a decision, and the tool exits non-zero if any remain
@@ -273,8 +276,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src-spec", required=True,
-                    help="spec from GET /v2/workbooks/{id}/spec (YAML or JSON)")
-    ap.add_argument("--out", required=True, help="create body to write (YAML)")
+                    help="workbook from GET /v2/workbooks/{id}?includeContents=true "
+                         "(or legacy /spec; YAML or JSON)")
+    ap.add_argument("--out", required=True, help="create body to write (JSON)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="set dryRun:true in the body (validate without persisting)")
     ap.add_argument("--report", required=True, help="JSON report to write")
     ap.add_argument("--folder-id", help="target folder (required unless --audit-only)")
     ap.add_argument("--name", help="workbook name (default: source name)")
@@ -289,9 +295,12 @@ def main():
     args = ap.parse_args()
 
     src = load_spec(args.src_spec)
-    if "document" not in src:
-        sys.exit("spec has no top-level 'document' — is this a workbook spec?")
-    doc = src["document"]
+    doc = src.get("contents") or src.get("document")
+    if doc is None:
+        if isinstance(src, dict) and ("elements" in src or "pages" in src):
+            doc = src          # a bare document, no envelope
+        else:
+            sys.exit("spec has no 'contents' or 'document' — is this a workbook?")
 
     cmap = parse_pairs(args.map_connection)
     imap = build_image_map(args.image_map) if args.image_map else {}
@@ -338,12 +347,13 @@ def main():
         if not args.folder_id:
             sys.exit("--folder-id is required to write a create body")
         body = {"name": args.name or src.get("name"),
-                "folderId": args.folder_id, "document": doc}
+                "folderId": args.folder_id, "contents": doc}
         if src.get("description"):
             body["description"] = src["description"]
+        if args.dry_run:
+            body["dryRun"] = True
         with open(args.out, "w", encoding="utf-8") as fh:
-            yaml.safe_dump(body, fh, sort_keys=False, width=10 ** 6,
-                           default_flow_style=False, allow_unicode=True)
+            json.dump(body, fh, indent=2)
         report["wrote"] = args.out
 
     with open(args.report, "w", encoding="utf-8") as fh:

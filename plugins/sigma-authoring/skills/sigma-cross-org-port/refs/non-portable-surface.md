@@ -26,7 +26,7 @@ Appears on `warehouse-table` sources, `input-table` `kind: empty` sources, and
 nested inside control `source.source`. Find them all:
 
 ```bash
-grep -o 'connectionId: [0-9a-f-]\{36\}' spec.yaml | sort -u
+grep -oE '"connectionId": *"[0-9a-f-]{36}"' src.json | sort -u
 ```
 
 Resolve the target's equivalent by name, then confirm the table path really

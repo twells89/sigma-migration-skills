@@ -51,7 +51,7 @@ RASTER_KINDS = {"point-map", "region-map", "geography-map"}
 def load(spec_path):
     with open(spec_path, encoding="utf-8") as fh:
         spec = yaml.safe_load(fh)
-    return spec["document"] if "document" in spec else spec
+    return spec.get("contents") or spec.get("document") or spec
 
 
 def page_plan(doc):

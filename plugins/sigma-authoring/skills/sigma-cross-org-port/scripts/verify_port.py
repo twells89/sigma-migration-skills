@@ -9,8 +9,9 @@ compiled SQL, so the element renders empty.
         make (connectionId, image source, groupingId: base).
 
     compile --base-url URL --workbook-id ID [--token T]
-        Live. Queries every data element and fails on an error literal baked
-        into the SQL. Token defaults to $SIGMA_API_TOKEN.
+        Live. Reads the workbook via GET /v2/workbooks/{id}?includeContents=true,
+        queries every data element, and fails on an error literal baked into the
+        SQL. Token defaults to $SIGMA_API_TOKEN.
 
     baseline --base-url URL --workbook-id ID [--token T]
         Same probe against the SOURCE workbook. Run it whenever `compile`
@@ -36,7 +37,9 @@ except ImportError:  # pragma: no cover
 
 DATA_KINDS = {"table", "pivot-table", "input-table", "bar-chart", "line-chart",
               "kpi-chart", "point-map", "region-map", "geography-map",
-              "pie-chart", "donut-chart", "scatter-chart", "combo-chart"}
+              "pie-chart", "donut-chart", "scatter-chart", "combo-chart",
+              "area-chart", "treemap-chart", "sankey-chart", "funnel-chart",
+              "gauge-chart", "box-chart", "waterfall-chart"}
 
 # Errors Sigma bakes into compiled SQL as string literals when a ref won't resolve.
 ERR_RE = re.compile(
@@ -46,7 +49,7 @@ ERR_RE = re.compile(
 def load_doc(path):
     with open(path, encoding="utf-8") as fh:
         spec = yaml.safe_load(fh)
-    return spec["document"] if "document" in spec else spec
+    return spec.get("contents") or spec.get("document") or spec
 
 
 def scrub(node):
@@ -154,8 +157,8 @@ def probe(args, label):
     if not token:
         sys.exit("no token: pass --token or export SIGMA_API_TOKEN")
     spec = yaml.safe_load(api_get(args.base_url, token,
-                                  f"/v2/workbooks/{args.workbook_id}/spec"))
-    doc = spec["document"]
+                                  f"/v2/workbooks/{args.workbook_id}?includeContents=true"))
+    doc = spec.get("contents") or spec.get("document") or spec
     results, bad = [], 0
     for e in doc.get("elements", []):
         if e.get("kind") not in DATA_KINDS:
