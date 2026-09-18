@@ -184,6 +184,12 @@ def canonicalize_layout(layout_xml):
 def _canonicalize_element(element):
     if not isinstance(element, dict):
         return element
+    # Workbook code representation rejects this data-model-only field. Keep it
+    # in local specs for parity/census readers, but never emit it through wrap().
+    element = {
+        key: value for key, value in element.items()
+        if key != "visibleAsSource"
+    }
     kind = element.get("kind")
     if kind == "text" and element.get("verticalAlign") in LEGACY_VERTICAL_ALIGN:
         return {**element, "verticalAlign": LEGACY_VERTICAL_ALIGN[element["verticalAlign"]]}
