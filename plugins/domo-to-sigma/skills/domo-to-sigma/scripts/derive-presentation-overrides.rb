@@ -15,6 +15,9 @@
 #
 # The existing builders consume these files. Raw-value parity twins remain the
 # builder's responsibility, so display scaling never changes the measured value.
+# Every sidecar is intentionally a sparse map keyed by card id: a missing id
+# means no source-grounded presentation override exists and the builder must use
+# its normal defaults. It is never an error and must never abort the migration.
 # Card headers are emitted only when layout-observed.json proves the source card
 # geometry; the observed path nests each header with its primary chart/KPI so no
 # element is left unplaced.
@@ -28,6 +31,38 @@ require 'json'
 require 'optparse'
 require_relative 'lib/domo_sigma_util'
 include DomoSigma
+
+def atomic_write_json(path, payload)
+  raise ArgumentError, "#{File.basename(path)} payload must be a JSON object" unless payload.is_a?(Hash)
+  temporary = "#{path}.tmp-#{Process.pid}-#{payload.object_id}"
+  File.open(temporary, 'wb') do |file|
+    file.write(JSON.pretty_generate(payload) + "\n")
+    file.flush
+    begin
+      file.fsync
+    rescue SystemCallError, IOError
+      # Some Windows/network filesystems do not expose fsync. The temp-file +
+      # rename boundary still prevents readers from seeing a partial document.
+    end
+  end
+  File.rename(temporary, path)
+rescue Errno::EEXIST, Errno::EPERM
+  # Windows cannot atomically replace an existing destination. `--force` is
+  # explicit, so use the narrow replace fallback there rather than leaving a
+  # partially-written destination.
+  FileUtils.rm_f(path)
+  File.rename(temporary, path)
+ensure
+  FileUtils.rm_f(temporary) if temporary && File.exist?(temporary)
+end
+
+def validate_sparse_map!(basename, payload, expected)
+  raise ArgumentError, "#{basename} must be a JSON object" unless payload.is_a?(Hash)
+  invalid = payload.find { |card_id, rule| card_id.to_s.empty? || !rule.is_a?(expected) }
+  return payload unless invalid
+  card_id, rule = invalid
+  raise ArgumentError, "#{basename}[#{card_id.inspect}] must be #{expected}, got #{rule.class}"
+end
 
 opts = {}
 OptionParser.new do |o|
@@ -288,23 +323,24 @@ cards.each do |card|
 end
 
 files = {
-  'kpi-format-overrides.json' => kpi_formats,
-  'chart-axis-overrides.json' => axis_formats,
-  'category-order-overrides.json' => category_orders,
-  'chart-color-overrides.json' => color_guards,
+  'kpi-format-overrides.json' => [kpi_formats, Hash],
+  'chart-axis-overrides.json' => [axis_formats, Hash],
+  'category-order-overrides.json' => [category_orders, Array],
+  'chart-color-overrides.json' => [color_guards, Hash],
 }
-files['kpi-card-header-overrides.json'] = kpi_headers if observed_layout
-files['card-header-overrides.json'] = card_headers if observed_layout
+files['kpi-card-header-overrides.json'] = [kpi_headers, Hash] if observed_layout
+files['card-header-overrides.json'] = [card_headers, Hash] if observed_layout
 
 written = []
 skipped = []
-files.each do |basename, payload|
+files.each do |basename, (payload, expected_rule_type)|
   path = File.join(discovery, basename)
   if File.exist?(path) && !opts[:force]
     skipped << basename
     next
   end
-  File.write(path, JSON.pretty_generate(payload) + "\n")
+  validate_sparse_map!(basename, payload, expected_rule_type)
+  atomic_write_json(path, payload)
   written << basename
 end
 
@@ -327,7 +363,7 @@ manifest = {
   'preserved_existing' => skipped,
   'warnings' => warnings
 }
-File.write(File.join(discovery, 'presentation-overrides.json'), JSON.pretty_generate(manifest) + "\n")
+atomic_write_json(File.join(discovery, 'presentation-overrides.json'), manifest)
 
 warn "derive-presentation-overrides: #{cards.size} cards; wrote #{written.join(', ')}"
 warn "  preserved existing: #{skipped.join(', ')}" unless skipped.empty?

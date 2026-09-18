@@ -1,0 +1,13 @@
+{
+  "schema": "domo-plugin-integrity/v1",
+  "pluginVersion": "0.16.117",
+  "files": {
+    ".claude-plugin/plugin.json": "a86ca7c24b14c317299adfcd79d27b4ce1f112eb6d060c9f1d3048d4a4648d3a",
+    "skills/domo-to-sigma/SKILL.md": "43165f44391c7df5a51c90a81c9e09bd24087f7edafdc3c51558d7bf51ac4714",
+    "skills/domo-to-sigma/scripts/migrate-domo.rb": "3ef4317af8871d97f0837b595cfa8293f071d0ca025b898142579abbd0db1d1b",
+    "skills/domo-to-sigma/scripts/build-workbook.rb": "c4ecf7f8ced0ea6cca2e29a02637370c105030119df81ecf03091382045a321b",
+    "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "a99e43812e84314c63d61745e473a5bfb7820be4d7c67f909619b6197fe96709",
+    "skills/domo-to-sigma/scripts/check-plugin-integrity.rb": "2d8fb28c64196194f5f21b0ad0cd6fda0388ef7f3b8add2b2ef587886b3ed525",
+    "skills/domo-to-sigma/scripts/lib/plugin_integrity.rb": "578681e34d33c3cf4c455ebaad6dd19db7af57b7b7d420cdeec6f2c35093abbc"
+  }
+}
