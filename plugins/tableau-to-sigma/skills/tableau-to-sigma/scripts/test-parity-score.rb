@@ -60,10 +60,13 @@ Dir.mktmpdir do |d|
                                  'oracle_mode' => 'anchors-warehouse'))
   output = IO.popen([RUBY, VP, '--plan', plan, '--score-out', score],
                     err: %i[child out], &:read)
+  empty_exit = $?.exitstatus
   doc = JSON.parse(File.read(score))
+  ok('empty chart plan fails closed with exit 2', empty_exit == 2)
   ok('zero source-CSV tiles have a null parity score', doc['value_parity_score'].nil?)
-  ok('zero-tile output says unavailable instead of 100%',
-     output.include?('value-parity score: unavailable') && !output.include?('100.0%'))
+  ok('zero-tile output routes to the oracle instead of printing 0/0 or 100%',
+     output.include?('anchors + warehouse') &&
+       !output.include?('0/0') && !output.include?('100.0%'))
 end
 
 # ── assert-phase6-ran.rb --min-parity-score gate ────────────────────────────

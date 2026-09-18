@@ -500,4 +500,8 @@ end
 File.write(summary_path, JSON.pretty_generate(summary))
 warn "wrote #{summary_path} (status=#{summary['status']} #{summary['charts_pass']}/#{summary['charts_total']}" \
      "#{summary['value_parity_score'] ? format(' parity=%.1f%%', summary['value_parity_score'].to_f * 100) : ''})"
+if plan['oracle_mode'] == 'anchors-warehouse' && total.zero?
+  warn 'phase6-parity finalize: source-CSV parity unavailable; anchors+warehouse hard gate decides completion'
+  exit 0
+end
 exit(status.success? ? 0 : 2)

@@ -277,6 +277,27 @@ else
   plan = raw
 end
 
+# An embedded-only dashboard has no worksheet CSV rows to compare. Empty
+# expected/actual arrays are mathematically equal but are not parity evidence;
+# fail closed and let the explicit anchors+warehouse route own verification.
+if plan.empty?
+  if opts[:score_out]
+    File.write(opts[:score_out], JSON.pretty_generate(
+      'ran_at' => Time.now.utc.iso8601,
+      'mode' => opts[:mode] == :extract ? 'extract' : 'strict',
+      'tiles_total' => 0,
+      'tiles_pass' => 0,
+      'tiles_fail' => 0,
+      'value_parity_score' => nil,
+      'tiles' => []
+    ))
+  end
+  warn 'verify-parity: empty chart plan — no worksheet CSV oracle exists to diff.'
+  warn '  Route: exact-target anchors + warehouse exports. MCP is optional.'
+  warn '  Vacuous 0/0 parity is intentionally blocked.'
+  exit 2
+end
+
 # Top-level --extract-mode overrides default
 mode_forced = opts[:mode] == :extract
 
