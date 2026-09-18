@@ -294,7 +294,7 @@ if plan.empty?
   end
   warn 'verify-parity: empty chart plan — no worksheet CSV oracle exists to diff.'
   warn '  Route: exact-target anchors + warehouse exports. MCP is optional.'
-  warn '  Vacuous 0/0 parity is intentionally blocked.'
+  warn '  Vacuous empty-plan parity is intentionally blocked.'
   exit 2
 end
 
