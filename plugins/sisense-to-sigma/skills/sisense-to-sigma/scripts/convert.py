@@ -724,7 +724,7 @@ def convert_dashboard(dashboards, model, dm_info, dm_metrics=None):
               "source": {"dataModelId": dm_info["dataModelId"],
                          "elementId": dm_info["factElementId"], "kind": "data-model"},
               "columns": master_cols, "name": "Master",
-              "order": [c["id"] for c in master_cols], "visibleAsSource": True}
+              "order": [c["id"] for c in master_cols], "visibleAsSource": False}
     doc = {"schemaVersion": 1, "kind": "workbook",
            "pages": [{"id": "pdata", "name": "Data", "visibility": "hidden"},
                      {"id": "pmain", "name": "Overview"}],

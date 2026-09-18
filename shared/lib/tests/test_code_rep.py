@@ -41,6 +41,20 @@ class TestCodeRep(unittest.TestCase):
         self.assertEqual(code_rep.wrap(doc), {'document': api_doc})
         self.assertEqual(code_rep.wrap(doc, extra={'name': 'N'}), {'name': 'N', 'document': api_doc})
 
+    def test_wrap_strips_data_model_only_visible_as_source(self):
+        doc = {
+            'schemaVersion': 1,
+            'pages': [{'id': 'data'}],
+            'elements': [
+                {'id': 'master', 'kind': 'table', 'visibleAsSource': False},
+                {'id': 'chart', 'kind': 'bar-chart', 'visibleAsSource': True},
+            ],
+        }
+        emitted = code_rep.wrap(doc)['document']['elements']
+        self.assertTrue(all('visibleAsSource' not in element for element in emitted))
+        self.assertFalse(doc['elements'][0]['visibleAsSource'])
+        self.assertTrue(doc['elements'][1]['visibleAsSource'])
+
     def test_round_trip_lossless_from_both_shapes(self):
         for r in (LIVE, LEGACY):
             doc = code_rep.document(r)

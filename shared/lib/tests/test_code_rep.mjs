@@ -35,6 +35,19 @@ const wrapped = wrap(nested).document;
 assert.deepEqual(wrapped.elements.map((element) => element.id), ['old']);
 assert.equal('elements' in wrapped.pages[0], false);
 
+const visibilityDoc = {
+  schemaVersion: 1,
+  pages: [{ id: 'data' }],
+  elements: [
+    { id: 'master', kind: 'table', visibleAsSource: false },
+    { id: 'chart', kind: 'bar-chart', visibleAsSource: true },
+  ],
+};
+const visibilityEmitted = wrap(visibilityDoc).document.elements;
+assert.equal(visibilityEmitted.every((element) => !('visibleAsSource' in element)), true);
+assert.equal(visibilityDoc.elements[0].visibleAsSource, false);
+assert.equal(visibilityDoc.elements[1].visibleAsSource, true);
+
 const legacyLayout = '<Page id="p"><GridContainer elementId="c"><LayoutElement elementId="e1"/>'
   + '<Noise elementId="not-layout"/></GridContainer></Page>';
 assert.deepEqual(

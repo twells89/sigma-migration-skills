@@ -152,6 +152,10 @@ export function canonicalizeLayout(layoutXml) {
 
 function canonicalizeElement(element) {
   if (!isObj(element)) return element;
+  // Workbook code representation rejects this data-model-only field. Keep it
+  // in local specs for parity/census readers, but never emit it through wrap().
+  const { visibleAsSource: _removedVisibleAsSource, ...workbookElement } = element;
+  element = workbookElement;
   if (element.kind === 'text' && element.verticalAlign in LEGACY_VERTICAL_ALIGN) {
     return { ...element, verticalAlign: LEGACY_VERTICAL_ALIGN[element.verticalAlign] };
   }

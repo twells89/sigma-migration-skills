@@ -20,8 +20,7 @@
           "dataModelId": "inode-DM000000",
           "elementId": "inode-ELEMENT00"
         },
-        "columns": [],
-        "visibleAsSource": false
+        "columns": []
       }
     ],
     "overlays": [],

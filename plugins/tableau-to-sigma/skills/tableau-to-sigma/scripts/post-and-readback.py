@@ -12,6 +12,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "lib"))
 import sigma_rest  # noqa: E402
+import code_rep  # noqa: E402
 
 DERIVATION_FIELDS = {"derivedVia", "partial", "droppedConditions"}
 
@@ -130,6 +131,11 @@ def post_and_readback(
     api=sigma_rest,
 ) -> tuple[str, dict, dict, dict]:
     outgoing = strip_derivation_fields(copy.deepcopy(spec))
+    if kind == "workbook":
+        outgoing = code_rep.wrap(
+            code_rep.document(outgoing),
+            extra=code_rep.metadata(outgoing),
+        )
     path, id_field = request_paths(kind, update_id)
     method = "put" if update_id else "post"
     body = outgoing if update_id else create_envelope(kind, outgoing)
