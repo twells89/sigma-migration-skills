@@ -154,6 +154,31 @@ def rebuild_workbook_artifacts?(opts)
   opts[:force] || PLUGIN_VERSION_CHANGED
 end
 
+def pop_discovery_refresh_needed?(cards_path)
+  cards = JSON.parse(File.read(cards_path))
+  Array(cards).any? do |card|
+    next false unless card['chartType'].to_s.downcase == 'badge_pop_bar_line'
+    next false unless card['_popComparisonProbe'].to_s.empty?
+
+    periods = card.dig('dateRangeFilter', 'periods')
+    candidates =
+      if periods.is_a?(Hash) && periods['type'].to_s.upcase == 'COMBINED'
+        Array(periods['combined'])
+      elsif periods.is_a?(Hash)
+        [periods]
+      else
+        []
+      end
+    candidates.none? do |period|
+      period.is_a?(Hash) &&
+        period['type'].to_s.upcase == 'OFFSET' &&
+        period['count'].to_i.positive?
+    end
+  end
+rescue StandardError
+  false
+end
+
 class VisualGradePending < StandardError
   attr_reader :request_path
 
@@ -956,10 +981,14 @@ def run_live!(opts)
   DomoRunState.record(OUT, 'tier' => (tier_b ? 'B' : 'A'))
 
   hr('discover')
-  if !opts[:force] && File.exist?(File.join(DISCOVERY, 'cards.json'))
+  cards_path = File.join(DISCOVERY, 'cards.json')
+  refresh_pop = PLUGIN_VERSION_CHANGED && pop_discovery_refresh_needed?(cards_path)
+  if !opts[:force] && File.exist?(cards_path) && !refresh_pop
     log 'discovery/cards.json already present — skip (idempotent; pass --force to rediscover)'
     skip_phase!('discover', 'already discovered (idempotent skip)')
   else
+    log 'refreshing discovery: prior cards.json contains POP cards without a completed public ' \
+        'comparison-metadata probe' if refresh_pop
     ok, code, _out = run_script!('domo-discover.rb', '--datasets')
     fail_phase!('discover', "domo-discover.rb --datasets exited #{code}") unless ok
     ok, code, _out = run_script!('domo-discover.rb', '--pages', opts[:pages].join(','))
