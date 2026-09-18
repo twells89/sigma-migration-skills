@@ -575,7 +575,6 @@ if plan_entries.empty? && sigma_charts.any?
 end
 
 output = {
-  'workbook_id'          => opts[:wb_id],
   'extract'              => extract,
   'charts'               => plan_entries,
   'hidden_filters'       => hidden_filters_gate,

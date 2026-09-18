@@ -130,8 +130,7 @@ if !opts[:finalize]
     plan_args = ['ruby', File.join(__dir__, 'auto-parity-plan.rb'),
                  '--tableau', opts[:tab],
                  '--workbook-spec', File.join(opts[:tab], 'wb-readback.json'),
-                 '--out', plan_path,
-                 '--workbook-id', opts[:wb]]
+                 '--out', plan_path]
     opts[:renames].each { |r| plan_args.concat(['--rename', r]) }
     # Thread --dashboard scoping through to the parity plan so both the chart
     # matching and the hidden_filters gate operate on the same tile set.
@@ -372,8 +371,7 @@ else
   warn "tile census skipped: no dashboard layout at #{dash_layout_path} (pass --dashboard-layout to enable)"
 end
 summary = {
-  'workbook_id'  => plan['workbook_id'] ||
-                    plan.dig('charts', 0, 'workbook_id') ||
+  'workbook_id'  => plan.dig('charts', 0, 'workbook_id') ||
                     (File.exist?(File.join(opts[:tab], 'wb-readback.json')) ?
                        JSON.parse(File.read(File.join(opts[:tab], 'wb-readback.json')))['workbookId'] : nil),
   'ran_at'       => Time.now.utc.iso8601,
