@@ -115,6 +115,17 @@ if render_target_page_src
   ok(render_target_page({ 'pages' => [] }).nil?, 'render_target_page returns nil for an empty pages array')
 end
 
+# A version-aware workbook rebuild cannot recover newly extractable POP
+# metadata if it reuses the old cards.json unchanged. Pin the targeted refresh:
+# only prior POP cards with neither periods nor a completed public probe make a
+# plugin-version resume rediscover the source.
+ok(migrate_src.include?('def pop_discovery_refresh_needed?(cards_path)'),
+   'plugin resume can detect stale POP discovery metadata')
+ok(migrate_src.include?('PLUGIN_VERSION_CHANGED && pop_discovery_refresh_needed?(cards_path)'),
+   'stale POP metadata triggers rediscovery when the plugin version changes')
+ok(migrate_src.include?('prior cards.json contains POP cards without a completed public'),
+   'targeted rediscovery is named in the run log instead of happening silently')
+
 # ---------------------------------------------------------------------------
 # bead B6 / B5 — static wiring regression guard for the LIVE-only code path.
 # run_live! shells out to real Domo/Sigma/Snowflake APIs, so it cannot be

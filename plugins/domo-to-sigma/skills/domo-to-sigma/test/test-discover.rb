@@ -146,6 +146,80 @@ eq(b['groupBy'], ['project_id'], 'groupBy flattened (Shape B)')
 eq(b['cardFormulas'].first['name'], 'Days Open', 'card formulas from definition.formulas')
 eq(b['limit'], 25, 'limit carried through Shape B normalization (bead 2ef7)')
 
+puts "== POP comparison metadata falls back from private Shape B to public Shape A =="
+private_pop = normalize_card({
+  'chartType' => 'badge_pop_bar_line',
+  'definition' => {
+    'title' => '1-30 $ YoY',
+    'subscriptions' => {
+      'main' => {
+        'columns' => [
+          { 'column' => 'Date', 'mapping' => 'ITEM' },
+          { 'column' => '1-30', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+        ],
+        'dateRangeFilter' => {
+          'column' => { 'column' => 'Date' },
+          'dateTimeRange' => {
+            'dateTimeRangeType' => 'INTERVAL_OFFSET',
+            'interval' => 'YEAR', 'offset' => 0, 'count' => 0,
+          },
+        },
+      },
+    },
+  },
+}, 'pop-private')
+public_pop = {
+  'title' => '1-30 $ YoY',
+  'chartType' => 'badge_pop_bar_line',
+  'chartBody' => {
+    'columns' => [
+      { 'column' => 'Date', 'mapping' => 'ITEM' },
+      { 'column' => '1-30', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+    ],
+    'dateGrain' => { 'column' => 'Date', 'dateTimeElement' => 'MONTH' },
+    'dateRangeFilter' => {
+      'column' => 'Date',
+      'dateTimeRange' => {
+        'dateTimeRangeType' => 'INTERVAL_OFFSET',
+        'interval' => 'YEAR', 'offset' => 0, 'count' => 0,
+      },
+      'periods' => {
+        'type' => 'COMBINED',
+        'combined' => [{ 'interval' => 'YEAR', 'type' => 'OFFSET', 'count' => 1 }],
+        'count' => 0,
+      },
+    },
+  },
+}
+enriched_pop = merge_public_pop_comparison(private_pop, public_pop, 'pop-private')
+ok(pop_comparison_periods?(enriched_pop['dateRangeFilter']),
+   'public CardDefinition restores the prior-year offset missing from private analyzer data')
+eq(enriched_pop.dig('dateRangeFilter', 'column'), { 'column' => 'Date' },
+   'private date binding remains authoritative while public periods are merged')
+eq(enriched_pop['dateGrain'], { 'column' => 'Date', 'dateTimeElement' => 'MONTH' },
+   'public date grain fills the private omission needed for POP alignment')
+eq(enriched_pop['_popComparisonSource'], 'public-card-definition',
+   'backfill is explicitly attributable in cards.json')
+eq(enriched_pop['columns'], private_pop['columns'],
+   'public fallback does not replace private formula/column bindings')
+
+already_complete = private_pop.merge(
+  'dateRangeFilter' => public_pop.dig('chartBody', 'dateRangeFilter')
+)
+different_public = Marshal.load(Marshal.dump(public_pop))
+different_public.dig('chartBody', 'dateRangeFilter', 'periods', 'combined', 0)['count'] = 2
+unchanged_pop = merge_public_pop_comparison(already_complete, different_public, 'pop-complete')
+eq(unchanged_pop.dig('dateRangeFilter', 'periods', 'combined', 0, 'count'), 1,
+   'existing private comparison metadata wins without a redundant public override')
+
+public_without_periods = Marshal.load(Marshal.dump(public_pop))
+public_without_periods.dig('chartBody', 'dateRangeFilter').delete('periods')
+probed_no_periods = merge_public_pop_comparison(
+  private_pop, public_without_periods, 'pop-no-periods'
+)
+eq(probed_no_periods['_popComparisonProbe'], 'public-no-periods',
+   'successful public probe distinguishes a genuine no-periods card from failed extraction')
+
 puts "== normalize_card: Shape B prefers operand over conflicting filterType =="
 shape_b_operand_wins = {
   'chartType' => 'badge_bar', 'dataSetId' => 'ds-2b',

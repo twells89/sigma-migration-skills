@@ -1587,24 +1587,66 @@ four_measure_pop = build_element({
     { 'column' => 'Prior 2', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
     { 'column' => 'Prior 3', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
   ],
+  'dateGrain' => { 'column' => 'Period', 'dateTimeElement' => 'MONTH' },
+  'dateRangeFilter' => {
+    'column' => { 'column' => 'Period' },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'YEAR',
+      'offset' => 0, 'count' => 0,
+    },
+  },
 }, {})
 eq(four_measure_pop.dig('yAxis', 'columnIds').map { |series| series['type'] },
    %w[bar line line line], 'one current plus three prior measures is a valid POP combo')
 ok(!$warnings.any? { |warning| warning['warning'].include?('expected a bar measure') },
    'valid four-period POP chart no longer emits a false expected-two warning')
+ok(four_measure_pop['filters'].any? { |filter| filter['columnId'] == 'f-datewin-period-year-offset-0' },
+   'authored multi-measure POP shape with no synthetic periods keeps its selected-year filter')
+ok(!$warnings.any? { |warning| warning['warning'].include?('date window NOT applied') },
+   'ordinary authored series do not trigger the synthetic-period date-window refusal')
 
-puts "== unresolved POP never masquerades as a valid one-series comparison =="
+puts "== live no-comparison POP shape remains an honest selected-period chart =="
 $warnings = []
 unresolved_pop = build_element({
   'id' => 'pop-missing-periods', 'title' => 'Broken YoY', 'chartType' => 'badge_pop_bar_line',
+  '_popComparisonProbe' => 'public-no-periods',
   'columns' => [
     { 'column' => 'Date', 'mapping' => 'ITEM' },
     { 'column' => 'Revenue', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
   ],
+  'dateGrain' => { 'column' => 'Period', 'dateTimeElement' => 'MONTH' },
+  'dateRangeFilter' => {
+    'column' => { 'column' => 'Period' },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'YEAR',
+      'offset' => 0, 'count' => 0,
+    },
+  },
 }, {})
-ok(unresolved_pop.nil?, 'POP with no compare metadata or explicit prior measure is skipped')
-ok($warnings.any? { |warning| warning['warning'].include?('falsely look like a valid comparison') },
-   'the skip names the missing POP semantics instead of silently degrading')
+eq(unresolved_pop['kind'], 'bar-chart',
+   'POP token with no compare metadata/channels preserves its one authored series as a bar')
+eq(unresolved_pop.dig('yAxis', 'columnIds').size, 1,
+   'fallback exposes exactly one series and cannot masquerade as a comparison')
+ok(unresolved_pop['filters'].any? { |filter| filter['columnId'] == 'f-datewin-period-year-offset-0' },
+   'fallback applies the selected Domo year instead of aggregating all history')
+ok($warnings.any? { |warning| warning['warning'].include?('does not claim a period-over-period comparison') },
+   'warning distinguishes absent source comparison semantics from a conversion failure')
+ok(!$warnings.any? { |warning| warning['warning'].include?('SKIPPED') },
+   'a source-valid no-comparison card is not dropped from the workbook')
+
+puts "== unresolved one-measure POP never erases a comparison visible in Analyzer =="
+$warnings = []
+unknown_pop = build_element({
+  'id' => 'pop-unknown-comparison', 'title' => '1-30 $ YoY', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'Date', 'mapping' => 'ITEM' },
+    { 'column' => '1-30', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+}, {})
+ok(unknown_pop.nil?,
+   'one authored measure without a successful public/card-data probe remains unresolved')
+ok($warnings.any? { |warning| warning['warning'].include?('Analyzer/render may still derive bars plus a line') },
+   'warning captures the customer-observed hidden-comparison shape')
 
 puts "== explicit current/prior Beast Modes remain a deterministic POP fallback =="
 $translated_bms = {

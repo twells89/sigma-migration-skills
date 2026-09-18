@@ -1000,7 +1000,16 @@ def append_geometryless_remainder(dash, cards, kind_map)
   # among geometry-bearing ones is a degraded/partial capture, not a case
   # this remainder pass should rescue — it stays excluded from rung 1's
   # output, unchanged (see test-build-domo-layout.rb's NoGeom/_error case).
-  synthesized = cards.select { |c| c['_synthesized'] }
+  # PageLayoutV4 headers/page breaks are synthesized into cards here but DO
+  # carry real x/y/w/h, so build_dashboard already placed them. Only append
+  # synthesized elements that were actually geometry-less (companion KPIs,
+  # orphan controls, derived headers). Including every synthesized element
+  # duplicated a v4 header id in dashboard-layout.json; the downstream layout
+  # matcher dropped both ambiguous zones and put-layout then failed because the
+  # real text element was unplaced.
+  synthesized = cards.select do |c|
+    c['_synthesized'] && !(c['x'] && c['y'] && c['w'] && c['h'])
+  end
   return dash if synthesized.empty?
 
   rest = build_dashboard_from_collections(dash['dashboard'], synthesized, kind_map)

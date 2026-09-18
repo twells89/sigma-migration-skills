@@ -1005,6 +1005,17 @@ def pop_card_data(card)
   cards.is_a?(Hash) ? cards[card['id'].to_s] : nil
 end
 
+def pop_no_comparison_proven?(card)
+  return true if card['_popComparisonProbe'] == 'public-no-periods'
+
+  expected = pop_card_data(card)
+  return false unless expected.is_a?(Hash)
+  mappings = Array(expected['mappings']).map { |mapping| mapping.to_s.upcase }
+  mappings.include?('VALUE') &&
+    !mappings.include?('POP_PERIOD') &&
+    !mappings.include?('POP_INDEX')
+end
+
 def infer_pop_offset(primary_start, comparison_start)
   months = (primary_start.year - comparison_start.year) * 12 +
            primary_start.month - comparison_start.month
@@ -1220,12 +1231,18 @@ def build_combo(card)
   ct = card['chartType'].to_s.downcase
   secondary = COMBO_SECONDARY_TYPE[ct] || 'line'
   if ct == 'badge_pop_bar_line' && meas.size < 2
-    warn_card(card, "badge_pop_bar_line: SKIPPED — Domo period-over-period cards expose one authored " \
-                    'measure plus synthetic POP_PERIOD/POP_INDEX channels. Only one explicit measure ' \
-                    "resolved here, so emitting it would falsely look like a valid comparison. Supply " \
-                    'the source compare-to metadata (or explicit current/prior Beast Mode measures) ' \
-                    'and rebuild.')
-    return nil
+    unless pop_no_comparison_proven?(card)
+      warn_card(card, "badge_pop_bar_line: SKIPPED — only one authored measure resolved, but neither " \
+                      'the public CardDefinition nor captured card-data proved that the source lacks a ' \
+                      'comparison. The Analyzer/render may still derive bars plus a line from hidden ' \
+                      'period metadata; refusing to erase that comparison.')
+      return nil
+    end
+    warn_card(card, 'badge_pop_bar_line: Domo returned no comparison in dateRangeFilter.periods or ' \
+                    'card-data POP_PERIOD/POP_INDEX channels. Preserved the authored value as a ' \
+                    'single-series selected-period bar chart; it does not claim a period-over-period ' \
+                    'comparison.')
+    return build_axis_chart(card, 'bar-chart')
   end
   if meas.size != 2 && !(ct == 'badge_pop_bar_line' && meas.size >= 2)
     warn_card(card, "combo-chart: expected a bar measure + a #{secondary} measure (2 total) but found " \
@@ -2209,10 +2226,12 @@ def apply_card_date_window!(card, el)
                     'own filters — apply the predicate on its source element instead.')
     return el
   end
-  if type == 'INTERVAL_OFFSET' && card['chartType'].to_s.downcase == 'badge_pop_bar_line'
-    warn_card(card, "date window NOT applied (#{payload}): Domo POP expands the selected bucket " \
-                    'with prior-period rows and synthetic period/index channels; a one-bucket ' \
-                    'predicate would drop those channels. Recreate this card with the POP plugin.')
+  # A reconstructed POP chart's hidden helpers already carry exact current and
+  # comparison windows. Do not add the ordinary one-bucket predicate to that
+  # element. A badge_pop_bar_line with NO periods/POP channels is different:
+  # live Domo card-data contains only ITEM/VALUE (or authored SERIES measures),
+  # so it is an ordinary selected-period query and must take this date filter.
+  if type == 'INTERVAL_OFFSET' && el['_periodComparisonManaged']
     return el
   end
 

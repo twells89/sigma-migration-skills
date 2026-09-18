@@ -268,7 +268,7 @@ instance (2026-07-30 validation, 48 cards / 22 distinct chartTypes). Sigma
 | `badge_word_cloud` | `table` | ❌ **no native equivalent** | see below. |
 | `badge_calendar` | `table` | ❌ **no native equivalent** | see below. |
 | `badge_filledgauge` | `progress` or `kpi-chart` | ✅ conditional released mapping | Emit ring `progress` only when explicit `CURRENT` + `TARGET` roles ground value/max and no card-local filter/date window would be lost; otherwise retain KPI + warn. |
-| `badge_pop_bar_line` | `combo-chart` | ✅ reconstructed | `dateRangeFilter.periods` becomes explicit current/prior measures; hidden filtered helpers reproduce Domo's synthetic `POP_PERIOD` / `POP_INDEX` alignment. |
+| `badge_pop_bar_line` | `combo-chart` / proven single-series `bar-chart` | ✅ evidence-based | Backfill private `periods` from the public CardDefinition, then reconstruct current/prior measures. Preserve selected-period series only when public/card-data evidence proves no comparison. |
 | `badge_vert_symbol_overlay` | `combo-chart` | ❌ **no native equivalent** | see below. |
 
 ### No native Sigma equivalent — do not silently substitute a bar chart
@@ -286,7 +286,7 @@ a nice-to-have:
 | `badge_calendar` | No calendar-heatmap kind exists. | A flat date + value `table`. |
 | `badge_vert_symbol_overlay` | No actual-vs-target dial/overlay kind exists (and `gauge` itself is invalid — see above). | `combo-chart` (bar + a `scatter` marker series) approximates the visual; a true actual-vs-target dial is not representable. |
 
-`badge_pop_bar_line` reconstruction and its refusal behavior are specified in
+`badge_pop_bar_line` reconstruction and no-comparison behavior are specified in
 `refs/chart-safety.md`.
 
 **Follow-up, not handled by this converter today:** closing this gap for real —
@@ -494,7 +494,7 @@ Add these to the mandatory layout-visual-qa gate:
       `badge_vert_symbol_overlay`) carries a Phase-5e
       warning naming the gap — never a silent, unexplained bar chart.
 - [ ] Every `badge_pop_bar_line` with source compare metadata emits at least two
-      explicit period measures; an unresolved POP card is skipped, never
-      presented as a valid one-series comparison.
+      period measures. Preserve a no-comparison card only after a completed
+      probe; skip an unresolved one-measure shape rather than flattening it.
 - [ ] Every `badge_filledgauge` either has explicit `CURRENT` + `TARGET` roles
       and emitted native `progress`, or carries the named KPI-fallback warning.
