@@ -85,6 +85,7 @@ require_relative 'lib/sigma_rest'
 require_relative 'lib/domo_warehouse_column_refs'
 require_relative 'lib/visual_handoff'
 require_relative 'lib/workbook_post_sanitizer'
+require_relative 'lib/plugin_integrity'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -138,6 +139,13 @@ BASE_ENV = {
 
 PLUGIN_MANIFEST_PATH = File.expand_path('../../../.claude-plugin/plugin.json', __dir__)
 PLUGIN_MANIFEST = JSON.parse(File.read(PLUGIN_MANIFEST_PATH)) rescue {}
+PLUGIN_ROOT = File.expand_path('../../..', __dir__)
+PLUGIN_INTEGRITY = begin
+  DomoPluginIntegrity.verify!(PLUGIN_ROOT)
+rescue StandardError => e
+  abort "FATAL: plugin integrity check failed before any source/target writes: #{e.message}. " \
+        'Reinstall or update domo-to-sigma; do not patch generated migration artifacts.'
+end
 PRIOR_RUN_STATE = JSON.parse(File.read(File.join(OUT, 'run-state.json'))) rescue {}
 PRIOR_PLUGIN_VERSION = PRIOR_RUN_STATE['plugin_version']
 PLUGIN_VERSION_CHANGED = !PRIOR_PLUGIN_VERSION.to_s.empty? &&
@@ -147,6 +155,7 @@ DomoRunState.record(
   OUT,
   'plugin_version' => PLUGIN_MANIFEST['version'],
   'plugin_manifest' => PLUGIN_MANIFEST_PATH,
+  'plugin_integrity' => PLUGIN_INTEGRITY,
   'resumed_from_plugin_version' => (PLUGIN_VERSION_CHANGED ? PRIOR_PLUGIN_VERSION : nil),
 )
 
@@ -225,6 +234,20 @@ def run_script!(script, *args)
   out.each_line { |l| print "    #{l}" }
   puts if !out.empty? && !out.end_with?("\n")
   [status.success?, status.exitstatus, out]
+end
+
+def script_failure_note(script, code, output)
+  sanitized = output.to_s.dup
+  %w[SIGMA_CLIENT_SECRET SIGMA_API_TOKEN DOMO_CLIENT_SECRET DOMO_ACCESS_TOKEN DOMO_DEV_TOKEN].each do |key|
+    value = ENV[key].to_s
+    sanitized.gsub!(value, '[REDACTED]') unless value.empty?
+  end
+  sanitized.gsub!(/Bearer\s+\S+/i, 'Bearer [REDACTED]')
+  tail = sanitized.lines.last(20).join
+  tail = tail[-4000, 4000] if tail.length > 4000
+  note = "#{script} exited #{code}"
+  note += "\n#{tail.rstrip}" unless tail.strip.empty?
+  note
 end
 
 # Same argv-array discipline as run_script!, for this skill's one Python
@@ -676,8 +699,8 @@ def phase_build_workbook!(opts)
     skip_phase!('build-workbook', 'already built (idempotent skip)')
     return
   end
-  ok, code, _out = run_script!('build-workbook.rb')
-  fail_phase!('build-workbook', "build-workbook.rb exited #{code}") unless ok
+  ok, code, out = run_script!('build-workbook.rb')
+  fail_phase!('build-workbook', script_failure_note('build-workbook.rb', code, out)) unless ok
   ok, code, _out = run_script!('qa-check.rb', '--in', cs_path)
   fail_phase!('build-workbook', "qa-check.rb exited #{code}") unless ok
   done_phase!('build-workbook')

@@ -14,7 +14,9 @@
 require 'json'
 require 'tmpdir'
 require 'open3'
+require 'fileutils'
 require_relative '../scripts/lib/code_rep'
+require_relative '../scripts/lib/plugin_integrity'
 # Ruby 2.6 floor: this test READS a sibling script and eval()s a method out
 # of it, so that script's own require_relative lines never run -- the test
 # must supply the polyfill itself. See shared/lib/ruby_compat.rb.
@@ -53,6 +55,34 @@ ok(cards.any? { |c| c['summaryNumber'] && !Array(c['groupBy']).empty? },
 ok(File.exist?(File.join(FIXTURE, 'dm-spec.json')), 'sanity: fixture stages dm-spec.json (build-dm.rb pre-post shape) for the ds-dim sub-master')
 ok(File.exist?(File.join(FIXTURE, 'dm-ids.json')), 'sanity: fixture stages dm-ids.json (synthesized post-and-readback) for the ds-dim sub-master')
 ok(File.exist?(File.join(FIXTURE, 'beast-modes.json')), 'sanity: fixture stages beast-modes.json so migrate-domo.rb\'s convert-beast-modes phase is actually exercised, not SKIPped')
+
+puts '== packaged plugin integrity =='
+plugin_root = File.expand_path('../..', SKILL)
+integrity = DomoPluginIntegrity.verify!(plugin_root)
+eq(integrity['pluginVersion'], PLUGIN_VERSION,
+   'release integrity manifest matches the advertised plugin version')
+eq(integrity['files'].keys.sort, DomoPluginIntegrity::CRITICAL_FILES.sort,
+   'every critical runtime file is covered by the release fingerprint')
+
+Dir.mktmpdir('domo-plugin-integrity') do |root|
+  DomoPluginIntegrity::CRITICAL_FILES.each do |relative|
+    path = File.join(root, relative)
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, relative.end_with?('plugin.json') ?
+      JSON.generate('version' => '9.9.9') : "fixture #{relative}\n")
+  end
+  manifest_path = DomoPluginIntegrity.manifest_path(root)
+  File.write(manifest_path, JSON.pretty_generate(DomoPluginIntegrity.generate(root)))
+  ok(DomoPluginIntegrity.verify!(root), 'a complete packaged fixture verifies')
+  File.write(File.join(root, 'skills/domo-to-sigma/scripts/build-workbook.rb'), "stale bytes\n")
+  begin
+    DomoPluginIntegrity.verify!(root)
+    ok(false, 'mixed-version plugin bytes are rejected')
+  rescue StandardError => e
+    ok(e.message.include?('build-workbook.rb'),
+       'mixed-version rejection names the stale critical file')
+  end
+end
 
 # ---------------------------------------------------------------------------
 # bead B5 — render_target_page (pure logic, no I/O): migrate-domo.rb's top
@@ -245,6 +275,11 @@ ok(migrate_src.include?('DomoVisualHandoff.record_args'),
    'visual handoff: a completed blind grade is consumed and recorded automatically')
 ok(migrate_src.include?("'plugin_version' => PLUGIN_MANIFEST['version']"),
    'run evidence records the exact Domo plugin version')
+ok(migrate_src.include?("'plugin_integrity' => PLUGIN_INTEGRITY") &&
+   migrate_src.include?('DomoPluginIntegrity.verify!'),
+   'startup verifies and records the packaged runtime fingerprint before migration phases')
+ok(migrate_src.include?("script_failure_note('build-workbook.rb', code, out)"),
+   'a workbook-builder crash records a sanitized exception tail, not only a generic exit code')
 sanitize_at = migrate_src.index('DomoSigma::WorkbookPostSanitizer.build')
 workbook_post_at = migrate_src.index("args = ['--type', 'workbook', '--spec', post_spec")
 ok(sanitize_at && workbook_post_at && sanitize_at < workbook_post_at,
@@ -505,6 +540,101 @@ else
        'step, which requires node to run the vendored converter/sql.mjs (same as doctor.sh\'s hard node ' \
        'requirement for this skill). Install node (see scripts/bootstrap.sh) to exercise this suite for real. ' \
        'This is NOT a verified pass.'
+end
+
+# Exact regression for the field crash: a simple no-POP dashboard produces five
+# KPI elements while its intentionally sparse presentation sidecar names only
+# four card ids. The full offline orchestrator must still build line/text/table
+# content, write control coverage, and finish.
+if node_present
+  Dir.mktmpdir('domo-simple-sparse-fixture') do |fixture_dir|
+    Dir.mktmpdir('domo-simple-sparse-out') do |out_dir|
+      write = ->(name, payload) {
+        File.write(File.join(fixture_dir, name), JSON.pretty_generate(payload) + "\n")
+      }
+      kpi_cards = (1..5).map do |index|
+        {
+          'id' => "simple-kpi-#{index}", 'title' => "KPI #{index}", 'datasetId' => 'ds1',
+          'chartType' => 'badge_singlevalue', 'sigmaKindHint' => 'kpi-chart',
+          'groupBy' => [], 'columns' => [{ 'column' => 'sales_amount', 'aggregation' => 'SUM' }],
+          'summaryNumber' => {
+            'column' => 'sales_amount', 'aggregation' => 'SUM', 'label' => "KPI #{index}",
+            '_defaultCountSuspect' => false,
+          },
+          'filters' => [], 'x' => (index - 1) * 20, 'y' => 0, 'w' => 20, 'h' => 20,
+        }
+      end
+      cards = kpi_cards + [
+        {
+          'id' => 'simple-line', 'title' => 'Calls by Queue', 'datasetId' => 'ds1',
+          'chartType' => 'badge_symbolline', 'sigmaKindHint' => 'line-chart',
+          'groupBy' => ['project_name'],
+          'columns' => [
+            { 'column' => 'project_name', 'mapping' => 'ITEM' },
+            { 'column' => 'sales_amount', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+          ],
+          'filters' => [], 'x' => 0, 'y' => 20, 'w' => 50, 'h' => 35,
+        },
+        {
+          'id' => 'simple-table', 'title' => 'Call Detail', 'datasetId' => 'ds1',
+          'chartType' => 'badge_table', 'sigmaKindHint' => 'table', 'groupBy' => [],
+          'columns' => [
+            { 'column' => 'project_name' },
+            { 'column' => 'sales_amount', 'aggregation' => 'SUM' },
+          ],
+          'filters' => [], 'x' => 50, 'y' => 20, 'w' => 50, 'h' => 35,
+        },
+      ]
+      write.call('cards.json', cards)
+      write.call('pages.json', [{
+        'id' => 'simple-page', 'title' => 'Simple Dashboard',
+        'cardIds' => cards.map { |card| card['id'] },
+        '_layoutContent' => [{
+          'id' => 'simple-text-1', 'type' => 'header', 'text' => 'AI Voice Calls',
+        }],
+      }])
+      write.call('beast-modes.json', [])
+      write.call('formulas.json', [])
+      write.call(
+        'kpi-format-overrides.json',
+        (1..4).each_with_object({}) { |index, out|
+          out["simple-kpi-#{index}"] = { 'fontSize' => 48 }
+        }
+      )
+      FileUtils.cp(File.join(FIXTURE, 'dm-spec.json'), File.join(fixture_dir, 'dm-spec.json'))
+      FileUtils.cp(File.join(FIXTURE, 'dm-ids.json'), File.join(fixture_dir, 'dm-ids.json'))
+
+      command = [
+        'ruby', File.join(SCRIPTS, 'migrate-domo.rb'),
+        '--offline', fixture_dir, '--out', out_dir,
+      ]
+      output = IO.popen(command, err: [:child, :out], &:read)
+      ok($?.success?, "simple sparse-override dashboard completes end to end\n#{output unless $?.success?}")
+
+      chart_specs = JSON.parse(File.read(File.join(out_dir, 'discovery', 'chart-specs.json')))
+      elements = chart_specs['pages'].flat_map { |page| Array(page['elements']) }
+      simple_kpis = elements.select { |element| element['id'].to_s.start_with?('el-simple-kpi-') }
+      eq(simple_kpis.size, 5, 'all five KPI source cards reach chart-specs.json')
+      eq(simple_kpis.first(4).map { |element| element.dig('value', 'fontSize') }, [48, 48, 48, 48],
+         'the four sparse presentation rules apply')
+      ok(!simple_kpis.last['value'].key?('fontSize'),
+         'the fifth KPI uses defaults instead of crashing on a missing sparse rule')
+      ok(elements.any? { |element| element['id'] == 'el-simple-line' && element['kind'] == 'line-chart' },
+         'simple line chart survives the same full build')
+      ok(elements.any? { |element| element['id'] == 'el-simple-table' && element['kind'] == 'table' },
+         'simple table survives the same full build')
+      ok(elements.any? { |element| element['id'] == 'simple-text-1' && element['kind'] == 'text' },
+         'simple source text survives the same full build')
+      controls = JSON.parse(File.read(File.join(out_dir, 'domo-controls-coverage.json')))
+      eq([controls['expected'], controls['emitted']], [0, 0],
+         'control coverage artifact is generated even when the simple dashboard has no controls')
+      ok(Dir.glob(File.join(out_dir, 'discovery', '*.tmp-*')).empty?,
+         'atomic presentation-sidecar writes leave no partial temp files')
+      run_state = JSON.parse(File.read(File.join(out_dir, 'run-state.json')))
+      ok(run_state.dig('plugin_integrity', 'manifestSha256'),
+         'end-to-end run records the verified package fingerprint')
+    end
+  end
 end
 
 # ---- fail-fast: a fixture missing cards.json aborts loudly, non-zero ------

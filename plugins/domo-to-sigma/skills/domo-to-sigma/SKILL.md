@@ -119,6 +119,7 @@ grid is only 6 wide, so widths scale ×4).
 | Script | Phase | Purpose |
 |---|---|---|
 | `scripts/doctor.sh` / `scripts/doctor.ps1` *(vendored)* | 0 | Environment preflight → `doctor.json` (macOS/Linux/Git-Bash / Windows PowerShell) |
+| `scripts/check-plugin-integrity.rb` | 0 | Verify critical installed files match the advertised plugin release; also runs automatically before migration writes |
 | `scripts/assert-doctor-ran.rb` *(vendored)* | 0 | Gate: the build phases refuse to start until `doctor.json` passes |
 | `scripts/setup.rb` *(vendored)* | prereq | Store Sigma credentials once (any shell) |
 | `scripts/get_token.py` *(vendored)* | prereq | Shell-neutral Sigma token → `auth.json` (bash / PowerShell / cmd) |
@@ -189,6 +190,12 @@ powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1
 If the doctor cannot pass in your environment and you must proceed anyway, waive
 the gate explicitly and name the reason in your report:
 `SIGMA_SKIP_DOCTOR_GATE="<reason>" ruby scripts/build-dm.rb`.
+
+`migrate-domo.rb` also verifies `.claude-plugin/integrity.json` before source or
+target writes and records that fingerprint in `run-state.json`. For stale-cache
+diagnosis, run `ruby scripts/check-plugin-integrity.rb`; a version label without
+matching file hashes is not proof of which code ran. Reinstall/update the plugin
+instead of patching generated migration artifacts.
 
 ---
 
@@ -460,6 +467,9 @@ order, and (when screenshot geometry is present) KPI title/subtitle blocks —
 from source facts, so a customer run reproduces the gold-path styling without
 hand-authored files. It only writes sidecars that don't already exist (an
 operator's hand-authored sidecar always wins) and never fails the run.
+The sidecars are intentionally sparse maps: a missing card id means “use normal
+element defaults.” Malformed optional presentation rules are warned and ignored;
+they never abort the semantic workbook build.
 Screenshot-backed chart and KPI headers are safe because the observed-layout
 path nests each header with its primary element inside one source-card container. The
 `domo/orders-presentation` corpus case pins this derivation offline/creds-free.

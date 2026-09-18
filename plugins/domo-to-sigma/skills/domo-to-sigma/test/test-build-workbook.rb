@@ -63,6 +63,68 @@ kpi3 = build_kpi({ 'id' => 'c2', 'title' => 'Projects',
 eq(kpi3['columns'][0]['formula'], 'Sum([Master/Budget])', 'override swaps to the intended measure')
 ok($warnings.empty?, 'no warning once overridden')
 
+puts "== sparse KPI presentation overrides are optional, never fatal =="
+Dir.mktmpdir do |dir|
+  File.write(
+    File.join(dir, 'kpi-format-overrides.json'),
+    JSON.generate((1..4).each_with_object({}) { |index, out|
+      out["sparse-#{index}"] = { 'fontSize' => 48 }
+    })
+  )
+  cards = (1..5).map do |index|
+    {
+      'id' => "sparse-#{index}",
+      'title' => "KPI #{index}",
+      'chartType' => 'badge_singlevalue',
+      'sigmaKindHint' => 'kpi-chart',
+      'groupBy' => [],
+      'columns' => [{ 'column' => 'value', 'aggregation' => 'SUM' }],
+      'summaryNumber' => {
+        'column' => 'value', 'aggregation' => 'SUM', 'label' => "KPI #{index}",
+        '_defaultCountSuspect' => false,
+      },
+      'filters' => [],
+    }
+  end
+  $warnings = []
+  built = nil
+  stub_const(:OUT, dir) { built = cards.map { |card| build_element(card, {}) } }
+  eq(built.compact.size, 5,
+     'five KPI elements build when kpi-format-overrides.json has only four card rules')
+  eq(built.first(4).map { |element| element.dig('value', 'fontSize') }, [48, 48, 48, 48],
+     'the four present rules are applied')
+  ok(!built.last['value'].key?('fontSize'),
+     'the unmatched KPI keeps its default presentation instead of dereferencing nil')
+  ok($warnings.none? { |warning| warning['warning'].include?('sparse') },
+     'a missing sparse-map key is normal and does not emit a false warning')
+end
+
+puts "== malformed optional presentation rules warn and fall back =="
+Dir.mktmpdir do |dir|
+  card = {
+    'id' => 'malformed-rule', 'title' => 'Malformed Rule',
+    'summaryNumber' => {
+      'column' => 'value', 'aggregation' => 'SUM', 'label' => 'Value',
+      '_defaultCountSuspect' => false,
+    },
+  }
+  kpi = build_kpi(card, {})
+  File.write(File.join(dir, 'kpi-format-overrides.json'), JSON.generate('malformed-rule' => 'not-an-object'))
+  $warnings = []
+  result = nil
+  stub_const(:OUT, dir) { result = apply_kpi_display_override!(card, kpi) }
+  eq(result, kpi, 'a non-object card rule leaves the KPI unchanged')
+  ok($warnings.any? { |warning| warning['warning'].include?('expected Hash') },
+     'a malformed card rule is named in warnings')
+
+  File.write(File.join(dir, 'kpi-format-overrides.json'), '{')
+  $warnings = []
+  stub_const(:OUT, dir) { result = apply_kpi_display_override!(card, kpi) }
+  eq(result, kpi, 'invalid sidecar JSON leaves the KPI unchanged')
+  ok($warnings.any? { |warning| warning['warning'].include?('JSON::ParserError') },
+     'invalid sidecar JSON is warned rather than crashing the build')
+end
+
 puts "== #7 + #8 bar chart: real bar-chart, gridlines off =="
 $warnings = []
 bar = build_element({ 'id' => 'c3', 'title' => 'Sales by Region', 'chartType' => 'badge_vert_bar',
