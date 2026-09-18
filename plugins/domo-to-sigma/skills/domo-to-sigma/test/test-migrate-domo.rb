@@ -23,6 +23,9 @@ require_relative '../scripts/lib/ruby_compat'
 SKILL   = File.expand_path('..', __dir__)
 SCRIPTS = File.join(SKILL, 'scripts')
 FIXTURE = File.join(__dir__, 'fixtures', 'domo-estate')
+PLUGIN_VERSION = JSON.parse(
+  File.read(File.expand_path('../../.claude-plugin/plugin.json', SKILL))
+)['version']
 
 $failures = 0
 def ok(c, m) if c then puts "  ok: #{m}" else $failures += 1; puts "  FAIL: #{m}" end end
@@ -231,6 +234,18 @@ ok(migrate_src.include?('DomoVisualHandoff.record_args'),
    'visual handoff: a completed blind grade is consumed and recorded automatically')
 ok(migrate_src.include?("'plugin_version' => PLUGIN_MANIFEST['version']"),
    'run evidence records the exact Domo plugin version')
+sanitize_at = migrate_src.index('DomoSigma::WorkbookPostSanitizer.build')
+workbook_post_at = migrate_src.index("args = ['--type', 'workbook', '--spec', post_spec")
+ok(sanitize_at && workbook_post_at && sanitize_at < workbook_post_at,
+   'live workbook path sanitizes a dedicated transport spec before post-and-readback')
+ok(migrate_src.include?("File.join(OUT, 'workbook-post-spec.json')"),
+   'sanitized POST payload is retained as an inspectable run artifact')
+ok(migrate_src.include?('PRIOR_PLUGIN_VERSION') &&
+   migrate_src.include?('PLUGIN_VERSION_CHANGED') &&
+   migrate_src.include?('rebuild_workbook_artifacts?(opts)'),
+   'plugin-version changes invalidate workbook/presentation artifacts without forcing data-model rebuild')
+ok(migrate_src.include?("update_wb_id = prior_ids['workbookId']"),
+   'plugin-update rebuild reuses an existing workbook id instead of orphaning a new workbook')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
    migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
    migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&
@@ -281,7 +296,7 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
   missing = required_phases.reject { |p| run_state['phases'].key?(p) }
   ok(missing.empty?, "run-state.json accounts for every phase in the chain (missing: #{missing.join(', ')})")
   eq(run_state['mode'], 'offline', 'run-state.json records mode=offline')
-  eq(run_state['plugin_version'], '0.16.108',
+  eq(run_state['plugin_version'], PLUGIN_VERSION,
      'run-state.json records the exact converter plugin version for stale-install diagnosis')
 
   # ---- bead B5: the render + verdict-recording phases are never silently ---

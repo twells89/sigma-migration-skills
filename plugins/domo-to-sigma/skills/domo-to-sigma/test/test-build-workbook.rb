@@ -1467,6 +1467,70 @@ eq(pop_yoy.dig('yAxis', 'columnIds').map { |series| series['type'] }, %w[bar lin
 ok($chart_helpers.first['columns'].first['formula'].include?('DateDiff("month"'),
    'YoY points align by month before the explicit measures aggregate')
 
+puts "== POP compare offsets fall back to Domo card-data channels =="
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'parity-expected.json'), JSON.generate(
+    'cards' => {
+      'pop-card-data' => {
+        'columns' => ['Date', 'Revenue', '__domo_period', '__domo_period_index'],
+        'mappings' => %w[ITEM VALUE POP_PERIOD POP_INDEX],
+        'rows' => [
+          ['2026-08-01', 100, 0, 0],
+          ['2026-08-02', 110, 0, 1],
+          ['2026-07-01', 90, 1, 0],
+          ['2026-07-02', 95, 1, 1],
+          ['2025-08-01', 80, 2, 0],
+          ['2025-08-02', 85, 2, 1],
+        ],
+      },
+    },
+  ))
+  stub_const(:OUT, dir) do
+    $warnings = []
+    $chart_helpers = []
+    inferred_pop = build_element({
+      'id' => 'pop-card-data', 'title' => '1-30 $ YoY', 'chartType' => 'badge_pop_bar_line',
+      'columns' => [
+        { 'column' => 'Date', 'mapping' => 'ITEM', 'calendar' => true },
+        { 'column' => 'Revenue', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+      ],
+      'dateGrain' => { 'column' => 'Date', 'dateTimeElement' => 'DAY' },
+      'dateRangeFilter' => {
+        'column' => { 'column' => 'Date' },
+        'dateTimeRange' => {
+          'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'MONTH',
+          'offset' => 1, 'count' => 0,
+        },
+      },
+    }, {})
+    ok(!inferred_pop.nil?, 'missing dateRangeFilter.periods no longer skips a card with POP card-data')
+    eq(inferred_pop['columns'].drop(1).map { |column| column['name'] },
+       ['1 Month Ago', '2 Months Ago', '1 Year Ago'],
+       'POP_PERIOD starts infer month and year comparisons in source order')
+    eq(inferred_pop.dig('yAxis', 'columnIds').map { |series| series['type'] },
+       %w[bar line line], 'inferred current period is bars and comparisons are lines')
+    ok($warnings.any? { |warning| warning['warning'].include?('POP_PERIOD/POP_INDEX') },
+       'card-data reconstruction is auditable, not silent')
+  end
+end
+
+puts "== explicit POP charts may carry more than two period measures =="
+$warnings = []
+four_measure_pop = build_element({
+  'id' => 'pop-four-measures', 'title' => '61-90 $ YoY', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'Month', 'mapping' => 'ITEM' },
+    { 'column' => 'Current', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+    { 'column' => 'Prior 1', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => 'Prior 2', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => 'Prior 3', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+  ],
+}, {})
+eq(four_measure_pop.dig('yAxis', 'columnIds').map { |series| series['type'] },
+   %w[bar line line line], 'one current plus three prior measures is a valid POP combo')
+ok(!$warnings.any? { |warning| warning['warning'].include?('expected a bar measure') },
+   'valid four-period POP chart no longer emits a false expected-two warning')
+
 puts "== unresolved POP never masquerades as a valid one-series comparison =="
 $warnings = []
 unresolved_pop = build_element({
