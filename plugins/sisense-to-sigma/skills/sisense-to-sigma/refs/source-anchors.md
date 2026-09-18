@@ -73,8 +73,16 @@ what the source *renders*.
   category, a missing path label). Scope: exports carry the element's full
   underlying data, so `text` anchors can't catch an UNFILTERED tile that merely
   windows the wrong first-N on screen — gate 9b (shape identity) owns that class.
-- `sigma_element_hint` — optional; the Sigma element name the value should land
-  in. When present it wins over fuzzy matching.
+- `sigma_element_hint` — optional but strongly recommended; the source
+  worksheet name or exact Sigma element name where the value must land. The
+  verifier resolves source worksheet names through `chart-provenance.json`.
+  Hinted anchors are exact-target assertions: an unresolved/ambiguous hint
+  fails closed, and a coincidental value in a similarly named tile never
+  counts. Legacy/non-Tableau workdirs without a provenance sidecar retain
+  fuzzy hint matching for compatibility; use an exact element name there.
+- `dashboard` — optional disambiguator when the same Tableau worksheet is
+  placed on multiple dashboards. Use the exact source dashboard name; without
+  it, a multi-target provenance match fails closed as ambiguous.
 - **Minimum anchors (the gate requires ≥ 5):** every KPI value, the **top 3
   values of every ranked list/table**, **one representative bucket value
   per chart**, and — for every ranked/top-N tile — **2–3 `text` roster anchors**
@@ -86,8 +94,9 @@ what the source *renders*.
   only vouches for the tile it lands in: a run shipped 11 anchors that all sat
   in 3 of 9 tiles, and the anchors oracle "passed" while 6 tiles had ZERO
   anchors watching them. `verify-anchors.rb` measures per-displayed-tile
-  coverage (an anchor covers a tile when it **matched in** it, or its
-  `sigma_element_hint` token-matches the tile name) and writes
+  coverage (an anchor covers a tile only when it **successfully matched in**
+  that displayed tile; merely aiming a missed hint at a tile is not evidence)
+  and writes
   `anchor_coverage {covered, displayed, uncovered:[names]}` into the verdict
   (WARN on uncovered). A tile that genuinely prints no anchorable value must be
   waived **here, at transcription time**:
@@ -110,13 +119,16 @@ what the source *renders*.
 
 `verify-anchors.rb --workdir <W> --workbook-id <id>` pools the live workbook's
 element CSV exports (the same export→poll→download flow
-`collect-parity-actuals.rb` uses) and searches each anchor in the element whose
-name best matches its label/panel (token overlap; the hint wins). A **hinted**
-anchor — numeric (#414) or text/roster (PR-6) — searches ONLY hint-matched
-elements: found-only-outside the asserted location is a MISS (the loophole that
-silently passed 10x-unit/wrong-aggregate defects living in big detail tables).
-Hint-less anchors keep the search-everywhere fallback; found-elsewhere still
-matches and is noted. Every detail/missing row carries the anchor's `kind` +
+`collect-parity-actuals.rb` uses). A **hinted** anchor — numeric (#414) or
+text/roster (PR-6) — searches ONLY the exact Sigma element resolved from
+`chart-provenance.json` (source worksheet → element id → live element name), or
+an exact element-name match for legacy artifacts. With a provenance sidecar,
+no exact target is a loud MISS; there is no one-token or global fallback.
+This closes the field case
+where 27 of 35 apparent matches came from unrelated tiles sharing generic
+words such as "ticket" and "summary." Hint-less anchors retain the
+search-everywhere fallback because they assert no location. Every
+detail/missing row carries the anchor's `kind` +
 `provenance` + `valued` so downstream consumers (G10 coverage,
 `verify-ground-truth.rb`, gate 18) apply the credit rules without re-reading
 the anchors file; the verdict also records `valued_matched` and a

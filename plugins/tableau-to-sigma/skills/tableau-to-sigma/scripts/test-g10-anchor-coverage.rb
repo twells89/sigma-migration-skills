@@ -6,7 +6,7 @@
 # charts_total<=0 substitution in assert-phase6-ran) passed while 6 tiles had
 # ZERO anchor coverage. Now:
 #   A — verify-anchors.rb computes per-displayed-tile anchor coverage
-#       (matched_in == tile display name, or sigma_element_hint token-match),
+#       from successful matches in the intended displayed tile,
 #       writes anchor_coverage {covered, displayed, uncovered:[names]} into the
 #       verdict, and WARNs on uncovered tiles (exit code unchanged — advisory).
 #   B — assert-phase6-ran's charts_total<=0 ORACLE SUBSTITUTION requires
@@ -72,7 +72,8 @@ BASE_ANCHORS = [
 ].freeze
 
 Dir.mktmpdir do |d|
-  # Beta covered by matched_in; Gamma covered ONLY via a hint (its anchor MISSES).
+  # Beta is covered by a real match. Gamma's hinted anchor MISSES, so merely
+  # aiming at Gamma must not claim that the tile has measured coverage.
   anchors = BASE_ANCHORS.map(&:dup)
   anchors[1] = { 'id' => 'a2', 'label' => 'Beta value', 'raw' => '55', 'kind' => 'number' }
   anchors << { 'id' => 'a6', 'label' => 'Gamma KPI', 'raw' => '424242', 'kind' => 'number',
@@ -82,10 +83,11 @@ Dir.mktmpdir do |d|
   v = JSON.parse(File.read(File.join(d, 'anchors-verdict.json')))
   cov = v['anchor_coverage']
   check(cov.is_a?(Hash), 'anchor_coverage written into the verdict', fails)
-  check(cov && cov['displayed'] == 3 && cov['covered'] == 3 && cov['uncovered'] == [],
-        "matched_in + hint token-match both cover (got #{cov.inspect})", fails)
+  check(cov && cov['displayed'] == 3 && cov['covered'] == 2 && cov['uncovered'] == ['Gamma Chart'],
+        "only successful in-tile matches cover; a missed hint does not (got #{cov.inspect})", fails)
   check(!st.success?, 'exit still reflects the MISSING anchor (coverage is advisory, not a pass)', fails)
-  check(!(out + err).include?('UNCOVERED'), 'no UNCOVERED warning when every displayed tile is covered', fails)
+  check((out + err).include?('UNCOVERED') && (out + err).include?('Gamma Chart'),
+        'coverage warning names the hinted-but-unverified tile', fails)
 end
 
 Dir.mktmpdir do |d|

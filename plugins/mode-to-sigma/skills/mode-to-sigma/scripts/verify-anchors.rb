@@ -32,11 +32,11 @@
 # HOW. Fetches the live workbook spec for element names, then pools element
 # CSV exports (the same POST /v2/workbooks/{wb}/export → poll
 # GET /v2/query/{q}/download flow collect-parity-actuals.rb uses). Each anchor
-# is searched in the element whose name best matches its label/panel (token
-# overlap; `sigma_element_hint` wins when present); when the matched element
-# doesn't carry the value, every other export is searched before declaring the
-# anchor MISSING — found-elsewhere still counts as matched (the value exists;
-# only the label→element mapping was fuzzy) and is noted in the verdict.
+# without a hint is searched best-match-first across exports. A hinted anchor
+# is stricter: its source worksheet resolves through chart-provenance.json to
+# the exact Sigma element (or an exact legacy element-name match). Unresolved
+# hints and values found only in other elements are MISSING; generic shared
+# tokens such as "ticket" never broaden the target.
 #
 # BOUNDED EXPORTS (issue #416). Element exports are row-capped (the export
 # POST sends Sigma's `rowLimit`; default anchors×10k, min 50k, --row-limit
@@ -153,6 +153,78 @@ module AnchorVerify
     hits + (el_names - hits)
   end
 
+  def element_display_name(element)
+    name = element['name']
+    return name.to_s unless name.is_a?(Hash)
+    text = name['text'].to_s
+    text.empty? ? element['id'].to_s.sub(/\Ael-/, '').tr('-', ' ') : text
+  end
+
+  # Resolve source worksheet hints to exact Sigma elements. The chart builder's
+  # provenance sidecar is the stable bridge when display names were renamed.
+  # A hint that resolves nowhere remains explicitly unresolved; verification
+  # must not broaden it to every tile sharing words like "ticket" or "summary".
+  def resolve_target_scopes(anchors, elements, provenance)
+    provenance = provenance['elements'] if provenance.is_a?(Hash) && provenance['elements'].is_a?(Hash)
+    provenance = {} unless provenance.is_a?(Hash)
+    strict_provenance = provenance.any?
+    by_id = Array(elements).each_with_object({}) { |element, out| out[element['id'].to_s] = element }
+    Array(anchors).each_with_object({}) do |anchor, out|
+      hint = anchor['sigma_element_hint'].to_s.strip
+      next if hint.empty?
+
+      provenance_ids = provenance.each_with_object([]) do |(element_id, entry), ids|
+        next unless entry.is_a?(Hash)
+        worksheet = entry['worksheet'].to_s.strip
+        ids << element_id.to_s if !worksheet.empty? && worksheet.casecmp?(hint)
+      end
+      if provenance_ids.length > 1
+        dashboard_hint = [anchor['dashboard'], anchor['panel']]
+                         .map { |value| value.to_s.strip }.find { |value| !value.empty? }
+        if dashboard_hint
+          narrowed = provenance_ids.select do |element_id|
+            dashboard = provenance.dig(element_id, 'dashboard').to_s.strip
+            !dashboard.empty? &&
+              (dashboard.casecmp?(dashboard_hint) ||
+               dashboard_hint.downcase.include?(dashboard.downcase))
+          end
+          provenance_ids = narrowed if narrowed.length == 1
+        end
+      end
+      provenance_names = provenance_ids.map do |element_id|
+        element = by_id[element_id]
+        element_display_name(element) if element
+      end.compact
+      exact_names = Array(elements).map do |element|
+        name = element_display_name(element)
+        name if name.strip.casecmp?(hint)
+      end.compact
+      ambiguous = provenance_ids.length > 1
+      names = ambiguous ? [] : (provenance_names.empty? ? exact_names : provenance_names).uniq
+      # Non-Tableau converters and legacy workdirs have no chart provenance.
+      # Preserve their historic fuzzy hint behavior unless the hint itself is
+      # already an exact element name. A present provenance map is an explicit
+      # targeting contract, so unresolved worksheet hints fail closed.
+      next if names.empty? && !strict_provenance
+      via = if ambiguous
+              'ambiguous'
+            elsif provenance_names.any?
+              'chart-provenance'
+            elsif exact_names.any?
+              'exact-element-name'
+            else
+              'unresolved'
+            end
+      result = { 'names' => names, 'via' => via }
+      if ambiguous
+        result['error'] = 'hint matched multiple chart-provenance elements; add an exact dashboard/panel discriminator'
+      elsif names.empty?
+        result['error'] = 'hint matched no exact Sigma element or chart-provenance worksheet'
+      end
+      out[anchor['id'].to_s] = result
+    end
+  end
+
   # Numeric face values of a CSV cell (both percent interpretations kept so
   # AnchorValues candidate matching sees whichever the export carried).
   def cell_numbers(cell)
@@ -230,7 +302,7 @@ module AnchorVerify
   #   verdict's `inconclusive` list instead of `missing` (issue #416: a
   #   truncated export must never produce a false hard MISS). Inconclusive
   #   anchors still fail `pass` — they are unverified, not vouched-for.
-  def verify(anchors, exports, extract_tol: nil, truncated: nil)
+  def verify(anchors, exports, extract_tol: nil, truncated: nil, target_scopes: nil)
     tol = extract_tol.is_a?(Numeric) && extract_tol.positive? ? extract_tol.to_f : nil
     trunc = Array(truncated)
     el_names = exports.keys
@@ -260,10 +332,16 @@ module AnchorVerify
     # anchors (a hinted roster anchor asserts the member appears in THAT ranked
     # tile — found in an unrelated feeder table is not acceptance). Hint-less
     # anchors keep the search-everywhere fallback (no asserted location).
-    scope_for = lambda do |a, order|
-      next order if a['sigma_element_hint'].to_s.strip.empty?
-      scoped = order.select { |n| element_score(a, n).positive? }
-      scoped.empty? ? order : scoped # defensive: hint matched no element name
+    target_for = lambda do |a, order|
+      hint = a['sigma_element_hint'].to_s.strip
+      next({ 'names' => order, 'via' => 'unhinted' }) if hint.empty?
+      supplied = target_scopes.is_a?(Hash) ? target_scopes[a['id'].to_s] : nil
+      if supplied.is_a?(Hash)
+        names = Array(supplied['names']).map(&:to_s) & el_names
+        next supplied.merge('names' => names)
+      end
+      scoped = order.select { |name| element_score(a, name).positive? }
+      { 'names' => (scoped.empty? ? order : scoped), 'via' => 'legacy-fuzzy' }
     end
     # Every detail/missing row carries the anchor's kind + provenance so
     # downstream consumers (G10 coverage, verify-ground-truth.rb, gate 18) can
@@ -271,12 +349,19 @@ module AnchorVerify
     stamp = lambda do |a, h|
       h['kind'] = a['kind'] if a['kind']
       h['provenance'] = a['provenance'] if a['provenance']
+      if !a['sigma_element_hint'].to_s.strip.empty?
+        target = target_for.call(a, ranked_elements(a, el_names))
+        h['target_resolution'] = target['via']
+        h['target_names'] = target['names']
+        h['target_error'] = target['error'] if target['error']
+      end
       h
     end
     anchors.each do |a|
       raw = a['raw'].to_s
       order = ranked_elements(a, el_names)
-      search_order = scope_for.call(a, order)
+      target = target_for.call(a, order)
+      search_order = target['names']
       if name_only?(a)
         want = raw.strip.downcase
         found_in = search_order.find { |n| texts[n].include?(want) }
@@ -300,7 +385,7 @@ module AnchorVerify
         tol_used = tol if found_in
       end
       if found_in
-        primary = order.first
+        primary = search_order.first
         d = { 'id' => a['id'], 'raw' => raw, 'matched_in' => found_in,
               'note' => (found_in == primary ? nil : "found outside best-match element #{primary.inspect}") }.compact
         d['valued'] = valued?(a)
@@ -317,7 +402,7 @@ module AnchorVerify
         # impostor ("$1.2T where the source printed 12,345B") rather than a
         # coincidentally-near number from an unrelated tile.
         best = nil
-        order.each do |n|
+        search_order.each do |n|
           numbers[n].each do |v|
             d = AnchorValues.relative_distance(raw, v)
             best = { 'value' => v, 'element' => n, 'distance' => d.round(6) } if best.nil? || d < best['distance']
@@ -874,8 +959,17 @@ if opts[:extract_tol]
                        'reason' => marker || 'workdir not extract-marked (hasExtracts/landing manifest absent)' }
 end
 
+provenance_path = File.join(opts[:dir], 'chart-provenance.json')
+provenance = if File.exist?(provenance_path)
+               parsed = (JSON.parse(File.read(provenance_path)) rescue {})
+               parsed.is_a?(Hash) ? parsed : {}
+             else
+               {}
+             end
+target_scopes = AnchorVerify.resolve_target_scopes(anchors, elements, provenance)
 verdict = AnchorVerify.verify(anchors, exports, extract_tol: extract_tol_active,
-                                                truncated: truncated_names)
+                                                truncated: truncated_names,
+                                                target_scopes: target_scopes)
 verdict['source_anchors'] = anchors_path
 verdict['verified_at'] = Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 verdict['extract_tolerance'] = extract_tol_info if extract_tol_info
@@ -915,9 +1009,9 @@ verdict['anchors_retranscribed'] = anchor_retranscribe if anchor_retranscribe
 # --- G10: per-displayed-tile ANCHOR COVERAGE ---------------------------------
 # Run-2 field failure: all 11 anchors sat in 3 of 9 displayed tiles, so the
 # anchors oracle "passed" while 6 tiles had ZERO anchors watching them. A tile
-# is COVERED when an anchor matched IN it (matched_in == the tile's display
-# name) or is AIMED at it (sigma_element_hint token-matches the tile name —
-# the hint asserts where the value must live even when the anchor missed).
+# is COVERED only when an eligible anchor MATCHED IN it. A hint that merely
+# aims at a tile is not measured evidence; counting a missed fuzzy hint as
+# coverage produced 39/39 coverage while 13 anchors were still missing.
 # PR-6 rider: only COVERAGE-ELIGIBLE anchors earn credit — numeric anchors not
 # explicitly provenance:"png-eyeball" (an eyeballed value is the weak reading
 # the field sessions got wrong; a name-only text/roster anchor carries no
@@ -928,13 +1022,9 @@ verdict['anchors_retranscribed'] = anchor_retranscribe if anchor_retranscribe
 # [{tile, reason}] (authored at Phase 1d).
 matched_in_names = verdict['detail'].select { |d| AnchorVerify.coverage_eligible?(d) }
                                     .map { |d| d['matched_in'].to_s }.to_set
-hinted = anchors.select do |a|
-  a.is_a?(Hash) && !a['sigma_element_hint'].to_s.strip.empty? && AnchorVerify.coverage_eligible?(a)
-end
 disp_tiles = tiles.select { |t| t['displayed'] }
 covered_names = disp_tiles.map { |t| t['name'] }.select do |name|
-  matched_in_names.include?(name) ||
-    hinted.any? { |a| AnchorVerify.element_score(a, name).positive? }
+  matched_in_names.include?(name)
 end.to_set
 uncovered = disp_tiles.map { |t| t['name'] }.reject { |n| covered_names.include?(n) }
 verdict['anchor_coverage'] = { 'covered' => covered_names.size,
