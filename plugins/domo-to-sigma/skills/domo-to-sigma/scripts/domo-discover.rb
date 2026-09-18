@@ -480,6 +480,57 @@ def normalize_card(raw, card_id, card_meta: nil, dataset_formulas: nil)
   end
 end
 
+# `badge_pop_bar_line` can expose only its one authored Y-axis measure while
+# Domo renders bars plus a prior-period line. That second series is defined by
+# dateRangeFilter.periods, not by another card column. Some tenant/version
+# combinations omit `periods` from the private analyzer definition even though
+# the official GET /v1/cards/chart/{urn} CardDefinition retains it. Merge only
+# this missing comparison metadata from Shape A; keep the richer private
+# columns, formulas, filters, title, and bindings untouched.
+def pop_comparison_periods?(date_range_filter)
+  periods = date_range_filter.is_a?(Hash) ? date_range_filter['periods'] : nil
+  return false unless periods.is_a?(Hash)
+  candidates =
+    if periods['type'].to_s.upcase == 'COMBINED'
+      Array(periods['combined'])
+    else
+      [periods]
+    end
+  candidates.any? do |period|
+    period.is_a?(Hash) &&
+      period['type'].to_s.upcase == 'OFFSET' &&
+      period['count'].to_i.positive?
+  end
+end
+
+def merge_public_pop_comparison(card, public_raw, card_id, card_meta: nil, dataset_formulas: nil)
+  return card unless card.is_a?(Hash)
+  return card unless card['chartType'].to_s.downcase == 'badge_pop_bar_line'
+  return card if pop_comparison_periods?(card['dateRangeFilter'])
+
+  public_card = normalize_card(
+    public_raw, card_id,
+    card_meta: card_meta,
+    dataset_formulas: dataset_formulas,
+  )
+  public_drf = public_card['dateRangeFilter']
+  unless pop_comparison_periods?(public_drf)
+    probed = card.dup
+    probed['_popComparisonProbe'] = 'public-no-periods'
+    return probed
+  end
+
+  merged = card.dup
+  merged_drf = card['dateRangeFilter'].is_a?(Hash) ? card['dateRangeFilter'].dup : {}
+  public_drf.each { |key, value| merged_drf[key] = value unless merged_drf.key?(key) }
+  merged_drf['periods'] = public_drf['periods']
+  merged['dateRangeFilter'] = merged_drf
+  merged['dateGrain'] ||= public_card['dateGrain']
+  merged['_popComparisonSource'] = 'public-card-definition'
+  merged['_popComparisonProbe'] = 'public-periods'
+  merged
+end
+
 # Extract the card's Summary Number — the single big value Domo shows at the top of
 # EVERY viz card (column + aggregation + label + number format). This is what a
 # table-that-looks-like-a-KPI is built from; the build step maps it to a Sigma
@@ -1090,6 +1141,25 @@ if opts[:pages]
           card_meta: card_meta_by_id[cid.to_s],
           dataset_formulas: ds_formula_cache[dsid],
         )
+        if card['chartType'].to_s.downcase == 'badge_pop_bar_line' &&
+           !pop_comparison_periods?(card['dateRangeFilter'])
+          begin
+            public_raw = Domo.public_get("/v1/cards/chart/#{cid}")
+            enriched = merge_public_pop_comparison(
+              card, public_raw, cid,
+              card_meta: card_meta_by_id[cid.to_s],
+              dataset_formulas: ds_formula_cache[dsid],
+            )
+            if enriched['_popComparisonSource']
+              warn "  POP card #{cid}: private analyzer definition omitted comparison periods; " \
+                   'backfilled them from public GET /v1/cards/chart/{urn}.'
+            end
+            card = enriched
+          rescue StandardError => e
+            warn "  ⚠ POP card #{cid}: public CardDefinition comparison fallback failed: #{e.message}; " \
+                 'card-data POP_PERIOD/POP_INDEX remains the next evidence source.'
+          end
+        end
         card['_pageId'] = pid.to_s
         card['beastModes'] = dig_beast_modes(card, ds_formula_cache[dsid], template_cache)
         beast_out.concat(card['beastModes'])

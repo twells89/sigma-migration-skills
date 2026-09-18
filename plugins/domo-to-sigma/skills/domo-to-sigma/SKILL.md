@@ -482,9 +482,10 @@ Then translate the rest per the ref:
 - Domo chart type → Sigma chart kind (full table in `refs/card-to-element.md`)
 - Domo period-over-period `dateRangeFilter.periods` → explicit current/prior
   Sigma measures over aligned hidden helpers (including multiple prior periods);
-  when compare metadata is absent, derive offsets from captured
-  `POP_PERIOD`/`POP_INDEX` card-data; never ship an unresolved POP card as a
-  misleading one-series chart
+  when private compare metadata is absent, backfill the public CardDefinition,
+  then derive offsets from captured `POP_PERIOD`/`POP_INDEX` card-data. Preserve
+  a selected-period-only chart only after one of those probes proves there is
+  no comparison; one authored Y-axis field can still render as bars plus a line
 - **KPI value guard:** a KPI's value is the summary number's aggregate of the
   authored **measure** (with a source prefix, e.g. `Sum([Master/Sales Amount])`) —
   **never `Count`/`CountDistinct` of the DM primary/row-key column** (that's Domo's

@@ -30,7 +30,7 @@
     {"source": "badge_treemap", "sigma": "bar-chart", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+bar", "notes": "Explicit approximation; area hierarchy is lost."},
     {"source": "badge_word_cloud", "sigma": "table", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+table", "notes": "No native word-cloud surface."},
     {"source": "badge_calendar", "sigma": "table", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+table", "notes": "No native calendar-heatmap surface."},
-    {"source": "badge_pop_bar_line", "sigma": "combo-chart", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+skip", "notes": "INTERVAL_OFFSET + periods OFFSET metadata is reconstructed as explicit measures over aligned hidden helpers; unresolved compare shapes are skipped rather than emitted as one series."},
+    {"source": "badge_pop_bar_line", "sigma": "combo-chart / bar-chart", "sigma_verified": {"status": "n"}, "on_unmapped": "reconstruct or warn+preserve", "notes": "Private analyzer metadata is backfilled from the public CardDefinition, then INTERVAL_OFFSET + periods OFFSET metadata is reconstructed as explicit measures over aligned hidden helpers. A proven no-periods source is preserved as its selected-period series; an unprobed one-measure shape is skipped rather than erasing a hidden comparison."},
     {"source": "badge_vert_symbol_overlay", "sigma": "combo-chart", "sigma_verified": {"status": "n"}, "on_unmapped": "warn+combo", "notes": "Approximate bar plus scatter marker; no dial semantics are claimed."}
   ]
 }

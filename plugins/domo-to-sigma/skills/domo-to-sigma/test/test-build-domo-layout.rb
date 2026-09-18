@@ -121,6 +121,38 @@ Dir.mktmpdir('domo-build-layout-rung1-companion') do |dir|
   end
 end
 
+# A PageLayoutV4 header is synthesized from pages.json but already carries
+# exact geometry, unlike a companion KPI. It must stay in rung 1 only; the
+# geometry-less remainder pass must not append the same element id again.
+Dir.mktmpdir('domo-build-layout-rung1-v4-header') do |dir|
+  w = ->(name, obj) { File.write(File.join(dir, name), JSON.generate(obj)) }
+  w.call('cards.json', [
+    { 'id' => 'bar1', 'title' => 'Sales', 'chartType' => 'badge_vert_bar',
+      'x' => 0, 'y' => 20, 'w' => 100, 'h' => 80 },
+  ])
+  w.call('pages.json', [{
+    'id' => 'p1', 'title' => 'Overview', 'cardIds' => ['bar1'],
+    '_layoutContent' => [{
+      'id' => 'domo-layout-p1-header-1', 'type' => 'header', 'text' => 'Appendix',
+      'x' => 0, 'y' => 5, 'w' => 100, 'h' => 10,
+    }],
+  }])
+  w.call('chart-specs.json', { 'pages' => [{ 'name' => 'Overview', 'elements' => [
+    { 'id' => 'el-bar1', 'kind' => 'bar-chart', 'name' => 'Sales' },
+    { 'id' => 'domo-layout-p1-header-1', 'kind' => 'text', 'name' => 'Appendix' },
+  ] }] })
+
+  env = { 'DOMO_DISCOVERY_DIR' => dir }
+  out = IO.popen(env, ['ruby', File.join(SCRIPTS, 'build-domo-layout.rb')], err: [:child, :out], &:read)
+  ok($?.success?, "build-domo-layout.rb exits 0 with geometry-bearing v4 content\n#{out unless $?.success?}")
+
+  dash = JSON.parse(File.read(File.join(dir, 'dashboard-layout.json'))).first
+  header_zones = dash['zones'].select { |zone| zone['id'] == 'domo-layout-p1-header-1' }
+  eq(header_zones.size, 1,
+     'geometry-bearing PageLayoutV4 header is placed once, not duplicated by the remainder pass')
+  eq(header_zones.first['caption'], 'Appendix', 'the single v4 header retains its source text')
+end
+
 # ===========================================================================
 # F3 / blocker 3 (2026-08-05 batch-verify): pages.json's cardIds is unreliable
 # (GET /v1/pages/{id} reports cardIds: [] even for a page that genuinely owns
