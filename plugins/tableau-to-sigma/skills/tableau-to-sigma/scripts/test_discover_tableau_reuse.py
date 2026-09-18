@@ -148,6 +148,27 @@ class DiscoverTableauReuseTest(unittest.TestCase):
         )
         self.assertEqual("layout", self.signature["evidence"]["column_basis"])
 
+    def test_internal_object_count_is_not_treated_as_a_column(self):
+        model, layout, meta = source_artifacts()
+        layout[0]["zones"][0]["rows_shelf"]["fields"].append(
+            {
+                "raw": (
+                    "[federated.x].[__tableau_internal_object_id__]."
+                    "[cnt:EMPLOYEES (CSA.EMPLOYEES)_"
+                    "C668FBD11FD74193BE1A8FFD57F9CFBF:qk]"
+                ),
+                "guid": (
+                    "EMPLOYEES (CSA.EMPLOYEES)_"
+                    "C668FBD11FD74193BE1A8FFD57F9CFBF"
+                ),
+                "role": "dim",
+                "derivation": "cnt",
+            }
+        )
+
+        signature = reuse.derive_signature(model, layout, meta)
+        self.assertEqual(["REGION", "SALES"], signature["referenced_columns"])
+
     def test_unique_compatible_dm_and_workbook_are_selected_with_gets_only(self):
         api = FakeApi(
             {

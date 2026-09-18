@@ -158,6 +158,16 @@ def _layout_field_rows(layout: list) -> list[dict]:
     return rows
 
 
+def _internal_object_count(field: dict) -> bool:
+    raw = str(field.get("raw") or "")
+    guid = str(field.get("guid") or "")
+    return (
+        "__tableau_internal_object_id__" in raw
+        or re.search(r"\s*\([^)]*\)_[0-9A-F]{32}\Z", guid, re.IGNORECASE)
+        is not None
+    )
+
+
 def _canonical_visual(kind: Any, name: Any) -> str | None:
     normalized_kind = str(kind or "").lower().replace("_", "-")
     if normalized_kind.endswith("-chart"):
@@ -178,6 +188,11 @@ def derive_signature(model: dict, layout: list, layout_meta: dict) -> dict:
     measures: dict[tuple[str, str], dict] = {}
 
     for field in _layout_field_rows(layout):
+        # Tableau's COUNT(table) pill serializes a logical object id in the
+        # field slot. It is a row-count measure, not a physical column
+        # requirement; treating it as one makes compatible DMs fail reuse.
+        if _internal_object_count(field):
+            continue
         guid = str(field.get("guid") or "").strip()
         metadata = columns_by_guid.get(guid) if isinstance(columns_by_guid, dict) else {}
         caption = field.get("caption") or (metadata or {}).get("caption")

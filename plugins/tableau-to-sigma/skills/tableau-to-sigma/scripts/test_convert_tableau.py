@@ -30,6 +30,101 @@ class ConvertTableauTest(unittest.TestCase):
         self.assertEqual([{"when": "A", "then": "[Sales]"}], promoted["cases"])
         self.assertEqual("[Profit]", promoted["elseExpr"])
 
+    def test_cross_table_provenance_columns_are_removed_from_wrong_base(self):
+        model = {
+            "pages": [
+                {
+                    "elements": [
+                        {
+                            "id": "employees",
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["CSA", "TJ", "EMPLOYEES"],
+                            },
+                            "columns": [
+                                {
+                                    "id": "employee",
+                                    "name": "Employee Id",
+                                    "formula": "[EMPLOYEES/Employee Id]",
+                                },
+                                {
+                                    "id": "wrong",
+                                    "formula": (
+                                        "[EMPLOYEES/Employee Id "
+                                        "(TIME_ENTRIES (CSA.TIME_ENTRIES))]"
+                                    ),
+                                },
+                            ],
+                            "order": ["employee", "wrong"],
+                        }
+                    ]
+                }
+            ]
+        }
+        warnings = []
+        removed = convert_tableau.remove_cross_table_provenance_columns(
+            model, warnings
+        )
+        element = model["pages"][0]["elements"][0]
+        self.assertEqual(1, removed)
+        self.assertEqual(["employee"], [column["id"] for column in element["columns"]])
+        self.assertEqual(["employee"], element["order"])
+        self.assertIn("TIME_ENTRIES", warnings[0])
+
+    def test_relationship_coverage_recovers_only_on_exact_source_model_count(self):
+        model = {
+            "pages": [
+                {
+                    "elements": [
+                        {
+                            "id": "employees",
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["CSA", "TJ", "EMPLOYEES"],
+                            },
+                        },
+                        {
+                            "id": "absence",
+                            "source": {
+                                "kind": "warehouse-table",
+                                "path": ["CSA", "TJ", "ABSENCE_RECORDS"],
+                            },
+                            "relationships": [
+                                {
+                                    "targetElementId": "employees",
+                                    "keys": [
+                                        {
+                                            "sourceColumnId": "absence-employee",
+                                            "targetColumnId": "employee-id",
+                                        }
+                                    ],
+                                    "derivedVia": "serialized",
+                                }
+                            ],
+                        },
+                    ]
+                }
+            ]
+        }
+        source = """
+        <workbook><datasource><object-graph><relationships>
+          <relationship><expression op="="/></relationship>
+        </relationships></object-graph></datasource></workbook>
+        """
+        recovered = convert_tableau.recover_relationship_coverage(model, source)
+        self.assertEqual(1, recovered["serialized"])
+        self.assertEqual(1, recovered["wired"])
+        self.assertEqual("ABSENCE_RECORDS", recovered["entries"][0]["left"])
+        self.assertEqual("EMPLOYEES", recovered["entries"][0]["right"])
+
+        mismatch = source.replace(
+            "</relationships>",
+            '<relationship><expression op="="/></relationship></relationships>',
+        )
+        self.assertIsNone(
+            convert_tableau.recover_relationship_coverage(model, mismatch)
+        )
+
     def test_vendored_converter_writes_model_and_audit_wrapper(self):
         self.assertTrue(FIXTURE.is_file(), FIXTURE)
         with tempfile.TemporaryDirectory() as tmp:

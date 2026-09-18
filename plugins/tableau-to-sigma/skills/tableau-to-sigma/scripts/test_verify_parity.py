@@ -25,6 +25,30 @@ class VerifyParityTest(unittest.TestCase):
         )
         self.assertEqual({"missing", "number"}, {item["kind"] for item in differences})
 
+    def test_chart_rows_compare_as_an_unordered_multiset(self):
+        expected = {
+            "Sheet 1": [
+                ["Part-Time", "Chicago Plant", 41.0],
+                ["Full-Time", "Atlanta DC", 570.0],
+                ["Part-Time", "Chicago Plant", 41.0],
+            ]
+        }
+        actual = {
+            "Sheet 1": [
+                ["Part-Time", "Chicago Plant", 41],
+                ["Part-Time", "Chicago Plant", 41.0],
+                ["Full-Time", "Atlanta DC", 570.0],
+            ]
+        }
+        self.assertEqual([], verify_parity.compare(expected, actual))
+
+        actual["Sheet 1"][0][2] = 42
+        differences = verify_parity.compare(expected, actual)
+        self.assertEqual(
+            {"missing-row", "unexpected-row"},
+            {item["kind"] for item in differences},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
