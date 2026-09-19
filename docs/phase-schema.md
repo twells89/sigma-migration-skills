@@ -224,3 +224,22 @@ Metabase keeps the standalone skill's established local numbering:
 | C8 Parity hard gate | Phase 4 — live Metabase values vs Sigma/warehouse, control flip test, visual check, and `assert-phase6-ran.rb` |
 | C9 Security/RLS | Security section — detect Metabase sandboxing always; port to Sigma user attributes only after explicit review |
 | C10 Enhance | — shared Phase E is not wired in this release |
+
+## omni-to-sigma
+
+Omni uses "Phase" numbering (scaffolded by `tools/new-skill.rb`, then filled).
+Local mapping:
+
+| Canonical | omni-to-sigma |
+|---|---|
+| C1 Assess | Phase 0 — Assess (`omni-assessment` inventory) |
+| C2 Discover | Phase 1 — model directory + dashboard export (`refs/omni-source-contract.md`) |
+| C3 Reuse-check | Phase 1.5 — `omni-signature.json` + `find-or-pick-dm.rb` |
+| C4 Convert | Phase 2 — `convert-dm.rb` (topic YAML → Sigma DM; query views skipped) |
+| C5 Post-DM gate | Phase 3 — POST `/v2/dataModels/spec` + read back server ids |
+| C6 Build workbook | Phase 4 — `build-workbook.rb` (export → charts/KPI/control) |
+| C7 Layout | Phase 5 — layout XML attached as the LAST write inside `build-workbook.rb` |
+| C8 Parity hard gate | Phase 6 — `omni-query-oracle.rb` (`POST /api/v1/query/run`) + `assert-phase6-ran.rb` |
+| C9 Security/RLS | Security section — `detect-rls.rb` always; `apply-sigma-rls.rb` opt-in |
+| C10 Enhance | — (scripts vendored; wire flags per adoption checklist) |
+

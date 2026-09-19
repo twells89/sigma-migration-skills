@@ -1,0 +1,207 @@
+{
+  "sigmaDataModel": {
+    "name": "Orders (Omni)",
+    "schemaVersion": 1,
+    "pages": [
+      {
+        "id": "id0001",
+        "name": "Data",
+        "elements": [
+          {
+            "id": "id0002",
+            "kind": "table",
+            "name": "ORDERS",
+            "source": {
+              "kind": "warehouse-table",
+              "connectionId": "<CONNECTION_ID>",
+              "path": [
+                "public",
+                "orders"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0003",
+                "name": "Id",
+                "formula": "[ORDERS/Id]"
+              },
+              {
+                "id": "id0004",
+                "name": "User Id",
+                "formula": "[ORDERS/User Id]"
+              },
+              {
+                "id": "id0005",
+                "name": "Status",
+                "formula": "[ORDERS/Status]"
+              },
+              {
+                "id": "id0006",
+                "name": "Sale Price",
+                "formula": "[ORDERS/Sale Price]"
+              },
+              {
+                "id": "id0007",
+                "name": "Created At",
+                "formula": "[ORDERS/Created At]"
+              }
+            ],
+            "relationships": [
+              {
+                "id": "id0008",
+                "name": "users",
+                "targetElementId": "id0009",
+                "relationshipType": "N:1",
+                "keys": [
+                  {
+                    "sourceColumnId": "id0004",
+                    "targetColumnId": "id0010"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "id0009",
+            "kind": "table",
+            "name": "USERS",
+            "source": {
+              "kind": "warehouse-table",
+              "connectionId": "<CONNECTION_ID>",
+              "path": [
+                "public",
+                "users"
+              ]
+            },
+            "columns": [
+              {
+                "id": "id0010",
+                "name": "Id",
+                "formula": "[USERS/Id]"
+              },
+              {
+                "id": "id0011",
+                "name": "First Name",
+                "formula": "[USERS/First Name]"
+              },
+              {
+                "id": "id0012",
+                "name": "Last Name",
+                "formula": "[USERS/Last Name]"
+              },
+              {
+                "id": "id0013",
+                "name": "Full Name",
+                "formula": "Concat([First Name], \" \", [Last Name])"
+              },
+              {
+                "id": "id0014",
+                "name": "Region",
+                "formula": "[USERS/Region]"
+              }
+            ]
+          },
+          {
+            "id": "id0015",
+            "kind": "table",
+            "name": "Orders",
+            "source": {
+              "kind": "table",
+              "elementId": "id0002"
+            },
+            "columns": [
+              {
+                "id": "id0016",
+                "name": "Id",
+                "formula": "[ORDERS/Id]"
+              },
+              {
+                "id": "id0017",
+                "name": "User Id",
+                "formula": "[ORDERS/User Id]"
+              },
+              {
+                "id": "id0018",
+                "name": "Status",
+                "formula": "[ORDERS/Status]"
+              },
+              {
+                "id": "id0019",
+                "name": "Sale Price",
+                "formula": "[ORDERS/Sale Price]"
+              },
+              {
+                "id": "id0020",
+                "name": "Created At",
+                "formula": "[ORDERS/Created At]"
+              },
+              {
+                "id": "id0021",
+                "name": "Id",
+                "formula": "[ORDERS/users/Id]"
+              },
+              {
+                "id": "id0022",
+                "name": "First Name",
+                "formula": "[ORDERS/users/First Name]"
+              },
+              {
+                "id": "id0023",
+                "name": "Last Name",
+                "formula": "[ORDERS/users/Last Name]"
+              },
+              {
+                "id": "id0024",
+                "name": "Full Name",
+                "formula": "[ORDERS/users/Full Name]"
+              },
+              {
+                "id": "id0025",
+                "name": "Region",
+                "formula": "[ORDERS/users/Region]"
+              }
+            ],
+            "metrics": [
+              {
+                "id": "id0026",
+                "name": "Order Count",
+                "formula": "Count()"
+              },
+              {
+                "id": "id0027",
+                "name": "Total Revenue",
+                "formula": "Sum([Sale Price])",
+                "format": {
+                  "kind": "number",
+                  "formatString": "$,.2f",
+                  "currencySymbol": "$"
+                }
+              },
+              {
+                "id": "id0028",
+                "name": "Revenue per Order",
+                "formula": "(Sum([Sale Price])) / NullIf((Count()), 0)"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "stats": {
+    "views": 2,
+    "topics": 1,
+    "elements": 3,
+    "columns": 20,
+    "metrics": 3,
+    "relationships": 1,
+    "query_views_skipped": 1
+  },
+  "warnings": [
+    "query view public/scratch.query.view skipped — query views are not converted in v0",
+    "access_filters on topic orders — run detect-rls.rb; not applied on the DM",
+    "connection id placeholder <CONNECTION_ID> — pass --connection-id before POST",
+    "users.region_gate skipped — Mustache user-attribute SQL is not translated",
+    "relationship orders → users is not reversible — Sigma relationship is one-directional"
+  ]
+}
