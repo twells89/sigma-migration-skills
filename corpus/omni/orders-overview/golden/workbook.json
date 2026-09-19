@@ -1,0 +1,119 @@
+{
+  "workbook": {
+    "name": "Orders Overview",
+    "folderId": "id0001",
+    "document": {
+      "schemaVersion": 1,
+      "kind": "workbook",
+      "pages": [
+        {
+          "id": "id0002",
+          "name": "Data",
+          "hidden": true
+        },
+        {
+          "id": "id0003",
+          "name": "Orders Overview"
+        }
+      ],
+      "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-data\">\n  <Element elementId=\"data-orders\" gridColumn=\"1 / 25\" gridRow=\"1 / 11\"/>\n</Page>\n<Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-dashboard\">\n  <Element elementId=\"ctl-date_filter\" gridColumn=\"1 / 25\" gridRow=\"1 / 3\"/>\n  <Element elementId=\"chart-1\" gridColumn=\"1 / 13\" gridRow=\"3 / 11\"/>\n  <Element elementId=\"chart-2\" gridColumn=\"13 / 25\" gridRow=\"3 / 7\"/>\n</Page>",
+      "elements": [
+        {
+          "id": "id0004",
+          "kind": "table",
+          "name": "Orders Data",
+          "source": {
+            "kind": "data-model",
+            "dataModelId": "id0005",
+            "elementId": "id0006"
+          },
+          "columns": [
+            {
+              "id": "id0007",
+              "name": "Created At Month",
+              "formula": "DateTrunc(\"month\", [Orders/Created At])"
+            },
+            {
+              "id": "id0008",
+              "name": "Total Revenue",
+              "formula": "[Orders/Total Revenue]"
+            },
+            {
+              "id": "id0009",
+              "name": "Created At",
+              "formula": "[Orders/Created At]"
+            }
+          ]
+        },
+        {
+          "id": "id0010",
+          "kind": "control",
+          "controlId": "id0010",
+          "name": "Created",
+          "controlType": "date-range",
+          "filters": [
+            {
+              "source": {
+                "kind": "table",
+                "elementId": "id0004"
+              },
+              "columnId": "id0009"
+            }
+          ],
+          "source": {
+            "kind": "source",
+            "source": {
+              "kind": "table",
+              "elementId": "id0004"
+            },
+            "columnId": "id0009"
+          },
+          "values": []
+        },
+        {
+          "id": "id0011",
+          "kind": "line-chart",
+          "name": "Revenue by month",
+          "source": {
+            "kind": "table",
+            "elementId": "id0004"
+          },
+          "columns": [
+            {
+              "id": "id0012",
+              "name": "Created At Month",
+              "formula": "[Orders Data/Created At Month]"
+            },
+            {
+              "id": "id0013",
+              "name": "Total Revenue",
+              "formula": "[Orders Data/Total Revenue]"
+            }
+          ]
+        },
+        {
+          "id": "id0014",
+          "kind": "kpi-chart",
+          "name": "Total revenue",
+          "source": {
+            "kind": "table",
+            "elementId": "id0004"
+          },
+          "columns": [
+            {
+              "id": "id0015",
+              "name": "Total Revenue",
+              "formula": "[Orders Data/Total Revenue]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "stats": {
+    "tiles": 2,
+    "controls": 1,
+    "gaps": 0
+  },
+  "warnings": []
+}

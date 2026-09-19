@@ -1,0 +1,8 @@
+# Query view — out of v0 scope. The converter must warn and skip, not inline it.
+sql: |
+  SELECT 1 AS id
+dimensions:
+  id: {}
+measures:
+  count:
+    aggregate_type: count
