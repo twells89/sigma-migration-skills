@@ -276,11 +276,6 @@ cards.each do |card|
       'scale' => compact[0].to_i, 'prefix' => '$', 'suffix' => compact[1], 'decimals' => 0
     }
   end
-  if observed_layout && VALUE_AXIS_KINDS.include?(kind)
-    axis_formats[id] ||= {}
-    axis_formats[id]['hideLabels'] = true
-  end
-
   first_column = Array(card['columns']).find { |column| column['aggregation'].to_s.empty? }
   first_values = rows.map { |row| Array(row).first }.compact
   unique_values = first_values.each_with_object([]) { |value, out| out << value unless out.include?(value) }

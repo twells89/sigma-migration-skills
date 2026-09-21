@@ -889,21 +889,19 @@ def build_axis_chart(card, kind)
   }
   if xcol
     xa = { 'columnId' => dcols[xidx]['id'], 'format' => AXIS_OFF }
-    if kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
-      time_axis = xcol['calendar'] || card['dateGrain'].is_a?(Hash)
-      xa['format'] = if time_axis
-                       {
-                         'marks' => 'none',
-                         'labels' => { 'fontSize' => 7, 'labelAngle' => -45,
-                                       'allowLongerLabels' => true }
-                       }
-                     else
-                       {
-                         'marks' => 'none',
-                         'labels' => { 'fontSize' => 9, 'labelAngle' => 0,
-                                       'allowLongerLabels' => true }
-                       }
-                     end
+    time_axis = xcol['calendar'] || card['dateGrain'].is_a?(Hash)
+    if time_axis && !HORIZONTAL_CHART_TYPES.include?(ct)
+      xa['format'] = {
+        'marks' => 'none',
+        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
+                      'allowLongerLabels' => false }
+      }
+    elsif kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
+      xa['format'] = {
+        'marks' => 'none',
+        'labels' => { 'fontSize' => 9, 'labelAngle' => 0,
+                      'allowLongerLabels' => true }
+      }
     end
     # Sort by the first measure if the card ordered by a measure, OR if this is
     # the badge_treemap degradation (no native treemap kind — see
@@ -928,10 +926,7 @@ def build_axis_chart(card, kind)
     el['xAxis'] = xa
   end
   unless mcols.empty?
-    currency_axis = meas.any? { |source|
-      source.dig('format', 'type').to_s.match?(/\A(?:currency|money)\z/i)
-    }
-    y_format = currency_axis ? { 'marks' => 'none', 'labels' => 'hidden' } : AXIS_OFF
+    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } }
     el['yAxis'] = { 'columnIds' => mcols.map { |m| m['id'] }, 'format' => y_format }
   end
   split = dims.each_with_index.find { |d, i| i != xidx && d['mapping'].to_s.upcase == SERIES_MAPPING }
@@ -965,8 +960,8 @@ def build_axis_chart(card, kind)
     if el['xAxis']
       el['xAxis']['format'] = {
         'marks' => 'none',
-        'labels' => { 'fontSize' => 7, 'labelAngle' => -45,
-                      'allowLongerLabels' => true }
+        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
+                      'allowLongerLabels' => false }
       }
     end
   end
@@ -1260,12 +1255,19 @@ def build_pop_chart(card, plan)
     'name' => card['title'],
     'source' => union_source,
     'columns' => [date_col] + measure_columns,
-    'xAxis' => { 'columnId' => date_col['id'], 'format' => AXIS_OFF },
+    'xAxis' => {
+      'columnId' => date_col['id'],
+      'format' => {
+        'marks' => 'none',
+        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
+                      'allowLongerLabels' => false },
+      },
+    },
     'yAxis' => {
       'columnIds' => measure_columns.each_with_index.map do |column, index|
         { 'columnId' => column['id'], 'type' => index.zero? ? 'bar' : 'line' }
       end,
-      'format' => AXIS_OFF,
+      'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } },
     },
     '_dataHelpers' => helpers,
     '_periodComparisonManaged' => true,

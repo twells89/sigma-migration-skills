@@ -390,7 +390,7 @@ else
     name: 'Light',
     overrides: {
       'colorOverrides' => sigma_color_overrides('#F6F6F6'),
-      'categoricalScheme' => %w[#82BADF #8BC34A #F3A24F #D95C59 #C8E5A3 #7FB4D3 #F8DFA0 #8BBF78],
+      'categoricalScheme' => %w[#82BADF #315A7D #8BC34A #F3A24F #D95C59 #8E6BBE #5BB7A8 #D7B95E],
       'titleFont' => { 'fontSize' => 10, 'fontWeight' => 'bold' }
     }
   )
