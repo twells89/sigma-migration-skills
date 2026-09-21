@@ -1288,6 +1288,25 @@ if [ -f "$TAB_GEN" ] && [ -f "$TAB_SKILL/converter/tableau.mjs" ]; then
   fi
 fi
 
+# A plugin can pin the SHA256 of its critical files in .claude-plugin/integrity.json
+# and enforce it at runtime via scripts/.../check-plugin-integrity.rb (domo-to-sigma
+# does: migrate-domo.rb calls verify! and test-migrate-domo.rb exercises it). The
+# scrub above rewrites some pinned files (MIT->Apache license in plugin.json,
+# identity/bead scrub in SKILL.md/scripts), so the dev-computed hashes no longer
+# match the scrubbed tree and verify! raises "plugin files do not match advertised
+# release" on public. Regenerate every such manifest against the now-scrubbed files
+# so the plugin's own integrity gate verifies clean. Idempotent (--write rewrites
+# integrity.json from current bytes); same post-scrub-regen pattern as the cognos
+# source_sha256 pin and the tableau determinism tables above.
+if command -v ruby >/dev/null 2>&1; then
+  while IFS= read -r -d '' chk; do
+    echo "  regenerate plugin integrity manifest ($chk --write)"
+    ruby "$chk" --write || echo "  WARN: integrity regen failed for $chk — review before shipping"
+  done < <(find plugins -path '*/scripts/check-plugin-integrity.rb' -print0 2>/dev/null)
+else
+  echo "  WARN: ruby unavailable — skipped plugin integrity-manifest regen (any pinned integrity.json may be stale vs the scrubbed tree)"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────
 # STEP 6 — re-sync canonical shared/ copies if any were touched above
 # ─────────────────────────────────────────────────────────────────────────
