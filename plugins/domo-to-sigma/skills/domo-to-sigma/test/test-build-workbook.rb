@@ -423,8 +423,9 @@ eq(day_line['columns'].first['format'],
 puts "== Phase-5 geometry gate: warn when a page's cards carry no x/y =="
 $warnings = []
 warn_missing_geometry('Overview', [{ 'id' => 'c7', 'title' => 'No Geometry' }, { 'id' => 'c8' }])
-ok($warnings.any? { |w| w['warning'].include?("no grid geometry for page 'Overview'") && w['warning'].include?('single-column stack') },
-   "page with no card x/y warns loudly (Task 1's merge_geometry never ran / found nothing)")
+ok($warnings.any? { |w| w['warning'].include?("no grid geometry for page 'Overview'") &&
+                          w['warning'].include?('kind-aware default composition') },
+   'page with no card x/y names the honest default-composition fallback')
 
 $warnings = []
 warn_missing_geometry('Overview', [{ 'id' => 'c9', 'x' => 0, 'y' => 0, 'w' => 3, 'h' => 2 }, { 'id' => 'c10' }])
