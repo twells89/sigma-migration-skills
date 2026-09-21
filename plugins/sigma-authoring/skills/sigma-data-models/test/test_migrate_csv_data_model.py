@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import importlib.util
+import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -217,22 +217,22 @@ class MigrationTransformTest(unittest.TestCase):
             def __init__(self, responses):
                 self.responses = responses
 
-            def get(self, path):
-                return self.responses[path]
+            def get_element_query(self, data_model_id, element_id):
+                return self.responses[("query", data_model_id, element_id)]
+
+            def get_connection(self, connection_id):
+                return self.responses[("connection", connection_id)]
 
         source = FakeClient(
             {
-                (
-                    "/v2/dataModels/source-model-id/elements/"
-                    "csv-sales/query"
-                ): {
+                ("query", "source-model-id", "csv-sales"): {
                     "sql": (
                         "select order_id, net_revenue "
                         "from analytics.writeback.sigma_df_csv_example Q1 "
                         "limit 1000"
                     )
                 },
-                "/v2/connections/source-connection": {
+                ("connection", "source-connection"): {
                     "type": "databricks",
                     "host": "workspace.cloud.databricks.com",
                 },
@@ -240,7 +240,7 @@ class MigrationTransformTest(unittest.TestCase):
         )
         target = FakeClient(
             {
-                "/v2/connections/target-connection": {
+                ("connection", "target-connection"): {
                     "type": "databricks",
                     "host": "workspace.cloud.databricks.com",
                 }
@@ -268,13 +268,42 @@ class MigrationTransformTest(unittest.TestCase):
         )
         self.assertEqual(result, "AbCdEf1234567890GhIjKl")
 
-    def test_rtf_credential_file_is_rejected(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "credentials.env"
-            path.write_text(r"{\rtf1\ansi not-an-env-file}", encoding="utf-8")
+    def test_sigma_cli_profile_is_used_for_api_calls(self):
+        calls = []
 
-            with self.assertRaisesRegex(MIGRATE.MigrationError, "RTF document"):
-                MIGRATE.load_credentials(path)
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout='{"dataModelId":"model-id"}',
+                stderr="",
+            )
+
+        client = MIGRATE.SigmaCliClient("source-org", runner=runner)
+        result = client.get_data_model_spec("model-id")
+
+        self.assertEqual(result, {"dataModelId": "model-id"})
+        self.assertEqual(
+            calls[0][0],
+            [
+                "sigma",
+                "api",
+                "data-models",
+                "spec",
+                "get",
+                "-f",
+                "json",
+                "-p",
+                "source-org",
+                "--params",
+                '{"dataModelId":"model-id"}',
+            ],
+        )
+        self.assertEqual(
+            calls[0][1],
+            {"capture_output": True, "text": True, "check": False},
+        )
 
 
 if __name__ == "__main__":

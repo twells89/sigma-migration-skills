@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Recreate a Sigma CSV-backed data model over its existing warehouse data.
 
-The source and target organizations use separate API credentials. Planning is
+Authentication is delegated to OAuth-capable Sigma CLI profiles. Planning is
 read-only and writes a transformed data-model spec locally. Creating the target
 model requires both --apply and --yes.
 """
@@ -9,17 +9,13 @@ model requires both --apply and --yes.
 from __future__ import annotations
 
 import argparse
-import base64
 import copy
 import json
 import os
 import re
-import shlex
-import ssl
+import subprocess
 import sys
-import urllib.error
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,21 +23,6 @@ from typing import Any
 
 class MigrationError(RuntimeError):
     """A user-actionable migration error."""
-
-
-class ApiError(MigrationError):
-    """A Sigma API error with its HTTP status preserved."""
-
-    def __init__(self, method: str, path: str, status: int, body: str):
-        super().__init__(f"{method.upper()} {path} -> {status}: {body}")
-        self.status = status
-
-
-@dataclass(frozen=True)
-class Credentials:
-    base_url: str
-    client_id: str
-    client_secret: str
 
 
 @dataclass(frozen=True)
@@ -53,133 +34,107 @@ class ResolvedSource:
     statement: str
 
 
-class SigmaClient:
-    """Small stdlib-only client for the data-model endpoints used here."""
+class SigmaCliClient:
+    """Typed wrapper around OAuth-capable Sigma CLI profiles."""
 
-    def __init__(self, credentials: Credentials):
-        self.credentials = credentials
-        self._token: str | None = None
-        self._ssl_context = ssl.create_default_context()
-
-    def _mint_token(self) -> str:
-        raw = (
-            f"{self.credentials.client_id}:{self.credentials.client_secret}"
-        ).encode()
-        request = urllib.request.Request(
-            f"{self.credentials.base_url}/v2/auth/token",
-            data=b"grant_type=client_credentials",
-            method="POST",
-            headers={
-                "Authorization": f"Basic {base64.b64encode(raw).decode()}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-        )
-        try:
-            with urllib.request.urlopen(
-                request, timeout=30, context=self._ssl_context
-            ) as response:
-                payload = json.load(response)
-        except urllib.error.HTTPError as error:
-            body = error.read().decode(errors="replace")
-            raise ApiError("POST", "/v2/auth/token", error.code, body) from error
-        token = payload.get("access_token")
-        if not token:
-            raise MigrationError("Sigma token response did not contain access_token")
-        self._token = token
-        return token
-
-    def request(
-        self, method: str, path: str, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        encoded = None if body is None else json.dumps(body).encode()
-        for attempt in range(2):
-            token = self._token or self._mint_token()
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-            }
-            if encoded is not None:
-                headers["Content-Type"] = "application/json"
-            request = urllib.request.Request(
-                f"{self.credentials.base_url}{path}",
-                data=encoded,
-                method=method.upper(),
-                headers=headers,
-            )
-            try:
-                with urllib.request.urlopen(
-                    request, timeout=120, context=self._ssl_context
-                ) as response:
-                    raw = response.read()
-                    return {} if not raw else json.loads(raw)
-            except urllib.error.HTTPError as error:
-                error_body = error.read().decode(errors="replace")
-                if error.code == 401 and attempt == 0:
-                    self._token = None
-                    continue
-                raise ApiError(method, path, error.code, error_body) from error
-        raise MigrationError("Sigma authentication failed after token refresh")
-
-    def get(self, path: str) -> dict[str, Any]:
-        return self.request("GET", path)
-
-    def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        return self.request("POST", path, body)
-
-
-def load_credentials(path: Path) -> Credentials:
-    """Parse a plain KEY=value env file without evaluating shell code."""
-
-    raw = path.read_text(encoding="utf-8-sig")
-    if raw.lstrip().startswith(r"{\rtf"):
-        raise MigrationError(
-            f"{path} is an RTF document, not a plain-text .env file; "
-            "resave it as plain text before using it"
-        )
-
-    values: dict[str, str] = {}
-    for line_number, raw_line in enumerate(raw.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[7:].lstrip()
-        if "=" not in line:
-            raise MigrationError(
-                f"{path}:{line_number}: expected KEY=value, found {raw_line!r}"
-            )
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", key):
-            raise MigrationError(f"{path}:{line_number}: invalid environment key")
-        try:
-            parsed = shlex.split(value.strip(), posix=True)
-        except ValueError as error:
-            raise MigrationError(f"{path}:{line_number}: {error}") from error
-        if len(parsed) > 1:
-            raise MigrationError(
-                f"{path}:{line_number}: quote values containing whitespace"
-            )
-        values[key] = parsed[0] if parsed else ""
-
-    required = ("SIGMA_BASE_URL", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET")
-    missing = [key for key in required if not values.get(key)]
-    if missing:
-        raise MigrationError(f"{path} is missing {', '.join(missing)}")
-    base_url = values["SIGMA_BASE_URL"].rstrip("/")
-    parsed_url = urllib.parse.urlparse(base_url)
-    host = (parsed_url.hostname or "").lower()
-    if parsed_url.scheme != "https" or not (
-        host == "sigmacomputing.com" or host.endswith(".sigmacomputing.com")
+    def __init__(
+        self,
+        profile: str,
+        binary: str = "sigma",
+        runner: Any = subprocess.run,
     ):
-        raise MigrationError(
-            "SIGMA_BASE_URL must be an https:// URL on sigmacomputing.com"
+        if not profile.strip():
+            raise MigrationError("Sigma CLI profile cannot be empty")
+        self.profile = profile
+        self.binary = binary
+        self._runner = runner
+
+    def _run(
+        self,
+        *operation: str,
+        params: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        command = [
+            self.binary,
+            "api",
+            *operation,
+            "-f",
+            "json",
+            "-p",
+            self.profile,
+        ]
+        if params is not None:
+            command.extend(["--params", json.dumps(params, separators=(",", ":"))])
+        if body is not None:
+            command.extend(["--json", json.dumps(body, separators=(",", ":"))])
+        try:
+            result = self._runner(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise MigrationError(
+                f"Sigma CLI binary {self.binary!r} was not found; install it "
+                "and run 'sigma auth login' for each organization"
+            ) from error
+        if result.returncode:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise MigrationError(
+                f"Sigma CLI profile {self.profile!r} failed "
+                f"({result.returncode}): {detail or 'no error output'}"
+            )
+        if not result.stdout.strip():
+            return {}
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise MigrationError(
+                f"Sigma CLI returned non-JSON output for profile "
+                f"{self.profile!r}: {result.stdout[:200]!r}"
+            ) from error
+        if not isinstance(payload, dict):
+            raise MigrationError(
+                f"Sigma CLI returned {type(payload).__name__}; expected an object"
+            )
+        return payload
+
+    def get_data_model_spec(self, data_model_id: str) -> dict[str, Any]:
+        return self._run(
+            "data-models",
+            "spec",
+            "get",
+            params={"dataModelId": data_model_id},
         )
-    return Credentials(
-        base_url=base_url,
-        client_id=values["SIGMA_CLIENT_ID"],
-        client_secret=values["SIGMA_CLIENT_SECRET"],
-    )
+
+    def get_element_query(
+        self, data_model_id: str, element_id: str
+    ) -> dict[str, Any]:
+        return self._run(
+            "data-models",
+            "elements",
+            "query",
+            "get",
+            params={"dataModelId": data_model_id, "elementId": element_id},
+        )
+
+    def get_connection(self, connection_id: str) -> dict[str, Any]:
+        return self._run(
+            "connections",
+            "get",
+            params={"connectionId": connection_id},
+        )
+
+    def create_data_model(self, spec: dict[str, Any]) -> dict[str, Any]:
+        return self._run(
+            "data-models",
+            "spec",
+            "create",
+            params={},
+            body=spec,
+        )
 
 
 def parse_model_ref(value: str) -> str:
@@ -317,7 +272,7 @@ def physical_relation_from_sql(statement: str) -> str:
 
 
 def discover_csv_queries(
-    source_client: SigmaClient, spec: dict[str, Any]
+    source_client: SigmaCliClient, spec: dict[str, Any]
 ) -> dict[str, dict[str, str]]:
     data_model_id = spec.get("dataModelId")
     if not isinstance(data_model_id, str) or not data_model_id:
@@ -327,10 +282,7 @@ def discover_csv_queries(
         element_id = element.get("id")
         if not isinstance(element_id, str) or not element_id:
             raise MigrationError("CSV element does not contain an id")
-        payload = source_client.get(
-            f"/v2/dataModels/{urllib.parse.quote(data_model_id, safe='')}"
-            f"/elements/{urllib.parse.quote(element_id, safe='')}/query"
-        )
+        payload = source_client.get_element_query(data_model_id, element_id)
         statement = sanitize_generated_sql(payload.get("sql"))
         discoveries[element_id] = {
             "statement": statement,
@@ -471,8 +423,8 @@ def load_mapping(path: Path) -> list[dict[str, Any]]:
 
 
 def resolve_sources(
-    source_client: SigmaClient,
-    target_client: SigmaClient,
+    source_client: SigmaCliClient,
+    target_client: SigmaCliClient,
     source_spec: dict[str, Any],
     mappings: list[dict[str, Any]],
 ) -> list[ResolvedSource]:
@@ -494,14 +446,12 @@ def resolve_sources(
         target_connection_id = mapping["targetConnectionId"]
 
         if source_connection_id not in source_connections:
-            source_connections[source_connection_id] = source_client.get(
-                "/v2/connections/"
-                f"{urllib.parse.quote(source_connection_id, safe='')}"
+            source_connections[source_connection_id] = (
+                source_client.get_connection(source_connection_id)
             )
         if target_connection_id not in target_connections:
-            target_connections[target_connection_id] = target_client.get(
-                "/v2/connections/"
-                f"{urllib.parse.quote(target_connection_id, safe='')}"
+            target_connections[target_connection_id] = (
+                target_client.get_connection(target_connection_id)
             )
         source_connection = source_connections[source_connection_id]
         target_connection = target_connections[target_connection_id]
@@ -540,9 +490,8 @@ def resolve_sources(
     return resolved
 
 
-def get_spec(client: SigmaClient, model_ref: str) -> dict[str, Any]:
-    model_id = urllib.parse.quote(parse_model_ref(model_ref), safe="")
-    return client.get(f"/v2/dataModels/{model_id}/spec")
+def get_spec(client: SigmaCliClient, model_ref: str) -> dict[str, Any]:
+    return client.get_data_model_spec(parse_model_ref(model_ref))
 
 
 def print_json(value: dict[str, Any]) -> None:
@@ -551,7 +500,7 @@ def print_json(value: dict[str, Any]) -> None:
 
 
 def inspect_command(args: argparse.Namespace) -> None:
-    client = SigmaClient(load_credentials(args.source_env))
+    client = SigmaCliClient(args.source_profile, args.sigma_binary)
     spec = get_spec(client, args.model)
     if not csv_elements(spec):
         raise MigrationError("the data model does not contain a CSV source")
@@ -563,8 +512,8 @@ def inspect_command(args: argparse.Namespace) -> None:
 
 
 def plan_command(args: argparse.Namespace) -> None:
-    source_client = SigmaClient(load_credentials(args.source_env))
-    target_client = SigmaClient(load_credentials(args.target_env))
+    source_client = SigmaCliClient(args.source_profile, args.sigma_binary)
+    target_client = SigmaCliClient(args.target_profile, args.sigma_binary)
     source_spec = get_spec(source_client, args.model)
     mappings = load_mapping(args.mapping)
     resolved = resolve_sources(
@@ -582,7 +531,7 @@ def plan_command(args: argparse.Namespace) -> None:
     if args.apply:
         if not args.yes:
             raise MigrationError("--apply requires --yes")
-        created = target_client.post("/v2/dataModels/spec", planned)
+        created = target_client.create_data_model(planned)
         created_id = created.get("dataModelId")
         if not created_id:
             raise MigrationError(
@@ -619,7 +568,8 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser = subparsers.add_parser(
         "inspect", help="read a model and list its CSV source mappings"
     )
-    inspect_parser.add_argument("--source-env", required=True, type=Path)
+    inspect_parser.add_argument("--source-profile", required=True)
+    inspect_parser.add_argument("--sigma-binary", default="sigma")
     inspect_parser.add_argument("--model", required=True)
     inspect_parser.add_argument("--export-spec", type=Path)
     inspect_parser.set_defaults(handler=inspect_command)
@@ -628,8 +578,9 @@ def build_parser() -> argparse.ArgumentParser:
         "plan",
         help="discover CSV backing tables and write a create-ready SQL spec",
     )
-    plan_parser.add_argument("--source-env", required=True, type=Path)
-    plan_parser.add_argument("--target-env", required=True, type=Path)
+    plan_parser.add_argument("--source-profile", required=True)
+    plan_parser.add_argument("--target-profile", required=True)
+    plan_parser.add_argument("--sigma-binary", default="sigma")
     plan_parser.add_argument("--model", required=True)
     plan_parser.add_argument("--mapping", required=True, type=Path)
     plan_parser.add_argument("--target-folder", required=True)

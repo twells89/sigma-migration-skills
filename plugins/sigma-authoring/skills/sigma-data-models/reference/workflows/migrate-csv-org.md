@@ -51,18 +51,23 @@ principal must have `SELECT` access to the source write-back schema.
 > customer-owned table or view over the data and repoint the generated plan
 > before retiring the source organization.
 
-## Credentials
+## Authentication
 
-Create separate, plain-text env files for the source and target organizations.
-Do not use RTF, Word, or TextEdit rich-text documents.
+Install the Sigma CLI and create one OAuth profile for each organization:
 
-```dotenv
-SIGMA_BASE_URL=https://<region>-api.sigmacomputing.com
-SIGMA_CLIENT_ID=<client-id>
-SIGMA_CLIENT_SECRET=<client-secret>
+```bash
+sigma auth login
+# Create OAuth profile: source-org
+
+sigma auth login
+# Create OAuth profile: target-org
+
+sigma -p source-org auth status
+sigma -p target-org auth status
 ```
 
-Keep both files outside the repository and set mode `0600`.
+The CLI owns browser login, token storage, and refresh. The migration tool does
+not read API keys, client secrets, bearer tokens, or credential files.
 
 ## 1. Inspect the source model
 
@@ -70,7 +75,7 @@ Run from the `sigma-data-models` skill directory:
 
 ```bash
 python3 scripts/migrate_csv_data_model.py inspect \
-  --source-env /secure/source.env \
+  --source-profile source-org \
   --model 'https://app.sigmacomputing.com/<org>/data-model/<model-slug>' \
   --export-spec /secure/source-model.json
 ```
@@ -103,8 +108,8 @@ set `"allowDifferentHost": true` only after confirming access.
 
 ```bash
 python3 scripts/migrate_csv_data_model.py plan \
-  --source-env /secure/source.env \
-  --target-env /secure/target.env \
+  --source-profile source-org \
+  --target-profile target-org \
   --model '<source-model-id-or-url>' \
   --mapping /secure/source-map.json \
   --target-folder '<destination-folder-id>' \
@@ -134,8 +139,8 @@ Add both mutation gates to the reviewed planning command:
 
 ```bash
 python3 scripts/migrate_csv_data_model.py plan \
-  --source-env /secure/source.env \
-  --target-env /secure/target.env \
+  --source-profile source-org \
+  --target-profile target-org \
   --model '<source-model-id-or-url>' \
   --mapping /secure/source-map.json \
   --target-folder '<destination-folder-id>' \
