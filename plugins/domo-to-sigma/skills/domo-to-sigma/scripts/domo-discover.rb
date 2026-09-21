@@ -498,7 +498,7 @@ def pop_comparison_periods?(date_range_filter)
     end
   candidates.any? do |period|
     period.is_a?(Hash) &&
-      period['type'].to_s.upcase == 'OFFSET' &&
+      %w[OFFSET CONSECUTIVE].include?(period['type'].to_s.upcase) &&
       period['count'].to_i.positive?
   end
 end

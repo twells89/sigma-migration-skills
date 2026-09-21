@@ -180,7 +180,7 @@ def pop_discovery_refresh_needed?(cards_path)
       end
     candidates.none? do |period|
       period.is_a?(Hash) &&
-        period['type'].to_s.upcase == 'OFFSET' &&
+        %w[OFFSET CONSECUTIVE].include?(period['type'].to_s.upcase) &&
         period['count'].to_i.positive?
     end
   end
@@ -189,6 +189,15 @@ rescue StandardError
 end
 
 class VisualGradePending < StandardError
+  attr_reader :request_path
+
+  def initialize(message, request_path)
+    super(message)
+    @request_path = request_path
+  end
+end
+
+class LayoutObservedPending < StandardError
   attr_reader :request_path
 
   def initialize(message, request_path)
@@ -248,6 +257,45 @@ def script_failure_note(script, code, output)
   note = "#{script} exited #{code}"
   note += "\n#{tail.rstrip}" unless tail.strip.empty?
   note
+end
+
+def require_observed_layout!(source_png)
+  return if source_png.to_s.empty?
+  cards_path = File.join(DISCOVERY, 'cards.json')
+  return unless File.exist?(cards_path)
+  cards = JSON.parse(File.read(cards_path)) rescue []
+  missing_geometry = Array(cards).reject { |card|
+    card['_error'] || card['_tierB'] ||
+      %w[x y w h].all? { |key| !card[key].nil? }
+  }
+  return if missing_geometry.empty?
+
+  observed_path = File.join(DISCOVERY, 'layout-observed.json')
+  observed = (JSON.parse(File.read(observed_path)) rescue nil) if File.exist?(observed_path)
+  uncovered = missing_geometry.reject do |card|
+    record = observed.is_a?(Hash) && observed[card['id'].to_s]
+    record.is_a?(Hash) && %w[x y w h].all? { |key| record[key].is_a?(Numeric) }
+  end
+  return if uncovered.empty?
+
+  request_path = File.join(OUT, 'layout-observed-request.json')
+  request = {
+    'schema' => 'domo-layout-observed-request/v1',
+    'source_png' => File.expand_path(source_png),
+    'output_json' => observed_path,
+    'coordinate_contract' => 'x/y/w/h are page fractions from 0.0 to 1.0; optional section is source heading text',
+    'cards' => uncovered.map {
+      |card| { 'id' => card['id'].to_s, 'title' => card['title'], 'pageId' => card['_pageId'] }.compact
+    },
+    'resume_command' => 'write output_json from the supplied full-page screenshot, then rerun the same migrate-domo.rb command',
+  }
+  File.write(request_path, JSON.pretty_generate(request) + "\n")
+  reason = "#{uncovered.size} source card(s) have no API geometry while a full-page source image is available — " \
+           "layout transcription is required before workbook construction; request: #{request_path}"
+  DomoRunState.wait(OUT, 'layout-observed', reason)
+  DomoRunState.record(OUT, 'status' => 'waiting-for-layout-observed',
+                           'layout_observed_request' => request_path)
+  raise LayoutObservedPending.new(reason, request_path)
 end
 
 # Same argv-array discipline as run_script!, for this skill's one Python
@@ -1035,6 +1083,8 @@ def run_live!(opts)
     end
   end
 
+  require_observed_layout!(opts[:source_dashboard_png])
+
   phase_convert_beast_modes!(opts)
 
   # ---- build-dm + its post-and-readback: NOT in the task's phase list, but a
@@ -1447,6 +1497,11 @@ rescue VisualGradePending => e
   hr('WAITING — visual grade required')
   log e.message
   log 'No failure or waiver was recorded. A vision-capable agent should fulfill the request and rerun this command.'
+  exit DomoVisualHandoff::EXIT_PENDING
+rescue LayoutObservedPending => e
+  hr('WAITING — source layout transcription required')
+  log e.message
+  log 'No new target build was attempted in this run. Read the supplied full-page source image, write layout-observed.json, and rerun.'
   exit DomoVisualHandoff::EXIT_PENDING
 end
 

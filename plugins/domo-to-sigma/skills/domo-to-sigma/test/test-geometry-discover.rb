@@ -190,6 +190,36 @@ eq(merged_b[2]['_collection'], { 'id' => 901, 'title' => 'Section Two', 'index' 
 eq([merged_b[0]['_pageOrder'], merged_b[1]['_pageOrder'], merged_b[2]['_pageOrder']], [0, 1, 2],
    '_pageOrder always attached (0-based array position) whenever stacks is given')
 
+puts '== merge_geometry: collection indices follow stacks sizes order, not definition-fetch order =='
+stacks_reordered = {
+  'sizes' => [
+    { 'id' => 'visual-first', 'size' => 'small' },
+    { 'id' => 'visual-second', 'size' => 'small' },
+    { 'id' => 'visual-third', 'size' => 'small' },
+  ],
+  'collections' => [
+    { 'id' => 910, 'title' => 'First Section', 'cardIndices' => [0, 1] },
+    { 'id' => 911, 'title' => 'Second Section', 'cardIndices' => [2] },
+  ],
+}
+definition_order = [
+  { 'id' => 'visual-third' },
+  { 'id' => 'visual-first' },
+  { 'id' => 'visual-second' },
+]
+merged_reordered = merge_geometry(definition_order, nil, stacks: stacks_reordered)
+reordered_by_id = merged_reordered.each_with_object({}) { |card, out| out[card['id']] = card }
+eq(reordered_by_id['visual-first']['_collection']['title'], 'First Section',
+   'first visual card uses collection index 0 even when fetched second')
+eq(reordered_by_id['visual-second']['_collection']['title'], 'First Section',
+   'second visual card uses collection index 1 even when fetched third')
+eq(reordered_by_id['visual-third']['_collection']['title'], 'Second Section',
+   'third visual card uses collection index 2 even when fetched first')
+eq(%w[visual-first visual-second visual-third].map {
+     |id| reordered_by_id[id]['_pageOrder']
+   }, [0, 1, 2],
+   '_pageOrder follows the visual sizes sequence')
+
 puts '== merge_geometry: API-created page (collections: []) — _pageOrder + _size, no _collection =='
 stacks_c = { 'sizes' => [{ 'id' => 'c1', 'size' => 'small' }], 'collections' => [] }
 merged_c = merge_geometry([{ 'id' => 'c1' }], nil, stacks: stacks_c)

@@ -195,6 +195,21 @@ if pop_src
      'ordinary combo charts never take the POP-specific transport transform')
 end
 
+max_date_src = oracle_src[/^def max_date\(rows\)\n.*?\nend\n/m]
+ok(max_date_src, 'extracted max_date(rows) from build-parity-oracle.rb')
+eval(max_date_src, TOPLEVEL_BINDING) if max_date_src # rubocop:disable Security/Eval
+if max_date_src
+  eq(max_date([
+       ['2026-09-01', 117_000],
+       ['2026-10-01', nil],
+       ['2026-11-01', nil],
+       ['2026-12-01', nil],
+     ]), Date.new(2026, 9, 1),
+     'future POP density rows with no values do not make the warehouse look stale')
+end
+ok(oracle_src.include?("unless expected_transform == 'domo-pop-aligned-grain'"),
+   'aligned POP display dates are excluded from warehouse-freshness inference')
+
 canon_src = oracle_src[/^def canonicalise_dim\(rows\)\n.*?(?=^def max_date\(rows\))/m]
 ok(canon_src, 'extracted canonicalise_dim(rows) from build-parity-oracle.rb')
 month_abbr_src = oracle_src[/^MONTH_ABBR = .*?\.freeze\n/m]

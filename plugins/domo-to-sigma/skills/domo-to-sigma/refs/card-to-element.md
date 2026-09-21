@@ -249,6 +249,7 @@ instance (2026-07-30 validation, 48 cards / 22 distinct chartTypes). Sigma
 | `badge_vert_multibar` | `bar-chart` | ✅ kind verified | grouped/clustered, `stacking: none`. |
 | `badge_horiz_multibar` | `bar-chart` | ✅ kind verified | `orientation: horizontal`, `stacking: none`. |
 | `badge_horiz_100pct` | `bar-chart` | ✅ kind verified | `orientation: horizontal`, `stacking: normalized` (Sigma's percent-stacked variant — the literal string is `normalized`, NOT `"100"`). |
+| `badge_vert_marimekko` | `bar-chart` | ⚠️ approximated | `stacking: normalized` preserves the source part-to-whole bands; Sigma does not encode variable bar widths. |
 | `badge_vert_nestedbar` | `bar-chart` | ⚠️ approximated | Sigma's cartesian axis has no native 2-level nested category shelf; degrades to a flat grouped bar (the outer grouping tier is lost) — warned, not silent. |
 | `badge_symbolline` | `line-chart` | ✅ kind verified | line with point markers; marker styling itself is a chart-style detail, not a distinct kind. |
 | `badge_curved_symbolline` | `line-chart` | ✅ kind verified | curved/smoothed variant — same kind as above; curve styling is a line-style detail. |

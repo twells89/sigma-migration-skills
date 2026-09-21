@@ -99,12 +99,12 @@
 #                   falls in, from stacks['collections'][].cardIndices;
 #                   OMITTED (never defaulted) when the card isn't referenced
 #                   by any collection. NOTE: '_collection'['index'] is the
-#                   card's own 0-based position in the stacks cards[] array
+#                   card's own 0-based position in the stacks sizes[] visual sequence
 #                   (same number as '_pageOrder' below), NOT the collection's
 #                   sequence number among collections[] — this file derives
 #                   section order from the MINIMUM '_pageOrder' across a
 #                   collection's cards instead (see group_into_sections).
-#   '_pageOrder'  — that same 0-based stacks-array position, ALWAYS attached
+#   '_pageOrder'  — that same 0-based sizes-array position, ALWAYS attached
 #                   whenever the private stacks response was available at
 #                   all (regardless of collection membership) — the explicit
 #                   ordering signal even on a page with zero collections
@@ -340,7 +340,7 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
     members_y = observed_cards.select { |c| observed[c['id'].to_s]['section'] == sec }
                                .map { |c| observed[c['id'].to_s]['y'].to_f }
     {
-      'id' => "observed-section-#{i}", 'kind' => 'text', 'caption' => sec,
+      'id' => "text-observed-section-#{i}", 'kind' => 'text', 'caption' => sec,
       'x_pct' => 0.0, 'y_pct' => [(members_y.min * 100.0) - 3.0, 0.0].max.round(2),
       'w_pct' => 100.0, 'h_pct' => 2.5, 'children' => [], '_source' => 'observed-from-screenshot',
     }
@@ -480,15 +480,15 @@ def has_width_signal?(card)
 end
 
 # Partition a page's cards into ordered SECTIONS: one per Domo `collections[]`
-# entry, each holding its cards in stacks-array order, plus one trailing,
+# entry, each holding its cards in sizes-array visual order, plus one trailing,
 # unheaded section for cards no collection references ("ungrouped", per the
-# live API's own terminology) in their original discovery order. No card is
+# live API's own terminology) in their original visual order. No card is
 # ever dropped: a card with no '_collection' at all lands in the trailing
 # ungrouped section.
 #
 # Keyed off merge_geometry's '_collection' ({'id','title','index'} — 'index'
-# is the CARD's own stacks-array position, not the collection's sequence
-# number) and '_pageOrder' (that same stacks-array position, always present
+# is the CARD's own sizes-array position, not the collection's sequence
+# number) and '_pageOrder' (that same sizes-array position, always present
 # when the private stacks response was available at all). Sections are
 # ordered by the MINIMUM '_pageOrder' among their cards, and cards within a
 # section are sorted by their own '_pageOrder' — since Domo's own

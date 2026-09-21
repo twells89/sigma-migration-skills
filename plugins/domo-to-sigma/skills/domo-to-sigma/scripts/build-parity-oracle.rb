@@ -341,7 +341,11 @@ end
 # not uniformly a date.
 def max_date(rows)
   return nil unless rows.is_a?(Array) && !rows.empty?
-  ds = rows.map { |r| parse_date(Array(r).first) }
+  meaningful = rows.map { |row| Array(row) }.select {
+    |row| row.drop(1).any? { |value| !value.nil? }
+  }
+  return nil if meaningful.empty?
+  ds = meaningful.map { |row| parse_date(row.first) }
   return nil if ds.any?(&:nil?)
   ds.max
 end
@@ -679,11 +683,18 @@ charts.each do |c|
   # See the guard below. Recorded per tile whose first column parses as a date
   # on BOTH sides, which is the only shape where "whose data is newer" is a
   # meaningful question.
-  ed = max_date(exp_rows)
-  ad = max_date(act_rows)
-  stale_evidence << { 'chart' => name, 'element_id' => eid,
-                      'domo_max' => ed.to_s, 'sigma_max' => ad.to_s,
-                      'days' => (ed - ad).to_i } if ed && ad && ed > ad
+  # POP transports align prior-period dates onto the selected period. Their
+  # visible max date can legitimately extend beyond current-period warehouse
+  # facts (for example Oct-Dec carry only last year's line). That is comparison
+  # semantics, not warehouse freshness; strict row parity below is the correct
+  # oracle for those tiles.
+  unless expected_transform == 'domo-pop-aligned-grain'
+    ed = max_date(exp_rows)
+    ad = max_date(act_rows)
+    stale_evidence << { 'chart' => name, 'element_id' => eid,
+                        'domo_max' => ed.to_s, 'sigma_max' => ad.to_s,
+                        'days' => (ed - ad).to_i } if ed && ad && ed > ad
+  end
 end
 
 # ---- WAREHOUSE FRESHNESS GUARD ---------------------------------------------
