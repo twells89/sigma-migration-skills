@@ -649,7 +649,9 @@ end
 def apply_chart_axis_override!(card, element)
   rule = optional_card_rule(card, 'chart-axis-overrides.json')
   return element unless rule
-  measure_ids = Array(element.dig('yAxis', 'columnIds'))
+  measure_ids = Array(element.dig('yAxis', 'columnIds')).filter_map do |entry|
+    entry.is_a?(Hash) ? entry['columnId'] : entry
+  end
   return element if measure_ids.empty?
 
   if rule['scale'].to_f.nonzero?

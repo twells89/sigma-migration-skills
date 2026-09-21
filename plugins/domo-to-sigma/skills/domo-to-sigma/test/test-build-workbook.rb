@@ -647,6 +647,36 @@ eq(meas.map { |column| column['column'] }, ['AR %'],
    'blank-mapped support aggregates do not leak onto the value axis')
 $translated_bms = nil
 
+puts "== combo chart display scaling resolves structured y-axis entries =="
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'chart-axis-overrides.json'), JSON.generate(
+    'scaled-combo' => {
+      'scale' => 1000, 'prefix' => '$', 'suffix' => 'K', 'decimals' => 0,
+    },
+  ))
+  combo = {
+    'id' => 'el-scaled-combo', 'kind' => 'combo-chart', 'name' => 'Amount YoY',
+    'columns' => [
+      { 'id' => 'm-current', 'name' => 'This Year', 'formula' => 'Sum([Master/Amount])' },
+      { 'id' => 'm-prior', 'name' => '1 Year Ago', 'formula' => 'Sum([Master/Prior Amount])' },
+    ],
+    'yAxis' => {
+      'columnIds' => [
+        { 'columnId' => 'm-current', 'type' => 'bar' },
+        { 'columnId' => 'm-prior', 'type' => 'line' },
+      ],
+    },
+  }
+  $chart_verification_elements = []
+  stub_const(:OUT, dir) do
+    apply_chart_axis_override!({ 'id' => 'scaled-combo', 'title' => 'Amount YoY' }, combo)
+  end
+  ok(combo['columns'].all? { |column| column['formula'].include?('/ 1000.0') },
+     'both structured combo measures receive compact display scaling')
+  eq($chart_verification_elements.size, 1,
+     'raw unscaled combo twin remains available for parity')
+end
+
 puts "== bead 2ef7: card['limit'] -> Sigma top-n element filter (table) =="
 $warnings = []
 topn = build_element({ 'id' => 'c22', 'title' => 'Order Detail (Top 25)', 'chartType' => 'badge_table',
