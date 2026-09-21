@@ -1614,6 +1614,8 @@ eq($chart_helpers.size, 2, 'CONSECUTIVE count=1 emits current and prior helper t
 helper_value = $chart_helpers.first['columns'].find { |column| column['id'] == 'd-pop-value' }
 eq(helper_value['formula'], 'Sum([Master/90+]) / Sum([Master/Total])',
    'each period helper evaluates the aggregate Beast Mode against its filtered source window')
+eq($chart_helpers.first.dig('groupings', 0, 'groupBy'), %w[d-aligned-date d-period-index],
+   'period helper groups before union so non-additive ratios emit once per aligned month')
 $translated_bms = nil
 
 puts "== POP compare offsets fall back to Domo card-data channels =="

@@ -1159,7 +1159,8 @@ def build_pop_chart(card, plan)
                     'POP_PERIOD/POP_INDEX channels because dateRangeFilter.periods was absent.')
   end
   value = plan['value_column']
-  value_formula = plan['value_formula'] || mref(display_name(value['column']))
+  value_formula = plan['value_formula'] ||
+    "#{sigma_agg(value['aggregation'], value['distinct'])}(#{mref(display_name(value['column']))})"
   base_start = %(DateTrunc("#{plan['interval']}", DateAdd("#{plan['interval']}", -#{plan['offset']}, Today())))
   base_end = %(DateAdd("#{plan['interval']}", 1, #{base_start}))
   periods = [{ 'unit' => plan['interval'], 'count' => 0, 'absolute' => plan['offset'], 'primary' => true }] +
@@ -1180,6 +1181,7 @@ def build_pop_chart(card, plan)
     raw_date = mref(display_name(plan['date_column']))
     aligned = %(DateAdd("#{plan['grain']}", DateDiff("#{plan['grain']}", #{start_at}, DateTrunc("#{plan['grain']}", #{raw_date})), #{base_start}))
     helper_id = "src-#{eid(card)}-pop-#{index}"
+    grouping_id = "grp-#{eid(card)}-pop-#{index}"
     helper_name = "#{card['title']} (POP #{index})"
     columns = [
       { 'id' => 'd-aligned-date', 'name' => 'Aligned Date', 'formula' => aligned },
@@ -1199,6 +1201,11 @@ def build_pop_chart(card, plan)
       'source' => { 'kind' => 'table', 'elementId' => 'master' },
       'columns' => columns,
       'order' => columns.map { |column| column['id'] },
+      'groupings' => [{
+        'id' => grouping_id,
+        'groupBy' => %w[d-aligned-date d-period-index],
+        'calculations' => ['d-pop-value'],
+      }],
       'filters' => [{
         'id' => "dw-#{helper_id}",
         'columnId' => 'f-period-window',
@@ -1214,7 +1221,12 @@ def build_pop_chart(card, plan)
   union_name = "Union of #{helpers.size} Sources"
   union_source = {
     'kind' => 'union',
-    'sources' => helpers.map { |helper| { 'kind' => 'table', 'elementId' => helper['id'] } },
+    'sources' => helpers.map.with_index do |helper, index|
+      {
+        'kind' => 'table', 'elementId' => helper['id'],
+        'groupingId' => "grp-#{eid(card)}-pop-#{index}",
+      }
+    end,
     'matches' => %w[Aligned\ Date Value Period\ Index].map do |name|
       {
         'outputColumnName' => name.tr('\\', ''),

@@ -1,11 +1,11 @@
 {
   "schema": "domo-plugin-integrity/v1",
-  "pluginVersion": "0.16.120",
+  "pluginVersion": "0.16.121",
   "files": {
-    ".claude-plugin/plugin.json": "25fedfd2e7aff5506efd8403ffbc412eb7b86d7b34258adcc816abab297cd477",
+    ".claude-plugin/plugin.json": "2ee2ac378983977c4947d7fdf670d4620ddf093d9b44e8cf72cdd3c92e3dd365",
     "skills/domo-to-sigma/SKILL.md": "78bc028df3a855d617198bba511a871bf7be41ebcae9fb753231930f9ebf68e2",
     "skills/domo-to-sigma/scripts/migrate-domo.rb": "316108f35a2314fbc18d41f6627d52bbe83bd6571d78b1991d75862f19569208",
-    "skills/domo-to-sigma/scripts/build-workbook.rb": "5e8defac077bd7b92b459580b9bf9191966c897752750349b81c27729ecee75f",
+    "skills/domo-to-sigma/scripts/build-workbook.rb": "04b6ba7cb30f3d55ce5203fd8f8cbbbf47487f4b7386e4cef3be0c867f65e881",
     "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "a99e43812e84314c63d61745e473a5bfb7820be4d7c67f909619b6197fe96709",
     "skills/domo-to-sigma/scripts/check-plugin-integrity.rb": "2d8fb28c64196194f5f21b0ad0cd6fda0388ef7f3b8add2b2ef587886b3ed525",
     "skills/domo-to-sigma/scripts/lib/plugin_integrity.rb": "578681e34d33c3cf4c455ebaad6dd19db7af57b7b7d420cdeec6f2c35093abbc"
