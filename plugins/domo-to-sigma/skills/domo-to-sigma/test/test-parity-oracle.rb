@@ -249,6 +249,19 @@ if canon_src
   eq(readable_count, 1, 'the readable day rewrite is counted')
 end
 
+source_grain_src = oracle_src[/^def canonicalise_source_grain\(rows, source_card\)\n.*?\nend\n/m]
+ok(source_grain_src, 'extracted canonicalise_source_grain(rows, source_card)')
+eval(source_grain_src, TOPLEVEL_BINDING) if source_grain_src # rubocop:disable Security/Eval
+if source_grain_src
+  monthly, count = canonicalise_source_grain(
+    [['2025-01-01', 40_000, 'Alpha'], ['2025-02-01', 42_000, 'Alpha']],
+    { 'dateGrain' => { 'dateTimeElement' => 'MONTH' } }
+  )
+  eq(monthly, [['2025-01', 40_000, 'Alpha'], ['2025-02', 42_000, 'Alpha']],
+     'month-grained source rows compare to Sigma month labels at the same grain')
+  eq(count, 2, 'source-grain rewrites are auditable')
+end
+
 display_src = oracle_src[/^def canonicalise_numeric_display\(rows, expected_rows = nil\)\n.*?\nend\n/m]
 ok(display_src, 'extracted canonicalise_numeric_display(rows) from build-parity-oracle.rb')
 eval(display_src, TOPLEVEL_BINDING) if display_src # rubocop:disable Security/Eval

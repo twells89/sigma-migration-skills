@@ -217,6 +217,25 @@ def canonicalise_dim(rows)
   [out, n]
 end
 
+def canonicalise_source_grain(rows, source_card)
+  grain = source_card.is_a?(Hash) ?
+    source_card.dig('dateGrain', 'dateTimeElement').to_s.downcase : ''
+  return [rows, 0] unless %w[month year].include?(grain)
+  rewritten = 0
+  output = Array(rows).map do |row|
+    values = Array(row).dup
+    date = parse_date(values.first)
+    next values unless date
+    replacement = grain == 'month' ? date.strftime('%Y-%m') : date.year.to_s
+    if replacement != values.first
+      values[0] = replacement
+      rewritten += 1
+    end
+    values
+  end
+  [output, rewritten]
+end
+
 # Sigma element CSV exports use display formatting. Canonicalize only strings
 # that unambiguously carry numeric decoration so strict parity compares Domo's
 # raw numbers to their displayed equivalents without weakening plain strings.
@@ -653,10 +672,11 @@ charts.each do |c|
   # Canonicalise the dimension BEFORE the row is recorded — doing it afterwards
   # mutates a local the emitted hash no longer references, which is exactly the
   # bug this comment exists to stop recurring.
+  exp_rows, source_grain_n = canonicalise_source_grain(exp_rows, source_cards[cid])
   exp_rows, expected_canon_n = canonicalise_dim(exp_rows)
   act_rows, actual_canon_n = canonicalise_dim(act_rows)
   act_rows = canonicalise_numeric_display(act_rows, exp_rows)
-  canonicalised += expected_canon_n + actual_canon_n
+  canonicalised += source_grain_n + expected_canon_n + actual_canon_n
 
   verified_entry = {
     'chart'          => name,
