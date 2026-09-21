@@ -514,10 +514,10 @@ Dir.mktmpdir('domo-build-layout-observed') do |dir|
   chart_header_container = dash['zone_tree'].find { |z| z['id'] == 'dc-ov4' }
   eq(chart_header_container['children'].map { |child| child['id'] }, %w[header-ov4 el-ov4],
      'screenshot-backed chart text header replaces a detached companion KPI')
-  eq(dash['zones'].select { |zone| zone['id'].to_s.start_with?('text-observed-section-') }
+  eq(dash['zones'].select { |zone| zone['id'].to_s.start_with?('observed-section-') }
                   .map { |zone| zone['id'] },
-     %w[text-observed-section-0 text-observed-section-1],
-     'observed section zone ids match the text elements emitted by build-workbook')
+     %w[observed-section-0 observed-section-1],
+     'observed section zones use the shared text-<zone-id> element resolution contract')
   ok(zov2['_source'].nil?, 'ov2 (not in the sidecar) falls back to the kind-aware default composition, untagged')
   ok(zov2['y_pct'] > zov1['y_pct'], 'the composed remainder (ov2) is placed below the observed region, end to end')
 end

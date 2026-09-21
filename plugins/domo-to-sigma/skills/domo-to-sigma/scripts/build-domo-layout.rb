@@ -340,7 +340,7 @@ def build_dashboard_with_observed(name, cards, observed, kind_map)
     members_y = observed_cards.select { |c| observed[c['id'].to_s]['section'] == sec }
                                .map { |c| observed[c['id'].to_s]['y'].to_f }
     {
-      'id' => "text-observed-section-#{i}", 'kind' => 'text', 'caption' => sec,
+      'id' => "observed-section-#{i}", 'kind' => 'text', 'caption' => sec,
       'x_pct' => 0.0, 'y_pct' => [(members_y.min * 100.0) - 3.0, 0.0].max.round(2),
       'w_pct' => 100.0, 'h_pct' => 2.5, 'children' => [], '_source' => 'observed-from-screenshot',
     }

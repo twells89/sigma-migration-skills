@@ -1921,8 +1921,8 @@ Dir.mktmpdir do |dir|
   ]
   stub_const(:OUT, dir) do
     section_els = collection_section_elements(cards)
-    eq(section_els.map { |element| element['id'] }, %w[collection-1 collection-2],
-       'collection text ids match build-domo-layout heading zone ids')
+    eq(section_els.map { |element| element['id'] }, %w[text-collection-1 text-collection-2],
+       'collection text ids use the shared layout builder text-<zone-id> contract')
     eq(section_els.map { |element| element['name'] }, %w[First Second],
        'collection headings follow source page order')
     eq(section_els.map { |element| element['body'] }, ['### First', '### Second'],

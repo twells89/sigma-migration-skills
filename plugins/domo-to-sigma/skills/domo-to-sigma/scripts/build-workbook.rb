@@ -3326,7 +3326,7 @@ def collection_section_elements(cards)
   collections.sort_by { |(_key, order)| order }
              .each_with_index.map do |((_, title), _order), index|
     {
-      'id' => "collection-#{index + 1}", 'kind' => 'text',
+      'id' => "text-collection-#{index + 1}", 'kind' => 'text',
       'name' => title, 'body' => "### #{title}",
     }
   end
