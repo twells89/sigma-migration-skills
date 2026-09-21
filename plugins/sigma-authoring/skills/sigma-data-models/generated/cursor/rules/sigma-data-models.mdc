@@ -44,6 +44,7 @@ Feature-specific JSON patterns live in `reference/`. Load each file when you ide
 | `reference/workflows/discover.md` | **Read first when starting a new model.** Find the user's connection, resolve a table path → inodeId, list columns. Without this, you'll guess column names and the spec will fail. |
 | `reference/workflows/authoring.md` | Composition judgment calls — one big model vs many small, SQL source vs warehouse-table, joins in the model vs in workbooks, naming conventions, where to put metrics, folder placement, when to materialize. |
 | `reference/workflows/crud.md` | `POST` / `GET` / `PUT` against `/v2/dataModels` endpoints. Always load before any API call. Contains the ID-semantics contrast (CREATE remap vs GET source-of-truth vs UPDATE preserve), full step-by-step recipes, and the mixed-ID rule for relationships in updates. |
+| `reference/workflows/migrate-csv-org.md` | Move a CSV-backed data model between Sigma organizations without re-uploading the CSV. Discovers the hidden Databricks upload table through element-query SQL, rewrites it as a destination custom SQL source, and creates only behind explicit mutation gates. |
 | `reference/workflows/validate.md` | Pre-submit checklist + decoding common errors (400 / 403 / 409) + the "pull a known-working model and diff" pattern when guessing isn't working. |
 
 ## ID Conventions
