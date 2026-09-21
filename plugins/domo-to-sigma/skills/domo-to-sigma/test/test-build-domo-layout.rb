@@ -479,9 +479,9 @@ Dir.mktmpdir('domo-build-layout-observed') do |dir|
     }],
   })
   w.call('layout-observed.json', {
-    'ov1' => { 'x' => 0.0, 'y' => 0.0, 'w' => 0.4, 'h' => 0.15 },
-    'ov3' => { 'x' => 0.5, 'y' => 0.0, 'w' => 0.4, 'h' => 0.15 },
-    'ov4' => { 'x' => 0.0, 'y' => 0.2, 'w' => 0.4, 'h' => 0.15 },
+    'ov1' => { 'x' => 0.0, 'y' => 0.0, 'w' => 0.4, 'h' => 0.15, 'section' => 'Top' },
+    'ov3' => { 'x' => 0.5, 'y' => 0.0, 'w' => 0.4, 'h' => 0.15, 'section' => 'Top' },
+    'ov4' => { 'x' => 0.0, 'y' => 0.2, 'w' => 0.4, 'h' => 0.15, 'section' => 'Bottom' },
     'nonexistent-card-id' => { 'x' => 0.0, 'y' => 0.0, 'w' => 1.0, 'h' => 1.0 }, # typo -> must WARN
   })
 
@@ -514,6 +514,10 @@ Dir.mktmpdir('domo-build-layout-observed') do |dir|
   chart_header_container = dash['zone_tree'].find { |z| z['id'] == 'dc-ov4' }
   eq(chart_header_container['children'].map { |child| child['id'] }, %w[header-ov4 el-ov4],
      'screenshot-backed chart text header replaces a detached companion KPI')
+  eq(dash['zones'].select { |zone| zone['id'].to_s.start_with?('observed-section-') }
+                  .map { |zone| zone['id'] },
+     %w[observed-section-0 observed-section-1],
+     'observed section zones use the shared text-<zone-id> element resolution contract')
   ok(zov2['_source'].nil?, 'ov2 (not in the sidecar) falls back to the kind-aware default composition, untagged')
   ok(zov2['y_pct'] > zov1['y_pct'], 'the composed remainder (ov2) is placed below the observed region, end to end')
 end

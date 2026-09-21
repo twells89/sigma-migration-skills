@@ -220,6 +220,20 @@ probed_no_periods = merge_public_pop_comparison(
 eq(probed_no_periods['_popComparisonProbe'], 'public-no-periods',
    'successful public probe distinguishes a genuine no-periods card from failed extraction')
 
+consecutive_pop = Marshal.load(Marshal.dump(private_pop))
+consecutive_pop['dateRangeFilter']['periods'] = {
+  'type' => 'COMBINED',
+  'combined' => [{ 'type' => 'CONSECUTIVE', 'count' => 1 }],
+  'count' => 0,
+}
+ok(pop_comparison_periods?(consecutive_pop['dateRangeFilter']),
+   'CONSECUTIVE compare metadata is a real prior period, not missing metadata')
+consecutive_unchanged = merge_public_pop_comparison(
+  consecutive_pop, public_without_periods, 'pop-consecutive'
+)
+ok(!consecutive_unchanged.key?('_popComparisonProbe'),
+   'a private CONSECUTIVE period never receives the false public-no-periods marker')
+
 puts "== normalize_card: Shape B prefers operand over conflicting filterType =="
 shape_b_operand_wins = {
   'chartType' => 'badge_bar', 'dataSetId' => 'ds-2b',

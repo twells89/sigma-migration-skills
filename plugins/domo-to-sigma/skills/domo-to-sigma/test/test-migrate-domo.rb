@@ -273,6 +273,10 @@ ok(!migrate_src.include?("'--agent-vision', 'false'"),
    'visual handoff: orchestrator no longer records a guaranteed not-executable verdict')
 ok(migrate_src.include?('DomoVisualHandoff.record_args'),
    'visual handoff: a completed blind grade is consumed and recorded automatically')
+ok(migrate_src.include?('require_observed_layout!(opts[:source_dashboard_png])') &&
+   migrate_src.include?('domo-layout-observed-request/v1') &&
+   migrate_src.include?('rescue LayoutObservedPending'),
+   'classic pages with a supplied screenshot wait for layout transcription before target construction')
 ok(migrate_src.include?("'plugin_version' => PLUGIN_MANIFEST['version']"),
    'run evidence records the exact Domo plugin version')
 ok(migrate_src.include?("'plugin_integrity' => PLUGIN_INTEGRITY") &&

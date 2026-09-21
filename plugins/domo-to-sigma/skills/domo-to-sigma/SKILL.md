@@ -318,12 +318,17 @@ is a human-supplied image. **Explicitly ask the operator:**
 
 > "Domo's API doesn't expose this page's layout. Can you paste or export a
 > screenshot of the page? I'll read the arrangement from it so the Sigma dashboard
-> matches. Without one I'll compose a clean default layout instead."
+> matches. Without one I can only compose a clean default layout, not claim
+> source-faithful placement."
 
 Then READ the image and transcribe what you see into
 **`discovery/layout-observed.json`** (schema + preference order documented in
 `scripts/build-domo-layout.rb`). Mark it `_source: "observed-from-screenshot"` —
 it is a model reading an image, and must never be presented as API-derived truth.
+When `--source-dashboard-png` is supplied for a page whose cards lack API
+geometry, the orchestrator now writes `layout-observed-request.json` and exits
+20 WAITING until every such card has a valid sidecar rectangle. It will not
+silently build the generic fallback while source geometry is visibly available.
 
 **If no screenshot is provided, do NOT fake geometry and do not stack.** The layout
 builder composes a clean default instead, in this house order:
@@ -492,8 +497,9 @@ Then translate the rest per the ref:
 - Domo chart type → Sigma chart kind (full table in `refs/card-to-element.md`)
 - Domo period-over-period `dateRangeFilter.periods` → explicit current/prior
   Sigma measures over aligned hidden helpers (including multiple prior periods);
-  when private compare metadata is absent, backfill the public CardDefinition,
-  then derive offsets from captured `POP_PERIOD`/`POP_INDEX` card-data. Preserve
+  both `OFFSET` and `CONSECUTIVE` compare metadata are supported, including
+  aggregate Beast Mode values; when metadata is absent, derive offsets from
+  captured `POP_PERIOD`/`POP_INDEX` card-data. Preserve
   a selected-period-only chart only after one of those probes proves there is
   no comparison; one authored Y-axis field can still render as bars plus a line
 - **KPI value guard:** a KPI's value is the summary number's aggregate of the

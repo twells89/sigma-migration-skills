@@ -174,16 +174,15 @@ module DomoSigma
   #   - '_size'        — the T-shirt token, from `stacks['sizes']`, keyed by
   #                       card id.
   #   - '_collection'  — {'id','title','index'} for the collection (if any)
-  #                       this card falls in. `index` is the card's 0-based
-  #                       position in the `cards` ARGUMENT passed to this
-  #                       method (NOT its id) — domo-discover.rb guarantees
-  #                       that position matches the stacks response's own
-  #                       `cards[]` order, since it builds the card list by
-  #                       walking that same array in order. Omitted (never
+  #                       this card falls in. `cardIndices` indexes the
+  #                       response's visual `sizes[]` sequence; the analyzer
+  #                       `cards[]`/definition-fetch order can differ wildly
+  #                       (field run: 26/29 cards assigned to the wrong section
+  #                       when those arrays were assumed identical). Omitted (never
   #                       defaulted) when the card's index isn't inside any
   #                       collection's `cardIndices` (e.g. collections: [] on
   #                       an API-created page).
-  #   - '_pageOrder'   — that same 0-based index, ALWAYS attached whenever
+  #   - '_pageOrder'   — that visual sizes[] index, ALWAYS attached whenever
   #                       `stacks` is given (regardless of collection
   #                       membership), so the layout builder has an explicit
   #                       ordering signal even on a page with zero collections.
@@ -317,27 +316,41 @@ module DomoSigma
     return cards unless stacks.is_a?(Hash)
 
     size_by_id = {}
+    ordered_ids = []
     Array(stacks['sizes']).each do |s|
       next unless s.is_a?(Hash) && s['id']
-      size_by_id[s['id'].to_s] = s['size']
+      id = s['id'].to_s
+      ordered_ids << id
+      size_by_id[id] = s['size']
     end
+    if ordered_ids.empty?
+      ordered_ids = Array(cards).each_with_object([]) do |card, out|
+        out << card['id'].to_s if card.is_a?(Hash) && card['id']
+      end
+    end
+    order_by_id = ordered_ids.each_with_index.to_h
 
-    collection_by_index = {}
+    collection_by_id = {}
     Array(stacks['collections']).each do |col|
       next unless col.is_a?(Hash)
       Array(col['cardIndices']).each do |idx|
-        collection_by_index[idx] = { 'id' => col['id'], 'title' => col['title'], 'index' => idx }
+        card_id = ordered_ids[idx.to_i]
+        next unless card_id
+        collection_by_id[card_id] = {
+          'id' => col['id'], 'title' => col['title'], 'index' => idx.to_i
+        }
       end
     end
 
     cards.each_with_index.map do |card, idx|
       next card unless card.is_a?(Hash)
       extra = {}
-      size = size_by_id[card['id'].to_s]
+      card_id = card['id'].to_s
+      size = size_by_id[card_id]
       extra['_size'] = size if size
-      coll = collection_by_index[idx]
+      coll = collection_by_id[card_id]
       extra['_collection'] = coll if coll
-      extra['_pageOrder'] = idx
+      extra['_pageOrder'] = order_by_id.fetch(card_id, idx)
       extra.empty? ? card : card.merge(extra)
     end
   end

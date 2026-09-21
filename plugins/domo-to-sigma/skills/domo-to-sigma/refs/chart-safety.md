@@ -27,12 +27,15 @@ warehouse columns. The converter reconstructs them from the source
 `dateRangeFilter`:
 
 - `dateTimeRange.dateTimeRangeType: INTERVAL_OFFSET` defines the selected period.
-- `periods.type: COMBINED` with `OFFSET` entries defines each comparison. When
+- `periods.type: COMBINED` with `OFFSET` entries, or a `CONSECUTIVE` entry whose
+  unit is inherited from the selected range, defines each comparison. When
   the private analyzer definition omits this block, discovery retries the
   official public `GET /v1/cards/chart/{urn}` CardDefinition. If it is still
   absent, the early Domo card-data snapshot reconstructs offsets from its
   `POP_PERIOD`/`POP_INDEX` channels and records a warning.
-- One hidden, filtered table is emitted per period.
+- One hidden, filtered table is emitted per period. Its value may be a raw
+  aggregate or an aggregate Beast Mode; the latter is evaluated after that
+  helper's exact period predicate, not flattened into unrelated support fields.
 - Helpers align dates by the source graph grain, then a union preserves overlap
   rows that belong to more than one comparison.
 - The visible `combo-chart` exposes one explicit measure per period: selected
@@ -59,8 +62,9 @@ probe created and then deleted five disposable cards through Domo's API:
   channels.
 
 Those latter shapes are ordinary selected-period Domo queries despite the POP
-chart-type token. When a successful public probe or captured card-data proves
-that shape, preserve one authored measure as a single-series bar, or multiple
+chart-type token. Only captured card-data with no `POP_PERIOD`/`POP_INDEX`
+channels proves that shape; absence from the public CardDefinition alone is not
+proof. Preserve one authored measure as a single-series bar, or multiple
 authored measures as a combo (first bar, remaining lines), and apply the source
 `INTERVAL_OFFSET` window. Record that no source comparison was present; do not
 drop the card and do not claim that a comparison was rebuilt.
