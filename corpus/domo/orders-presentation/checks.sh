@@ -58,7 +58,7 @@ ruby -rjson -e '
 
   ax = axis["bar_channel"] || {}
   errs << "currency chart axis not compacted" unless ax["scale"] == 1000 && ax["suffix"] == "K" && ax["prefix"] == "$"
-  errs << "screenshot-backed chart must hide source-hidden value-axis labels" unless ax["hideLabels"] == true
+  errs << "screenshot-backed chart must preserve readable value-axis labels" if ax["hideLabels"] == true
   errs << "percent/count chart wrongly given a currency axis" if axis.key?("kpi_ret") || axis.key?("table_detail")
 
   errs << "categorical order not preserved from Domo rows" unless order["bar_channel"] == ["In-Store", "Online", "App"]
@@ -93,7 +93,7 @@ ruby -rjson -e '
   abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 6 && c["kpi_formats"] == 5 &&
     c["kpi_headers"] == 2 &&
     c["card_headers"] == 3 &&
-    c["axis_formats"] == 3 && c["category_orders"] == 1 && c["color_guards"] == 1
+    c["axis_formats"] == 2 && c["category_orders"] == 1 && c["color_guards"] == 1
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }
 

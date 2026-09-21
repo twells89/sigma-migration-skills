@@ -217,6 +217,25 @@ def canonicalise_dim(rows)
   [out, n]
 end
 
+def canonicalise_source_grain(rows, source_card)
+  grain = source_card.is_a?(Hash) ?
+    source_card.dig('dateGrain', 'dateTimeElement').to_s.downcase : ''
+  return [rows, 0] unless %w[month year].include?(grain)
+  rewritten = 0
+  output = Array(rows).map do |row|
+    values = Array(row).dup
+    date = parse_date(values.first)
+    next values unless date
+    replacement = grain == 'month' ? date.strftime('%Y-%m') : date.year.to_s
+    if replacement != values.first
+      values[0] = replacement
+      rewritten += 1
+    end
+    values
+  end
+  [output, rewritten]
+end
+
 # Sigma element CSV exports use display formatting. Canonicalize only strings
 # that unambiguously carry numeric decoration so strict parity compares Domo's
 # raw numbers to their displayed equivalents without weakening plain strings.
@@ -341,7 +360,11 @@ end
 # not uniformly a date.
 def max_date(rows)
   return nil unless rows.is_a?(Array) && !rows.empty?
-  ds = rows.map { |r| parse_date(Array(r).first) }
+  meaningful = rows.map { |row| Array(row) }.select {
+    |row| row.drop(1).any? { |value| !value.nil? }
+  }
+  return nil if meaningful.empty?
+  ds = meaningful.map { |row| parse_date(row.first) }
   return nil if ds.any?(&:nil?)
   ds.max
 end
@@ -649,10 +672,11 @@ charts.each do |c|
   # Canonicalise the dimension BEFORE the row is recorded — doing it afterwards
   # mutates a local the emitted hash no longer references, which is exactly the
   # bug this comment exists to stop recurring.
+  exp_rows, source_grain_n = canonicalise_source_grain(exp_rows, source_cards[cid])
   exp_rows, expected_canon_n = canonicalise_dim(exp_rows)
   act_rows, actual_canon_n = canonicalise_dim(act_rows)
   act_rows = canonicalise_numeric_display(act_rows, exp_rows)
-  canonicalised += expected_canon_n + actual_canon_n
+  canonicalised += source_grain_n + expected_canon_n + actual_canon_n
 
   verified_entry = {
     'chart'          => name,
@@ -679,11 +703,18 @@ charts.each do |c|
   # See the guard below. Recorded per tile whose first column parses as a date
   # on BOTH sides, which is the only shape where "whose data is newer" is a
   # meaningful question.
-  ed = max_date(exp_rows)
-  ad = max_date(act_rows)
-  stale_evidence << { 'chart' => name, 'element_id' => eid,
-                      'domo_max' => ed.to_s, 'sigma_max' => ad.to_s,
-                      'days' => (ed - ad).to_i } if ed && ad && ed > ad
+  # POP transports align prior-period dates onto the selected period. Their
+  # visible max date can legitimately extend beyond current-period warehouse
+  # facts (for example Oct-Dec carry only last year's line). That is comparison
+  # semantics, not warehouse freshness; strict row parity below is the correct
+  # oracle for those tiles.
+  unless expected_transform == 'domo-pop-aligned-grain'
+    ed = max_date(exp_rows)
+    ad = max_date(act_rows)
+    stale_evidence << { 'chart' => name, 'element_id' => eid,
+                        'domo_max' => ed.to_s, 'sigma_max' => ad.to_s,
+                        'days' => (ed - ad).to_i } if ed && ad && ed > ad
+  end
 end
 
 # ---- WAREHOUSE FRESHNESS GUARD ---------------------------------------------

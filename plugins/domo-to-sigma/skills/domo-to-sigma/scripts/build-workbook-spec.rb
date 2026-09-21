@@ -390,8 +390,8 @@ else
     name: 'Light',
     overrides: {
       'colorOverrides' => sigma_color_overrides('#F6F6F6'),
-      'categoricalScheme' => %w[#82BADF #8BC34A #F3A24F #D95C59 #C8E5A3 #7FB4D3 #F8DFA0 #8BBF78],
-      'titleFont' => { 'fontSize' => 10, 'fontWeight' => 'bold' }
+      'categoricalScheme' => %w[#B3D9EF #315A7D #8BC34A #F3A24F #D95C59 #8E6BBE #5BB7A8 #D7B95E],
+      'titleFont' => { 'fontSize' => 12, 'fontWeight' => 'bold' }
     }
   )
   warn '  theme: Domo default canvas + 8-color categorical scheme'

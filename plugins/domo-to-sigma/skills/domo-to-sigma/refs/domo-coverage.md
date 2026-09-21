@@ -6,7 +6,7 @@ Every documented source construct maps to a real, current Sigma target or a loud
 
 **`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at **query time** in a live migration (no `type=error` column) on the date shown; 🟡 n = target is documented but not yet query-verified.
 
-**Coverage:** 39 documented constructs across 2 dimensions; 0 live-verified.
+**Coverage:** 40 documented constructs across 2 dimensions; 0 live-verified.
 
 ## Visualization / chart kind
 
@@ -28,6 +28,8 @@ Authoritative source: <https://knowledge.domo.com/Visualize/Adding_Cards_to_Domo
 | | | | | _Horizontal grouped bars._ |
 | `badge_horiz_100pct` | — | `bar-chart` | 🟡 n | warn+bar |
 | | | | | _Horizontal, stacking:normalized._ |
+| `badge_vert_marimekko` | — | `bar-chart` | 🟡 n | warn+normalized-bar |
+| | | | | _Approximation: normalized stacking preserves part-to-whole bands; variable bar widths are not represented._ |
 | `badge_vert_nestedbar` | — | `bar-chart` | 🟡 n | warn+flatten-groups |
 | | | | | _Explicit approximation: Sigma has no two-level nested category shelf._ |
 | `badge_symbolline` | — | `line-chart` | 🟡 n | warn+line |
@@ -56,7 +58,7 @@ Authoritative source: <https://knowledge.domo.com/Visualize/Adding_Cards_to_Domo
 | `badge_calendar` | — | `table` | 🟡 n | warn+table |
 | | | | | _No native calendar-heatmap surface._ |
 | `badge_pop_bar_line` | — | `combo-chart / bar-chart` | 🟡 n | reconstruct or warn+preserve |
-| | | | | _Private analyzer metadata is backfilled from the public CardDefinition, then INTERVAL_OFFSET + periods OFFSET metadata is reconstructed as explicit measures over aligned hidden helpers. A proven no-periods source is preserved as its selected-period series; an unprobed one-measure shape is skipped rather than erasing a hidden comparison._ |
+| | | | | _Private/public OFFSET or CONSECUTIVE metadata and POP_PERIOD/POP_INDEX channels reconstruct explicit current/prior measures over aligned hidden helpers, including aggregate Beast Mode values. Only card-data proving no comparison permits a single-series fallback._ |
 | `badge_vert_symbol_overlay` | — | `combo-chart` | 🟡 n | warn+combo |
 | | | | | _Approximate bar plus scatter marker; no dial semantics are claimed._ |
 

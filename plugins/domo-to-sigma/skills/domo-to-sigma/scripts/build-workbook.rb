@@ -247,6 +247,7 @@ CHART_TYPE_MAP = {
   'badge_vert_multibar'       => 'bar-chart',   # + stacking: none (grouped/clustered)
   'badge_horiz_multibar'      => 'bar-chart',   # + orientation: horizontal, stacking: none
   'badge_horiz_100pct'        => 'bar-chart',   # + orientation: horizontal, stacking: normalized
+  'badge_vert_marimekko'      => 'bar-chart',   # closest native encoding: normalized stacked bars
   'badge_vert_nestedbar'      => 'bar-chart',   # approximated (no 2-level nested axis) — see warning
   'badge_treemap'             => 'bar-chart',   # NO_NATIVE_EQUIVALENT — sorted desc by measure
   'badge_symbolline'          => 'line-chart',
@@ -294,6 +295,8 @@ NO_NATIVE_EQUIVALENT = {
   'badge_vert_symbol_overlay' => 'Domo bar + actual/target symbol overlay — combo-chart (bar + a ' \
                                   'scatter marker series) is the closest native shape; a true ' \
                                   'actual-vs-target dial is not representable.',
+  'badge_vert_marimekko' => 'Domo Marimekko — approximated as a normalized stacked bar chart; ' \
+                             'Sigma preserves the part-to-whole bands but not variable bar widths.',
 }.freeze
 
 # Exact-match chartType tokens (never substring) whose Sigma bar-chart needs a
@@ -303,7 +306,7 @@ HORIZONTAL_CHART_TYPES = %w[badge_horiz_bar badge_horiz_multibar badge_horiz_100
 def bar_stacking_for(chart_type)
   case chart_type.to_s.downcase
   when 'badge_vert_stackedbar' then 'stacked'
-  when 'badge_horiz_100pct'    then 'normalized'
+  when 'badge_horiz_100pct', 'badge_vert_marimekko' then 'normalized'
   else 'none'
   end
 end
@@ -344,8 +347,16 @@ end
 def warn_missing_geometry(pname, pcards)
   return if pcards.empty?
   return if pcards.any? { |c| c['x'] || c['y'] }
-  warn_card(pcards.first, "no grid geometry for page '#{pname}' — layout will fall back to a " \
-                          'single-column stack; ensure domo-discover captured x/y/w/h')
+  return if File.exist?(File.join(OUT, 'layout-observed.json'))
+  if pcards.any? { |card| card['_collection'] || !card['_size'].to_s.empty? }
+    warn_card(pcards.first, "no exact grid geometry for page '#{pname}' — layout will use Domo " \
+                            'collections/size signals. For source-faithful card positions, transcribe ' \
+                            'the supplied page screenshot to discovery/layout-observed.json.')
+  else
+    warn_card(pcards.first, "no grid geometry for page '#{pname}' — layout will use the kind-aware " \
+                            'default composition. For source-faithful card positions, transcribe the ' \
+                            'supplied page screenshot to discovery/layout-observed.json.')
+  end
 end
 
 # Split a card's columns into dimensions (grouped / non-aggregated) and measures.
@@ -390,15 +401,20 @@ def split_cols(card)
   cols = card['columns'] || []
   gb = Array(card['groupBy'])
   chart_type = card['chartType'].to_s.downcase
+  visual_mappings = (DIM_MAPPINGS + MEASURE_MAPPINGS + [SERIES_MAPPING, 'XTIME']).uniq
+  mapped_mode = cols.any? { |column| visual_mappings.include?(column['mapping'].to_s.upcase) }
+  eligible_cols = mapped_mode ?
+    cols.select { |column| visual_mappings.include?(column['mapping'].to_s.upcase) } :
+    cols
   dims = []
   meas = []
-  # Per-column: prefer Domo's own `mapping` when THIS column carries one (it's
-  # the more reliable signal); fall back to the aggregation/groupBy heuristic
-  # for any column that doesn't (Tier B, or an extraction pass that hasn't
-  # captured `mapping` yet) — mixing the two per-column, rather than an
-  # all-or-nothing switch, so a partially-tagged column set still classifies
-  # correctly instead of silently losing the untagged columns.
-  cols.each do |c|
+  # Once Domo exposes any recognized visual-role mapping, that role set is the
+  # authoritative rendered channel list. Shape-B definitions also carry
+  # projection/support columns with a blank mapping; treating those as plotted
+  # measures leaked age-bucket totals into unrelated YoY and by-site charts
+  # (including million-percent axes). Fall back to aggregation/groupBy only
+  # when the whole card lacks role metadata.
+  eligible_cols.each do |c|
     m = c['mapping'].to_s.upcase
     aggregate_like = !c['aggregation'].to_s.empty? || aggregate_beast_mode_column?(c)
     if m == SERIES_MAPPING || m == 'XTIME'
@@ -423,7 +439,7 @@ def split_cols(card)
       meas << c
     end
   end
-  dims = cols.reject { |c| meas.include?(c) } if dims.empty? && !meas.empty?
+  dims = eligible_cols.reject { |c| meas.include?(c) } if dims.empty? && !meas.empty?
   [dims, meas]
 end
 
@@ -633,7 +649,9 @@ end
 def apply_chart_axis_override!(card, element)
   rule = optional_card_rule(card, 'chart-axis-overrides.json')
   return element unless rule
-  measure_ids = Array(element.dig('yAxis', 'columnIds'))
+  measure_ids = Array(element.dig('yAxis', 'columnIds')).filter_map do |entry|
+    entry.is_a?(Hash) ? entry['columnId'] : entry
+  end
   return element if measure_ids.empty?
 
   if rule['scale'].to_f.nonzero?
@@ -873,21 +891,19 @@ def build_axis_chart(card, kind)
   }
   if xcol
     xa = { 'columnId' => dcols[xidx]['id'], 'format' => AXIS_OFF }
-    if kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
-      time_axis = xcol['calendar'] || card['dateGrain'].is_a?(Hash)
-      xa['format'] = if time_axis
-                       {
-                         'marks' => 'none',
-                         'labels' => { 'fontSize' => 7, 'labelAngle' => -45,
-                                       'allowLongerLabels' => true }
-                       }
-                     else
-                       {
-                         'marks' => 'none',
-                         'labels' => { 'fontSize' => 9, 'labelAngle' => 0,
-                                       'allowLongerLabels' => true }
-                       }
-                     end
+    time_axis = xcol['calendar'] || card['dateGrain'].is_a?(Hash)
+    if time_axis && !HORIZONTAL_CHART_TYPES.include?(ct)
+      xa['format'] = {
+        'marks' => 'none',
+        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
+                      'allowLongerLabels' => false }
+      }
+    elsif kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
+      xa['format'] = {
+        'marks' => 'none',
+        'labels' => { 'fontSize' => 9, 'labelAngle' => 0,
+                      'allowLongerLabels' => true }
+      }
     end
     # Sort by the first measure if the card ordered by a measure, OR if this is
     # the badge_treemap degradation (no native treemap kind — see
@@ -912,10 +928,7 @@ def build_axis_chart(card, kind)
     el['xAxis'] = xa
   end
   unless mcols.empty?
-    currency_axis = meas.any? { |source|
-      source.dig('format', 'type').to_s.match?(/\A(?:currency|money)\z/i)
-    }
-    y_format = currency_axis ? { 'marks' => 'none', 'labels' => 'hidden' } : AXIS_OFF
+    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } }
     el['yAxis'] = { 'columnIds' => mcols.map { |m| m['id'] }, 'format' => y_format }
   end
   split = dims.each_with_index.find { |d, i| i != xidx && d['mapping'].to_s.upcase == SERIES_MAPPING }
@@ -949,8 +962,8 @@ def build_axis_chart(card, kind)
     if el['xAxis']
       el['xAxis']['format'] = {
         'marks' => 'none',
-        'labels' => { 'fontSize' => 7, 'labelAngle' => -45,
-                      'allowLongerLabels' => true }
+        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
+                      'allowLongerLabels' => false }
       }
     end
   end
@@ -1006,8 +1019,6 @@ def pop_card_data(card)
 end
 
 def pop_no_comparison_proven?(card)
-  return true if card['_popComparisonProbe'] == 'public-no-periods'
-
   expected = pop_card_data(card)
   return false unless expected.is_a?(Hash)
   mappings = Array(expected['mappings']).map { |mapping| mapping.to_s.upcase }
@@ -1029,6 +1040,21 @@ def infer_pop_offset(primary_start, comparison_start)
   { 'unit' => 'day', 'count' => days }
 end
 
+def parse_pop_date(value)
+  raw = value.to_s.strip
+  return nil if raw.empty?
+  ['%Y-%b', '%b %y'].each do |format|
+    begin
+      return Date.strptime(raw, format)
+    rescue ArgumentError
+      next
+    end
+  end
+  Date.parse(raw)
+rescue ArgumentError, TypeError
+  nil
+end
+
 def pop_comparisons_from_card_data(card)
   expected = pop_card_data(card)
   return [] unless expected.is_a?(Hash)
@@ -1043,7 +1069,7 @@ def pop_comparisons_from_card_data(card)
   starts = groups.each_with_object({}) do |(period, rows), out|
     ordered = alignment_index ? rows.sort_by { |row| Array(row)[alignment_index].to_i } : rows
     raw = Array(ordered.first)[item_index]
-    out[period] = Date.parse(raw.to_s) rescue nil
+    out[period] = parse_pop_date(raw)
   end
   primary_key = starts.key?(0) ? 0 : (starts.key?('0') ? '0' : starts.max_by { |_, date| date || Date.new(1, 1, 1) }&.first)
   primary_start = starts[primary_key]
@@ -1065,12 +1091,19 @@ def pop_period_plan(card)
   value_column = Array(card['columns']).find { |column| column['mapping'].to_s.upcase == 'VALUE' } ||
                  Array(card['columns']).find { |column| !column['aggregation'].to_s.empty? }
   return nil if date_column.to_s.empty? || !value_column.is_a?(Hash)
-  return nil if value_column['_isCalc'] || value_column['aggregation'].to_s.empty?
 
   interval = DOMO_DATE_INTERVAL_UNIT[rng['interval'].to_s.upcase]
   grain = DATE_GRAIN_UNIT[card.dig('dateGrain', 'dateTimeElement').to_s.upcase]
   grain ||= interval
   return nil unless interval && grain
+  value_formula = nil
+  if value_column['_isCalc']
+    inlined = inline_beast_mode_measure(card, value_column)
+    return nil unless inlined && !inlined['formula'].to_s.empty?
+    value_formula = inlined['formula']
+  elsif value_column['aggregation'].to_s.empty?
+    return nil
+  end
 
   periods = drf['periods']
   comparisons =
@@ -1082,8 +1115,11 @@ def pop_period_plan(card)
       []
     end
   comparisons = comparisons.filter_map do |period|
-    next unless period.is_a?(Hash) && period['type'].to_s.upcase == 'OFFSET'
-    unit = DOMO_DATE_INTERVAL_UNIT[period['interval'].to_s.upcase]
+    next unless period.is_a?(Hash)
+    type = period['type'].to_s.upcase
+    next unless %w[OFFSET CONSECUTIVE].include?(type)
+    unit = type == 'CONSECUTIVE' ? interval :
+      DOMO_DATE_INTERVAL_UNIT[period['interval'].to_s.upcase]
     count = period['count'].to_i
     next unless unit && count.positive?
     { 'unit' => unit, 'count' => count }
@@ -1098,6 +1134,7 @@ def pop_period_plan(card)
   {
     'date_column' => date_column,
     'value_column' => value_column,
+    'value_formula' => value_formula,
     'interval' => interval,
     'grain' => grain,
     'offset' => rng['offset'].to_i,
@@ -1119,6 +1156,8 @@ def build_pop_chart(card, plan)
                     'POP_PERIOD/POP_INDEX channels because dateRangeFilter.periods was absent.')
   end
   value = plan['value_column']
+  value_formula = plan['value_formula'] ||
+    "#{sigma_agg(value['aggregation'], value['distinct'])}(#{mref(display_name(value['column']))})"
   base_start = %(DateTrunc("#{plan['interval']}", DateAdd("#{plan['interval']}", -#{plan['offset']}, Today())))
   base_end = %(DateAdd("#{plan['interval']}", 1, #{base_start}))
   periods = [{ 'unit' => plan['interval'], 'count' => 0, 'absolute' => plan['offset'], 'primary' => true }] +
@@ -1139,10 +1178,11 @@ def build_pop_chart(card, plan)
     raw_date = mref(display_name(plan['date_column']))
     aligned = %(DateAdd("#{plan['grain']}", DateDiff("#{plan['grain']}", #{start_at}, DateTrunc("#{plan['grain']}", #{raw_date})), #{base_start}))
     helper_id = "src-#{eid(card)}-pop-#{index}"
+    grouping_id = "grp-#{eid(card)}-pop-#{index}"
     helper_name = "#{card['title']} (POP #{index})"
     columns = [
       { 'id' => 'd-aligned-date', 'name' => 'Aligned Date', 'formula' => aligned },
-      { 'id' => 'd-pop-value', 'name' => 'Value', 'formula' => mref(display_name(value['column'])) },
+      { 'id' => 'd-pop-value', 'name' => 'Value', 'formula' => value_formula },
       { 'id' => 'd-period-index', 'name' => 'Period Index', 'formula' => index.to_s },
       {
         'id' => 'f-period-window', 'name' => 'Period Window',
@@ -1158,6 +1198,11 @@ def build_pop_chart(card, plan)
       'source' => { 'kind' => 'table', 'elementId' => 'master' },
       'columns' => columns,
       'order' => columns.map { |column| column['id'] },
+      'groupings' => [{
+        'id' => grouping_id,
+        'groupBy' => %w[d-aligned-date d-period-index],
+        'calculations' => ['d-pop-value'],
+      }],
       'filters' => [{
         'id' => "dw-#{helper_id}",
         'columnId' => 'f-period-window',
@@ -1173,7 +1218,12 @@ def build_pop_chart(card, plan)
   union_name = "Union of #{helpers.size} Sources"
   union_source = {
     'kind' => 'union',
-    'sources' => helpers.map { |helper| { 'kind' => 'table', 'elementId' => helper['id'] } },
+    'sources' => helpers.map.with_index do |helper, index|
+      {
+        'kind' => 'table', 'elementId' => helper['id'],
+        'groupingId' => "grp-#{eid(card)}-pop-#{index}",
+      }
+    end,
     'matches' => %w[Aligned\ Date Value Period\ Index].map do |name|
       {
         'outputColumnName' => name.tr('\\', ''),
@@ -1207,12 +1257,19 @@ def build_pop_chart(card, plan)
     'name' => card['title'],
     'source' => union_source,
     'columns' => [date_col] + measure_columns,
-    'xAxis' => { 'columnId' => date_col['id'], 'format' => AXIS_OFF },
+    'xAxis' => {
+      'columnId' => date_col['id'],
+      'format' => {
+        'marks' => 'none',
+        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
+                      'allowLongerLabels' => false },
+      },
+    },
     'yAxis' => {
       'columnIds' => measure_columns.each_with_index.map do |column, index|
         { 'columnId' => column['id'], 'type' => index.zero? ? 'bar' : 'line' }
       end,
-      'format' => AXIS_OFF,
+      'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } },
     },
     '_dataHelpers' => helpers,
     '_periodComparisonManaged' => true,
@@ -3273,6 +3330,24 @@ def observed_section_elements(cards)
   end
 end
 
+def collection_section_elements(cards)
+  return [] if File.exist?(File.join(OUT, 'layout-observed.json'))
+  collections = Array(cards).each_with_object({}) do |card, out|
+    collection = card['_collection']
+    next unless collection.is_a?(Hash) && !collection['title'].to_s.strip.empty?
+    key = [collection['id'], collection['title'].to_s]
+    order = card['_pageOrder'].to_i
+    out[key] = order if !out.key?(key) || order < out[key]
+  end
+  collections.sort_by { |(_key, order)| order }
+             .each_with_index.map do |((_, title), _order), index|
+    {
+      'id' => "text-collection-#{index + 1}", 'kind' => 'text',
+      'name' => title, 'body' => "### #{title}",
+    }
+  end
+end
+
 def observed_page_title_element(page_name)
   return nil unless File.exist?(File.join(OUT, 'layout-observed.json'))
   slug = page_name.to_s.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/\A-+|-+\z/, '')[0, 40]
@@ -3315,6 +3390,7 @@ if $PROGRAM_NAME == __FILE__
     source_page = pages.find { |page| page_name(page) == pname }
     els += page_layout_elements(source_page || {})
     els += observed_section_elements(pcards)
+    els += collection_section_elements(pcards)
     if source_page&.dig('_pageAnalyzerSettings', 'showFilterBar')
       warn_card(pcards.first || { 'id' => source_page['id'], 'title' => pname },
                 'Domo page filter-bar chrome is present, but no exported filter definitions were captured; ' \

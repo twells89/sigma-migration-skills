@@ -135,7 +135,8 @@ bar = build_element({ 'id' => 'c3', 'title' => 'Sales by Region', 'chartType' =>
 eq(bar['kind'], 'bar-chart', '#7 bar card → bar-chart element (NOT table+dataBars)')
 ok(bar['columns'].none? { |c| c['id'].to_s.start_with?('cf') }, 'no conditionalFormats/dataBars on a bar chart')
 eq(bar.dig('xAxis', 'format', 'marks'), 'none', '#8 x-axis gridlines off')
-eq(bar['yAxis']['format'], { 'marks' => 'none' }, '#8 y-axis gridlines off')
+eq(bar['yAxis']['format'], { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } },
+   '#8 y-axis gridlines stay off while labels remain legible')
 eq(bar['columns'][0]['formula'], '[Master/Store Region]', 'dimension references master')
 eq(bar['columns'][1]['formula'], 'Sum([Master/Sales Amount])', 'measure aggregated + master-ref')
 eq(bar['columns'][1]['name'], 'Sales', 'measure label uses Domo alias (fixes raw names #4)')
@@ -423,8 +424,9 @@ eq(day_line['columns'].first['format'],
 puts "== Phase-5 geometry gate: warn when a page's cards carry no x/y =="
 $warnings = []
 warn_missing_geometry('Overview', [{ 'id' => 'c7', 'title' => 'No Geometry' }, { 'id' => 'c8' }])
-ok($warnings.any? { |w| w['warning'].include?("no grid geometry for page 'Overview'") && w['warning'].include?('single-column stack') },
-   "page with no card x/y warns loudly (Task 1's merge_geometry never ran / found nothing)")
+ok($warnings.any? { |w| w['warning'].include?("no grid geometry for page 'Overview'") &&
+                          w['warning'].include?('kind-aware default composition') },
+   'page with no card x/y names the honest default-composition fallback')
 
 $warnings = []
 warn_missing_geometry('Overview', [{ 'id' => 'c9', 'x' => 0, 'y' => 0, 'w' => 3, 'h' => 2 }, { 'id' => 'c10' }])
@@ -508,6 +510,23 @@ pct = build_element({ 'id' => 'c15', 'title' => 'Share of Total', 'chartType' =>
                       'columns' => [ { 'column' => 'segment' }, { 'column' => 'share', 'aggregation' => 'SUM' } ] }, {})
 eq(pct['orientation'], 'horizontal', 'badge_horiz_100pct is horizontal')
 eq(pct['stacking'], 'normalized', 'badge_horiz_100pct is the percent-stacked variant')
+
+marimekko = build_element({
+  'id' => 'c15-marimekko', 'title' => 'Age Bucket as % of Total',
+  'chartType' => 'badge_vert_marimekko',
+  'columns' => [
+    { 'column' => 'Month', 'mapping' => 'ITEM' },
+    { 'column' => '1-30', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => '31-60', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => '61-90', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+    { 'column' => '90+', 'aggregation' => 'SUM', 'mapping' => 'SERIES' },
+  ],
+}, {})
+eq(marimekko['kind'], 'bar-chart', 'badge_vert_marimekko uses the closest native bar chart')
+eq(marimekko['stacking'], 'normalized',
+   'Marimekko part-to-whole bands become normalized stacked bars')
+eq(marimekko.dig('yAxis', 'columnIds').size, 4,
+   'all four authored age-bucket series remain visible')
 
 donut = build_element({ 'id' => 'c16', 'title' => 'Mix', 'chartType' => 'badge_donut',
                         'columns' => [ { 'column' => 'family' }, { 'column' => 'sales', 'aggregation' => 'SUM' } ] }, {})
@@ -604,6 +623,60 @@ dims, meas = split_cols({ 'columns' => [ { 'column' => 'region', 'mapping' => 'I
                                          { 'column' => 'revenue', 'mapping' => 'VALUE' } ] })
 eq(dims.map { |c| c['column'] }, ['region'], 'ITEM-mapped column is a dimension even with no aggregation/groupBy present')
 eq(meas.map { |c| c['column'] }, ['revenue'], 'VALUE-mapped column is a measure even with no aggregation present (fails under the old aggregation-only heuristic)')
+
+puts "== explicit visual mappings exclude Shape-B support columns =="
+$translated_bms = {
+  'calc-ar-pct' => {
+    'id' => 'calc-ar-pct', 'name' => 'AR %', 'class' => 'aggregate',
+    'sigmaFormula' => 'Sum([AR Amount]) / Sum([Total])',
+  },
+}
+dims, meas = split_cols({
+  'chartType' => 'badge_two_trendline',
+  'columns' => [
+    { 'column' => 'CalendarMonth', 'mapping' => 'ITEM', 'calendar' => true },
+    { 'column' => 'AR %', 'mapping' => 'VALUE', '_isCalc' => true, 'beastModeId' => 'calc-ar-pct' },
+    { 'column' => 'Site', 'mapping' => 'SERIES' },
+    { 'column' => '60+', 'aggregation' => 'SUM' },
+    { 'column' => '31-60', 'aggregation' => 'SUM' },
+    { 'column' => '1-30', 'aggregation' => 'COUNT' },
+  ],
+})
+eq(dims.map { |column| column['column'] }, %w[CalendarMonth Site],
+   'mapped ITEM/SERIES columns remain the only dimensions')
+eq(meas.map { |column| column['column'] }, ['AR %'],
+   'blank-mapped support aggregates do not leak onto the value axis')
+$translated_bms = nil
+
+puts "== combo chart display scaling resolves structured y-axis entries =="
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'chart-axis-overrides.json'), JSON.generate(
+    'scaled-combo' => {
+      'scale' => 1000, 'prefix' => '$', 'suffix' => 'K', 'decimals' => 0,
+    },
+  ))
+  combo = {
+    'id' => 'el-scaled-combo', 'kind' => 'combo-chart', 'name' => 'Amount YoY',
+    'columns' => [
+      { 'id' => 'm-current', 'name' => 'This Year', 'formula' => 'Sum([Master/Amount])' },
+      { 'id' => 'm-prior', 'name' => '1 Year Ago', 'formula' => 'Sum([Master/Prior Amount])' },
+    ],
+    'yAxis' => {
+      'columnIds' => [
+        { 'columnId' => 'm-current', 'type' => 'bar' },
+        { 'columnId' => 'm-prior', 'type' => 'line' },
+      ],
+    },
+  }
+  $chart_verification_elements = []
+  stub_const(:OUT, dir) do
+    apply_chart_axis_override!({ 'id' => 'scaled-combo', 'title' => 'Amount YoY' }, combo)
+  end
+  ok(combo['columns'].all? { |column| column['formula'].include?('/ 1000.0') },
+     'both structured combo measures receive compact display scaling')
+  eq($chart_verification_elements.size, 1,
+     'raw unscaled combo twin remains available for parity')
+end
 
 puts "== bead 2ef7: card['limit'] -> Sigma top-n element filter (table) =="
 $warnings = []
@@ -1529,6 +1602,53 @@ eq(pop_yoy.dig('yAxis', 'columnIds').map { |series| series['type'] }, %w[bar lin
 ok($chart_helpers.first['columns'].first['formula'].include?('DateDiff("month"'),
    'YoY points align by month before the explicit measures aggregate')
 
+puts "== customer CONSECUTIVE POP supports aggregate Beast Mode values =="
+$translated_bms = {
+  'calc-90-pct' => {
+    'id' => 'calc-90-pct', 'name' => '90+ %', 'class' => 'aggregate',
+    'sigmaFormula' => 'Sum([90+]) / Sum([Total])',
+  },
+}
+$chart_helpers = []
+consecutive_calc_pop = build_element({
+  'id' => 'aged-pop-calc', 'title' => '90+ % YoY', 'chartType' => 'badge_pop_bar_line',
+  'columns' => [
+    { 'column' => 'CalendarMonth', 'mapping' => 'ITEM', 'calendar' => true },
+    { 'column' => '90+ %', 'mapping' => 'VALUE', '_isCalc' => true,
+      'beastModeId' => 'calc-90-pct', 'format' => { 'type' => 'percent', 'precision' => 1 } },
+    { 'column' => '61-90', 'aggregation' => 'SUM' },
+    { 'column' => '31-60', 'aggregation' => 'SUM' },
+    { 'column' => '1-30', 'aggregation' => 'COUNT' },
+  ],
+  'dateGrain' => { 'column' => 'Date', 'dateTimeElement' => 'MONTH' },
+  'dateRangeFilter' => {
+    'column' => { 'column' => 'Date', 'exprType' => 'COLUMN' },
+    'dateTimeRange' => {
+      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'YEAR',
+      'offset' => 0, 'count' => 0,
+    },
+    'periods' => {
+      'type' => 'COMBINED',
+      'combined' => [{ 'type' => 'CONSECUTIVE', 'count' => 1 }],
+      'count' => 0,
+    },
+  },
+}, {})
+eq(consecutive_calc_pop['kind'], 'combo-chart',
+   'CONSECUTIVE prior-year metadata reconstructs a combo instead of generic fallback')
+eq(consecutive_calc_pop.dig('yAxis', 'columnIds').map { |series| series['type'] }, %w[bar line],
+   'aggregate Beast Mode POP still emits current bars plus one prior-year line')
+eq(consecutive_calc_pop['columns'].map { |column| column['name'] },
+   ['Date', 'This Year', '1 Year Ago'],
+   'blank-mapped support measures never leak into the reconstructed POP legend')
+eq($chart_helpers.size, 2, 'CONSECUTIVE count=1 emits current and prior helper tables')
+helper_value = $chart_helpers.first['columns'].find { |column| column['id'] == 'd-pop-value' }
+eq(helper_value['formula'], 'Sum([Master/90+]) / Sum([Master/Total])',
+   'each period helper evaluates the aggregate Beast Mode against its filtered source window')
+eq($chart_helpers.first.dig('groupings', 0, 'groupBy'), %w[d-aligned-date d-period-index],
+   'period helper groups before union so non-additive ratios emit once per aligned month')
+$translated_bms = nil
+
 puts "== POP compare offsets fall back to Domo card-data channels =="
 Dir.mktmpdir do |dir|
   File.write(File.join(dir, 'parity-expected.json'), JSON.generate(
@@ -1606,33 +1726,46 @@ ok(!$warnings.any? { |warning| warning['warning'].include?('date window NOT appl
    'ordinary authored series do not trigger the synthetic-period date-window refusal')
 
 puts "== live no-comparison POP shape remains an honest selected-period chart =="
-$warnings = []
-unresolved_pop = build_element({
-  'id' => 'pop-missing-periods', 'title' => 'Broken YoY', 'chartType' => 'badge_pop_bar_line',
-  '_popComparisonProbe' => 'public-no-periods',
-  'columns' => [
-    { 'column' => 'Date', 'mapping' => 'ITEM' },
-    { 'column' => 'Revenue', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
-  ],
-  'dateGrain' => { 'column' => 'Period', 'dateTimeElement' => 'MONTH' },
-  'dateRangeFilter' => {
-    'column' => { 'column' => 'Period' },
-    'dateTimeRange' => {
-      'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'YEAR',
-      'offset' => 0, 'count' => 0,
+Dir.mktmpdir do |dir|
+  File.write(File.join(dir, 'parity-expected.json'), JSON.generate(
+    'cards' => {
+      'pop-missing-periods' => {
+        'columns' => %w[Date Revenue], 'mappings' => %w[ITEM VALUE],
+        'rows' => [['2026-01-01', 100]],
+      },
     },
-  },
-}, {})
-eq(unresolved_pop['kind'], 'bar-chart',
-   'POP token with no compare metadata/channels preserves its one authored series as a bar')
-eq(unresolved_pop.dig('yAxis', 'columnIds').size, 1,
-   'fallback exposes exactly one series and cannot masquerade as a comparison')
-ok(unresolved_pop['filters'].any? { |filter| filter['columnId'] == 'f-datewin-period-year-offset-0' },
-   'fallback applies the selected Domo year instead of aggregating all history')
-ok($warnings.any? { |warning| warning['warning'].include?('does not claim a period-over-period comparison') },
-   'warning distinguishes absent source comparison semantics from a conversion failure')
-ok(!$warnings.any? { |warning| warning['warning'].include?('SKIPPED') },
-   'a source-valid no-comparison card is not dropped from the workbook')
+  ))
+  $warnings = []
+  unresolved_pop = nil
+  stub_const(:OUT, dir) do
+    unresolved_pop = build_element({
+      'id' => 'pop-missing-periods', 'title' => 'Broken YoY', 'chartType' => 'badge_pop_bar_line',
+      '_popComparisonProbe' => 'public-no-periods',
+      'columns' => [
+        { 'column' => 'Date', 'mapping' => 'ITEM' },
+        { 'column' => 'Revenue', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+      ],
+      'dateGrain' => { 'column' => 'Period', 'dateTimeElement' => 'MONTH' },
+      'dateRangeFilter' => {
+        'column' => { 'column' => 'Period' },
+        'dateTimeRange' => {
+          'dateTimeRangeType' => 'INTERVAL_OFFSET', 'interval' => 'YEAR',
+          'offset' => 0, 'count' => 0,
+        },
+      },
+    }, {})
+  end
+  eq(unresolved_pop['kind'], 'bar-chart',
+     'POP token with card-data proof of no comparison preserves its one authored series as a bar')
+  eq(unresolved_pop.dig('yAxis', 'columnIds').size, 1,
+     'fallback exposes exactly one series and cannot masquerade as a comparison')
+  ok(unresolved_pop['filters'].any? { |filter| filter['columnId'] == 'f-datewin-period-year-offset-0' },
+     'fallback applies the selected Domo year instead of aggregating all history')
+  ok($warnings.any? { |warning| warning['warning'].include?('does not claim a period-over-period comparison') },
+     'warning distinguishes absent source comparison semantics from a conversion failure')
+  ok(!$warnings.any? { |warning| warning['warning'].include?('SKIPPED') },
+     'a source-valid no-comparison card is not dropped from the workbook')
+end
 
 puts "== unresolved one-measure POP never erases a comparison visible in Analyzer =="
 $warnings = []
@@ -1811,6 +1944,28 @@ ok(latest_filter, 'companion KPI has a machine-derived latest-bucket filter')
 latest_col = latest['columns'].find { |c| c['id'] == latest_filter['columnId'] }
 ok(latest_col['formula'].include?('DateTrunc("quarter"'),
    'latest-bucket predicate uses the source calendar grain')
+
+puts "== classic-page collections become real workbook section text =="
+Dir.mktmpdir do |dir|
+  cards = [
+    { 'id' => 'c', '_pageOrder' => 2, '_collection' => { 'id' => 2, 'title' => 'Second' } },
+    { 'id' => 'a', '_pageOrder' => 0, '_collection' => { 'id' => 1, 'title' => 'First' } },
+    { 'id' => 'b', '_pageOrder' => 1, '_collection' => { 'id' => 1, 'title' => 'First' } },
+  ]
+  stub_const(:OUT, dir) do
+    section_els = collection_section_elements(cards)
+    eq(section_els.map { |element| element['id'] }, %w[text-collection-1 text-collection-2],
+       'collection text ids use the shared layout builder text-<zone-id> contract')
+    eq(section_els.map { |element| element['name'] }, %w[First Second],
+       'collection headings follow source page order')
+    eq(section_els.map { |element| element['body'] }, ['### First', '### Second'],
+       'every classic-page collection is visible in the workbook')
+
+    File.write(File.join(dir, 'layout-observed.json'), '{}')
+    eq(collection_section_elements(cards), [],
+       'screenshot-observed sections replace collection headings rather than duplicating them')
+  end
+end
 
 puts "== screenshot-observed sections become real workbook text elements =="
 Dir.mktmpdir do |dir|
