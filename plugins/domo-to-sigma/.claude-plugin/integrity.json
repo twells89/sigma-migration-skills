@@ -5,7 +5,7 @@
     ".claude-plugin/plugin.json": "abaca43ccd0ba30ea66333d4afed2f6f4dd7f42249d0e7307fbfc013d279c9cd",
     "skills/domo-to-sigma/SKILL.md": "78bc028df3a855d617198bba511a871bf7be41ebcae9fb753231930f9ebf68e2",
     "skills/domo-to-sigma/scripts/migrate-domo.rb": "316108f35a2314fbc18d41f6627d52bbe83bd6571d78b1991d75862f19569208",
-    "skills/domo-to-sigma/scripts/build-workbook.rb": "957f2c1c3a4e8aa5c450e3671850a56bfce44f5db2d6610e0792ba56ed6b24c3",
+    "skills/domo-to-sigma/scripts/build-workbook.rb": "0fde0a8690d50c5f3d08f5d49e84f53da765a3d03b92643ad2ac2558820afc90",
     "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "a99e43812e84314c63d61745e473a5bfb7820be4d7c67f909619b6197fe96709",
     "skills/domo-to-sigma/scripts/check-plugin-integrity.rb": "2d8fb28c64196194f5f21b0ad0cd6fda0388ef7f3b8add2b2ef587886b3ed525",
     "skills/domo-to-sigma/scripts/lib/plugin_integrity.rb": "578681e34d33c3cf4c455ebaad6dd19db7af57b7b7d420cdeec6f2c35093abbc"

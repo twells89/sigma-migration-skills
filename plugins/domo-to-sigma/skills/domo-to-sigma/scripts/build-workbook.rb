@@ -347,6 +347,7 @@ end
 def warn_missing_geometry(pname, pcards)
   return if pcards.empty?
   return if pcards.any? { |c| c['x'] || c['y'] }
+  return if File.exist?(File.join(OUT, 'layout-observed.json'))
   if pcards.any? { |card| card['_collection'] || !card['_size'].to_s.empty? }
     warn_card(pcards.first, "no exact grid geometry for page '#{pname}' — layout will use Domo " \
                             'collections/size signals. For source-faithful card positions, transcribe ' \
