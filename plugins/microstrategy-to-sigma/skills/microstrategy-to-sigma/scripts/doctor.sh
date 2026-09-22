@@ -105,7 +105,15 @@ if [ "$RUNTIME_PROFILE_REQUESTED" = python ] || [ "$RUNTIME_PROFILE_SELECTED" = 
 fi
 
 # --- ruby ------------------------------------------------------------------
-if command -v ruby >/dev/null 2>&1; then
+if [ "$RUBY_REQUIRED" != true ]; then
+  if command -v ruby >/dev/null 2>&1; then
+    warn "ruby is present but not selected by the Python runtime profile" \
+         "No Ruby probe is run on this profile; Python hard gates remain mandatory."
+  else
+    warn "ruby not found — accepted by the selected Python runtime profile" \
+         "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
+  fi
+elif command -v ruby >/dev/null 2>&1; then
   RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null)"
   RUBY_MAJMIN="$(printf '%s' "$RUBY_V" | cut -d. -f1,2)"
   # Assert the FLOOR, do not just print the version. This was a bare
@@ -146,10 +154,7 @@ if command -v ruby >/dev/null 2>&1; then
     ok "ruby — $RUBY_V"
   fi
 else
-  if [ "$RUBY_REQUIRED" != true ]; then
-    warn "ruby not found — accepted by the selected Python runtime profile" \
-         "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
-  elif [ "$OS" = "windows-bash" ]; then
+  if [ "$OS" = "windows-bash" ]; then
     bad "ruby not found" "Run the bootstrap: bash scripts/bootstrap.sh   — no-admin install/activation; it re-runs this doctor when done."
   else
     bad "ruby not found" "Run the bootstrap: bash scripts/bootstrap.sh   — installs only what's missing (macOS: brew; Linux: apt-get only when already root — never sudo; otherwise it names the exact admin ask)."
