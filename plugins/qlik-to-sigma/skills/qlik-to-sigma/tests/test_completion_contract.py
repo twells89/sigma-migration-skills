@@ -601,28 +601,66 @@ class CompletionContractTest(unittest.TestCase):
                 },
             }],
         })
+        policy_sha256 = hashlib.sha256(
+            source_policy_path.read_bytes()
+        ).hexdigest()
+        rule_id = hashlib.sha256(
+            json.dumps(
+                {
+                    "kind": "rls",
+                    "rls": {
+                        "name": "Region RLS",
+                        "formula": (
+                            'CurrentUserAttributeText("Region") = [Region]'
+                        ),
+                    },
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
         allow_source = self.workdir / "allow-source.json"
         allow_sigma = self.workdir / "allow-sigma.json"
         deny_source = self.workdir / "deny-source.json"
         deny_sigma = self.workdir / "deny-sigma.json"
         write_json(allow_source, {
+            "system": "qlik",
             "principal": "member-1",
             "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "qlik-engine",
             "rows": ["West"],
         })
         write_json(allow_sigma, {
+            "system": "sigma",
             "principal": "member-1",
             "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "sigma-export",
             "rows": ["West"],
         })
         write_json(deny_source, {
+            "system": "qlik",
             "principal": "member-2",
             "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "qlik-engine",
             "rows": [],
         })
         write_json(deny_sigma, {
+            "system": "sigma",
             "principal": "member-2",
             "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "sigma-export",
             "rows": [],
         })
         def evidence(path):
@@ -657,6 +695,8 @@ class CompletionContractTest(unittest.TestCase):
                     "principal": "member-1",
                     "status": "PASS",
                     "match": True,
+                    "query": "restricted-region-check",
+                    "rule_ids": [rule_id],
                     "source_result": evidence(allow_source),
                     "sigma_result": evidence(allow_sigma),
                 },
@@ -665,6 +705,8 @@ class CompletionContractTest(unittest.TestCase):
                     "principal": "member-2",
                     "status": "PASS",
                     "match": True,
+                    "query": "restricted-region-check",
+                    "rule_ids": [rule_id],
                     "source_result": evidence(deny_source),
                     "sigma_result": evidence(deny_sigma),
                 },
@@ -677,11 +719,9 @@ class CompletionContractTest(unittest.TestCase):
             "--workbook-id", "wb-1",
         )
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        write_json(allow_sigma, {
-            "principal": "member-1",
-            "query": "restricted-region-check",
-            "rows": ["East"],
-        })
+        mismatched_allow = json.loads(allow_sigma.read_text())
+        mismatched_allow["rows"] = ["East"]
+        write_json(allow_sigma, mismatched_allow)
         verdict_path = self.workdir / "security-effective-user-verdict.json"
         verdict = json.loads(verdict_path.read_text())
         verdict["tests"][0]["sigma_result"]["sha256"] = hashlib.sha256(

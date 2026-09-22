@@ -676,7 +676,10 @@ it never treats missing rules as an unsecured success.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 5. **Effective-user proof.** Write `security-effective-user-verdict.json`
    bound to the run, data model, DM readback hash, source/Sigma roster evidence,
-   and at least one passing allow + deny test. Automatic Qlik `OMIT` output is
+   and at least one passing allow + deny test. Each test must cover the exact
+   source-policy rule ids and carry distinct, hash-bound Qlik/Sigma result
+   payloads with matching principal/query/rows plus transport provenance.
+   Automatic Qlik `OMIT` output is
    not equivalent to per-user CLS: customize it and set
    `verifiedEquivalent:true` only after these tests.
 

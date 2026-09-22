@@ -326,6 +326,12 @@ def apply_from_security(
         for rule in security
         if isinstance(rule, dict)
     )
+    if expected_rules != len(security):
+        print(
+            "FATAL: security input contains unsupported or malformed rule rows",
+            file=sys.stderr,
+        )
+        return 1
     required_principals = set()
     for rule in security:
         rls = rule.get("rls") if isinstance(rule, dict) else None

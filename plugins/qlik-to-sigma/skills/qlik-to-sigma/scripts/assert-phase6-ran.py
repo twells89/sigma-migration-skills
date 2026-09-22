@@ -926,6 +926,12 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
         for row in security_rows
         if isinstance(row, dict) and (row.get("rls") or row.get("cls"))
     ]
+    if len(expected_rules) != len(security_rows):
+        fail(
+            32,
+            "security",
+            "security.json contains unsupported or malformed rule rows",
+        )
     if (
         integer(decision.get("rules_detected")) != len(security_rows)
         or integer(decision.get("rules_applied")) != len(expected_rules)
@@ -1097,6 +1103,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "effective-user security verdict is missing, stale, or not PASS",
         )
     effective_documents = {}
+    effective_paths = {}
     for key in ("source_policy", "source_roster", "sigma_roster"):
         evidence = effective.get(key)
         path = Path(str((evidence or {}).get("path") or "")).expanduser()
@@ -1109,6 +1116,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
         ):
             fail(32, "security", f"{key} evidence is missing or stale: {path}")
         effective_documents[key] = load_object(path, 32, "security")
+        effective_paths[key] = path
     source_policy = effective_documents["source_policy"]
     if source_policy.get("security") != security_rows:
         fail(
@@ -1116,8 +1124,23 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "security",
             "source policy evidence does not exactly match security.json",
         )
+    policy_sha256 = hashlib.sha256(
+        effective_paths["source_policy"].read_bytes()
+    ).hexdigest()
+    expected_rule_ids = {
+        hashlib.sha256(
+            json.dumps(
+                row,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        for row in expected_rules
+    }
 
-    def assignment_map(document: dict[str, Any]) -> dict[str, Any]:
+    def assignment_map(
+        document: dict[str, Any], label: str
+    ) -> dict[str, Any]:
         result = {}
         for assignment in document.get("assignments") or []:
             if not isinstance(assignment, dict):
@@ -1126,6 +1149,12 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 assignment.get("principal") or assignment.get("name") or ""
             )
             if principal:
+                if principal in result:
+                    fail(
+                        32,
+                        "security",
+                        f"{label} roster contains duplicate principal {principal!r}",
+                    )
                 result[principal] = (
                     assignment.get("members")
                     if assignment.get("members") is not None
@@ -1133,8 +1162,12 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 )
         return result
 
-    source_assignments = assignment_map(effective_documents["source_roster"])
-    sigma_assignments = assignment_map(effective_documents["sigma_roster"])
+    source_assignments = assignment_map(
+        effective_documents["source_roster"], "source"
+    )
+    sigma_assignments = assignment_map(
+        effective_documents["sigma_roster"], "Sigma"
+    )
     if source_assignments != sigma_assignments:
         fail(32, "security", "source and Sigma membership rosters do not reconcile")
     if required_principals and (
@@ -1176,6 +1209,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "security",
             "effective-user verdict requires passing allow and deny tests",
         )
+    covered_rule_ids = set()
     for test in tests:
         principal = str(test.get("principal") or "")
         if principal not in source_subjects:
@@ -1184,7 +1218,23 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 "security",
                 f"effective-user test principal is absent from reconciled rosters: {principal}",
             )
+        query = str(test.get("query") or "").strip()
+        test_rule_ids = {
+            str(value) for value in test.get("rule_ids") or []
+        }
+        if (
+            not query
+            or not test_rule_ids
+            or not test_rule_ids.issubset(expected_rule_ids)
+        ):
+            fail(
+                32,
+                "security",
+                "effective-user test is not bound to known policy rule ids/query",
+            )
+        covered_rule_ids.update(test_rule_ids)
         result_documents = {}
+        result_paths = {}
         for key in ("source_result", "sigma_result"):
             evidence = test.get(key)
             path = Path(str((evidence or {}).get("path") or "")).expanduser()
@@ -1201,28 +1251,48 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                     f"effective-user {key} evidence is missing or stale: {path}",
                 )
             result_documents[key] = load_json(path, 32, "security")
-        if result_documents["source_result"] != result_documents["sigma_result"]:
+            result_paths[key] = path
+        if result_paths["source_result"] == result_paths["sigma_result"]:
+            fail(32, "security", "source and Sigma query evidence must be distinct")
+        source_result = result_documents["source_result"]
+        sigma_result = result_documents["sigma_result"]
+        for label, result, system in (
+            ("source", source_result, "qlik"),
+            ("Sigma", sigma_result, "sigma"),
+        ):
+            if (
+                not isinstance(result, dict)
+                or result.get("system") != system
+                or result.get("principal") != principal
+                or result.get("query") != query
+                or result.get("policy_sha256") != policy_sha256
+                or {str(value) for value in result.get("rule_ids") or []}
+                != test_rule_ids
+                or not str(result.get("captured_at") or "").strip()
+                or not str(result.get("transport") or "").strip()
+                or not isinstance(result.get("rows"), list)
+            ):
+                fail(
+                    32,
+                    "security",
+                    f"{label} result is not provenance/policy/query bound",
+                )
+        if source_result["rows"] != sigma_result["rows"]:
             fail(
                 32,
                 "security",
                 f"effective-user {test.get('kind')} source/Sigma results differ",
             )
-        source_result = result_documents["source_result"]
-        if (
-            not isinstance(source_result, dict)
-            or source_result.get("principal") != principal
-            or not str(source_result.get("query") or "").strip()
-            or not isinstance(source_result.get("rows"), list)
-        ):
-            fail(
-                32,
-                "security",
-                "effective-user result is not bound to its principal/query/rows",
-            )
         if test.get("kind") == "allow" and not source_result["rows"]:
             fail(32, "security", "allow test must prove at least one visible result")
         if test.get("kind") == "deny" and source_result["rows"]:
             fail(32, "security", "deny test must prove zero visible restricted rows")
+    if covered_rule_ids != expected_rule_ids:
+        fail(
+            32,
+            "security",
+            "effective-user tests do not cover every source security rule",
+        )
     return None
 
 
