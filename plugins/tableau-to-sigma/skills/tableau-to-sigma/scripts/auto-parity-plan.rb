@@ -37,7 +37,7 @@ require 'uri'
 require 'set'
 require_relative 'lib/workbook_code'
 
-opts = { renames: {} }
+opts = { renames: {}, trusted_rename_sources: Set.new }
 OptionParser.new do |p|
   p.on('--tableau DIR')          { |v| opts[:tab] = v }
   p.on('--workbook-spec PATH')   { |v| opts[:wb]  = v }
@@ -48,7 +48,11 @@ OptionParser.new do |p|
        'Default: auto-detect every element where source.kind=="table" and ' \
        'elementId starts with "master" (handles multi-master specs like ' \
        'master-absences / master-employees / master-time).') { |v| (opts[:master_ids] ||= []) << v }
-  p.on('--rename PAIR')          { |v| from, to = v.split('=', 2); opts[:renames][from] = to }
+  p.on('--rename PAIR')          do |v|
+    from, to = v.split('=', 2)
+    opts[:renames][from] = to
+    opts[:trusted_rename_sources] << from
+  end
   p.on('--no-fetch')             {     opts[:no_fetch] = true }
   # Per-dashboard parity scoping (large-workbook one-tab-at-a-time gating). When
   # set, only chart elements on the matching workbook PAGE(s) are planned/gated —
@@ -212,6 +216,7 @@ if File.exist?(_layout_renames_path)
     if _layout_renames.is_a?(Hash)
       _layout_renames.each do |source_name, sigma_name|
         opts[:renames][source_name] ||= sigma_name
+        opts[:trusted_rename_sources] << source_name if opts[:renames][source_name] == sigma_name
       end
     end
   rescue JSON::ParserError => e
@@ -228,6 +233,10 @@ end
 # same-titled view). This map is therefore only the FALLBACK — the provenance
 # join below (element id → worksheet, unique) is consumed first.
 rev_renames = opts[:renames].each_with_object({}) { |(k, v), h| h[v] = k }
+trusted_rev_renames = opts[:trusted_rename_sources].each_with_object({}) do |source_name, index|
+  sigma_name = opts[:renames][source_name]
+  index[sigma_name] = source_name if sigma_name
+end
 
 # ---- Chart provenance (v5.5 — the collision-free join) ----------------------
 # build-charts-from-signals.rb writes <tableau-dir>/chart-provenance.json:
@@ -264,11 +273,11 @@ sigma_charts.each do |el|
   if prov && !prov['worksheet'].to_s.strip.empty?
     tableau_name = prov['worksheet'].to_s
     matched_via  = 'provenance'
-  elsif rev_renames.key?(sigma_name)
-    tableau_name = rev_renames[sigma_name]
+  elsif trusted_rev_renames.key?(sigma_name)
+    tableau_name = trusted_rev_renames[sigma_name]
     matched_via  = 'rename'
   else
-    tableau_name = sigma_name
+    tableau_name = rev_renames[sigma_name] || sigma_name
     matched_via  = 'name-fallback'
     unless provenance.empty?
       warn "provenance MISS for element #{el['id']} (#{sigma_name.inspect}) — falling back to " \
