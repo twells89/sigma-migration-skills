@@ -121,12 +121,16 @@ def normalize_ids(value: Any) -> Any:
 
 def normalize_layout_ids(value: str) -> str:
     found: dict[str, str] = {}
-    for match in re.finditer(r'\b(?:id|elementId)="([^"]+)"', value):
-        found.setdefault(match.group(1), f"<ID-{len(found) + 1:04d}>")
-    result = value
-    for original, normalized in found.items():
-        result = result.replace(original, normalized)
-    return result
+    pattern = re.compile(r'(\b(?:id|elementId)=")([^"]+)(")')
+
+    def replace(match: re.Match[str]) -> str:
+        original = match.group(2)
+        normalized = found.setdefault(
+            original, f"<ID-{len(found) + 1:04d}>"
+        )
+        return f"{match.group(1)}{normalized}{match.group(3)}"
+
+    return pattern.sub(replace, value)
 
 
 def run_entrypoint(command: list[str], fixture: Path, workdir: Path) -> None:
