@@ -323,12 +323,16 @@ if grep -Eq 'SIGMA_(API_TOKEN|CLIENT_ID)' "$HOME/.sigma-migration/env" 2>/dev/nu
   _SIGMA_CREDS=true
 fi
 if [ "$_SIGMA_CREDS" != true ]; then
-  if [ "$RUBY_REQUIRED" = true ]; then
+  if [ "${SIGMA_OFFLINE_DRY_RUN:-}" = "1" ]; then
+    warn "Sigma credentials absent — accepted for SIGMA_OFFLINE_DRY_RUN=1" \
+         "Only --dry-run/offline fixture conversion is allowed; unset this flag and configure credentials before any live build."
+  elif [ "$RUBY_REQUIRED" = true ]; then
     _SIGMA_SETUP_FIX="Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+    bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
   else
     _SIGMA_SETUP_FIX="Export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+    bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
   fi
-  bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
 elif [ -n "${SIGMA_SKIP_CRED_SMOKE:-}" ]; then
   ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
 elif [ "$RUNTIME_PROFILE_SELECTED" = python ] && [ -f "$HERE/lib/sigma_rest.py" ] && [ -n "$PY_ARGV" ]; then
