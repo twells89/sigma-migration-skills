@@ -259,8 +259,8 @@ def compare_tile(entry, gt_res, sigma_rows, tol)
       ground_value = places ? g.to_f.round(places) : g
       sigma_value = places ? s.to_f.round(places) : s
       display_precision_used ||= ground_value != g
-      rel = (ground_value - sigma_value).abs /
-            [ground_value.abs, sigma_value.abs, 1.0].max
+      rel = (ground_value.to_f - sigma_value.to_f).abs /
+            [ground_value.to_f.abs, sigma_value.to_f.abs, 1.0].max
       if rel > max_rel
         max_rel = rel
         worst = { 'key' => k, 'measure' => meas_aliases[j] || "measure ##{j + 1}",
