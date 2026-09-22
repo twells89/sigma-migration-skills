@@ -742,7 +742,13 @@ module GroundTruthSql
     end
 
     fields = shelf_fields(zone)
-    if (grain_owner = related_object_grain(ds, fields))
+    ownership_fields = fields.dup
+    Array(zone['measures']).each do |measure|
+      raw = measure.is_a?(Hash) ? measure['column'] : measure
+      guid = shelf_guid(raw.to_s)
+      ownership_fields << { 'role' => 'measure', 'guid' => guid, 'raw' => raw } if guid
+    end
+    if (grain_owner = related_object_grain(ds, ownership_fields))
       return classify.call(
         'anchor-only',
         "tile aggregates only #{grain_owner} fields; per-viz relationship culling/null semantics " \
