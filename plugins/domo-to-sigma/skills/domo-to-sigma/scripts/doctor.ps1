@@ -365,7 +365,13 @@ $modelHint = if ($env:SIGMA_MODEL_HINT) { $env:SIGMA_MODEL_HINT } else { "" }
 # failures. Human output above is unchanged. Always ~/.sigma-migration/doctor.json;
 # also -WorkDir if given.
 $rubyOk = [bool](Get-Command ruby -ErrorAction SilentlyContinue)
-$rubyV  = if ($rubyOk) { (& ruby -e 'print RUBY_VERSION' 2>$null) } else { "" }
+$rubyV  = if (-not $rubyOk) {
+  ""
+} elseif ($rubyRequired) {
+  (& ruby -e 'print RUBY_VERSION' 2>$null)
+} else {
+  "present (not probed)"
+}
 $nodeOk = [bool](Get-Command node -ErrorAction SilentlyContinue)
 $nodeV  = if ($nodeOk) { (& node --version 2>$null) } else { "" }
 $pyDesc = Test-RealPython 'py' '-3'

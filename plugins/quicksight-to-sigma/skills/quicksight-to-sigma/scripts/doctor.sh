@@ -555,7 +555,14 @@ json_csv() {
 }
 
 RUBY_OK=false; RUBY_V=""
-if command -v ruby >/dev/null 2>&1; then RUBY_OK=true; RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"; fi
+if command -v ruby >/dev/null 2>&1; then
+  RUBY_OK=true
+  if [ "$RUBY_REQUIRED" = true ]; then
+    RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"
+  else
+    RUBY_V="present (not probed)"
+  fi
+fi
 NODE_OK=false; NODE_V=""
 if command -v node >/dev/null 2>&1; then NODE_OK=true; NODE_V="$(node --version 2>/dev/null || true)"; fi
 PY_OK=false; PY_VER="${PY_VER:-}"
