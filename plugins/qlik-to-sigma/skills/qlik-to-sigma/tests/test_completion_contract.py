@@ -589,8 +589,15 @@ class CompletionContractTest(unittest.TestCase):
         })
         source_policy_path = self.workdir / "source-security-policy.json"
         write_json(source_policy_path, {
-            "sectionAccess": True,
-            "rules": ["Region RLS"],
+            "security": [{
+                "kind": "rls",
+                "rls": {
+                    "name": "Region RLS",
+                    "formula": (
+                        'CurrentUserAttributeText("Region") = [Region]'
+                    ),
+                },
+            }],
         })
         allow_source = self.workdir / "allow-source.json"
         allow_sigma = self.workdir / "allow-sigma.json"
@@ -652,6 +659,16 @@ class CompletionContractTest(unittest.TestCase):
             "--workbook-id", "wb-1",
         )
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        write_json(allow_sigma, {"rows": ["East"]})
+        verdict_path = self.workdir / "security-effective-user-verdict.json"
+        verdict = json.loads(verdict_path.read_text())
+        verdict["tests"][0]["sigma_result"]["sha256"] = hashlib.sha256(
+            allow_sigma.read_bytes()
+        ).hexdigest()
+        write_json(verdict_path, verdict)
+        mismatch = self.assert_phase6()
+        self.assertEqual(32, mismatch.returncode, mismatch.stdout + mismatch.stderr)
+        self.assertIn("results differ", mismatch.stderr)
 
     def test_missing_app_meta_is_valid_for_unsecured_offline_project(self):
         (self.workdir / "app-meta.json").unlink()

@@ -1096,6 +1096,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "security",
             "effective-user security verdict is missing, stale, or not PASS",
         )
+    effective_documents = {}
     for key in ("source_policy", "source_roster", "sigma_roster"):
         evidence = effective.get(key)
         path = Path(str((evidence or {}).get("path") or "")).expanduser()
@@ -1107,6 +1108,35 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             != str((evidence or {}).get("sha256") or "").lower()
         ):
             fail(32, "security", f"{key} evidence is missing or stale: {path}")
+        effective_documents[key] = load_object(path, 32, "security")
+    source_policy = effective_documents["source_policy"]
+    if source_policy.get("security") != security_rows:
+        fail(
+            32,
+            "security",
+            "source policy evidence does not exactly match security.json",
+        )
+
+    def assignment_map(document: dict[str, Any]) -> dict[str, Any]:
+        result = {}
+        for assignment in document.get("assignments") or []:
+            if not isinstance(assignment, dict):
+                continue
+            principal = str(
+                assignment.get("principal") or assignment.get("name") or ""
+            )
+            if principal:
+                result[principal] = (
+                    assignment.get("members")
+                    if assignment.get("members") is not None
+                    else assignment.get("values")
+                )
+        return result
+
+    if assignment_map(effective_documents["source_roster"]) != assignment_map(
+        effective_documents["sigma_roster"]
+    ):
+        fail(32, "security", "source and Sigma membership rosters do not reconcile")
     tests = effective.get("tests")
     if (
         not isinstance(tests, list)
@@ -1128,6 +1158,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "effective-user verdict requires passing allow and deny tests",
         )
     for test in tests:
+        result_documents = {}
         for key in ("source_result", "sigma_result"):
             evidence = test.get(key)
             path = Path(str((evidence or {}).get("path") or "")).expanduser()
@@ -1142,6 +1173,27 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                     32,
                     "security",
                     f"effective-user {key} evidence is missing or stale: {path}",
+                )
+            result_documents[key] = load_json(path, 32, "security")
+        if result_documents["source_result"] != result_documents["sigma_result"]:
+            fail(
+                32,
+                "security",
+                f"effective-user {test.get('kind')} source/Sigma results differ",
+            )
+        if test.get("kind") == "allow":
+            allow_result = result_documents["source_result"]
+            visible = (
+                bool(allow_result.get("rows"))
+                if isinstance(allow_result, dict)
+                and isinstance(allow_result.get("rows"), list)
+                else bool(allow_result)
+            )
+            if not visible:
+                fail(
+                    32,
+                    "security",
+                    "allow test must prove at least one visible result",
                 )
     return None
 
