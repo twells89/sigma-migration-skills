@@ -202,13 +202,18 @@ if (-not (Test-Path $sigmaTokenPy)) {
   $sigmaTokenPy = Join-Path $PSScriptRoot "vendor\get_token.py"
 }
 if (-not $sigmaCreds) {
-  $sigmaFix = if ($rubyRequired) {
-    "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+  if ($env:SIGMA_OFFLINE_DRY_RUN -eq '1') {
+    Warn "Sigma credentials absent - accepted for SIGMA_OFFLINE_DRY_RUN=1" `
+         "Only --dry-run/offline fixture conversion is allowed; unset this flag and configure credentials before any live build."
   } else {
-    "Set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+    $sigmaFix = if ($rubyRequired) {
+      "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+    } else {
+      "Set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+    }
+    Bad "no Sigma credentials found (REQUIRED - the run would die at its first Sigma API call)" `
+        $sigmaFix
   }
-  Bad "no Sigma credentials found (REQUIRED - the run would die at its first Sigma API call)" `
-      $sigmaFix
 } elseif ($env:SIGMA_SKIP_CRED_SMOKE) {
   Ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
 } elseif (($script:RuntimeProfileSelected -eq "python") -and (Test-Path $sigmaTokenPy) -and $script:PyExe) {
