@@ -48,6 +48,9 @@ ok(AnchorVerify.cell_numbers('(42)') == [-42.0], 'paren negative parses')
 ok(AnchorVerify.cell_numbers('12%') == [12.0, 0.12], 'percent cell keeps points + fraction')
 ok(AnchorVerify.cell_numbers('United Widgets').empty?, 'non-numeric cell yields nothing')
 ok(AnchorVerify.cell_numbers('').empty? && AnchorVerify.cell_numbers(nil).empty?, 'empty/nil cells yield nothing')
+dot_grouped = { 'raw' => '$106.801', 'grouping_symbol' => '.' }
+ok(AnchorVerify.numeric_raw(dot_grouped) == '$106801',
+   'explicit source grouping symbol disambiguates dot-grouped printed values')
 
 puts '-- pure core: verify() verdicts --'
 exports = {
@@ -63,6 +66,13 @@ anchors = [
 v = AnchorVerify.verify(anchors, exports)
 ok(v['pass'] == true && v['matched'] == 3 && v['checked'] == 3, 'all-matched verdict passes 3/3')
 ok(v['missing'].empty?, 'no missing entries when all matched')
+dot_verdict = AnchorVerify.verify(
+  [{ 'id' => 'dot1', 'label' => 'Profit', 'raw' => '$106.801',
+     'grouping_symbol' => '.', 'sigma_element_hint' => 'Profit' }],
+  { 'Profit' => [['Profit'], ['106801.0']] }
+)
+ok(dot_verdict['pass'] == true,
+   'dot-grouped source anchor matches the full numeric value, not decimal 106.801')
 
 # The field failure: the workbook renders 1.2T where the source printed 12,345B.
 bad_exports = exports.merge('Top Accounts' => [['Account', 'Revenue'], ['Umbrella Corp', '1.2e12']])
