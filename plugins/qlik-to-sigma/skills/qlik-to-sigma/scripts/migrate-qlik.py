@@ -161,6 +161,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--name")
     parser.add_argument("--out")
     parser.add_argument("--answers")
+    parser.add_argument(
+        "--security",
+        help="parsed Qlik Section Access security JSON override",
+    )
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--from-discovery", dest="from_discovery")
     parser.add_argument("--unbuild")
@@ -591,9 +595,22 @@ class Migration:
         if not (self.workdir / "formula-mapping.json").is_file():
             raise RuntimeError("normalizer did not write formula-mapping.json")
         converted = load_json(output_path)
+        security = converted.get("security") or []
+        if self.args.security:
+            override = load_json(
+                Path(self.args.security).expanduser().resolve()
+            )
+            security = (
+                override.get("security")
+                if isinstance(override, dict)
+                else override
+            )
+            if not isinstance(security, list):
+                raise ValueError("--security must contain a security-rule array")
+            converted["security"] = security
         (self.workdir / "security.json").write_text(
             json.dumps(
-                {"security": converted.get("security") or []},
+                {"security": security},
                 indent=2,
             )
             + "\n",
@@ -1290,11 +1307,36 @@ class Migration:
 
     @staticmethod
     def numeric(value: Any) -> float | None:
-        text = re.sub(r"[$,%\s]", "", str(value or ""))
+        raw = str(value or "").strip()
+        is_percent = raw.endswith("%")
+        text = re.sub(r"[$,%\s]", "", raw)
         try:
-            return float(text)
+            number = float(text)
+            return number / 100.0 if is_percent else number
         except ValueError:
             return None
+
+    @classmethod
+    def canonical_chart_rows(
+        cls, rows: Any, dimension_count: int
+    ) -> list[tuple[Any, ...]]:
+        normalized = []
+        for raw_row in rows or []:
+            if not isinstance(raw_row, list):
+                continue
+            row = []
+            for index, value in enumerate(raw_row):
+                if index < dimension_count:
+                    row.append(("text", str(value or "").strip()))
+                    continue
+                number = cls.numeric(value)
+                row.append(
+                    ("number", round(number, 9))
+                    if number is not None
+                    else ("text", str(value or "").strip())
+                )
+            normalized.append(tuple(row))
+        return sorted(normalized, key=repr)
 
     def export_elements(
         self, workbook_id: str, element_map: list[dict[str, Any]]
@@ -1400,11 +1442,17 @@ class Migration:
         }
         kpi_results, kpi_rows = [], []
         actuals: dict[str, list[list[str]]] = {}
+        actuals_by_source: dict[str, list[list[str]]] = {}
         for element in element_map:
             body = csv_by_element.get(str(element.get("elementId")), "")
             parsed = list(csv.reader(body.splitlines())) if body else []
             data_rows = parsed[1:] if parsed else []
             actuals[str(element.get("name") or element.get("elementId"))] = data_rows
+            source_object_id = str(
+                (element.get("qlik") or {}).get("objectId") or ""
+            )
+            if source_object_id:
+                actuals_by_source[source_object_id] = data_rows
             if element.get("kind") not in {"kpi-chart", "progress"}:
                 continue
             expression = ((element.get("qlik") or {}).get("measures") or [None])[0]
@@ -1464,6 +1512,11 @@ class Migration:
             row.get("expr"): row.get("value")
             for row in snapshot.get("buckets") or []
         }
+        snapshot_chart_data = {
+            str(row.get("objectId")): row
+            for row in snapshot.get("chartData") or []
+            if isinstance(row, dict) and row.get("objectId")
+        }
         bucket_rows = []
         for element in element_map:
             if element.get("kind") in {"kpi-chart", "progress"}:
@@ -1484,13 +1537,34 @@ class Migration:
             qlik_count = self.numeric(qlik_value)
             qlik_count = int(qlik_count) if qlik_count is not None else None
             body = csv_by_element.get(str(element.get("elementId")), "")
-            sigma_count = max(len(body.splitlines()) - 1, 0) if body else None
-            if qlik_count is not None and sigma_count == qlik_count:
+            parsed = list(csv.reader(body.splitlines())) if body else []
+            sigma_rows = parsed[1:] if parsed else []
+            sigma_count = len(sigma_rows) if body else None
+            object_id = str((element.get("qlik") or {}).get("objectId") or "")
+            source_data = snapshot_chart_data.get(object_id)
+            full_rows_match = bool(
+                source_data
+                and source_data.get("complete") is True
+                and self.canonical_chart_rows(
+                    source_data.get("rows"),
+                    int(source_data.get("dimensionCount") or len(dimensions)),
+                )
+                == self.canonical_chart_rows(sigma_rows, len(dimensions))
+            )
+            if (
+                qlik_count is not None
+                and sigma_count == qlik_count
+                and full_rows_match
+            ):
                 state = "MATCH"
+            elif not source_data or source_data.get("complete") is not True:
+                state = "SOURCE-DATA-MISSING"
             elif qlik_count is None or sigma_count is None:
                 state = "NO-DATA"
+            elif qlik_count != sigma_count:
+                state = "BUCKET-MISMATCH"
             else:
-                state = "MISMATCH"
+                state = "VALUE-MISMATCH"
             bucket_rows.append(
                 {
                     "chart": str(element.get("name") or ""),
@@ -1498,6 +1572,11 @@ class Migration:
                     "kind": element.get("kind"),
                     "qlik_buckets": qlik_count,
                     "sigma_buckets": sigma_count,
+                    "qlik_rows": (
+                        len(source_data.get("rows") or [])
+                        if source_data
+                        else 0
+                    ),
                     "status": state,
                     "pass": state == "MATCH",
                 }
@@ -1578,15 +1657,20 @@ class Migration:
                     name = str(
                         element.get("name") or element.get("elementId") or ""
                     )
-                    actual_rows = normalized_rows(actuals.get(name))
-                    expected_rows = normalized_rows(expected.get(name))
+                    source_object_id = str(
+                        (element.get("qlik") or {}).get("objectId") or ""
+                    )
+                    actual_rows = normalized_rows(
+                        actuals_by_source.get(source_object_id)
+                    )
+                    expected_rows = normalized_rows(
+                        expected.get(source_object_id)
+                    )
                     matched = bool(expected_rows) and actual_rows == expected_rows
                     compared_rows.append(
                         {
                             "chart": name,
-                            "source_object_id": (
-                                element.get("qlik") or {}
-                            ).get("objectId"),
+                            "source_object_id": source_object_id,
                             "kind": element.get("kind"),
                             "expected_rows": len(expected_rows),
                             "actual_rows": len(actual_rows),
@@ -1594,7 +1678,10 @@ class Migration:
                             "pass": matched,
                         }
                     )
-                unexpected = sorted(set(expected) - {row["chart"] for row in compared_rows})
+                unexpected = sorted(
+                    set(expected)
+                    - {row["source_object_id"] for row in compared_rows}
+                )
                 if unexpected:
                     raise ValueError(
                         "--warehouse-expected contains unknown chart(s): "

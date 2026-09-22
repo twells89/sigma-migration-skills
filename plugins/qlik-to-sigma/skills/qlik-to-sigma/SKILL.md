@@ -307,7 +307,8 @@ staleness) blocks GREEN.
 > without a live engine the default check is **warehouse executability only**
 > (nonempty/error-free exports, explicitly non-strict and RED for completion).
 > Supply `--warehouse-expected <json>` from independently queried warehouse
-> results to arm strict value parity, and
+> results (object keyed by source object id, each value an ordered row array) to
+> arm strict value parity, and
 > chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against). Because
 > QlikView has **no capture API**, the `--prj` discovery step (`qlik-prj-discover.py`) prints an
 > `[ASSIST]` telling you to **`AskUserQuestion` for a screenshot of each sheet** and drop them in
@@ -653,6 +654,12 @@ never reloaded and never written.
 Row/column security is **never silently dropped and never silently ported** — and it is handled by the **skill**, not baked into the converted model. The converter (`convert_qlik_to_sigma`) only **detects and reports** security in `result.security[]`; it does **not** inject it into the data-model spec (a stateless converter can't create Sigma user attributes or assign members, so an injected `CurrentUserAttributeText` filter would fail-closed to 0 rows). This skill provisions + applies it after the model is posted.
 
 **What is detected for Qlik:** Section Access (supply the parsed `sectionAccess` object): `REDUCTION` row reduction (to team/attribute RLS; strict-exclusion equals Sigma fail-closed) and `OMIT` column reduction (to CLS).
+
+When Qlik metadata/load-script discovery detects Section Access but cannot
+materialize its rules (for example, connection-backed access tables), provide
+the reviewed rule artifact with `migrate-qlik.py --security <security.json>`.
+The Python path aborts by default when only the boolean/script signal exists;
+it never treats missing rules as an unsecured success.
 
 **Flow (only runs when `result.security` is non-empty — zero overhead otherwise):**
 1. **Convert + post** the data model as usual. Capture the `dataModelId` and the converter's `result.security[]` (write it to `security.json`).

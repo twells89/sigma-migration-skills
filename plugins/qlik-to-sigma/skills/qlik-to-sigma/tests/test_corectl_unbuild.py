@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Offline regression for corectl unbuild, LOAD expressions, and coverage."""
+import importlib.util
 import json
 import os
 import subprocess
@@ -15,10 +16,45 @@ sys.path.insert(0, SCRIPTS)
 SUBPROCESS_TEXT = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace"}
 
 
+def load_discovery():
+    path = os.path.join(SCRIPTS, "qlik-discover.py")
+    spec = importlib.util.spec_from_file_location("qlik_discovery_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def run(*args):
     result = subprocess.run(args, **SUBPROCESS_TEXT)
     assert result.returncode == 0, result.stdout + result.stderr
     return result
+
+
+def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
+    module = load_discovery()
+    module.qlik = lambda *_args, **_kwargs: {
+        "qHyperCube": {"qSize": {"qcx": 2, "qcy": 2}},
+        "qDataPages": [{
+            "qMatrix": [
+                [
+                    {"qText": "West", "qNum": 0},
+                    {"qText": "$42.00", "qNum": 42.0},
+                ],
+                [
+                    {"qText": "East", "qNum": 0},
+                    {"qText": "$10.50", "qNum": 10.5},
+                ],
+            ]
+        }]
+    }
+    result = module.qlik_chart_rows(
+        "app",
+        ["--context", "fixture"],
+        {"id": "chart-1", "dimensions": ["Region"], "measures": ["Sum(Sales)"]},
+    )
+    assert result["rows"] == [["West", 42.0], ["East", 10.5]]
+    assert result["complete"] is True
+    assert result["expectedRows"] == 2
 
 
 def test_normalizes_nested_children_with_empty_master_items():

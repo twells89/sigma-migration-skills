@@ -486,7 +486,7 @@ class OrchestrationTests(unittest.TestCase):
 
             expected = workdir / "warehouse-expected.json"
             expected.write_text(
-                json.dumps({"Sales": [["West", "10"]]}),
+                json.dumps({"chart-1": [["West", "10"]]}),
                 encoding="utf-8",
             )
             migration.args.warehouse_expected = str(expected)
@@ -583,6 +583,112 @@ class OrchestrationTests(unittest.TestCase):
             self.assertEqual(1, parity["charts_total"])
             self.assertEqual("MATCH", parity["per_chart"][0]["status"])
             self.assertEqual("progress", parity["per_chart"][0]["kind"])
+
+    def test_live_chart_parity_compares_full_hypercube_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workdir = Path(temporary)
+            migration = migrate.Migration(self.args())
+            migration.args.app = None
+            migration.workdir = workdir
+            (workdir / "element-map.json").write_text(
+                json.dumps([{
+                    "elementId": "bar-1",
+                    "name": "Sales by Region",
+                    "kind": "bar-chart",
+                    "qlik": {
+                        "objectId": "chart-1",
+                        "dims": ["Region"],
+                        "measures": ["Sum(Sales)"],
+                    },
+                }]),
+                encoding="utf-8",
+            )
+            (workdir / "control-scope.json").write_text(
+                json.dumps({
+                    "sourceFilterSignals": 0,
+                    "controls": [],
+                    "unbound": [],
+                }),
+                encoding="utf-8",
+            )
+            live = {
+                "workbookId": "wb-1",
+                "latestDocumentVersion": 7,
+                "document": {
+                    "pages": [{"id": "page-1", "name": "Overview"}],
+                    "elements": [{
+                        "id": "bar-1",
+                        "name": "Sales by Region",
+                        "kind": "bar-chart",
+                        "columns": [
+                            {"id": "region", "name": "Region"},
+                            {"id": "sales", "name": "Sales"},
+                        ],
+                    }],
+                    "layout": (
+                        '<Page id="page-1"><Element elementId="bar-1" '
+                        'gridColumn="1 / 25" gridRow="1 / 13"/></Page>'
+                    ),
+                },
+            }
+
+            def api(_method, path, **_kwargs):
+                if "/columns" in path:
+                    return {
+                        "entries": [{
+                            "elementId": "bar-1",
+                            "type": {"type": "number"},
+                        }]
+                    }
+                if path.endswith("/spec"):
+                    return live
+                raise AssertionError(path)
+
+            migration.export_elements = lambda *_args: {
+                "bar-1": "Region,Sales\nWest,10\n"
+            }
+            base_snapshot = {
+                "buckets": [{
+                    "expr": "Count(distinct [Region])",
+                    "value": "1",
+                }],
+                "chartData": [{
+                    "objectId": "chart-1",
+                    "dimensionCount": 1,
+                    "measureCount": 1,
+                    "rows": [["West", 10.0]],
+                    "complete": True,
+                }],
+            }
+            coverage = {
+                "sourceVisualIds": ["chart-1"],
+                "builtSourceVisualIds": ["chart-1"],
+            }
+            with mock.patch.object(migrate.sigma_rest, "request", side_effect=api):
+                matched, _, _, _, parity = migration.parity(
+                    {"workbookId": "wb-1"},
+                    "dm-1",
+                    {},
+                    base_snapshot,
+                    [{"id": "chart-1", "title": "Sales by Region"}],
+                    coverage,
+                )
+            self.assertTrue(matched)
+            self.assertEqual("MATCH", parity["per_chart"][0]["status"])
+
+            mismatched_snapshot = json.loads(json.dumps(base_snapshot))
+            mismatched_snapshot["chartData"][0]["rows"][0][1] = 11.0
+            with mock.patch.object(migrate.sigma_rest, "request", side_effect=api):
+                matched, _, _, _, parity = migration.parity(
+                    {"workbookId": "wb-1"},
+                    "dm-1",
+                    {},
+                    mismatched_snapshot,
+                    [{"id": "chart-1", "title": "Sales by Region"}],
+                    coverage,
+                )
+            self.assertFalse(matched)
+            self.assertEqual("VALUE-MISMATCH", parity["per_chart"][0]["status"])
 
     def test_render_failure_cannot_reuse_prior_page_png(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

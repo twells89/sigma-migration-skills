@@ -18,6 +18,7 @@ QUERYABLE = {
     "kpi-chart", "box-chart", "funnel-chart", "gauge-chart", "waterfall-chart",
     "sankey-chart", "region-map", "point-map", "viz", "chart", "treemap-chart",
     "heatmap-chart", "word-cloud",
+    "progress",
 }
 
 

@@ -75,7 +75,7 @@ def data_element(element: dict[str, Any]) -> bool:
     if not kind or "control" in kind or "container" in kind:
         return False
     return (
-        kind in {"chart", "kpi", "table"}
+        kind in {"chart", "kpi", "table", "progress"}
         or kind.endswith("chart")
         or kind.endswith("table")
         or "pivot" in kind
@@ -141,7 +141,7 @@ def binding_value(element: dict[str, Any], wanted: str) -> Any:
 def usable_data_binding(element: dict[str, Any]) -> bool:
     kind = normalize_key(element.get("kind"))
     columns = binding_value(element, "columns")
-    if "kpi" in kind:
+    if "kpi" in kind or kind == "progress":
         if any(
             usable_binding(binding_value(element, name), name)
             for name in ("value", "values", "yaxis", "measure", "measures")

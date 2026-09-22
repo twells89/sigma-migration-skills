@@ -921,26 +921,78 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
     )
     if not isinstance(secured, dict):
         fail(32, "security", "secured denormalized element is absent from readback")
-    expects_rls = any(
-        isinstance(row, dict) and row.get("kind") == "rls" and row.get("rls")
+    expected_rules = [
+        row
         for row in security_rows
-    )
-    expects_cls = any(
-        isinstance(row, dict) and row.get("kind") == "cls" and row.get("cls")
-        for row in security_rows
-    )
-    has_rls = bool(secured.get("filters")) and any(
-        "CurrentUserAttribute" in str(column.get("formula") or "")
-        for column in secured.get("columns") or []
-        if isinstance(column, dict)
-    )
-    has_cls = bool(secured.get("columnSecurities"))
-    if (expects_rls and not has_rls) or (expects_cls and not has_cls):
+        if isinstance(row, dict) and (row.get("rls") or row.get("cls"))
+    ]
+    if (
+        integer(decision.get("rules_detected")) != len(security_rows)
+        or integer(decision.get("rules_applied")) != len(expected_rules)
+    ):
         fail(
             32,
             "security",
-            "persisted denormalized element lacks the expected RLS/CLS structures",
+            "security decision rule counts do not cover every supplied rule",
         )
+    columns = [
+        row for row in secured.get("columns") or [] if isinstance(row, dict)
+    ]
+    filters = [
+        row for row in secured.get("filters") or [] if isinstance(row, dict)
+    ]
+    securities = [
+        row
+        for row in secured.get("columnSecurities") or []
+        if isinstance(row, dict)
+    ]
+    for row in expected_rules:
+        if row.get("kind") == "rls" and isinstance(row.get("rls"), dict):
+            formula = str(row["rls"].get("formula") or "")
+            column = next(
+                (candidate for candidate in columns if candidate.get("formula") == formula),
+                None,
+            )
+            if not column or not any(
+                candidate.get("columnId") == column.get("id")
+                and candidate.get("values") == [True]
+                for candidate in filters
+            ):
+                fail(
+                    32,
+                    "security",
+                    "a supplied RLS formula/filter is absent from persisted readback",
+                )
+        elif row.get("kind") == "cls" and isinstance(row.get("cls"), dict):
+            expected_names = {
+                re.sub(r"[^a-z0-9]", "", str(name).casefold())
+                for name in row["cls"].get("restrictedColumnNames") or []
+            }
+            column_ids = {
+                str(column.get("id"))
+                for column in columns
+                if re.sub(
+                    r"[^a-z0-9]",
+                    "",
+                    str(column.get("name") or "").casefold(),
+                )
+                in expected_names
+            }
+            if (
+                not expected_names
+                or len(column_ids) != len(expected_names)
+                or not any(
+                column_ids.issubset(
+                    {str(value) for value in security.get("restrictedColumns") or []}
+                )
+                for security in securities
+                )
+            ):
+                fail(
+                    32,
+                    "security",
+                    "a supplied CLS restriction is absent from persisted readback",
+                )
     return None
 
 

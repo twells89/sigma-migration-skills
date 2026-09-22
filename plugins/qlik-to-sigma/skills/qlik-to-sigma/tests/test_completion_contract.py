@@ -108,6 +108,10 @@ class CompletionContractTest(unittest.TestCase):
             }]}],
         })
         write_json(wd / "dm-ids.json", {"dataModelId": "dm-1"})
+        write_json(wd / "dm-result.json", {
+            "dataModelId": "dm-1",
+            "denormElementId": "dm-orders",
+        })
         write_json(wd / "datamodel-readback.json", {
             "dataModelId": "dm-1",
             "pages": [{"elements": [{
@@ -511,6 +515,58 @@ class CompletionContractTest(unittest.TestCase):
         result = self.assert_phase6()
         self.assertEqual(32, result.returncode, result.stdout + result.stderr)
         self.assertIn("stale", result.stderr)
+
+    def test_applied_security_must_persist_on_denormalized_source(self):
+        app_meta_path = self.workdir / "app-meta.json"
+        app_meta = json.loads(app_meta_path.read_text())
+        app_meta["hasSectionAccess"] = True
+        write_json(app_meta_path, app_meta)
+        write_json(self.workdir / "security.json", {
+            "security": [{
+                "kind": "rls",
+                "rls": {
+                    "name": "Region RLS",
+                    "formula": (
+                        'CurrentUserAttributeText("Region") = [Region]'
+                    ),
+                },
+            }],
+        })
+        readback_path = self.workdir / "datamodel-readback.json"
+        readback = json.loads(readback_path.read_text())
+        element = readback["pages"][0]["elements"][0]
+        element["columns"].append({
+            "id": "rls-column",
+            "name": "Region RLS",
+            "formula": 'CurrentUserAttributeText("Region") = [Region]',
+        })
+        element["filters"] = [{
+            "id": "rls-filter",
+            "kind": "list",
+            "columnId": "rls-column",
+            "values": [True],
+        }]
+        write_json(readback_path, readback)
+        write_json(self.workdir / "security-decision.json", {
+            "decision": "port",
+            "status": "applied",
+            "readback_verified": True,
+            "rules_detected": 1,
+            "rules_applied": 1,
+            "dataModelId": "dm-1",
+            "securedElementId": "dm-orders",
+            "run_id": "fixture-run",
+            "readback_sha256": hashlib.sha256(
+                readback_path.read_bytes()
+            ).hexdigest(),
+        })
+        self.complete_python_gate()
+        result = self.run_script(
+            "verify-complete.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_missing_app_meta_is_valid_for_unsecured_offline_project(self):
         (self.workdir / "app-meta.json").unlink()

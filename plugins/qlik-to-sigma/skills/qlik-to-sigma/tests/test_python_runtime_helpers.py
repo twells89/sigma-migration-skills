@@ -74,6 +74,7 @@ CLEANUP = load_script("cleanup_orphan_workbooks.py")
 DOCTOR_GATE = load_script("assert-doctor-ran.py")
 INTAKE = load_script("intake.py")
 PHASE_GATE = load_script("assert-phase6-ran.py")
+RLS_APPLY = load_script("apply_sigma_rls.py")
 
 
 class WorkbookPreflightTest(unittest.TestCase):
@@ -518,6 +519,56 @@ class DecisionAndCatalogTest(unittest.TestCase):
 
 
 class OfflineBoundaryTest(unittest.TestCase):
+    def test_security_apply_writes_model_and_denorm_bound_decision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workdir = Path(temporary)
+            decision_path = workdir / "security-decision.json"
+            spec = {
+                "pages": [{"elements": [{
+                    "id": "denorm-1",
+                    "name": "Custom SQL",
+                    "kind": "table",
+                    "columns": [{"id": "region", "name": "Region"}],
+                }]}],
+            }
+
+            def api(method, path, body=None):
+                if method == "GET":
+                    return spec
+                if method == "PUT":
+                    return {"dataModelId": "dm-1"}
+                raise AssertionError((method, path, body))
+
+            security = [{
+                "kind": "rls",
+                "rls": {
+                    "name": "Region RLS",
+                    "formula": (
+                        'CurrentUserAttributeText("Region") = [Region]'
+                    ),
+                    "userAttributes": [],
+                    "teams": [],
+                },
+            }]
+            with mock.patch.object(RLS_APPLY, "api", side_effect=api):
+                result = RLS_APPLY.apply_from_security(
+                    "dm-1",
+                    security,
+                    True,
+                    False,
+                    decision_out=decision_path,
+                    run_id="run-1",
+                    decision="port",
+                    required_element_id="denorm-1",
+                )
+            self.assertEqual(0, result)
+            decision = json.loads(decision_path.read_text())
+            self.assertEqual("dm-1", decision["dataModelId"])
+            self.assertEqual("denorm-1", decision["securedElementId"])
+            self.assertEqual("run-1", decision["run_id"])
+            self.assertTrue(decision["readback_verified"])
+            self.assertEqual(1, decision["rules_applied"])
+
     def test_mixed_control_probe_requires_complete_skip_marker(self):
         with tempfile.TemporaryDirectory() as temporary:
             workdir = Path(temporary)

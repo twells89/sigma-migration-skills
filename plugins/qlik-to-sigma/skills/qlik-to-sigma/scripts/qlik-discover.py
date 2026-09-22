@@ -23,9 +23,9 @@ Outputs in --out/:
   app-meta.json         REST item record: name, lastReloadTime, hasSectionAccess,
                         isDirectQueryMode — feeds the source-freshness preflight
   snapshot.json         Qlik-engine eval of every sheet KPI expression + Max() of
-                        date-ish fact fields + per-chart distinct-bucket counts —
-                        the app's IN-MEMORY totals, used to report staleness vs
-                        the live warehouse before any parity
+                        date-ish fact fields, per-chart bucket counts, and
+                        evaluated hypercube rows — the app's IN-MEMORY values
+                        used for strict chart parity
   converter-input.json  ready for convert_qlik_to_sigma (tables + masterMeasures + masterDimensions)
   timings.json          ALWAYS written — per-stage wall-clock + retry counts, the
                         evidence trail for any future "discovery is slow" report
@@ -418,6 +418,69 @@ def qlik_eval(app, ctx_args, expr):
     return lines[1].strip() if out.returncode == 0 and len(lines) >= 2 else None
 
 
+def qlik_chart_rows(app, ctx_args, chart):
+    """Read one chart's evaluated hypercube rows through qlik-cli."""
+    data = qlik(
+        "app", "object", "data", str(chart.get("id")),
+        "-a", app, *ctx_args, "--json",
+    )
+
+    def matrices(value):
+        found = []
+        if isinstance(value, dict):
+            matrix = value.get("qMatrix")
+            if isinstance(matrix, list):
+                found.append(matrix)
+            for child in value.values():
+                found.extend(matrices(child))
+        elif isinstance(value, list):
+            for child in value:
+                found.extend(matrices(child))
+        return found
+
+    rows = []
+    sizes = []
+
+    def collect_sizes(value):
+        if isinstance(value, dict):
+            size = value.get("qSize")
+            if isinstance(size, dict) and isinstance(size.get("qcy"), int):
+                sizes.append(size["qcy"])
+            for child in value.values():
+                collect_sizes(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect_sizes(child)
+
+    collect_sizes(data)
+    dimension_count = len(chart.get("dimensions") or [])
+    for matrix in matrices(data):
+        for raw_row in matrix:
+            if not isinstance(raw_row, list):
+                continue
+            row = []
+            for index, cell in enumerate(raw_row):
+                if not isinstance(cell, dict) or cell.get("qIsNull"):
+                    row.append(None)
+                elif index >= dimension_count and isinstance(
+                    cell.get("qNum"), (int, float)
+                ):
+                    row.append(cell["qNum"])
+                else:
+                    row.append(cell.get("qText"))
+            rows.append(row)
+    expected_rows = max(sizes) if sizes else None
+    return {
+        "rows": rows,
+        "complete": bool(
+            rows
+            and expected_rows is not None
+            and len(rows) >= expected_rows
+        ),
+        "expectedRows": expected_rows,
+    }
+
+
 def _resolve_title(props, app, ctx_args):
     """A chart title may be a STATIC string or a Qlik string-expression
     ({qStringExpression:{qExpr:"='Total Revenue = ' & num(Sum(...))"}}). Return a
@@ -446,12 +509,12 @@ def bucket_expr(dims):
 
 def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
     """The Qlik-engine snapshot (source-freshness preflight input): every
-    on-sheet KPI expression, Max() of date-ish fact fields, and per-chart
-    distinct-bucket counts — all evaluated against the app's IN-MEMORY data
-    (cannot change without a reload, hence safely deferrable). All evals run
-    through the shared pool."""
+    on-sheet KPI expression, Max() of date-ish fact fields, per-chart
+    distinct-bucket counts, and complete evaluated hypercube rows — all against
+    the app's IN-MEMORY data (cannot change without a reload, hence safely
+    deferrable). All reads run through the shared pool."""
     snapshot = {"lastReloadTime": app_meta.get("lastReloadTime"),
-                "kpis": [], "maxDates": [], "buckets": []}
+                "kpis": [], "maxDates": [], "buckets": [], "chartData": []}
     if skip_eval:
         return snapshot
 
@@ -496,6 +559,29 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
             snapshot["maxDates"].append({"field": label, "value": val})
         else:
             snapshot["buckets"].append({"expr": expr, "value": val})
+    chart_jobs = [
+        chart
+        for chart in charts
+        if chart.get("sheet")
+        and chart.get("dimensions")
+        and chart.get("measures")
+    ]
+    chart_values = pmap(
+        lambda chart: qlik_chart_rows(app, ctx, chart),
+        chart_jobs,
+        pool,
+    )
+    for chart, result in zip(chart_jobs, chart_values):
+        result = result or {}
+        snapshot["chartData"].append({
+            "objectId": chart.get("id"),
+            "title": chart.get("title") or chart.get("id"),
+            "dimensionCount": len(chart.get("dimensions") or []),
+            "measureCount": len(chart.get("measures") or []),
+            "rows": result.get("rows") or [],
+            "complete": result.get("complete") is True,
+            "expectedRows": result.get("expectedRows"),
+        })
     return snapshot
 
 
