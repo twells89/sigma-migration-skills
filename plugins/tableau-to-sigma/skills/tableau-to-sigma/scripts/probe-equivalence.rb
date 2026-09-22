@@ -76,6 +76,7 @@ require 'optparse'
 require 'securerandom'
 $LOAD_PATH.unshift File.expand_path('lib', __dir__)
 require 'equivalence_probe'
+require_relative 'lib/workbook_code'
 
 $stdout.sync = true # progress lines interleave correctly with the FATAL block
 
@@ -240,9 +241,14 @@ def sigma_sql_rows(conn_id, folder_id, sql, columns, deadline, workdir: nil)
       'columns' => columns.each_with_index.map { |c, i| { 'id' => "c#{i}", 'name' => c, 'formula' => "[Custom SQL/#{c}]" } }
     }] }]
   }
-  spec['folderId'] = folder_id if folder_id # omitted key = My Documents (API default)
+  spec['folderId'] = folder_id if folder_id
   begin
-    r = Sigma.request(:post, '/v2/workbooks/spec', body: JSON.generate(spec))
+    # The current workbook API accepts the released nested `document` shape
+    # with document-global elements and layout-owned page membership. The
+    # legacy flat pages[].elements body is rejected before either SQL probe can
+    # run, leaving every declared semantic edit permanently unproven.
+    post_body = WorkbookCode.canonicalize(spec)
+    r = Sigma.request(:post, '/v2/workbooks/spec', body: JSON.generate(post_body))
   rescue Sigma::Error => e
     raise "probe workbook POST failed: #{e.message.to_s.gsub(/\s+/, ' ').strip[0, 240]}"
   end

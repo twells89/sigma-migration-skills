@@ -294,6 +294,17 @@ end
 _out, _err, st = run_probe('--workdir', '.', '--withdraw', 'x', '--reason', 'y', '--edit', 'z')
 check(st.exitstatus == 1, '--withdraw mixed with probe flags → exit 1', fails)
 
+# Live probe POST contract: workbook writes must use the released nested
+# document shape. Fixture-only tests cannot exercise the API boundary, so pin
+# the same canonicalizer used by probe-join-keys.rb.
+script_source = File.read(SCRIPT)
+canonicalize_at = script_source.index('WorkbookCode.canonicalize(spec)')
+post_at = script_source.index("Sigma.request(:post, '/v2/workbooks/spec'")
+check(script_source.include?("require_relative 'lib/workbook_code'"),
+      'live seam loads the workbook code-representation adapter', fails)
+check(canonicalize_at && post_at && canonicalize_at < post_at,
+      'live seam canonicalizes the probe workbook before POST', fails)
+
 puts
 if fails.empty?
   puts 'ALL PASS — probe-equivalence fixture modes, fan-out FATAL, proof replacement, element extraction, invocation guards, withdraw + unknown-key round-trip'
