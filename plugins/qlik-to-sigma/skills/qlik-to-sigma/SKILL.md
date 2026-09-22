@@ -674,6 +674,11 @@ it never treats missing rules as an unsecured success.
    ```
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element, reads every requested rule back, and writes run/model/hash-bound `security-decision.json`. When rules name teams or user attributes, completion also requires hash-bound `--membership-evidence` from the assignment/readback step.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
+5. **Effective-user proof.** Write `security-effective-user-verdict.json`
+   bound to the run, data model, DM readback hash, source/Sigma roster evidence,
+   and at least one passing allow + deny test. Automatic Qlik `OMIT` output is
+   not equivalent to per-user CLS: customize it and set
+   `verifiedEquivalent:true` only after these tests.
 
 For a detected Section Access app, unattended Python runs default to **abort
 before build**. An explicit proceed may post the model for security work, but

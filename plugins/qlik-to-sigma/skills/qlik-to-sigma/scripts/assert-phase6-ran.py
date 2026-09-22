@@ -966,6 +966,12 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                     "a supplied RLS formula/filter is absent from persisted readback",
                 )
         elif row.get("kind") == "cls" and isinstance(row.get("cls"), dict):
+            if row["cls"].get("verifiedEquivalent") is not True:
+                fail(
+                    32,
+                    "security",
+                    "Qlik OMIT requires customized CLS with verifiedEquivalent:true",
+                )
             expected_names = {
                 re.sub(r"[^a-z0-9]", "", str(name).casefold())
                 for name in row["cls"].get("restrictedColumnNames") or []
@@ -1074,6 +1080,52 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 "security",
                 "membership evidence does not cover every required team/user attribute",
             )
+    effective = load_object(
+        workdir / "security-effective-user-verdict.json",
+        32,
+        "security",
+    )
+    if (
+        effective.get("status") != "PASS"
+        or effective.get("dataModelId") != dm_ids.get("dataModelId")
+        or effective.get("run_id") != run_state.get("run_id")
+        or effective.get("readback_sha256") != expected_hash
+    ):
+        fail(
+            32,
+            "security",
+            "effective-user security verdict is missing, stale, or not PASS",
+        )
+    for key in ("source_roster", "sigma_roster"):
+        evidence = effective.get(key)
+        path = Path(str((evidence or {}).get("path") or "")).expanduser()
+        if not path.is_absolute():
+            path = workdir / path
+        if (
+            not path.is_file()
+            or hashlib.sha256(path.read_bytes()).hexdigest()
+            != str((evidence or {}).get("sha256") or "").lower()
+        ):
+            fail(32, "security", f"{key} evidence is missing or stale: {path}")
+    tests = effective.get("tests")
+    if (
+        not isinstance(tests, list)
+        or not tests
+        or any(
+            not isinstance(test, dict)
+            or test.get("status") != "PASS"
+            or not str(test.get("principal") or "").strip()
+            for test in tests
+        )
+        or not {"allow", "deny"}.issubset(
+            {str(test.get("kind") or "") for test in tests}
+        )
+    ):
+        fail(
+            32,
+            "security",
+            "effective-user verdict requires passing allow and deny tests",
+        )
     return None
 
 

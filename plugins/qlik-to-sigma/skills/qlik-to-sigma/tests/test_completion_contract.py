@@ -579,6 +579,47 @@ class CompletionContractTest(unittest.TestCase):
                 readback_path.read_bytes()
             ).hexdigest(),
         })
+        sigma_roster_path = self.workdir / "sigma-membership-readback.json"
+        write_json(sigma_roster_path, {
+            "dataModelId": "dm-1",
+            "assignments": [{
+                "principal": "Region",
+                "values": {"member-1": "West"},
+            }],
+        })
+        readback_hash = hashlib.sha256(
+            readback_path.read_bytes()
+        ).hexdigest()
+        write_json(self.workdir / "security-effective-user-verdict.json", {
+            "status": "PASS",
+            "dataModelId": "dm-1",
+            "run_id": "fixture-run",
+            "readback_sha256": readback_hash,
+            "source_roster": {
+                "path": str(membership_path),
+                "sha256": hashlib.sha256(
+                    membership_path.read_bytes()
+                ).hexdigest(),
+            },
+            "sigma_roster": {
+                "path": str(sigma_roster_path),
+                "sha256": hashlib.sha256(
+                    sigma_roster_path.read_bytes()
+                ).hexdigest(),
+            },
+            "tests": [
+                {
+                    "kind": "allow",
+                    "principal": "member-1",
+                    "status": "PASS",
+                },
+                {
+                    "kind": "deny",
+                    "principal": "member-2",
+                    "status": "PASS",
+                },
+            ],
+        })
         self.complete_python_gate()
         result = self.run_script(
             "verify-complete.py",

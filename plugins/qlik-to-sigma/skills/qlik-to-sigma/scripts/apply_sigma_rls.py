@@ -309,6 +309,14 @@ def apply_from_security(
                 el.setdefault("filters", []).append(filt); applied += 1
         elif rule.get("kind") == "cls" and rule.get("cls"):
             c = rule["cls"]
+            if c.get("verifiedEquivalent") is not True:
+                print(
+                    "  FATAL: Qlik OMIT is identity-dependent; customize CLS "
+                    "criteria and set verifiedEquivalent:true only after "
+                    "effective-user validation.",
+                    file=sys.stderr,
+                )
+                continue
             ids = _resolve_col_ids(el, c.get("restrictedColumnNames"))
             print(f"CLS → element '{_elname(el)}': hide {c.get('restrictedColumnNames')}")
             if do_apply and ids:
