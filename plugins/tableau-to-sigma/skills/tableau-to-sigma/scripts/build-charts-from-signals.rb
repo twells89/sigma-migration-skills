@@ -6079,6 +6079,10 @@ layout.each do |dash|
             element['orientation'] = 'horizontal'
           end
         end
+        # On a horizontal bar Sigma renders xAxis.title as a vertical left-side
+        # title, where it consumes the chart-title gutter and clips the element
+        # heading. Keep the category labels horizontal, but omit this title.
+        element.dig('xAxis', 'format')&.delete('title') if element['orientation'] == 'horizontal'
       end
 
       # Axis format (log scale, fixed min/max). parse-twb-layout extracts these
