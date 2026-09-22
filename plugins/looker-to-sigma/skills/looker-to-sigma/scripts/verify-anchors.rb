@@ -123,6 +123,12 @@ module AnchorVerify
     NAME_ONLY_KINDS.include?(anchor['kind'].to_s)
   end
 
+  def numeric_raw(anchor)
+    raw = anchor['raw'].to_s
+    grouping = anchor['grouping_symbol'].to_s
+    grouping.empty? ? raw : raw.delete(grouping)
+  end
+
   def valued?(anchor)
     !name_only?(anchor) && VALUED_PROVENANCE.include?(anchor['provenance'].to_s)
   end
@@ -227,7 +233,7 @@ module AnchorVerify
 
   # Numeric face values of a CSV cell (both percent interpretations kept so
   # AnchorValues candidate matching sees whichever the export carried).
-  def cell_numbers(cell)
+  def cell_numbers(cell, grouping = nil)
     s = cell.to_s
     # Export bytes arrive as ASCII-8BIT off the HTTP body; a UTF-8 regexp match
     # on that raises Encoding::CompatibilityError (live-caught). Normalize first.
@@ -246,11 +252,23 @@ module AnchorVerify
       return []
     end
     f = -f if neg
-    pct ? [f, f / 100.0] : [f]
+    values = pct ? [f, f / 100.0] : [f]
+    if !grouping.to_s.empty? && body.include?(grouping.to_s)
+      grouped = begin
+        Float(body.delete(grouping.to_s))
+      rescue ArgumentError, TypeError
+        nil
+      end
+      if grouped
+        grouped = -grouped if neg
+        values.concat(pct ? [grouped, grouped / 100.0] : [grouped])
+      end
+    end
+    values.uniq
   end
 
-  def rows_numbers(rows)
-    rows.flat_map { |r| Array(r).flat_map { |c| cell_numbers(c) } }
+  def rows_numbers(rows, grouping = nil)
+    rows.flat_map { |r| Array(r).flat_map { |c| cell_numbers(c, grouping) } }
   end
 
   # Normalized text cells of an export (for kind:"text" roster anchors).
@@ -359,6 +377,11 @@ module AnchorVerify
     end
     anchors.each do |a|
       raw = a['raw'].to_s
+      match_raw = numeric_raw(a)
+      grouping = a['grouping_symbol'].to_s
+      nums_for = lambda do |name|
+        grouping.empty? ? numbers[name] : rows_numbers(exports[name], grouping)
+      end
       order = ranked_elements(a, el_names)
       target = target_for.call(a, order)
       search_order = target['names']
@@ -376,11 +399,11 @@ module AnchorVerify
         end
         next
       end
-      found_in = search_order.find { |n| numbers[n].any? { |v| AnchorValues.match?(raw, v) } }
+      found_in = search_order.find { |n| nums_for.call(n).any? { |v| AnchorValues.match?(match_raw, v) } }
       tol_used = nil
       if found_in.nil? && tol
         found_in = search_order.find do |n|
-          numbers[n].any? { |v| AnchorValues.relative_distance(raw, v) <= tol }
+          nums_for.call(n).any? { |v| AnchorValues.relative_distance(match_raw, v) <= tol }
         end
         tol_used = tol if found_in
       end
@@ -390,7 +413,7 @@ module AnchorVerify
               'note' => (found_in == primary ? nil : "found outside best-match element #{primary.inspect}") }.compact
         d['valued'] = valued?(a)
         if tol_used
-          drift = numbers[found_in].map { |v| AnchorValues.relative_distance(raw, v) }.min
+          drift = nums_for.call(found_in).map { |v| AnchorValues.relative_distance(match_raw, v) }.min
           d['tolerance_used'] = tol_used
           d['drift'] = drift.round(6) if drift&.finite?
         end
@@ -403,8 +426,8 @@ module AnchorVerify
         # coincidentally-near number from an unrelated tile.
         best = nil
         search_order.each do |n|
-          numbers[n].each do |v|
-            d = AnchorValues.relative_distance(raw, v)
+          nums_for.call(n).each do |v|
+            d = AnchorValues.relative_distance(match_raw, v)
             best = { 'value' => v, 'element' => n, 'distance' => d.round(6) } if best.nil? || d < best['distance']
           end
           break if best
@@ -605,7 +628,8 @@ end
 # membership for ranked tiles) — only NUMERIC anchors must parse as values.
 bad = anchors.reject do |a|
   next false unless a.is_a?(Hash)
-  %w[text roster member].include?(a['kind'].to_s) ? !a['raw'].to_s.strip.empty? : AnchorValues.parse(a['raw'])
+  %w[text roster member].include?(a['kind'].to_s) ?
+    !a['raw'].to_s.strip.empty? : AnchorValues.parse(AnchorVerify.numeric_raw(a))
 end
 unless bad.empty?
   warn "FATAL: #{bad.length} anchor(s) have an unparseable `raw` printed value:"

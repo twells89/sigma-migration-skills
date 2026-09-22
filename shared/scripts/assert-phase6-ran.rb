@@ -2475,7 +2475,14 @@ else
                 if _rb_doc.is_a?(Hash)
                   _els = CODE_REP_LOADED ? Sigma::CodeRep.workbook_elements(_rb_doc) :
                                            Array(_rb_doc['elements'])
-                  _census = _els.select { |el| el.is_a?(Hash) && el['visibleAsSource'] != false }
+                  _page_by = CODE_REP_LOADED ?
+                               Sigma::CodeRep.workbook_page_by_element(Sigma::CodeRep.document(_rb_doc)) : {}
+                  _census = _els.select do |el|
+                    next false unless el.is_a?(Hash) && el['visibleAsSource'] != false
+                    owner = _page_by[el['id'].to_s]
+                    !(owner && (owner['name'].to_s.strip.casecmp?('Data') ||
+                                owner['id'].to_s.downcase.include?('data')))
+                  end
                                 .map { |el| _fam.call(el['kind']) }
                                 .select { |f| _chartf.include?(f) }
                 end
