@@ -61,6 +61,7 @@
     {
       "canonical": "shared/lib/sigma_rest.py",
       "targets": [
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/sigma_rest.py",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/sigma_rest.py"
       ]
     },
@@ -648,6 +649,7 @@
     {
       "canonical": "shared/scripts/runtime_profile.py",
       "targets": [
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/runtime_profile.py",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/runtime_profile.py"
       ]
     },
@@ -670,6 +672,7 @@
     {
       "canonical": "shared/scripts/setup.py",
       "targets": [
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/setup.py",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/setup.py"
       ]
     },
@@ -1285,6 +1288,7 @@
       "targets": [
         "plugins/looker-to-sigma/skills/looker-to-sigma/scripts/pick_destination.py",
         "plugins/microstrategy-to-sigma/skills/microstrategy-to-sigma/scripts/pick_destination.py",
+        "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/pick_destination.py",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/pick_destination.py"
       ]
     },
