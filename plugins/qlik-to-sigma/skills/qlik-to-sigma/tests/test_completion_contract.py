@@ -587,6 +587,24 @@ class CompletionContractTest(unittest.TestCase):
                 "values": {"member-1": "West"},
             }],
         })
+        source_policy_path = self.workdir / "source-security-policy.json"
+        write_json(source_policy_path, {
+            "sectionAccess": True,
+            "rules": ["Region RLS"],
+        })
+        allow_source = self.workdir / "allow-source.json"
+        allow_sigma = self.workdir / "allow-sigma.json"
+        deny_source = self.workdir / "deny-source.json"
+        deny_sigma = self.workdir / "deny-sigma.json"
+        write_json(allow_source, {"rows": ["West"]})
+        write_json(allow_sigma, {"rows": ["West"]})
+        write_json(deny_source, {"rows": []})
+        write_json(deny_sigma, {"rows": []})
+        def evidence(path):
+            return {
+                "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
         readback_hash = hashlib.sha256(
             readback_path.read_bytes()
         ).hexdigest()
@@ -595,6 +613,7 @@ class CompletionContractTest(unittest.TestCase):
             "dataModelId": "dm-1",
             "run_id": "fixture-run",
             "readback_sha256": readback_hash,
+            "source_policy": evidence(source_policy_path),
             "source_roster": {
                 "path": str(membership_path),
                 "sha256": hashlib.sha256(
@@ -612,11 +631,17 @@ class CompletionContractTest(unittest.TestCase):
                     "kind": "allow",
                     "principal": "member-1",
                     "status": "PASS",
+                    "match": True,
+                    "source_result": evidence(allow_source),
+                    "sigma_result": evidence(allow_sigma),
                 },
                 {
                     "kind": "deny",
                     "principal": "member-2",
                     "status": "PASS",
+                    "match": True,
+                    "source_result": evidence(deny_source),
+                    "sigma_result": evidence(deny_sigma),
                 },
             ],
         })

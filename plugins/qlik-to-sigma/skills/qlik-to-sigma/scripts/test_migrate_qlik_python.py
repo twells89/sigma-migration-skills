@@ -607,6 +607,37 @@ class OrchestrationTests(unittest.TestCase):
             self.assertEqual("MATCH", parity["per_chart"][0]["status"])
             self.assertEqual("progress", parity["per_chart"][0]["kind"])
 
+            element_map = json.loads(
+                (workdir / "element-map.json").read_text()
+            )
+            element_map[0]["qlik"]["measures"].append("Avg(Margin)")
+            (workdir / "element-map.json").write_text(
+                json.dumps(element_map),
+                encoding="utf-8",
+            )
+            with mock.patch.object(migrate.sigma_rest, "request", side_effect=api):
+                parity_ok, _, _, _, parity = migration.parity(
+                    {"workbookId": "wb-1"},
+                    "dm-1",
+                    {},
+                    {
+                        "kpis": [
+                            {"expr": "Sum(Sales)", "value": "42"},
+                            {"expr": "Avg(Margin)", "value": "0.25"},
+                        ]
+                    },
+                    [{"id": "gauge-1", "title": "Sales Gauge"}],
+                    {
+                        "sourceVisualIds": ["gauge-1"],
+                        "builtSourceVisualIds": ["gauge-1"],
+                    },
+                )
+            self.assertFalse(parity_ok)
+            self.assertEqual(
+                "SECONDARY-MEASURE-UNBUILT",
+                parity["per_chart"][0]["status"],
+            )
+
     def test_live_chart_parity_compares_full_hypercube_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workdir = Path(temporary)

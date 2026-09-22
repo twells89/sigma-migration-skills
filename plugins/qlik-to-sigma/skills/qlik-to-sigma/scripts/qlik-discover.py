@@ -558,11 +558,13 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
     for c in charts:
         if not (c["sheet"] and c["measures"] and not c["dimensions"]):
             continue
-        expr = c["measures"][0]
-        if not expr or expr in seen:
-            continue
-        seen.add(expr)
-        kpi_jobs.append((expr, c["title"] or (c["measureLabels"] or [None])[0]))
+        for index, expr in enumerate(c["measures"]):
+            if not expr or expr in seen:
+                continue
+            seen.add(expr)
+            labels = c.get("measureLabels") or []
+            label = labels[index] if index < len(labels) else None
+            kpi_jobs.append((expr, label or c.get("title") or expr))
 
     date_jobs = []
     if tables:

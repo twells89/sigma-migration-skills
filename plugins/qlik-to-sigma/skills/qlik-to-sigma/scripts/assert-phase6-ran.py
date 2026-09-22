@@ -1096,7 +1096,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "security",
             "effective-user security verdict is missing, stale, or not PASS",
         )
-    for key in ("source_roster", "sigma_roster"):
+    for key in ("source_policy", "source_roster", "sigma_roster"):
         evidence = effective.get(key)
         path = Path(str((evidence or {}).get("path") or "")).expanduser()
         if not path.is_absolute():
@@ -1114,6 +1114,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
         or any(
             not isinstance(test, dict)
             or test.get("status") != "PASS"
+            or test.get("match") is not True
             or not str(test.get("principal") or "").strip()
             for test in tests
         )
@@ -1126,6 +1127,22 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "security",
             "effective-user verdict requires passing allow and deny tests",
         )
+    for test in tests:
+        for key in ("source_result", "sigma_result"):
+            evidence = test.get(key)
+            path = Path(str((evidence or {}).get("path") or "")).expanduser()
+            if not path.is_absolute():
+                path = workdir / path
+            if (
+                not path.is_file()
+                or hashlib.sha256(path.read_bytes()).hexdigest()
+                != str((evidence or {}).get("sha256") or "").lower()
+            ):
+                fail(
+                    32,
+                    "security",
+                    f"effective-user {key} evidence is missing or stale: {path}",
+                )
     return None
 
 

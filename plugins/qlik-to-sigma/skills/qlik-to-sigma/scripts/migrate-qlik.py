@@ -1520,7 +1520,8 @@ class Migration:
                 actuals_by_source[source_object_id] = data_rows
             if element.get("kind") not in {"kpi-chart", "progress"}:
                 continue
-            expression = ((element.get("qlik") or {}).get("measures") or [None])[0]
+            expressions = (element.get("qlik") or {}).get("measures") or []
+            expression = (expressions or [None])[0]
             qlik_value = snapshot_kpis.get(expression)
             if qlik_value is None and expression:
                 qlik_value = self.qlik_eval(expression)
@@ -1561,6 +1562,8 @@ class Migration:
                 state = "STALE-EXPLAINED"
             else:
                 state = "DIVERGENT"
+            if len(expressions) > 1:
+                state = "SECONDARY-MEASURE-UNBUILT"
             kpi_results.append(state)
             kpi_rows.append(
                 {
