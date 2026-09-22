@@ -43,6 +43,8 @@ class SourceObjectCensus
     @built_elements = Set.new
     @built_columns = Set.new
     @built_controls = Set.new
+    @built_source_worksheets = Set.new
+    @provenance_artifact = nil
     @parity_pass = Set.new
     @parity_fail = Set.new
     @parity_green = false
@@ -98,6 +100,16 @@ class SourceObjectCensus
       if scope['mode'] == 'selected' && %w[stated cli].include?(scope['provenance'].to_s)
         Array(scope['dashboards']).each { |name| add_folded(@explicit_scope_dashboards, name) }
       end
+    end
+    provenance_path = File.join(@workdir, 'chart-provenance.json')
+    if File.file?(provenance_path)
+      provenance = read_json(provenance_path)
+      records = provenance.is_a?(Hash) && provenance['elements'].is_a?(Hash) ?
+                  provenance['elements'].values : []
+      records.each do |record|
+        add_folded(@built_source_worksheets, record['worksheet']) if record.is_a?(Hash)
+      end
+      @provenance_artifact = display_path(provenance_path)
     end
   rescue TwbXml::ParseError => e
     raise CensusError, "#{display_path(twb)}: #{e.message}"
@@ -448,6 +460,7 @@ class SourceObjectCensus
   end
 
   def built?(object)
+    return true if provenance_built?(object)
     names = candidate_names(object)
     case object['type']
     when 'dashboard'
@@ -463,6 +476,12 @@ class SourceObjectCensus
     else
       names.any? { |name| @built_elements.include?(fold(name)) }
     end
+  end
+
+  def provenance_built?(object)
+    return false unless %w[worksheet dashboard-zone].include?(object['type'])
+    worksheet = object['worksheet_name'] || object['name']
+    @built_source_worksheets.include?(fold(worksheet))
   end
 
   def candidate_names(object)
@@ -614,6 +633,11 @@ class SourceObjectCensus
   end
 
   def built_evidence(object)
+    if provenance_built?(object)
+      worksheet = object['worksheet_name'] || object['name']
+      return evidence(@provenance_artifact || 'chart-provenance.json',
+                      "chart provenance maps source worksheet #{worksheet.inspect} to a built element")
+    end
     source = @built_artifact || 'workdir'
     kind = @built_kind == :wb_readback ? 'workbook readback' : 'workbook spec'
     evidence(source, "matching #{kind} object for #{object['name'].inspect}")
