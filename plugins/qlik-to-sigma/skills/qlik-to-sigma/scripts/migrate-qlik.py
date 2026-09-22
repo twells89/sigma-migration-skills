@@ -680,7 +680,7 @@ class Migration:
                         "proceed (migrate now; port security via apply_sigma_rls.py after)",
                         "abort until security is designed",
                     ],
-                    "default": "proceed (migrate now; port security via apply_sigma_rls.py after)",
+                    "default": "abort until security is designed",
                 }
             )
         if app_meta.get("isDirectQueryMode") is True:
@@ -1638,6 +1638,22 @@ class Migration:
                 )
             elif decision == "advisory":
                 print("     [WARN] no control auto-probeable")
+                (self.workdir / "control-flip-unverified.json").write_text(
+                    json.dumps(
+                        {
+                            "workbookId": workbook_id,
+                            "status": "ADVISORY",
+                            "unprobed": [
+                                {"control": control, "reason": note}
+                                for control, note in information["skips"]
+                            ],
+                            "generatedAt": utc_now(),
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
             else:
                 print(
                     f"     [OK] {len(information['passes'])} control(s) proven live"

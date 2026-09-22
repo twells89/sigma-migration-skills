@@ -306,6 +306,19 @@ class OrchestrationTests(unittest.TestCase):
                 events,
             )
 
+    def test_section_access_default_stops_before_unsecured_build(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            migration = migrate.Migration(self.args())
+            migration.workdir = Path(temporary)
+            result = migration.decisions(
+                "Secured App",
+                {"warnings": []},
+                {"hasSectionAccess": True},
+                [],
+            )
+            self.assertEqual(10, result)
+            self.assertFalse((Path(temporary) / "security-decision.json").exists())
+
     def test_dry_run_exits_zero_before_render_and_terminal_gates(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             events: list[str] = []

@@ -490,6 +490,33 @@ def gate_flip(
     path = workdir / "probe-controls" / "probe-results.json"
     if path.is_file():
         rows = probe_rows(load_json(path, 21, "control-flip"))
+        failures = [
+            row for row in rows if str(row.get("result") or "").upper() == "FAIL"
+        ]
+        passes = [
+            row for row in rows if str(row.get("result") or "").upper() == "PASS"
+        ]
+        skips = [
+            row for row in rows if str(row.get("result") or "").upper() == "SKIP"
+        ]
+        if not failures and not passes and skips:
+            marker_path = workdir / "control-flip-unverified.json"
+            marker = (
+                load_object(marker_path, 21, "control-flip")
+                if marker_path.is_file()
+                else {}
+            )
+            if (
+                marker.get("workbookId") == workbook_id
+                and isinstance(marker.get("unprobed"), list)
+                and marker["unprobed"]
+            ):
+                return
+            fail(
+                21,
+                "control-flip",
+                "all controls were unprobeable but no matching advisory marker exists",
+            )
         evidence = load_object(
             workdir / "probe-controls" / "probe-evidence.json",
             21,
@@ -520,12 +547,6 @@ def gate_flip(
                 != str(expected_hash)
             ):
                 fail(21, "control-flip", f"runtime flip export is missing or stale: {filename}")
-        failures = [
-            row for row in rows if str(row.get("result") or "").upper() == "FAIL"
-        ]
-        passes = [
-            row for row in rows if str(row.get("result") or "").upper() == "PASS"
-        ]
         wrong_workbooks = {
             str(row.get("workbookId"))
             for row in rows
@@ -705,6 +726,43 @@ def gate_anchors(workdir: Path, render: dict[str, Any], waiver_reason: str | Non
         or verdict.get("tiles_all_nonempty") is not True
     ):
         fail(18, "anchors", "source anchor matching is stale or incomplete")
+
+
+def gate_security(workdir: Path) -> dict[str, str] | None:
+    app_meta = load_object(workdir / "app-meta.json", 32, "security")
+    if app_meta.get("hasSectionAccess") is not True:
+        return None
+    decision = load_object(workdir / "security-decision.json", 32, "security")
+    choice = str(decision.get("decision") or "")
+    if choice == "skip":
+        reason = str(decision.get("reason") or "").strip()
+        if not reason or decision.get("acknowledges_all_rows_visible") is not True:
+            fail(
+                32,
+                "security",
+                "Section Access skip requires a reason and explicit all-rows-visible acknowledgement",
+            )
+        return {
+            "flag": "--skip-source-security",
+            "gate": "security",
+            "reason": reason,
+        }
+    if choice not in {"port", "customize"}:
+        fail(
+            32,
+            "security",
+            "Section Access requires decision=port|customize|skip before completion",
+        )
+    if (
+        decision.get("status") != "applied"
+        or decision.get("readback_verified") is not True
+    ):
+        fail(
+            32,
+            "security",
+            f"Section Access decision {choice!r} is not applied and readback-verified",
+        )
+    return None
 
 
 def ledger_ids(path: Path) -> list[str]:
@@ -938,6 +996,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "reason": str(blind_waiver["reason"]).strip(),
             }
         )
+    security_waiver = gate_security(workdir)
+    if security_waiver:
+        waivers.append(security_waiver)
     if len(mode_waivers) + len(waivers) > 2:
         fail(
             19,

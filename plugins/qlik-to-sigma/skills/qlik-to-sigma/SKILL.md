@@ -664,4 +664,10 @@ Row/column security is **never silently dropped and never silently ported** — 
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 
+For a detected Section Access app, unattended Python runs default to **abort
+before build**. An explicit proceed may post the model for security work, but
+the Python completion gate remains RED until `security-decision.json` records
+either an applied/readback-verified `port` or `customize` decision, or a named
+`skip` with `acknowledges_all_rows_visible:true` (budget-counted waiver).
+
 **Skip is loud:** opting out leaves the migrated model with NO RLS — all rows visible to everyone. Confirm before skipping.

@@ -436,6 +436,73 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(19, result.returncode, result.stdout + result.stderr)
         self.assertFalse((self.workdir / "phase6-success.json").exists())
 
+    def test_section_access_cannot_complete_without_applied_decision(self):
+        app_meta_path = self.workdir / "app-meta.json"
+        app_meta = json.loads(app_meta_path.read_text())
+        app_meta["hasSectionAccess"] = True
+        write_json(app_meta_path, app_meta)
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(32, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_all_unprobeable_controls_use_advisory_marker(self):
+        control = {
+            "id": "control-element",
+            "name": "Date Filter",
+            "kind": "control",
+            "controlId": "date-filter",
+            "controlType": "date-range",
+            "source": {
+                "kind": "source",
+                "source": {"kind": "table", "elementId": "sigma-chart-1"},
+                "columnId": "country",
+            },
+            "filters": [{
+                "source": {"kind": "table", "elementId": "sigma-chart-1"},
+                "columnId": "country",
+            }],
+        }
+        for filename in ("wb-spec.json", "wb-readback.json"):
+            path = self.workdir / filename
+            document = json.loads(path.read_text())
+            root = document.get("document") or document
+            root["pages"][0]["elements"].append(control)
+            root["layout"] = str(root.get("layout") or "") + (
+                '<Page id="controls"><Element elementId="control-element" '
+                'gridColumn="1 / 25" gridRow="1 / 4"/></Page>'
+            )
+            write_json(path, document)
+        write_json(self.workdir / "control-scope.json", {
+            "version": 1,
+            "source": "qlik",
+            "sourceFilterSignals": 1,
+            "controls": [{
+                "controlId": "date-filter",
+                "mustReach": ["sigma-chart-1"],
+            }],
+            "unbound": [],
+            "dropped": [],
+        })
+        write_json(self.workdir / "probe-controls" / "probe-results.json", [{
+            "control": "date-filter",
+            "result": "SKIP",
+            "note": "date range has no safe automatic sample",
+        }])
+        write_json(self.workdir / "control-flip-unverified.json", {
+            "workbookId": "wb-1",
+            "status": "ADVISORY",
+            "unprobed": [{
+                "control": "date-filter",
+                "reason": "date range has no safe automatic sample",
+            }],
+        })
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
     def test_visual_recorder_rejects_incomplete_blind_grade(self):
         source = self.workdir / "source-pages" / "sheet-1.png"
         target = self.workdir / "visual-qa" / "sheet-1.png"
