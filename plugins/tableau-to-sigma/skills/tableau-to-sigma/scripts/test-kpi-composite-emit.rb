@@ -104,6 +104,8 @@ check(kpi && kpi['name'] == 'Total Job Losses',
       "KPI name = the customized-label label run, not the worksheet caption (got #{kpi && kpi['name'].inspect})", fails)
 check(kpi && kpi.dig('value', 'fontSize') == 26,
       "value.fontSize = SOURCE BAN font size 26 (got #{kpi && kpi.dig('value', 'fontSize').inspect})", fails)
+check(kpi && kpi['layout'] == { 'anchor' => 'middle' },
+      "KPI content uses source-like centered alignment (got #{kpi && kpi['layout'].inspect})", fails)
 check(kpi && kpi.dig('value', 'columnId'),
       'value still carries columnId (kpi-chart contract)', fails)
 # Transparency is a COMPOSITION decision (only reads well over a container tint),

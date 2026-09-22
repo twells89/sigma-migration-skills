@@ -4340,6 +4340,7 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
     element['name'] = z['kpi_label'] if z['kpi_label'] && !z['kpi_label'].to_s.strip.empty? &&
                                         z['display_title'].to_s.strip.empty?
     element['value']['fontSize'] = z['kpi_value_font_size']
+    element['layout'] = { 'anchor' => 'middle' }
     # The BAN's side annotation (e.g. "40% of U.S. total") is driven by a dynamic
     # Tableau calc token that can't be reproduced as static text; emitting the
     # literal remainder ("of U.S. total") alone would mislead. Surface the gap.
@@ -6041,6 +6042,16 @@ layout.each do |dash|
         end
       end
       element['yAxis'] = { 'columnIds' => y_column_ids }
+      element['xAxis']['format'] ||= {}
+      element['xAxis']['format']['labels'] = {
+        'labelAngle' => 0,
+        'fontSize' => 11,
+        'allowLongerLabels' => true
+      }
+      element['xAxis']['format']['title'] = {
+        'text' => dim['name'],
+        'fontSize' => 10
+      }
 
       # Bar orientation (bead: bar-orientation). Tableau puts the DIMENSION on
       # the Rows shelf and the MEASURE on Columns for a HORIZONTAL bar (bars grow
