@@ -958,6 +958,7 @@ PHASE_BUDGET = {
   'cleanup-orphans'   => 45,
   'assert-run-state'  => 10,
   'assert-phase6-ran' => 90,
+  'assert-reconstruction-integrity' => 10,
   'assert-datasource-filters' => 15, # one GET /v2/workbooks/<id>/spec + local checks (SKIPs offline)
   'assert-action-gates' => 10, # local checks only (spec + ledger + guide) — no network
   'phaseE'            => 240,
@@ -1393,6 +1394,17 @@ if opts[:finalize]
   gout = _
   mark('assert-phase6-ran')
 
+  # Tableau-local reconstruction gate. The shared gate intentionally accepts a
+  # declared needs-* control as accounted-for and compares chart families by
+  # literal name. For Tableau reconstruction, those are not terminal: unfinished
+  # wiring blocks, and persisted layout renames must still bind source chart
+  # families to renamed live elements.
+  reconout, reconst = run!(
+    ['ruby', File.join(HERE, 'assert-reconstruction-integrity.rb'), '--workdir', WORK],
+    allow_fail: true
+  )
+  mark('assert-reconstruction-integrity')
+
   # #483 datasource-filter gate — always-on Tableau data-source filters (a
   # <shared-view> database-domain filter like company_active=true, or a
   # <datasource>/<extract> filter) render NOTHING on any dashboard, so a visual
@@ -1609,7 +1621,7 @@ if opts[:finalize]
   parity_ok = p6st.success? || (opts[:min_pass_rate] && gst.success?)
   accounting_ok = census_st.success? && report_st.success? && report_verdict != 'RED'
   all_green = parity_ok && clst.success? && relgst.success? && dashgst.success? && sqlpst.success? &&
-              gst.success? && dsfst.success? &&
+              gst.success? && reconst.success? && dsfst.success? &&
               agst.success? && accounting_ok
 
   # ---------------------------------------------------------------------------
@@ -1746,7 +1758,7 @@ if opts[:finalize]
   else
     puts "PARITY      : #{pf['status'] || '?'} (#{pf['charts_pass']}/#{pf['charts_total']} charts#{state['extract_mode'] ? ', extract-mode' : ''})"
   end
-  puts "GATES       : phase6=#{p6st.success? ? 'PASS' : 'FAIL'} cleanup=#{clst.success? ? 'PASS' : 'FAIL'} relationships=#{relgst.success? ? 'PASS' : "FAIL(#{relgst.exitstatus})"} dashboards=#{dashgst.success? ? 'PASS' : "FAIL(#{dashgst.exitstatus})"} sql-provenance=#{sqlpst.success? ? 'PASS' : "FAIL(#{sqlpst.exitstatus})"} assert-phase6-ran=#{gst.success? ? 'PASS' : "FAIL(#{gst.exitstatus})"} ds-filters=#{dsfst.success? ? 'PASS' : "FAIL(#{dsfst.exitstatus})"} action-gates=#{agst.success? ? 'PASS' : "FAIL(#{agst.exitstatus})"} source-census=#{census_st.success? ? 'PASS' : "FAIL(#{census_st.exitstatus})"} report=#{report_verdict}#{report_st.success? ? '' : "(#{report_st.exitstatus})"}"
+  puts "GATES       : phase6=#{p6st.success? ? 'PASS' : 'FAIL'} cleanup=#{clst.success? ? 'PASS' : 'FAIL'} relationships=#{relgst.success? ? 'PASS' : "FAIL(#{relgst.exitstatus})"} dashboards=#{dashgst.success? ? 'PASS' : "FAIL(#{dashgst.exitstatus})"} sql-provenance=#{sqlpst.success? ? 'PASS' : "FAIL(#{sqlpst.exitstatus})"} assert-phase6-ran=#{gst.success? ? 'PASS' : "FAIL(#{gst.exitstatus})"} reconstruction=#{reconst.success? ? 'PASS' : "FAIL(#{reconst.exitstatus})"} ds-filters=#{dsfst.success? ? 'PASS' : "FAIL(#{dsfst.exitstatus})"} action-gates=#{agst.success? ? 'PASS' : "FAIL(#{agst.exitstatus})"} source-census=#{census_st.success? ? 'PASS' : "FAIL(#{census_st.exitstatus})"} report=#{report_verdict}#{report_st.success? ? '' : "(#{report_st.exitstatus})"}"
   puts "ENHANCE     : #{enhance_line}" if enhance_line
   puts "PUNCH LIST  : #{_pl_note}" if _pl_note
   puts "STATUS      : #{all_green ? 'GREEN' : 'NOT GREEN'}"
@@ -1757,7 +1769,9 @@ if opts[:finalize]
                            'relationships' => relgst.exitstatus,
                            'dashboards' => dashgst.exitstatus,
                            'sql_provenance' => sqlpst.exitstatus,
-                           'assert_phase6_ran' => gst.exitstatus, 'ds_filters' => dsfst.exitstatus,
+                           'assert_phase6_ran' => gst.exitstatus,
+                           'reconstruction_integrity' => reconst.exitstatus,
+                           'ds_filters' => dsfst.exitstatus,
                            'action_gates' => agst.exitstatus, 'source_census' => census_st.exitstatus,
                            'migration_report' => report_st.exitstatus,
                            'migration_report_verdict' => report_verdict })
@@ -1792,6 +1806,7 @@ if opts[:finalize]
                 elsif !sqlpst.success? then sqlpout
                 elsif !gst.success? then gout
                 elsif !parity_ok then p6out # p6 failure NOT excused by --min-pass-rate
+                elsif !reconst.success? then reconout
                 elsif !dsfst.success? then dsfout
                 elsif !agst.success? then agout
                 elsif !census_st.success? then census_out
@@ -1805,6 +1820,7 @@ if opts[:finalize]
                                                    sql_provenance: sqlpst.exitstatus,
                                                    gate: gst.exitstatus,
                                                    cleanup: clst.exitstatus,
+                                                   reconstruction: reconst.exitstatus,
                                                    dsfilters: dsfst.exitstatus,
                                                    actiongates: agst.exitstatus,
                                                    census: census_st.exitstatus,

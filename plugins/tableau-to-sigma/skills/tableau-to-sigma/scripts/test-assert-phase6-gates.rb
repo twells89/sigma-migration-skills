@@ -922,24 +922,6 @@ Dir.mktmpdir do |dir|
         'gate 21 failure names the propagation remedy + the read-time waiver ledger', fails)
 end
 
-# A reconstructed element may have a new Sigma display name. The persisted
-# source→Sigma rename must not let a chart-family substitution evade gate 21.
-Dir.mktmpdir do |dir|
-  base_workdir(dir)
-  File.write(File.join(dir, 'png-read.json'), JSON.pretty_generate(kp_png(KP_TILES)))
-  File.write(File.join(dir, 'wb-readback.json'), JSON.pretty_generate(kp_rb(
-               [{ 'id' => 'e1', 'kind' => 'kpi-chart', 'name' => 'KPI' },
-                { 'id' => 'e2', 'kind' => 'bar-chart', 'name' => 'REBUILT Trend' }])))
-  File.write(File.join(dir, 'layout-renames.json'), JSON.pretty_generate(
-               'Trend' => 'REBUILT Trend'
-             ))
-  _out, err, st = run_gate(dir)
-  check(st.exitstatus == 28,
-        "gate 21: renamed reconstructed bar still fails verified source line → exit 28 (got #{st.exitstatus})", fails)
-  check(err.include?('"Trend"') && err.include?("expected family 'line'") && err.include?("built 'bar'"),
-        'gate 21 consumes layout-renames when comparing reconstructed chart families', fails)
-end
-
 # tile UNVERIFIED at read time (built element not in png-read) → stated, not failed
 Dir.mktmpdir do |dir|
   base_workdir(dir)
@@ -1345,22 +1327,6 @@ Dir.mktmpdir do |dir|
   check(st.success?, "dropped-with-record → exit 0 (got #{st.exitstatus})", fails)
   check(out.include?('declared filter:Region') || out.include?('1 declared in control-scope.json'),
         'declared drop is stated per control, never silent', fails)
-end
-
-# gate 7c: needs-wiring is not a terminal migration result. Merely repeating it
-# in control-scope records evidence, but must not turn unfinished wiring green.
-Dir.mktmpdir do |dir|
-  base_workdir(dir)
-  write_census(dir, [{ 'kind' => 'parameter', 'name' => 'Date Grain', 'status' => 'needs-wiring' }])
-  File.write(File.join(dir, 'control-scope.json'), JSON.pretty_generate(
-               'version' => 1, 'source' => 'tableau', 'sourceFilterSignals' => 1,
-               'controls' => [{ 'controlId' => 'ctl-date-grain', 'name' => 'Date Grain',
-                                'status' => 'needs-wiring',
-                                'source_signal' => "tableau parameter 'Date Grain'" }]))
-  _out, err, st = run_gate(dir)
-  check(st.exitstatus == 31, "declared needs-wiring remains blocking → exit 31 (got #{st.exitstatus})", fails)
-  check(err.include?('parameter:Date Grain') && err.include?('unfinished work'),
-        'needs-wiring failure names the control and requires completion or explicit waiver', fails)
 end
 
 # gate 7c: UNACCOUNTED signal named in controls-waivers.json WITH reason → passes
