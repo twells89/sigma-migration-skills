@@ -48,6 +48,7 @@ TWB = <<~XML
         <column caption='Net Bookings' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' default-format='$#,##0.00' />
         <column caption='Order Date' name='[c2ec6b07-897e-39ab-9422-aa895d35a627]' datatype='date' role='dimension' type='ordinal' />
         <column caption='Value Tier' name='[a1b2c3d4-1111-2222-3333-444455556666]' datatype='string' role='dimension' type='nominal' />
+        <column caption='Customer Tier' name='[c3d4e5f6-3333-4444-5555-666677778888]' datatype='string' role='dimension' type='nominal' />
         <column caption='Region' name='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' datatype='string' role='dimension' type='nominal' />
         <column caption='Weird Metric' name='[Weird Metric]' datatype='real' role='measure' type='quantitative' />
       </datasource>
@@ -88,17 +89,17 @@ TWB = <<~XML
           <view>
             <datasource-dependencies datasource='federated.fact'>
               <column caption='Net Bookings' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' />
-              <column caption='Value Tier' name='[a1b2c3d4-1111-2222-3333-444455556666]' datatype='string' role='dimension' type='nominal' />
-              <column-instance column='[a1b2c3d4-1111-2222-3333-444455556666]' derivation='None' name='[none:a1b2c3d4-1111-2222-3333-444455556666:nk]' pivot='key' type='nominal' />
+              <column caption='Customer Tier' name='[c3d4e5f6-3333-4444-5555-666677778888]' datatype='string' role='dimension' type='nominal' />
+              <column-instance column='[c3d4e5f6-3333-4444-5555-666677778888]' derivation='None' name='[none:c3d4e5f6-3333-4444-5555-666677778888:nk]' pivot='key' type='nominal' />
               <column-instance column='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' derivation='Sum' name='[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]' pivot='key' type='quantitative' />
             </datasource-dependencies>
           </view>
           <rows>[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]</rows>
-          <cols>[federated.fact].[none:a1b2c3d4-1111-2222-3333-444455556666:nk]</cols>
+          <cols>[federated.fact].[none:c3d4e5f6-3333-4444-5555-666677778888:nk]</cols>
           <pane>
             <mark class='Bar' />
             <encodings>
-              <color column='[federated.fact].[none:Value Tier:nk]' />
+              <color column='[federated.fact].[none:Customer Tier:nk]' />
             </encodings>
           </pane>
         </table>
@@ -142,6 +143,7 @@ MASTER_MAP = {
   '(?i)^Net Bookings$' => { 'id' => 'm-nb',   'name' => 'Net Bookings' },
   '(?i)^Order Date$'   => { 'id' => 'm-od',   'name' => 'Order Date' },
   '(?i)^Value Tier$'   => { 'id' => 'm-vt',   'name' => 'Value Tier' },
+  '(?i)^Customer Tier$'=> { 'id' => 'm-ct',   'name' => 'Customer Tier' },
   '(?i)^Region$'       => { 'id' => 'm-reg',  'name' => 'Region' },
   '(?i)^Weird Metric$' => { 'id' => 'm-wm',   'name' => 'Weird Metric' }
 }
@@ -161,7 +163,7 @@ WEIRD_CSV = <<~CSV
 CSV
 
 TIER_BARS_CSV = <<~CSV
-  Value Tier,Net Bookings
+  Customer Tier,Net Bookings
   Platinum,1200.50
   Silver,800.25
   Gold,500.00
