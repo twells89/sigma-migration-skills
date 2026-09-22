@@ -55,6 +55,7 @@ require_relative 'lib/layout'
 require_relative 'lib/zone_census'
 require_relative 'lib/arrangement_lint'
 require_relative 'lib/workbook_code'
+require_relative 'lib/dashboard_element_assignment'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -278,6 +279,33 @@ dash_layout.each do |d|
   page_for_dash[d['dashboard']] = pg
 end
 abort('no dashboard↔page pairs resolved') if page_for_dash.empty?
+
+# Workbook elements are document-global; a stale/manual layout may currently
+# assign a valid chart to the wrong page or to no page. Reconcile source
+# worksheet provenance and explicit reconstruction renames before any
+# page-local layout path builds its element index.
+layout_assignment = DashboardElementAssignment.reconcile!(
+  legacy_pages: wb_ids['pages'],
+  dashboards: dash_layout,
+  page_for_dashboard: page_for_dash,
+  all_elements: WorkbookCode.elements(wb_ids_raw),
+  provenance: PROV_BY_ID,
+  renames: opts[:renames]
+)
+assignment_errors = layout_assignment['ambiguous'] + layout_assignment['conflicts']
+unless assignment_errors.empty?
+  abort "FATAL: dashboard element assignment is ambiguous/conflicted — refusing duplicate or guessed placement: " \
+        "#{JSON.generate(assignment_errors)}"
+end
+layout_assignment['moved'].each do |record|
+  from = Array(record['from_page_ids']).empty? ? 'no page' : Array(record['from_page_ids']).join(', ')
+  warn "reassigned global element #{record['element_id']} from #{from} to #{record['to_page_id']} " \
+       "for source zone #{record['zone'].inspect} (matched #{record['matched_name'].inspect})"
+end
+if layout_assignment['unmatched'].any?
+  warn "WARN: #{layout_assignment['unmatched'].length} source chart zone(s) matched no document-global element; " \
+       'the zero-dropped-zones invariant will block layout publication if they are data tiles'
+end
 
 def chart_pos(z, opts)
   y0 = z['y_pct'] || 0
@@ -1846,6 +1874,25 @@ unless duplicate_ids.empty? && missing_ids.empty? && unknown_ids.empty? &&
         "(duplicates=#{duplicate_ids.inspect}, missing=#{missing_ids.inspect}, unknown=#{unknown_ids.inspect}, " \
         "invalid_explicit_prunes=#{invalid_pruned.inspect}, duplicate_explicit_prunes=#{duplicate_pruned.inspect})"
 end
+
+census_out = opts[:census_out] || File.join(File.dirname(opts[:out]), 'layout-census.json')
+census_document = {
+  'pages' => census_pages,
+  'bands_detected' => bands_detected,
+  'min_row_expansions' => min_row_expansions,
+  'element_assignment' => layout_assignment
+}
+dropped_pages = census_pages.select { |page| page['dropped'].to_i.positive? }
+if dropped_pages.any?
+  # Preserve diagnostic evidence, but do not publish a layout that knowingly
+  # omits source data tiles. This moves the gate in front of put-layout instead
+  # of relying on a later Phase-6 check after a partial workbook already exists.
+  File.write(census_out, JSON.pretty_generate(census_document) + "\n")
+  detail = dropped_pages.map { |page| "#{page['page']}: #{page['dropped']}" }.join(', ')
+  abort "FATAL: generated layout dropped source data tile(s) (#{detail}); " \
+        "diagnostics written to #{census_out}, layout was not written"
+end
+
 File.write(opts[:out], layout_out)
 File.write("#{opts[:out]}.elements.json", JSON.pretty_generate(sidecar))
 prune_path = "#{opts[:out]}.prune-elements.json"
@@ -1869,12 +1916,9 @@ File.write(prune_path, JSON.pretty_generate({
 # Top-level additions (telemetry, E3):
 #   bands_detected     {header:bool, kpi_rows:N, sidebar:bool} across pages
 #   min_row_expansions N tiles grown to their per-kind minimum row span
-census_out = opts[:census_out] || File.join(File.dirname(opts[:out]), 'layout-census.json')
-File.write(census_out, JSON.pretty_generate({
-  'pages' => census_pages,
-  'bands_detected' => bands_detected,
-  'min_row_expansions' => min_row_expansions
-}) + "\n")
+#   element_assignment document-global elements rehomed by source provenance /
+#                      explicit rename before page-local layout generation
+File.write(census_out, JSON.pretty_generate(census_document) + "\n")
 
 # ---- layout-arrangement.json (gate 8e producer, PLAN-v3 PR-11) ------------
 # One record per dashboard page comparing the SOURCE zone arrangement against

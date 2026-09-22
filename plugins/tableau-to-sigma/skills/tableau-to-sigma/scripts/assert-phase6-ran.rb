@@ -1945,12 +1945,12 @@ end
 # signal (.twb parameters + shared quick filters) against what it built and
 # writes <workdir>/*-controls-coverage.json — until PR-13 a WARN + file that
 # no gate, script, or doc ever read. This gate makes the census load-bearing:
-# every expected signal must be BUILT (status 'emitted'), DECLARED in the
-# control-scope.json sidecar (a dropped / needs-* / narrow-scope record with
-# its evidence — stated per control, never silent), or NAMED in the
-# <workdir>/controls-waivers.json ledger with a reason. An unexplained missing
-# control — a control the user had in Tableau that the migration silently
-# lost — fails BY NAME. NO skip flag: the ledger waiver IS the sanctioned
+# every expected signal must be BUILT (status 'emitted'), terminally DECLARED
+# in the control-scope.json sidecar (a dropped / narrow-scope decision with its
+# evidence), or NAMED in the <workdir>/controls-waivers.json ledger with a
+# reason. `needs-wiring` / `needs-materialization` are NOT terminal decisions:
+# declaration alone cannot turn unfinished wiring green. An unresolved or
+# unexplained missing control fails BY NAME. NO skip flag: the ledger waiver IS the sanctioned
 # escape (the join-plan/LOD doctrine). File-based, so it runs offline.
 # ---------------------------------------------------------------------------
 ctl_census_path = Dir[File.join(opts[:tab], '*-controls-coverage.json')].min
@@ -1966,9 +1966,9 @@ else
     exit 31
   end
   ctl_norm = ->(s) { s.to_s.strip.downcase }
-  # Sidecar declarations: every control-scope record — emitted (with a page or
-  # narrow scope:[...]), dropped, or needs-* — is a recorded decision that
-  # carries its evidence (unreachable roots, source signal, intent).
+  # Sidecar declarations carry evidence (unreachable roots, source signal,
+  # intent), but `needs-*` remains unfinished and blocks below unless the
+  # explicit controls-waivers ledger terminally accepts the scope cut.
   ctl_scope_path = opts[:control_scope] || File.join(opts[:tab], 'control-scope.json')
   ctl_declared = {}
   if File.exist?(ctl_scope_path)
@@ -2017,6 +2017,12 @@ else
     status = r['status'].to_s
     if status == 'emitted'
       ctl_built << name
+    elsif status.start_with?('needs-')
+      if (w = ctl_waiver_for.call(kind, name))
+        ctl_waived_rows << [kind, name, status, w['reason'].to_s.strip]
+      else
+        ctl_unexplained << [kind, name, status]
+      end
     elsif (note = ctl_declared[ctl_norm.call(name)])
       ctl_declared_rows << [kind, name, status, note]
     elsif (w = ctl_waiver_for.call(kind, name))
@@ -2026,13 +2032,14 @@ else
     end
   end
   if ctl_unexplained.any?
-    warn "[FAIL] gate 7c: controls census — #{ctl_unexplained.length} source control signal(s) UNEXPLAINED " \
-         '(present in the source, never built, not declared, not waived):'
+    warn "[FAIL] gate 7c: controls census — #{ctl_unexplained.length} source control signal(s) " \
+         'UNRESOLVED/UNEXPLAINED (present in the source, never built to a terminal state, not waived):'
     ctl_unexplained.each { |k, n, s| warn "         - #{k}:#{n} (census status: #{s})" }
     warn "       Census: #{File.basename(ctl_census_path)}. Every source parameter / quick filter must be"
     warn '       (a) BUILT as a control (build-charts-from-signals.rb --auto-controls), or'
-    warn '       (b) DECLARED in control-scope.json (a dropped/needs-*/narrow-scope record with evidence), or'
+    warn '       (b) terminally DECLARED in control-scope.json (a dropped/narrow-scope decision with evidence), or'
     warn '       (c) NAMED in <workdir>/controls-waivers.json ([{"control":"filter:Region","reason":"…"}]).'
+    warn '       A needs-wiring / needs-materialization declaration is unfinished work and cannot pass GREEN.'
     warn '       NO skip flag — the ledger waiver IS the sanctioned escape; name it in your report.'
     exit 31
   end
@@ -3820,6 +3827,7 @@ if File.exist?(kp21_path)
     kp21_rb = JSON.parse(File.read(kp21_rb_path)) rescue nil
     kp21_els = {}      # normalized element name → [family, ...]
     kp21_el_kinds = {} # normalized element name → [raw kind, ...] (for the message)
+    kp21_by_id = {}     # element id → [family, raw kind], for provenance aliases
     kp21_elements = if kp21_rb.is_a?(Hash)
                       CODE_REP_LOADED ? Sigma::CodeRep.workbook_elements(kp21_rb) :
                                         Array(kp21_rb['elements'])
@@ -3837,6 +3845,48 @@ if File.exist?(kp21_path)
         next if k.empty?
         (kp21_els[k] ||= []) << f
         (kp21_el_kinds[k] ||= []) << el['kind'].to_s
+        kp21_by_id[el['id'].to_s] = [f, el['kind'].to_s] unless el['id'].to_s.empty?
+    end
+    # Manual reconstructions and display-title changes intentionally rename the
+    # Sigma element. Consume the same provenance/rename sidecars as layout and
+    # tile census so a renamed bar cannot evade a verified source "line" check
+    # merely because gate 21 looked up the old title literally.
+    kp21_alias_keys = []
+    kp21_add_alias = lambda do |source_name, family, raw_kind|
+      key = kp21_norm.call(source_name)
+      next if key.empty?
+      (kp21_els[key] ||= []) << family
+      (kp21_el_kinds[key] ||= []) << raw_kind
+      kp21_alias_keys << key
+    end
+    begin
+      renames_path = File.join(opts[:tab], 'layout-renames.json')
+      if File.exist?(renames_path)
+        renames = JSON.parse(File.read(renames_path))
+        if renames.is_a?(Hash)
+          renames.each do |source_name, built_name|
+            built_key = kp21_norm.call(built_name)
+            Array(kp21_els[built_key]).zip(Array(kp21_el_kinds[built_key])).each do |family, raw_kind|
+              kp21_add_alias.call(source_name, family, raw_kind) if family
+            end
+          end
+        end
+      end
+      provenance_path = File.join(opts[:tab], 'chart-provenance.json')
+      if File.exist?(provenance_path)
+        provenance_doc = JSON.parse(File.read(provenance_path))
+        provenance = provenance_doc.is_a?(Hash) && provenance_doc['elements'].is_a?(Hash) ?
+                       provenance_doc['elements'] : provenance_doc
+        if provenance.is_a?(Hash)
+          provenance.each do |element_id, record|
+            next unless record.is_a?(Hash) && kp21_by_id[element_id.to_s]
+            family, raw_kind = kp21_by_id[element_id.to_s]
+            kp21_add_alias.call(record['worksheet'], family, raw_kind)
+          end
+        end
+      end
+    rescue JSON::ParserError => e
+      warn "[WARN] gate 21: chart rename/provenance sidecar unreadable (#{e.message}); literal names only"
     end
     kp21_waivers = {} # normalized tile → reason
     Array(kp21['kind_waivers']).each do |w|
@@ -3868,7 +3918,7 @@ if File.exist?(kp21_path)
         kp21_mismatch << [title, exp_f, fams.uniq, Array(kp21_el_kinds[k]).uniq]
       end
     end
-    kp21_unread = kp21_els.keys - kp21_verified_keys -
+    kp21_unread = kp21_els.keys - kp21_alias_keys.uniq - kp21_verified_keys -
                   kp21['tiles'].select { |t| t.is_a?(Hash) }.map { |t| kp21_norm.call(t['title']) }
     # E5.11: the kind-parity result is CENSUS data — stamp the summary beside
     # the tile census in parity-final.json (when present) and land every

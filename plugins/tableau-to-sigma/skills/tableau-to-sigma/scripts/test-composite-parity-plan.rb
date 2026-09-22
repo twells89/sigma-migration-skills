@@ -9,6 +9,7 @@ require 'json'
 require 'open3'
 require 'rbconfig'
 require 'tmpdir'
+require_relative 'lib/zone_census'
 
 SCRIPT = File.join(__dir__, 'auto-parity-plan.rb')
 
@@ -41,6 +42,9 @@ def stage_fixture(dir, extra_worksheet_csv: false)
       }
     }
   ))
+  File.write(File.join(dir, 'layout-renames.json'), JSON.generate(
+    'Embedded Latency' => 'REBUILT Latency'
+  ))
   File.write(File.join(dir, 'dashboard-layout.json'), JSON.generate([
     {
       'dashboard' => 'Operations Dashboard',
@@ -49,6 +53,13 @@ def stage_fixture(dir, extra_worksheet_csv: false)
           'kind' => 'chart',
           'caption' => 'Embedded Volume',
           'measures' => ['Volume'],
+          'rows_shelf' => { 'dim_count' => 1 },
+          'cols_shelf' => { 'measure_count' => 1 }
+        },
+        {
+          'kind' => 'chart',
+          'caption' => 'Embedded Latency',
+          'measures' => ['Latency'],
           'rows_shelf' => { 'dim_count' => 1 },
           'cols_shelf' => { 'measure_count' => 1 }
         }
@@ -78,10 +89,23 @@ def stage_fixture(dir, extra_worksheet_csv: false)
         ],
         'xAxis' => { 'columnId' => 'x-period' },
         'yAxis' => { 'columnIds' => ['y-volume'] }
+      },
+      {
+        'id' => 'el-rebuilt-latency',
+        'kind' => 'line-chart',
+        'name' => 'REBUILT Latency',
+        'source' => { 'kind' => 'table', 'elementId' => 'master' },
+        'columns' => [
+          { 'id' => 'x-period-2', 'name' => 'Period' },
+          { 'id' => 'y-latency', 'name' => 'Latency' }
+        ],
+        'xAxis' => { 'columnId' => 'x-period-2' },
+        'yAxis' => { 'columnIds' => ['y-latency'] }
       }
     ],
     'layout' => '<Page id="page-data"><Element elementId="master"/></Page>' \
-                '<Page id="page-dashboard"><Element elementId="el-volume"/></Page>'
+                '<Page id="page-dashboard"><Element elementId="el-volume"/>' \
+                '<Element elementId="el-rebuilt-latency"/></Page>'
   ))
 end
 
@@ -103,6 +127,16 @@ Dir.mktmpdir do |dir|
   plan, log, status = run_plan(dir)
   check.call(status.success?, "dashboard-only CSV selects the oracle route (exit #{status.exitstatus})")
   check.call(plan && plan['charts'] == [], 'no expected:null chart stubs are emitted')
+  check.call(plan && plan['chart_inventory'].map { |chart| chart['sigma_element_id'] }.sort ==
+               %w[el-rebuilt-latency el-volume],
+             'composite route retains a structural inventory for every built tile')
+  rebuilt = plan && plan['chart_inventory'].find { |chart| chart['sigma_element_id'] == 'el-rebuilt-latency' }
+  check.call(rebuilt && rebuilt['tableau_view'] == 'Embedded Latency' && rebuilt['matched_via'] == 'rename',
+             'persisted layout rename maps a reconstructed tile back to its source zone')
+  layout = JSON.parse(File.read(File.join(dir, 'dashboard-layout.json')))
+  census = plan && ZoneCensus.tile_census(layout, plan['chart_inventory'], ['Operations Dashboard'])
+  check.call(census && census['zones_total'] == 2 && census['zones_unmatched'].zero?,
+             'tile census consumes the structural inventory instead of reporting false 0/N')
   check.call(plan && plan['workbook_id'] == 'wb-test',
              'top-level workbook id survives a zero-chart plan')
   check.call(plan && plan['oracle_mode'] == 'anchors-warehouse',

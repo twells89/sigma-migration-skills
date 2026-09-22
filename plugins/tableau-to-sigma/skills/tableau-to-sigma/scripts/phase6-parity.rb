@@ -78,6 +78,13 @@ def http_json(path)
   Sigma.request(:get, path)
 end
 
+def document_version(spec)
+  return nil unless spec.is_a?(Hash)
+
+  value = spec['latestDocumentVersion'] || spec['latestVersion'] || spec['documentVersion']
+  value.nil? || value.to_s.empty? ? nil : value.to_s
+end
+
 plan_path = File.join(opts[:tab], 'parity-plan.json')
 
 # Finalize does NOT rebuild the plan (that would divorce it from the actuals just
@@ -96,11 +103,12 @@ if !opts[:finalize]
   # PASS 1 — build plan + emit per-chart MCP instructions
   warn "Phase 6 PASS 1: reading workbook spec #{opts[:wb]}"
   raw_spec = http_json("/v2/workbooks/#{opts[:wb]}/spec")
-  # Live GET now nests non-metadata fields under `document` (verified 2026-08-03/04);
-  # unwrap so wb-readback.json keeps the flat {pages:[...]} shape downstream
-  # scripts (auto-parity-plan.rb, verify-anchors.rb, ...) already expect on disk.
-  spec = Sigma::CodeRep.document(raw_spec)
-  File.write(File.join(opts[:tab], 'wb-readback.json'), JSON.pretty_generate(spec))
+  live_document_version = document_version(raw_spec)
+  # Preserve the full live response: metadata (workbookId and
+  # latestDocumentVersion) sits beside `document`. WorkbookCode transparently
+  # reads the nested release shape, while evidence/readback freshness gates
+  # need the outer version metadata to reject stale artifacts.
+  File.write(File.join(opts[:tab], 'wb-readback.json'), JSON.pretty_generate(raw_spec))
 
   # Idempotence guard: if a parity plan already exists, REUSE it (unless
   # --regen-plan). auto-parity-plan.rb rewrites the plan from scratch, which
@@ -115,17 +123,27 @@ if !opts[:finalize]
   # → a false FAIL at finalize (the current data matches Sigma, not the plan).
   # If the view CSVs are newer than the data this plan was built from, rebuild.
   plan_stale = false
+  plan_stale_reason = nil
   if File.exist?(plan_path) && !opts[:regen_plan]
-    built_mtime = (JSON.parse(File.read(plan_path))['source_csv_max_mtime'] rescue nil) ||
+    prior_plan = (JSON.parse(File.read(plan_path)) rescue {})
+    built_mtime = prior_plan['source_csv_max_mtime'] ||
                   File.mtime(plan_path).to_i
     csv_mtime = Dir.glob(File.join(opts[:tab], 'views', '*.csv'))
                    .map { |f| File.mtime(f).to_i }.max || 0
     plan_stale = csv_mtime > built_mtime
+    plan_stale_reason = 'view CSVs are newer than the plan' if plan_stale
+    if live_document_version &&
+       prior_plan['workbook_document_version'].to_s != live_document_version
+      plan_stale = true
+      plan_stale_reason = "workbook document version changed " \
+                          "(plan=#{prior_plan['workbook_document_version'].inspect}, live=#{live_document_version})"
+    end
   end
   if File.exist?(plan_path) && !opts[:regen_plan] && !plan_stale
     warn "Phase 6 PASS 1: REUSING existing #{plan_path} (operator waives/edits preserved; pass --regen-plan to rebuild from scratch)"
   else
-    warn 'Phase 6 PASS 1: existing plan is STALE — view CSVs are newer than the data it was built from; REBUILDING so expected values match current data (prior operator edits on this plan are discarded — the source data changed underneath them).' if plan_stale
+    warn "Phase 6 PASS 1: existing plan is STALE — #{plan_stale_reason}; REBUILDING so source mappings " \
+         'and expected values bind to the current workbook (prior operator edits on this plan are discarded).' if plan_stale
     warn "Phase 6 PASS 1: building parity plan"
     plan_args = ['ruby', File.join(__dir__, 'auto-parity-plan.rb'),
                  '--tableau', opts[:tab],
@@ -143,6 +161,10 @@ if !opts[:finalize]
   end
 
   plan = JSON.parse(File.read(plan_path))
+  if live_document_version && plan['workbook_document_version'].to_s != live_document_version
+    plan['workbook_document_version'] = live_document_version
+    File.write(plan_path, JSON.pretty_generate(plan))
+  end
   # Persist the census/plan dashboard scope so PASS-2/finalize (which may run
   # without --dashboard flags) scopes the tile census identically (gate-5 fix).
   if (opts[:dashboards] || []).any? && plan["dashboards_scope"] != opts[:dashboards]
@@ -298,6 +320,21 @@ abort("plan not found at #{plan_path}; run pass 1 first") unless File.exist?(pla
 plan = JSON.parse(File.read(plan_path))
 actuals = JSON.parse(File.read(opts[:actuals]))
 
+# A manual/reconstructed tile PUT changes element ids, names, kinds, or page
+# ownership without changing Tableau CSV mtimes. Bind the plan to Sigma's
+# document version so finalize can never combine stale mappings with current
+# actuals and screenshots.
+if plan['workbook_id']
+  live_spec = http_json("/v2/workbooks/#{plan['workbook_id']}/spec")
+  live_version = document_version(live_spec)
+  planned_version = plan['workbook_document_version'].to_s
+  if live_version && planned_version != live_version
+    abort "Phase 6 finalize blocked: parity-plan.json is STALE " \
+          "(plan document version #{planned_version.empty? ? 'missing' : planned_version}, " \
+          "live #{live_version}). Re-run PASS 1 with --regen-plan, recollect actuals, then finalize."
+  end
+end
+
 warn "Phase 6 PASS 2: injecting actuals (#{actuals.size} charts) → #{plan_path}"
 plan['charts'].each do |c|
   # Actuals are keyed by the chart's `chart` field, but a HAND-AUTHORED parity
@@ -360,10 +397,16 @@ if File.exist?(dash_layout_path)
     # zones made every out-of-scope tile read "unmatched". The plan persists its
     # own scope so a finalize-only invocation scopes identically.
     census_scope = opts[:dashboards] || plan['dashboards_scope'] || []
-    tile_census = ZoneCensus.tile_census(dash_layout, plan['charts'], census_scope)
+    # Value-parity `charts` is intentionally empty when Tableau exposes only a
+    # composite dashboard CSV. `chart_inventory` still records every built
+    # Sigma tile through chart provenance / persisted layout renames, so the
+    # structural census never reports a false 0/N merely because per-sheet CSV
+    # value oracles are unavailable.
+    census_charts = plan['chart_inventory'].is_a?(Array) ? plan['chart_inventory'] : plan['charts']
+    tile_census = ZoneCensus.tile_census(dash_layout, census_charts, census_scope)
     warn "tile census: #{tile_census['zones_total']} dashboard zone(s)" \
          "#{census_scope.any? ? " (scoped: #{Array(tile_census['dashboards_scoped']).join(', ')})" : ''}, " \
-         "#{plan['charts'].size} chart(s) in parity plan, #{tile_census['zones_unmatched']} unmatched" \
+         "#{census_charts.size} built chart(s) in census inventory, #{tile_census['zones_unmatched']} unmatched" \
          "#{tile_census['zones_unmatched'].positive? ? " — UNMATCHED: #{tile_census['unmatched_zone_names'].join(', ')}" : ''}"
   else
     warn "tile census skipped: #{dash_layout_path} is not a parse-twb-layout array"
