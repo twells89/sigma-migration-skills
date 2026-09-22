@@ -4825,6 +4825,20 @@ layout.each do |dash|
           color_dim = { 'id' => "m-#{color_hdr.downcase.gsub(/\W+/,'-')}", 'name' => color_hdr }
         end
       end
+    elsif (cc = z.dig('channels', 'color', 'column'))
+      # Tableau can place the SAME category on the axis and Color shelf. Its
+      # CSV then has only [dim, measure], so the 3-channel detector above never
+      # sets color_hdr. Emit a duplicate column for Sigma's exclusive color
+      # channel (one column cannot be referenced by both xAxis and color).
+      guid = guid_from_text(cc.to_s)
+      info = guid ? (meta['columns_by_guid'] || {})[guid] : nil
+      color_caption = (info && info['caption']).to_s.strip
+      if !color_caption.empty? &&
+         [dim['name'].to_s.strip, dim_hdr.to_s.strip].any? { |name| name.casecmp?(color_caption) }
+        color_dim = dim.dup
+        warnings << "'#{cap}' uses '#{color_caption}' on both the axis and Color shelf — " \
+                    'emitted a duplicate category column for Sigma color-channel exclusivity'
+      end
     end
 
     # Decide the Sigma aggregator. Priority:

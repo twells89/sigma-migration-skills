@@ -83,6 +83,26 @@ TWB = <<~XML
           </pane>
         </table>
       </worksheet>
+      <worksheet name='Tier Bars'>
+        <table>
+          <view>
+            <datasource-dependencies datasource='federated.fact'>
+              <column caption='Net Bookings' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' />
+              <column caption='Value Tier' name='[a1b2c3d4-1111-2222-3333-444455556666]' datatype='string' role='dimension' type='nominal' />
+              <column-instance column='[a1b2c3d4-1111-2222-3333-444455556666]' derivation='None' name='[none:a1b2c3d4-1111-2222-3333-444455556666:nk]' pivot='key' type='nominal' />
+              <column-instance column='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' derivation='Sum' name='[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]' pivot='key' type='quantitative' />
+            </datasource-dependencies>
+          </view>
+          <rows>[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]</rows>
+          <cols>[federated.fact].[none:a1b2c3d4-1111-2222-3333-444455556666:nk]</cols>
+          <pane>
+            <mark class='Bar' />
+            <encodings>
+              <color column='[federated.fact].[none:a1b2c3d4-1111-2222-3333-444455556666:nk]' />
+            </encodings>
+          </pane>
+        </table>
+      </worksheet>
       <worksheet name='Weird Metric by Region'>
         <table>
           <view>
@@ -110,6 +130,7 @@ TWB = <<~XML
           <zone id='1' type-v2='layout-basic' x='0' y='0' w='100000' h='100000'>
             <zone id='2' name='Bookings by Tier' x='0' y='0' w='50000' h='100000' />
             <zone id='3' name='Weird Metric by Region' x='50000' y='0' w='50000' h='100000' />
+            <zone id='4' name='Tier Bars' x='0' y='0' w='50000' h='50000' />
           </zone>
         </zones>
       </dashboard>
@@ -139,6 +160,14 @@ WEIRD_CSV = <<~CSV
   West,9.1
 CSV
 
+TIER_BARS_CSV = <<~CSV
+  Value Tier,Net Bookings
+  Platinum,1200.50
+  Silver,800.25
+  Gold,500.00
+  Bronze,200.10
+CSV
+
 build_out = nil
 build_log = ''
 formats_emitted = nil
@@ -151,15 +180,18 @@ Dir.mktmpdir do |d|
   File.write(File.join(d, 'get-workbook.json'),
              JSON.dump('views' => { 'view' => [
                { 'id' => 'v1', 'name' => 'Bookings by Tier' },
-               { 'id' => 'v2', 'name' => 'Weird Metric by Region' }
+               { 'id' => 'v2', 'name' => 'Weird Metric by Region' },
+               { 'id' => 'v3', 'name' => 'Tier Bars' }
              ] }))
   Dir.mkdir(File.join(d, 'views'))
   File.write(File.join(d, 'views', 'v1.csv'), TIER_CSV)
   File.write(File.join(d, 'views', 'v2.csv'), WEIRD_CSV)
+  File.write(File.join(d, 'views', 'v3.csv'), TIER_BARS_CSV)
   File.write(File.join(d, 'png-read.json'),
              JSON.dump('source_png' => 'views/v1.png',
                        'tiles' => [{ 'title' => 'Bookings by Tier', 'kind' => 'bar-chart', 'orientation' => 'vertical' },
-                                   { 'title' => 'Weird Metric by Region', 'kind' => 'bar-chart', 'orientation' => 'vertical' }],
+                                   { 'title' => 'Weird Metric by Region', 'kind' => 'bar-chart', 'orientation' => 'vertical' },
+                                   { 'title' => 'Tier Bars', 'kind' => 'bar-chart', 'orientation' => 'vertical' }],
                        'text_elements' => [], 'filter_shelf' => []))
   abort 'parse-twb-layout failed' unless system('ruby', PARSER, twb, lay, out: File::NULL, err: File::NULL)
   out = File.join(d, 'specs.json')
@@ -172,6 +204,7 @@ end
 els = build_out ? (build_out.is_a?(Array) ? build_out : (build_out['elements'] || (build_out['pages'] || []).flat_map { |p| p['elements'] || [] })) : []
 tier  = els.find { |e| e['name'].to_s.casecmp?('Bookings by Tier') }
 weird = els.find { |e| e['name'].to_s.casecmp?('Weird Metric by Region') }
+same_axis_color = els.find { |e| e['name'].to_s.casecmp?('Tier Bars') }
 
 # ---- 1. ORDERED series scheme ----------------------------------------------
 color = tier && tier['color']
@@ -182,6 +215,10 @@ check(color && color['scheme'] == %w[#c9d1d3 #f2c037],
       "(the inversion kill; got #{color && color['scheme'].inspect})", fails)
 check(build_log.include?('series colors PINNED'),
       'builder logged the pinned member→color ordering', fails)
+check(same_axis_color && same_axis_color.dig('color', 'by') == 'category',
+      "axis+Color-shelf chart emits a category color channel (got #{same_axis_color && same_axis_color['color'].inspect})", fails)
+check(same_axis_color && same_axis_color.dig('color', 'column') != same_axis_color.dig('xAxis', 'columnId'),
+      'axis+Color-shelf chart uses a duplicate column to satisfy channel exclusivity', fails)
 
 # ---- 2. number format from the column default-format ------------------------
 ycol = tier && (tier['columns'] || []).find { |c| tier.dig('yAxis', 'columnIds')&.include?(c['id']) }
