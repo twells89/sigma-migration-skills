@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -71,6 +73,7 @@ DM_PICKER = load_script("find_or_pick_dm.py")
 CLEANUP = load_script("cleanup_orphan_workbooks.py")
 DOCTOR_GATE = load_script("assert-doctor-ran.py")
 INTAKE = load_script("intake.py")
+PHASE_GATE = load_script("assert-phase6-ran.py")
 
 
 class WorkbookPreflightTest(unittest.TestCase):
@@ -515,6 +518,54 @@ class DecisionAndCatalogTest(unittest.TestCase):
 
 
 class OfflineBoundaryTest(unittest.TestCase):
+    def test_mixed_control_probe_requires_complete_skip_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workdir = Path(temporary)
+            probe = workdir / "probe-controls"
+            probe.mkdir()
+            export = probe / "pass.csv"
+            export.write_text("Region,Sales\nWest,10\n", encoding="utf-8")
+            write_json(probe / "probe-results.json", [
+                {"control": "region-filter", "result": "PASS"},
+                {"control": "date-filter", "result": "SKIP"},
+            ])
+            write_json(probe / "probe-evidence.json", {
+                "workbook_id": "wb-1",
+                "doc_version": "7",
+                "probed_at": datetime.now(timezone.utc).isoformat(),
+                "exports": {
+                    export.name: hashlib.sha256(export.read_bytes()).hexdigest(),
+                },
+            })
+            controls = [
+                {"id": "region-control", "controlId": "region-filter"},
+                {"id": "date-control", "controlId": "date-filter"},
+            ]
+            with self.assertRaises(PHASE_GATE.GateFailure):
+                PHASE_GATE.gate_flip(
+                    workdir,
+                    "wb-1",
+                    "7",
+                    controls,
+                    True,
+                    None,
+                )
+            write_json(workdir / "control-flip-unverified.json", {
+                "workbookId": "wb-1",
+                "unprobed": [{
+                    "control": "date-filter",
+                    "reason": "no safe automatic date sample",
+                }],
+            })
+            PHASE_GATE.gate_flip(
+                workdir,
+                "wb-1",
+                "7",
+                controls,
+                True,
+                None,
+            )
+
     def test_cleanup_no_ledger_and_single_ledger_never_call_network(self):
         def forbidden_requester(_method, _path):
             raise AssertionError("cleanup attempted network access")

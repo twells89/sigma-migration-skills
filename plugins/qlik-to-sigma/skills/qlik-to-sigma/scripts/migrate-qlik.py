@@ -586,6 +586,14 @@ class Migration:
         if not (self.workdir / "formula-mapping.json").is_file():
             raise RuntimeError("normalizer did not write formula-mapping.json")
         converted = load_json(output_path)
+        (self.workdir / "security.json").write_text(
+            json.dumps(
+                {"security": converted.get("security") or []},
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         statistics = converted.get("stats") or {}
         warnings = converted.get("warnings") or []
         print(
@@ -1064,6 +1072,7 @@ class Migration:
             )
             dm_result = load_json(self.workdir / "dm-result.json")
             dm_id = dm_result.get("dataModelId")
+        if not self.args.dry_run and dm_id:
             (self.workdir / "dm-ids.json").write_text(
                 json.dumps({"dataModelId": dm_id}, indent=2) + "\n",
                 encoding="utf-8",
@@ -1361,7 +1370,7 @@ class Migration:
             parsed = list(csv.reader(body.splitlines())) if body else []
             data_rows = parsed[1:] if parsed else []
             actuals[str(element.get("name") or element.get("elementId"))] = data_rows
-            if element.get("kind") != "kpi-chart":
+            if element.get("kind") not in {"kpi-chart", "progress"}:
                 continue
             expression = ((element.get("qlik") or {}).get("measures") or [None])[0]
             qlik_value = snapshot_kpis.get(expression)
@@ -1422,7 +1431,7 @@ class Migration:
         }
         bucket_rows = []
         for element in element_map:
-            if element.get("kind") == "kpi-chart":
+            if element.get("kind") in {"kpi-chart", "progress"}:
                 continue
             dimensions = (element.get("qlik") or {}).get("dims") or []
             if not dimensions:
@@ -1671,14 +1680,7 @@ class Migration:
                 default=None,
             )
             decision, information = flip_gate.decide(probe.returncode, results)
-            if decision in {"fail", "error"}:
-                flip_ok = False
-                print(
-                    f"     [FAIL] control flip gate: {decision}; "
-                    f"{len(information['fails'])} failure(s)"
-                )
-            elif decision == "advisory":
-                print("     [WARN] no control auto-probeable")
+            if information["skips"]:
                 (self.workdir / "control-flip-unverified.json").write_text(
                     json.dumps(
                         {
@@ -1695,6 +1697,14 @@ class Migration:
                     + "\n",
                     encoding="utf-8",
                 )
+            if decision in {"fail", "error"}:
+                flip_ok = False
+                print(
+                    f"     [FAIL] control flip gate: {decision}; "
+                    f"{len(information['fails'])} failure(s)"
+                )
+            elif decision == "advisory":
+                print("     [WARN] no control auto-probeable")
             else:
                 print(
                     f"     [OK] {len(information['passes'])} control(s) proven live"

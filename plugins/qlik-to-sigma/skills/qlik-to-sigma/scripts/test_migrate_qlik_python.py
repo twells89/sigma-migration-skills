@@ -482,6 +482,83 @@ class OrchestrationTests(unittest.TestCase):
             self.assertEqual("WAREHOUSE-PASS", parity["per_chart"][0]["status"])
             self.assertEqual(["--source-parity-unavailable"], parity["waivers"])
 
+    def test_progress_visual_participates_in_source_value_parity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workdir = Path(temporary)
+            migration = migrate.Migration(self.args())
+            migration.args.app = None
+            migration.workdir = workdir
+            (workdir / "element-map.json").write_text(
+                json.dumps([{
+                    "elementId": "progress-1",
+                    "name": "Sales Gauge",
+                    "kind": "progress",
+                    "qlik": {
+                        "objectId": "gauge-1",
+                        "dims": [],
+                        "measures": ["Sum(Sales)"],
+                    },
+                }]),
+                encoding="utf-8",
+            )
+            (workdir / "control-scope.json").write_text(
+                json.dumps({
+                    "sourceFilterSignals": 0,
+                    "controls": [],
+                    "unbound": [],
+                }),
+                encoding="utf-8",
+            )
+            live = {
+                "workbookId": "wb-1",
+                "latestDocumentVersion": 7,
+                "document": {
+                    "pages": [{"id": "page-1", "name": "Overview"}],
+                    "elements": [{
+                        "id": "progress-1",
+                        "name": "Sales Gauge",
+                        "kind": "progress",
+                        "value": "Sum([Master/Sales])",
+                    }],
+                    "layout": (
+                        '<Page id="page-1"><Element elementId="progress-1" '
+                        'gridColumn="1 / 25" gridRow="1 / 13"/></Page>'
+                    ),
+                },
+            }
+
+            def api(_method, path, **_kwargs):
+                if "/columns" in path:
+                    return {
+                        "entries": [{
+                            "elementId": "progress-1",
+                            "type": {"type": "number"},
+                        }]
+                    }
+                if path.endswith("/spec"):
+                    return live
+                raise AssertionError(path)
+
+            migration.export_elements = lambda *_args: {
+                "progress-1": "Value\n42\n"
+            }
+            with mock.patch.object(migrate.sigma_rest, "request", side_effect=api):
+                parity_ok, _, _, _, parity = migration.parity(
+                    {"workbookId": "wb-1"},
+                    "dm-1",
+                    {},
+                    {"kpis": [{"expr": "Sum(Sales)", "value": "42"}]},
+                    [{"id": "gauge-1", "title": "Sales Gauge"}],
+                    {
+                        "sourceVisualIds": ["gauge-1"],
+                        "builtSourceVisualIds": ["gauge-1"],
+                    },
+                )
+            self.assertTrue(parity_ok)
+            self.assertEqual(1, parity["charts_total"])
+            self.assertEqual("MATCH", parity["per_chart"][0]["status"])
+            self.assertEqual("progress", parity["per_chart"][0]["kind"])
+
     def test_terminal_gate_order_is_cleanup_finalize_assert_finalize(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workdir = Path(temporary)

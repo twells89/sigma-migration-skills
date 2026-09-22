@@ -107,6 +107,14 @@ class CompletionContractTest(unittest.TestCase):
                 "columns": [{"id": "country", "name": "Country"}],
             }]}],
         })
+        write_json(wd / "dm-ids.json", {"dataModelId": "dm-1"})
+        write_json(wd / "datamodel-readback.json", {
+            "dataModelId": "dm-1",
+            "pages": [{"elements": [{
+                "id": "dm-orders", "name": "Orders Country", "kind": "table",
+                "columns": [{"id": "country", "name": "Country"}],
+            }]}],
+        })
         workbook_spec = {
             "pages": [{"id": "sheet-1", "name": "Overview", "elements": [{
                 "id": "sigma-chart-1", "name": "Sales", "kind": "bar-chart",
@@ -456,6 +464,25 @@ class CompletionContractTest(unittest.TestCase):
         result = self.assert_phase6()
         self.assertEqual(32, result.returncode, result.stdout + result.stderr)
         self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_stale_security_decision_cannot_approve_new_model(self):
+        app_meta_path = self.workdir / "app-meta.json"
+        app_meta = json.loads(app_meta_path.read_text())
+        app_meta["hasSectionAccess"] = True
+        write_json(app_meta_path, app_meta)
+        write_json(self.workdir / "security-decision.json", {
+            "decision": "port",
+            "status": "applied",
+            "readback_verified": True,
+            "dataModelId": "different-model",
+            "run_id": "stale-run",
+            "readback_sha256": "0" * 64,
+        })
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(32, result.returncode, result.stdout + result.stderr)
+        self.assertIn("stale", result.stderr)
 
     def test_missing_app_meta_is_valid_for_unsecured_offline_project(self):
         (self.workdir / "app-meta.json").unlink()

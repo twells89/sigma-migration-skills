@@ -658,10 +658,10 @@ Row/column security is **never silently dropped and never silently ported** — 
    ```bash
    # Python profile self-mints; optional shell-neutral token handoff:
    python3 scripts/vendor/get_token.py --workdir <WORK>
-   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
-   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
+   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK>            # plan only (default)
+   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK> --provision --apply
    ```
-   `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
+   `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element, reads the model back, and writes run/model/hash-bound `security-decision.json`.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 
 For a detected Section Access app, unattended Python runs default to **abort

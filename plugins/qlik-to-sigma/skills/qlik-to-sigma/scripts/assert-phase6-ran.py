@@ -44,6 +44,7 @@ QUERYABLE_KINDS = {
     "pivot",
     "kpi",
     "kpi-chart",
+    "progress",
     "bar",
     "bar-chart",
     "line",
@@ -285,6 +286,7 @@ def gate_coverage(workdir: Path, parity: dict[str, Any]) -> None:
         or set(source_ids) != set(built_ids)
         or len(source_ids) != len(set(source_ids))
         or len(built_ids) != len(set(built_ids))
+        or integer(parity.get("charts_total")) != len(built_ids)
         or unbuilt
     ):
         fail(
@@ -586,6 +588,43 @@ def gate_flip(
             for row in rows
             if row.get("workbookId") and str(row.get("workbookId")) != workbook_id
         }
+        if skips:
+            marker_path = workdir / "control-flip-unverified.json"
+            marker = (
+                load_object(marker_path, 21, "control-flip")
+                if marker_path.is_file()
+                else {}
+            )
+            expected_controls = {
+                str(row.get("controlId") or row.get("id"))
+                for row in controls
+                if row.get("controlId") or row.get("id")
+            }
+            passed_controls = {
+                str(row.get("control"))
+                for row in passes
+                if row.get("control")
+            }
+            skipped_controls = {
+                str(row.get("control"))
+                for row in skips
+                if row.get("control")
+            }
+            marker_controls = {
+                str(row.get("control"))
+                for row in marker.get("unprobed") or []
+                if isinstance(row, dict) and row.get("control")
+            }
+            if not (
+                marker.get("workbookId") == workbook_id
+                and expected_controls == passed_controls | skipped_controls
+                and skipped_controls == marker_controls
+            ):
+                fail(
+                    21,
+                    "control-flip",
+                    "mixed PASS/SKIP control evidence lacks complete advisory coverage",
+                )
         if failures or not passes or wrong_workbooks:
             fail(
                 21,
@@ -780,6 +819,24 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
     if not section_access:
         return None
     decision = load_object(workdir / "security-decision.json", 32, "security")
+    dm_ids = load_object(workdir / "dm-ids.json", 32, "security")
+    run_state = load_object(workdir / "run-state.json", 32, "security")
+    readback_path = workdir / "datamodel-readback.json"
+    if not readback_path.is_file():
+        fail(32, "security", "data-model readback is missing")
+    expected_hash = hashlib.sha256(readback_path.read_bytes()).hexdigest()
+    if (
+        str(decision.get("dataModelId") or "")
+        != str(dm_ids.get("dataModelId") or "")
+        or str(decision.get("run_id") or "")
+        != str(run_state.get("run_id") or "")
+        or str(decision.get("readback_sha256") or "").lower() != expected_hash
+    ):
+        fail(
+            32,
+            "security",
+            "security decision is stale or belongs to a different run/data model",
+        )
     choice = str(decision.get("decision") or "")
     if choice == "skip":
         reason = str(decision.get("reason") or "").strip()

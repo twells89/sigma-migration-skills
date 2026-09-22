@@ -209,6 +209,7 @@ def assert_artifacts(
         "control-scope.json",
         "workbook-coverage.json",
         "formula-mapping.json",
+        "security.json",
     )
     missing = [name for name in required if not (workdir / name).is_file()]
     if missing:

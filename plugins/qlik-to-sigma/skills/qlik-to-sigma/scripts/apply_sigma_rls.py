@@ -53,12 +53,14 @@ name. --provision creates missing attributes/teams (assign per-user values separ
 Works for tableau/quicksight/powerbi/thoughtspot/qlik/lookml converter output alike.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 BASE = os.environ.get("SIGMA_BASE_URL")
 TOK = os.environ.get("SIGMA_API_TOKEN")
@@ -241,7 +243,15 @@ def _resolve_col_ids(element, names):
         else: print(f"  WARN: CLS column '{nm}' not found on element — skipped.")
     return out
 
-def apply_from_security(dm_id, security, do_apply, do_provision):
+def apply_from_security(
+    dm_id,
+    security,
+    do_apply,
+    do_provision,
+    decision_out=None,
+    run_id=None,
+    decision="port",
+):
     """Provision attrs/teams + apply RLS calc/filter and CLS for each result.security entry."""
     spec = api("GET", f"/v2/dataModels/{dm_id}/spec")
     if not isinstance(spec, dict):
@@ -275,11 +285,55 @@ def apply_from_security(dm_id, security, do_apply, do_provision):
             print(f"CLS → element '{_elname(el)}': hide {c.get('restrictedColumnNames')}")
             if do_apply and ids:
                 el.setdefault("columnSecurities", []).append({"id": _short_id("cls"), "criteria": c.get("criteria") or {"kind": "no-one-can-view"}, "restrictedColumns": ids}); applied += 1
+    expected_rules = sum(
+        bool(rule.get("rls") or rule.get("cls"))
+        for rule in security
+        if isinstance(rule, dict)
+    )
     if do_apply and applied:
         res = api("PUT", f"/v2/dataModels/{dm_id}/spec", spec)
         print(f"PUT spec -> applied {applied} rule(s):", (json.dumps(res)[:200] if isinstance(res, dict) else str(res)[:200]))
+        readback = api("GET", f"/v2/dataModels/{dm_id}/spec")
+        verified = isinstance(readback, dict) and applied == expected_rules
+        if decision_out:
+            decision_path = Path(decision_out).expanduser().resolve()
+            decision_path.parent.mkdir(parents=True, exist_ok=True)
+            readback_path = decision_path.parent / "datamodel-readback.json"
+            readback_path.write_text(
+                json.dumps(readback, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            decision_path.write_text(
+                json.dumps(
+                    {
+                        "decision": decision,
+                        "status": "applied" if verified else "failed",
+                        "readback_verified": verified,
+                        "rules_detected": len(security),
+                        "rules_applied": applied,
+                        "dataModelId": dm_id,
+                        "run_id": run_id,
+                        "readback_sha256": hashlib.sha256(
+                            readback_path.read_bytes()
+                        ).hexdigest(),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            print(f"security decision evidence -> {decision_path}")
+        if not verified:
+            print(
+                f"FATAL: applied/readback evidence covers {applied}/{expected_rules} rule(s)",
+                file=sys.stderr,
+            )
+            return 1
     elif not do_apply:
         print("\n(plan only — pass --apply --dm-id <id> to PATCH these into the DM spec; --provision to create attributes/teams.)")
+    elif expected_rules:
+        print("FATAL: no security rules were applied", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -297,6 +351,8 @@ def main():
     ap.add_argument("--apply", action="store_true", help="PATCH the RLS calc col + filter into the DM element spec")
     ap.add_argument("--from-security", help="path to a converter result.security[] JSON (batch RLS+CLS apply)")
     ap.add_argument("--provision", action="store_true", help="create missing user attributes / teams (with --from-security)")
+    ap.add_argument("--workdir", help="migration workdir for bound security-decision/readback evidence")
+    ap.add_argument("--decision", choices=("port", "customize"), default="port")
     a = ap.parse_args()
 
     # Batch mode: ingest a converter's result.security[] and provision + apply all rules.
@@ -305,7 +361,18 @@ def main():
             sys.exit("--from-security requires --dm-id (the posted data model).")
         raw = json.load(open(a.from_security))
         security = raw.get("security", raw) if isinstance(raw, dict) else raw
-        return apply_from_security(a.dm_id, security, a.apply, a.provision)
+        workdir = Path(a.workdir).expanduser().resolve() if a.workdir else Path(a.from_security).expanduser().resolve().parent
+        run_state_path = workdir / "run-state.json"
+        run_state = json.loads(run_state_path.read_text(encoding="utf-8-sig")) if run_state_path.is_file() else {}
+        return apply_from_security(
+            a.dm_id,
+            security,
+            a.apply,
+            a.provision,
+            decision_out=workdir / "security-decision.json" if a.apply else None,
+            run_id=run_state.get("run_id"),
+            decision=a.decision,
+        )
 
     if not a.attr:
         sys.exit("Provide --attr (single-rule mode) or --from-security <json> (batch mode).")
