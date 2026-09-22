@@ -552,6 +552,7 @@ class CompletionContractTest(unittest.TestCase):
         write_json(membership_path, {
             "dataModelId": "dm-1",
             "run_id": "fixture-run",
+            "subjects": ["member-1", "member-2"],
             "assignments": [{
                 "principal": "Region",
                 "readback_verified": True,
@@ -582,6 +583,7 @@ class CompletionContractTest(unittest.TestCase):
         sigma_roster_path = self.workdir / "sigma-membership-readback.json"
         write_json(sigma_roster_path, {
             "dataModelId": "dm-1",
+            "subjects": ["member-1", "member-2"],
             "assignments": [{
                 "principal": "Region",
                 "values": {"member-1": "West"},
@@ -603,10 +605,26 @@ class CompletionContractTest(unittest.TestCase):
         allow_sigma = self.workdir / "allow-sigma.json"
         deny_source = self.workdir / "deny-source.json"
         deny_sigma = self.workdir / "deny-sigma.json"
-        write_json(allow_source, {"rows": ["West"]})
-        write_json(allow_sigma, {"rows": ["West"]})
-        write_json(deny_source, {"rows": []})
-        write_json(deny_sigma, {"rows": []})
+        write_json(allow_source, {
+            "principal": "member-1",
+            "query": "restricted-region-check",
+            "rows": ["West"],
+        })
+        write_json(allow_sigma, {
+            "principal": "member-1",
+            "query": "restricted-region-check",
+            "rows": ["West"],
+        })
+        write_json(deny_source, {
+            "principal": "member-2",
+            "query": "restricted-region-check",
+            "rows": [],
+        })
+        write_json(deny_sigma, {
+            "principal": "member-2",
+            "query": "restricted-region-check",
+            "rows": [],
+        })
         def evidence(path):
             return {
                 "path": str(path),
@@ -659,7 +677,11 @@ class CompletionContractTest(unittest.TestCase):
             "--workbook-id", "wb-1",
         )
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        write_json(allow_sigma, {"rows": ["East"]})
+        write_json(allow_sigma, {
+            "principal": "member-1",
+            "query": "restricted-region-check",
+            "rows": ["East"],
+        })
         verdict_path = self.workdir / "security-effective-user-verdict.json"
         verdict = json.loads(verdict_path.read_text())
         verdict["tests"][0]["sigma_result"]["sha256"] = hashlib.sha256(

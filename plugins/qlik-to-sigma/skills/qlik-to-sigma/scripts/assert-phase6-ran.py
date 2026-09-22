@@ -1133,10 +1133,29 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 )
         return result
 
-    if assignment_map(effective_documents["source_roster"]) != assignment_map(
-        effective_documents["sigma_roster"]
-    ):
+    source_assignments = assignment_map(effective_documents["source_roster"])
+    sigma_assignments = assignment_map(effective_documents["sigma_roster"])
+    if source_assignments != sigma_assignments:
         fail(32, "security", "source and Sigma membership rosters do not reconcile")
+    if required_principals and (
+        not source_assignments
+        or not required_principals.issubset(set(source_assignments))
+    ):
+        fail(
+            32,
+            "security",
+            "reconciled rosters do not cover every required security principal",
+        )
+    source_subjects = {
+        str(value)
+        for value in effective_documents["source_roster"].get("subjects") or []
+    }
+    sigma_subjects = {
+        str(value)
+        for value in effective_documents["sigma_roster"].get("subjects") or []
+    }
+    if not source_subjects or source_subjects != sigma_subjects:
+        fail(32, "security", "source and Sigma effective-user subjects do not reconcile")
     tests = effective.get("tests")
     if (
         not isinstance(tests, list)
@@ -1158,6 +1177,13 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             "effective-user verdict requires passing allow and deny tests",
         )
     for test in tests:
+        principal = str(test.get("principal") or "")
+        if principal not in source_subjects:
+            fail(
+                32,
+                "security",
+                f"effective-user test principal is absent from reconciled rosters: {principal}",
+            )
         result_documents = {}
         for key in ("source_result", "sigma_result"):
             evidence = test.get(key)
@@ -1181,20 +1207,22 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 "security",
                 f"effective-user {test.get('kind')} source/Sigma results differ",
             )
-        if test.get("kind") == "allow":
-            allow_result = result_documents["source_result"]
-            visible = (
-                bool(allow_result.get("rows"))
-                if isinstance(allow_result, dict)
-                and isinstance(allow_result.get("rows"), list)
-                else bool(allow_result)
+        source_result = result_documents["source_result"]
+        if (
+            not isinstance(source_result, dict)
+            or source_result.get("principal") != principal
+            or not str(source_result.get("query") or "").strip()
+            or not isinstance(source_result.get("rows"), list)
+        ):
+            fail(
+                32,
+                "security",
+                "effective-user result is not bound to its principal/query/rows",
             )
-            if not visible:
-                fail(
-                    32,
-                    "security",
-                    "allow test must prove at least one visible result",
-                )
+        if test.get("kind") == "allow" and not source_result["rows"]:
+            fail(32, "security", "allow test must prove at least one visible result")
+        if test.get("kind") == "deny" and source_result["rows"]:
+            fail(32, "security", "deny test must prove zero visible restricted rows")
     return None
 
 
