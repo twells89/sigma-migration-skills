@@ -123,12 +123,6 @@ module AnchorVerify
     NAME_ONLY_KINDS.include?(anchor['kind'].to_s)
   end
 
-  def numeric_raw(anchor)
-    raw = anchor['raw'].to_s
-    grouping = anchor['grouping_symbol'].to_s
-    grouping.empty? ? raw : raw.delete(grouping)
-  end
-
   def valued?(anchor)
     !name_only?(anchor) && VALUED_PROVENANCE.include?(anchor['provenance'].to_s)
   end
@@ -365,7 +359,6 @@ module AnchorVerify
     end
     anchors.each do |a|
       raw = a['raw'].to_s
-      match_raw = numeric_raw(a)
       order = ranked_elements(a, el_names)
       target = target_for.call(a, order)
       search_order = target['names']
@@ -383,11 +376,11 @@ module AnchorVerify
         end
         next
       end
-      found_in = search_order.find { |n| numbers[n].any? { |v| AnchorValues.match?(match_raw, v) } }
+      found_in = search_order.find { |n| numbers[n].any? { |v| AnchorValues.match?(raw, v) } }
       tol_used = nil
       if found_in.nil? && tol
         found_in = search_order.find do |n|
-          numbers[n].any? { |v| AnchorValues.relative_distance(match_raw, v) <= tol }
+          numbers[n].any? { |v| AnchorValues.relative_distance(raw, v) <= tol }
         end
         tol_used = tol if found_in
       end
@@ -397,7 +390,7 @@ module AnchorVerify
               'note' => (found_in == primary ? nil : "found outside best-match element #{primary.inspect}") }.compact
         d['valued'] = valued?(a)
         if tol_used
-          drift = numbers[found_in].map { |v| AnchorValues.relative_distance(match_raw, v) }.min
+          drift = numbers[found_in].map { |v| AnchorValues.relative_distance(raw, v) }.min
           d['tolerance_used'] = tol_used
           d['drift'] = drift.round(6) if drift&.finite?
         end
@@ -411,7 +404,7 @@ module AnchorVerify
         best = nil
         search_order.each do |n|
           numbers[n].each do |v|
-            d = AnchorValues.relative_distance(match_raw, v)
+            d = AnchorValues.relative_distance(raw, v)
             best = { 'value' => v, 'element' => n, 'distance' => d.round(6) } if best.nil? || d < best['distance']
           end
           break if best
@@ -612,8 +605,7 @@ end
 # membership for ranked tiles) — only NUMERIC anchors must parse as values.
 bad = anchors.reject do |a|
   next false unless a.is_a?(Hash)
-  %w[text roster member].include?(a['kind'].to_s) ?
-    !a['raw'].to_s.strip.empty? : AnchorValues.parse(AnchorVerify.numeric_raw(a))
+  %w[text roster member].include?(a['kind'].to_s) ? !a['raw'].to_s.strip.empty? : AnchorValues.parse(a['raw'])
 end
 unless bad.empty?
   warn "FATAL: #{bad.length} anchor(s) have an unparseable `raw` printed value:"
