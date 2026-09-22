@@ -406,6 +406,23 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(19, result.returncode, result.stdout + result.stderr)
         self.assertFalse((self.workdir / "phase6-success.json").exists())
 
+    def test_warehouse_evidence_cannot_hide_behind_missing_mode(self):
+        parity_path = self.workdir / "parity-final.json"
+        parity = json.loads(parity_path.read_text())
+        parity.pop("mode", None)
+        parity["verified_against"] = "warehouse"
+        parity["per_chart"][0]["status"] = "WAREHOUSE-PASS"
+        parity["waivers"] = ["--source-parity-unavailable"]
+        parity["waiver_reasons"] = {
+            "--source-parity-unavailable": "offline source fixture",
+        }
+        write_json(parity_path, parity)
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(19, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
     def test_visual_recorder_rejects_incomplete_blind_grade(self):
         source = self.workdir / "source-pages" / "sheet-1.png"
         target = self.workdir / "visual-qa" / "sheet-1.png"

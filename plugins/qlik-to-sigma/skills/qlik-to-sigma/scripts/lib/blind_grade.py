@@ -112,8 +112,8 @@ def built_families(readback: dict[str, Any]) -> list[str]:
             continue
         if isinstance(page, dict) and (
             page.get("visibility") == "hidden"
-            or str(page.get("name") or "").strip().casefold() == "data"
-            or "data" in str(page.get("id") or "").casefold()
+            or str(page.get("id") or "").strip().casefold()
+            in {"data", "page-data", "pg-data"}
         ):
             continue
         normalized = family(element.get("kind"))

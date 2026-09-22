@@ -887,6 +887,23 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     parity_reasons = parity.get("waiver_reasons") or {}
     mode_waivers: list[dict[str, str]] = []
     declared_parity_waivers = set(parity.get("waivers") or [])
+    warehouse_rows = any(
+        str(row.get("status") or "").upper() == "WAREHOUSE-PASS"
+        for row in parity.get("per_chart") or []
+        if isinstance(row, dict)
+    )
+    if warehouse_rows and (
+        parity.get("mode") != "warehouse"
+        or parity.get("verified_against") != "warehouse"
+    ):
+        fail(
+            19,
+            "waiver-budget",
+            "WAREHOUSE-PASS evidence requires mode=warehouse and "
+            "verified_against=warehouse",
+        )
+    if parity.get("mode") == "warehouse" and not warehouse_rows:
+        fail(19, "waiver-budget", "warehouse mode has no WAREHOUSE-PASS evidence")
     if (
         parity.get("mode") == "warehouse"
         and "--source-parity-unavailable" not in declared_parity_waivers

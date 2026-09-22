@@ -220,6 +220,20 @@ def main(argv: list[str] | None = None) -> int:
                 f"stale={integer(parity.get('charts_stale_explained'))}",
             ],
         )
+    warehouse_rows = any(
+        isinstance(row, dict)
+        and str(row.get("status") or "").upper() == "WAREHOUSE-PASS"
+        for row in per_chart
+    )
+    if warehouse_rows and (
+        parity.get("mode") != "warehouse"
+        or parity.get("verified_against") != "warehouse"
+        or "--source-parity-unavailable" not in (parity.get("waivers") or [])
+    ):
+        return stop(
+            5,
+            "warehouse-only parity lacks its mode, oracle, or named source-parity disposition.",
+        )
     column_scan = load_json(workdir / "column-scan.json")
     if (
         not isinstance(column_scan, dict)

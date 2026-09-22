@@ -166,6 +166,22 @@ class RenderAndLayoutTest(unittest.TestCase):
             {"kpi", "other", "bar"}.issubset(blind_grade_lib.CHART_FAMILIES)
         )
 
+    def test_visible_source_page_named_data_remains_in_visual_census(self):
+        spec = workbook(
+            [{
+                "id": "chart-1",
+                "name": "Sales",
+                "kind": "bar-chart",
+                "columns": [{"id": "region"}, {"id": "sales"}],
+            }],
+            pages=[{"id": "pg-1", "name": "Data"}],
+            layout=(
+                '<Page id="pg-1"><Element elementId="chart-1" '
+                'gridColumn="1 / 25" gridRow="1 / 13"/></Page>'
+            ),
+        )
+        self.assertEqual(["bar"], blind_grade_lib.built_families(spec))
+
     def test_render_integrity_reports_data_elements_without_usable_bindings(self):
         spec = workbook(
             [
