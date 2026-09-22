@@ -98,7 +98,7 @@ TWB = <<~XML
           <pane>
             <mark class='Bar' />
             <encodings>
-              <color column='[federated.fact].[none:a1b2c3d4-1111-2222-3333-444455556666:nk]' />
+              <color column='[federated.fact].[none:Value Tier:nk]' />
             </encodings>
           </pane>
         </table>

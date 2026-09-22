@@ -4830,9 +4830,9 @@ layout.each do |dash|
       # CSV then has only [dim, measure], so the 3-channel detector above never
       # sets color_hdr. Emit a duplicate column for Sigma's exclusive color
       # channel (one column cannot be referenced by both xAxis and color).
-      guid = guid_from_text(cc.to_s)
+      guid = name_or_guid_from_text(cc.to_s)
       info = guid ? (meta['columns_by_guid'] || {})[guid] : nil
-      color_caption = (info && info['caption']).to_s.strip
+      color_caption = ((info && info['caption']) || guid).to_s.strip
       if !color_caption.empty? &&
          [dim['name'].to_s.strip, dim_hdr.to_s.strip].any? { |name| name.casecmp?(color_caption) }
         color_dim = dim.dup
