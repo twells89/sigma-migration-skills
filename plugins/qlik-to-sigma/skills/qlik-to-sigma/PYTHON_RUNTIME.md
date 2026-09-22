@@ -93,9 +93,12 @@ For client-managed Qlik Sense, configure `QLIK_BIN` as documented in
 ## One-command offline conversions
 
 A captured discovery fixture needs no Qlik tenant, Sigma org, credentials, or
-network:
+network. Use the explicit offline doctor mode to create runtime evidence without
+persisting fake credentials:
 
 ```bash
+export SIGMA_OFFLINE_DRY_RUN=1
+bash scripts/bootstrap.sh --runtime-profile python --workdir <WORK>
 python3 scripts/migrate-qlik.py \
   --from-discovery fixtures/retail-orders \
   --connection 00000000-0000-0000-0000-000000000000 \
@@ -108,11 +111,13 @@ A standard corectl export uses the same Python entrypoint:
 ```bash
 python3 scripts/migrate-qlik.py \
   --unbuild <app-unbuild-dir> \
-  --connection <SIGMA_CONNECTION_ID> \
+  --connection 00000000-0000-0000-0000-000000000000 \
   --database <DB> --schema <SCHEMA> \
   --dry-run --yes --out <WORK>
 ```
 
 Dry-run still runs source-coverage and spec gates and must emit meaningful data
 model/workbook artifacts; it only suppresses Sigma writes. The Python path does
-not silently drop a gate or fall back to the Ruby orchestrator.
+not silently drop a gate or fall back to the Ruby orchestrator. Unset
+`SIGMA_OFFLINE_DRY_RUN` before any live build; the orchestrator rejects that
+combination fail-closed.

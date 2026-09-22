@@ -154,7 +154,9 @@ exit 0 = PARITY GREEN; exit 3 = built but parity RED. Each phase below is also a
 independently runnable script if you need to intervene mid-pipeline.
 
 **Offline smoke (no tenant/org/network/credentials):**
-`python3 scripts/migrate-qlik.py --from-discovery fixtures/retail-orders
+`SIGMA_OFFLINE_DRY_RUN=1 bash scripts/bootstrap.sh --runtime-profile python
+--workdir /tmp/smoke`, then
+`SIGMA_OFFLINE_DRY_RUN=1 python3 scripts/migrate-qlik.py --from-discovery fixtures/retail-orders
 --connection 00000000-0000-0000-0000-000000000000 --database DEMO_DB
 --schema DEMO --dry-run --yes --out /tmp/smoke` — see `fixtures/README.md`.
 The Ruby profile remains supported with the same flags. The Python path never
@@ -590,7 +592,7 @@ run must never install or invoke Ruby to manufacture completion evidence.
 | `scripts/qlik-dm-signature.py` | 2.5 | Converter-input JSON → DM-reuse signature (`{warehouse_tables, referenced_columns, measures}`) for the selected profile's DM picker. **Validated live.** |
 | `scripts/vendor/find-or-pick-dm.rb` | 2.5 | Scan existing Sigma DMs and recommend reuse (score = 0.7·column + 0.2·table + 0.1·metric overlap; `--auto-pick` with tie-window safety). Shared vendor-neutral copy (canonical: tableau-to-sigma). Non-destructive. |
 | `scripts/migrate-qlik.rb` | ALL | **The one command** — chains every phase below for any app/sheet; OPEN-QUESTIONS checkpoint, freshness preflight, bucket parity; `--from-discovery` + `--dry-run` = offline smoke. Discovery runs as a background lane with Sigma-side prep (token, folder, DM-spec prefetch for Phase 2.5) interleaved in the foreground; the engine snapshot runs as its own lane under Phases 2-5; `PHASE TIMINGS` printed at exit. **Validated live 2026-06-11 (68s wall, zero hand-edits, GREEN incl. layout lint).** |
-| `scripts/migrate-qlik.py` | ALL | Supported Python + Node entrypoint for the same artifact-driven, fail-closed pipeline. Requires no Ruby; `--from-discovery ... --dry-run --yes` is the credentials-free certification path. |
+| `scripts/migrate-qlik.py` | ALL | Supported Python + Node entrypoint for the same artifact-driven, fail-closed pipeline. Requires no Ruby; `SIGMA_OFFLINE_DRY_RUN=1` plus `--from-discovery ... --dry-run --yes` is the credentials-free certification path. |
 | `scripts/reconcile-columns.py` | 3 | Auto-derive the Qlik-field → real-warehouse-column map from the load script's `AS` aliases + `FROM` tables (so the DM points at real columns). **Validated.** |
 | `scripts/preflight-warehouse.rb` | 3 | Resolve tables and exhaustively list columns through the supplied Sigma connection's REST catalog; no MCP or direct warehouse credentials. Blocks missing/ambiguous sources before POST. |
 | `scripts/gen-denorm-sql.py` | 3 | Turn reconcile.json into the denormalized SQL element (`real AS qlik` + inferred fact↔dim joins) — feeds `build-sigma-dm.py`. Display names match Sigma's own derivation rule. **Validated.** |

@@ -7,6 +7,7 @@ import argparse
 import difflib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -44,6 +45,19 @@ VOLATILE_KEYS = {
     "startedAt",
     "updatedAt",
 }
+ID_KEYS = {
+    "id",
+    "columnId",
+    "controlId",
+    "dataModelId",
+    "denormElementId",
+    "elementId",
+    "folderId",
+    "sourceColumnId",
+    "targetColumnId",
+    "targetElementId",
+    "workbookId",
+}
 
 
 def read_json(path: Path) -> Any:
@@ -66,6 +80,53 @@ def normalize(value: Any, roots: tuple[Path, ...]) -> Any:
             result = result.replace(str(root), "<WORKDIR>")
         return result
     return value
+
+
+def normalize_ids(value: Any) -> Any:
+    found: dict[str, None] = {}
+
+    def collect(item: Any) -> None:
+        if isinstance(item, dict):
+            for key in sorted(item):
+                child = item[key]
+                if key in ID_KEYS and isinstance(child, str):
+                    found.setdefault(child, None)
+                collect(child)
+        elif isinstance(item, list):
+            for child in item:
+                collect(child)
+
+    collect(value)
+    mapping = {
+        original: f"<ID-{index:04d}>"
+        for index, original in enumerate(found, 1)
+    }
+
+    def replace(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {key: replace(child) for key, child in item.items()}
+        if isinstance(item, list):
+            return [replace(child) for child in item]
+        if isinstance(item, str):
+            if item in mapping:
+                return mapping[item]
+            for original, normalized in mapping.items():
+                if item.startswith(original + "/"):
+                    return normalized + item[len(original):]
+            return item
+        return item
+
+    return replace(value)
+
+
+def normalize_layout_ids(value: str) -> str:
+    found: dict[str, str] = {}
+    for match in re.finditer(r'\b(?:id|elementId)="([^"]+)"', value):
+        found.setdefault(match.group(1), f"<ID-{len(found) + 1:04d}>")
+    result = value
+    for original, normalized in found.items():
+        result = result.replace(original, normalized)
+    return result
 
 
 def run_entrypoint(command: list[str], fixture: Path, workdir: Path) -> None:
@@ -187,8 +248,8 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             failures.extend(
                 compare(
-                    normalize(read_json(left_path), roots),
-                    normalize(read_json(right_path), roots),
+                    normalize(normalize_ids(read_json(left_path)), roots),
+                    normalize(normalize_ids(read_json(right_path)), roots),
                     artifact,
                 )
             )
@@ -201,8 +262,12 @@ def main(argv: list[str] | None = None) -> int:
                     f"(ruby={left_path.is_file()}, python={right_path.is_file()})"
                 )
                 continue
-            left = normalize(left_path.read_text(encoding="utf-8"), roots)
-            right = normalize(right_path.read_text(encoding="utf-8"), roots)
+            left = normalize_layout_ids(
+                normalize(left_path.read_text(encoding="utf-8"), roots)
+            )
+            right = normalize_layout_ids(
+                normalize(right_path.read_text(encoding="utf-8"), roots)
+            )
             failures.extend(compare(left, right, artifact))
 
     if failures:

@@ -17,6 +17,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+os.environ.setdefault("PYTHONUTF8", "1")
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 import control_lint
 import flip_gate
 import layout_lint
@@ -193,6 +198,8 @@ class Migration:
             rendered,
             env={**os.environ, **(env or {})},
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
@@ -270,6 +277,11 @@ class Migration:
             self.args.app = None
 
     def validate_front_door(self) -> None:
+        if not self.args.dry_run and os.environ.get("SIGMA_OFFLINE_DRY_RUN") == "1":
+            raise ValueError(
+                "SIGMA_OFFLINE_DRY_RUN=1 is valid only with --dry-run; unset it "
+                "and configure Sigma credentials before a live build"
+            )
         if not self.args.app and not self.args.from_discovery:
             raise ValueError(
                 "missing --app (or --from-discovery/--unbuild/--prj)"
@@ -1177,6 +1189,8 @@ class Migration:
                 self.args.context,
             ],
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             check=False,

@@ -21,6 +21,8 @@ node converter build, nor network access.
 ## Offline smoke (no Qlik tenant, no Sigma org, no network)
 
 ```bash
+export SIGMA_OFFLINE_DRY_RUN=1
+bash scripts/bootstrap.sh --runtime-profile python --workdir /tmp/qlik-smoke
 python3 scripts/migrate-qlik.py \
   --from-discovery fixtures/retail-orders \
   --connection 00000000-0000-0000-0000-000000000000 \
@@ -60,6 +62,8 @@ sheet's recursive `qChildren`. Its load script also defines
 on the denormalized SQL element.
 
 ```bash
+export SIGMA_OFFLINE_DRY_RUN=1
+bash scripts/bootstrap.sh --runtime-profile python --workdir /tmp/qlik-corectl-smoke
 python3 scripts/migrate-qlik.py \
   --unbuild fixtures/corectl-country-unbuild \
   --connection 00000000-0000-0000-0000-000000000000 \

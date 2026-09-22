@@ -215,15 +215,20 @@ same source, connection, warehouse, destination, and workdir flags. The Python
 entrypoint also reads `<WORK>/connection.json`, so `--connection` may be omitted
 after `intake.py`; neither path guesses among connections.
 
-For a credentials-free, network-free offline conversion:
+For a credentials-free, network-free offline conversion, create doctor evidence
+in the explicit offline mode first:
 
 ```bash
+export SIGMA_OFFLINE_DRY_RUN=1
+bash scripts/bootstrap.sh --runtime-profile python --workdir <WORK>
 python3 scripts/migrate-qlik.py \
   --from-discovery fixtures/retail-orders \
   --connection 00000000-0000-0000-0000-000000000000 \
   --database DEMO_DB --schema DEMO \
   --dry-run --yes --out <WORK>
 ```
+
+Unset `SIGMA_OFFLINE_DRY_RUN` before any live build.
 
 Both entrypoints chain these phases:
 

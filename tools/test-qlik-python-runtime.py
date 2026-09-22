@@ -88,13 +88,8 @@ def clean_environment(path: str, home: Path) -> dict[str, str]:
         {
             "PATH": path,
             "HOME": str(home),
-            # Placeholders satisfy doctor's presence check. The invalid host
-            # makes an accidental live call fail safely instead of using creds.
-            "SIGMA_BASE_URL": "https://example.invalid",
-            "SIGMA_CLIENT_ID": "ci-offline-placeholder",
-            "SIGMA_CLIENT_SECRET": "ci-offline-placeholder-secret",
+            "SIGMA_OFFLINE_DRY_RUN": "1",
             "SIGMA_RUNTIME_PROFILE": "python",
-            "SIGMA_SKIP_CRED_SMOKE": "1",
             "SIGMA_SKIP_VERSION_CHECK": "1",
             "PYTHONHASHSEED": "0",
         }
