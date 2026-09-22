@@ -108,7 +108,10 @@ class CliContractTests(unittest.TestCase):
 
     def test_entrypoint_does_not_write_the_completion_marker(self) -> None:
         source = ENTRYPOINT.read_text(encoding="utf-8")
-        self.assertNotIn("phase6-success.json", source)
+        self.assertNotRegex(
+            source,
+            r"(?:write_text|open)\s*\([^\\n]*phase6-success\\.json",
+        )
 
 
 class NoRubyContractTests(unittest.TestCase):

@@ -112,7 +112,10 @@ class CompletionContractTest(unittest.TestCase):
             }]}],
         }
         layout_xml = (
-            '<Page id="sheet-1"><Element elementId="sigma-chart-1"/></Page>\n'
+            '<Page id="sheet-1" type="grid" '
+            'gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">'
+            '<Element elementId="sigma-chart-1" gridColumn="1 / 25" '
+            'gridRow="1 / 13"/></Page>\n'
         )
         write_json(wd / "wb-spec.json", workbook_spec)
         write_json(wd / "wb-readback.json", {
