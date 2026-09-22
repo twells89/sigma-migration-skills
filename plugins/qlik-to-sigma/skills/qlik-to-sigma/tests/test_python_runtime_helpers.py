@@ -160,6 +160,8 @@ class RenderAndLayoutTest(unittest.TestCase):
         self.assertEqual("kpi", blind_grade_lib.family("progress"))
         self.assertEqual("other", blind_grade_lib.family("box-chart"))
         self.assertEqual("bar", blind_grade_lib.family("waterfall-chart"))
+        self.assertEqual("text", blind_grade_lib.family("text"))
+        self.assertNotIn("text", blind_grade_lib.CHART_FAMILIES)
         self.assertTrue(
             {"kpi", "other", "bar"}.issubset(blind_grade_lib.CHART_FAMILIES)
         )

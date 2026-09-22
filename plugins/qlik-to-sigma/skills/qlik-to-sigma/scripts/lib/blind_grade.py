@@ -48,6 +48,14 @@ FAMILY_MAP = {
     "treemap-chart": "other",
     "heatmap-chart": "other",
     "word-cloud": "other",
+    "text": "text",
+    "control": "control",
+    "image": "image",
+    "container": "container",
+    "tabbed-container": "container",
+    "divider": "divider",
+    "spacer": "spacer",
+    "navigation": "navigation",
     "pivot-table": "table",
     "pivot": "table",
     "crosstab": "table",
@@ -59,11 +67,19 @@ CHART_FAMILIES = {
     "bar", "line", "area", "combo", "scatter", "pie", "kpi", "map", "table",
     "other",
 }
+NON_CHART_FAMILIES = {
+    "text", "control", "image", "container", "divider", "spacer", "navigation",
+}
 
 
 def family(value: Any) -> str:
     normalized = str(value or "").strip().casefold()
-    return FAMILY_MAP.get(normalized, normalized if normalized in CHART_FAMILIES else "other")
+    return FAMILY_MAP.get(
+        normalized,
+        normalized
+        if normalized in CHART_FAMILIES | NON_CHART_FAMILIES
+        else "other",
+    )
 
 
 def sha256(path: Path) -> str:
