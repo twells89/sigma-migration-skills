@@ -213,6 +213,12 @@ if File.exist?(CORPUS_TWB)
        'corpus tiles all classify better than unverifiable (anchor-only reasons are named, not dead ends)')
     ok(doc['entries'].all? { |e| e['classification'] == 'warehouse-sql' || !e['reason'].to_s.empty? },
        'every non-SQL corpus entry names its reason')
+    corpus_sql = doc['entries'].select { |e| e['classification'] == 'warehouse-sql' }
+                               .map { |e| e['sql'].to_s }.join("\n")
+    ok(corpus_sql.include?('.PRODUCT_KEY') && corpus_sql.include?('.PROMO_KEY'),
+       'object-graph relationship SQL uses the physical product/promo key names')
+    ok(!corpus_sql.include?('PRODUCT_KEY_(') && !corpus_sql.include?('PROMO_KEY_('),
+       'logical-table disambiguation suffixes never leak into warehouse identifiers')
     counts = doc['entries'].group_by { |e| e['classification'] }.map { |k, v| "#{k}=#{v.size}" }.join(', ')
     puts "  INFO  orders-overview classification mix: #{counts}"
   end

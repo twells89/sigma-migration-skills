@@ -452,14 +452,21 @@ module GroundTruthSql
       aliases[o['caption']] ||= a
     end
     cbg = meta.is_a?(Hash) ? (meta['columns_by_guid'] || {}) : {}
-    key_sql = lambda do |expr, al|
+    key_sql = lambda do |expr, al, object_caption|
       s = expr.to_s
       resolved = true
       sql = s.gsub(/\[([^\]]+)\]/) do
         ref = Regexp.last_match(1).sub(/\s+\([^\]]*\)\z/, '') # '<guid> (DUP TABLE)' → guid
         info = cbg[ref]
         if info && info['caption']
-          "#{al}.#{JoinPlan.physical_name(info['caption'])}"
+          caption = info['caption'].to_s
+          # parse-twb-layout disambiguates duplicate relationship fields by
+          # appending " (<logical table caption>)". That suffix is display-only,
+          # not part of the warehouse identifier (Product Key, not
+          # PRODUCT_KEY_(PRODUCT_DIM_(WAREHOUSE.PRODUCT_DIM))).
+          suffix = " (#{object_caption})"
+          caption = caption[0...-suffix.length] if caption.end_with?(suffix)
+          "#{al}.#{JoinPlan.physical_name(caption)}"
         elsif ref =~ /\A[0-9A-Fa-f-]{20,}\z/
           resolved = false
           ref
@@ -481,8 +488,8 @@ module GroundTruthSql
       end
       o = by_id[r['second']]
       return { 'error' => 'relationship references an unknown object' } if o.nil?
-      l = key_sql.call(r['lexpr'], aliases[r['first']])
-      rr = key_sql.call(r['rexpr'], aliases[r['second']])
+      l = key_sql.call(r['lexpr'], aliases[r['first']], by_id[r['first']]['caption'])
+      rr = key_sql.call(r['rexpr'], aliases[r['second']], by_id[r['second']]['caption'])
       if l.nil? || rr.nil?
         return { 'error' => "relationship key column unresolvable (no caption for the field GUID in the .twb)",
                  'anchor_only' => true }
