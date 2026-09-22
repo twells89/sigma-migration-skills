@@ -626,6 +626,26 @@ $doctorArgs += @('-RuntimeProfile', $RuntimeProfile)
 if ($AllowPreviewRuntime) { $doctorArgs += '-AllowPreviewRuntime' }
 & powershell @doctorArgs
 $doctorPass = ($LASTEXITCODE -eq 0)
+# Runtime installation can change profile selection. Bind the sentinel to the
+# doctor's post-install resolution instead of the stale pre-install probe.
+$doctorJsonPath = if ($WorkDir -and (Test-Path (Join-Path $WorkDir 'doctor.json'))) {
+  Join-Path $WorkDir 'doctor.json'
+} else {
+  Join-Path $StateDir 'doctor.json'
+}
+if (Test-Path $doctorJsonPath) {
+  try {
+    $doctorDocument = Get-Content $doctorJsonPath -Raw | ConvertFrom-Json
+    $doctorProfile = $doctorDocument.runtime_profile
+    if (-not $doctorProfile) { $doctorProfile = $doctorDocument.runtimeProfile }
+    if ($doctorProfile) {
+      $script:RuntimeProfileSelected = if ($doctorProfile.selected) { "$($doctorProfile.selected)" } else { "$($doctorProfile.selectedProfile)" }
+      $required = if ($doctorProfile.required_runtimes) { $doctorProfile.required_runtimes } else { $doctorProfile.requiredRuntimes }
+      $script:RuntimeProfileRequired = @($required)
+      $script:RuntimeProfileFallbackReason = if ($doctorProfile.fallback_reason) { "$($doctorProfile.fallback_reason)" } else { "$($doctorProfile.fallbackReason)" }
+    }
+  } catch { }
+}
 
 # --- sentinel ---------------------------------------------------------------
 $sentinel = [ordered]@{
