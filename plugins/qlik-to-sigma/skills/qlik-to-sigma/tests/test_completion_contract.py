@@ -543,6 +543,7 @@ class CompletionContractTest(unittest.TestCase):
         element["filters"] = [{
             "id": "rls-filter",
             "kind": "list",
+            "mode": "include",
             "columnId": "rls-column",
             "values": [True],
         }]
