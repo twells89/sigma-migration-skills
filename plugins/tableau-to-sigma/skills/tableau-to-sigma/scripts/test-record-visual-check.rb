@@ -254,16 +254,19 @@ CENSUS_ELEMENTS = [
   { 'id' => 'e2', 'kind' => 'bar-chart' },
   { 'id' => 'e3', 'kind' => 'bar-chart' },
   { 'id' => 'e4', 'kind' => 'control' },          # non-chart: never in the census
-  { 'id' => 'e5', 'kind' => 'bar-chart', 'visibleAsSource' => false } # hidden master
+  { 'id' => 'e5', 'kind' => 'bar-chart', 'visibleAsSource' => false }, # hidden master
+  { 'id' => 'e6', 'kind' => 'table' } # readback may drop visibleAsSource on a Data-page helper
 ].freeze
 CENSUS_RB = {
   'workbookId' => 'wb-test',
   'document' => {
     'schemaVersion' => 4,
     'kind' => 'workbook',
-    'pages' => [{ 'id' => 'p1', 'name' => 'Dashboard' }],
+    'pages' => [{ 'id' => 'page-data', 'name' => 'Data' },
+                { 'id' => 'p1', 'name' => 'Dashboard' }],
     'elements' => CENSUS_ELEMENTS,
-    'layout' => "<Page id=\"p1\">#{CENSUS_ELEMENTS.map { |el| %(<Element elementId="#{el['id']}"/>) }.join}</Page>"
+    'layout' => '<Page id="page-data"><Element elementId="e5"/><Element elementId="e6"/></Page>' \
+                "<Page id=\"p1\">#{CENSUS_ELEMENTS.first(4).map { |el| %(<Element elementId="#{el['id']}"/>) }.join}</Page>"
   }
 }.freeze
 
