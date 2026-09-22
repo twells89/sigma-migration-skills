@@ -149,8 +149,12 @@ module BlindGrade
     inner = Sigma::CodeRep.document(doc)
     return nil unless inner['elements'].is_a?(Array)
     fams = []
+    page_by_element = Sigma::CodeRep.workbook_page_by_element(inner)
     Sigma::CodeRep.workbook_elements(inner).each do |el|
-      next if el['visibleAsSource'] == false # hidden data-page master
+      owner = page_by_element[el['id'].to_s]
+      data_page = owner && (owner['name'].to_s.strip.casecmp?('Data') ||
+                            owner['id'].to_s.downcase.include?('data'))
+      next if data_page || el['visibleAsSource'] == false
       f = family(el['kind'])
       fams << f if chart_family?(f)
     end
