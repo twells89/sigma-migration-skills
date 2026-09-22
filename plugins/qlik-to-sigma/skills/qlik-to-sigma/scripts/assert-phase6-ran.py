@@ -506,10 +506,44 @@ def gate_flip(
                 if marker_path.is_file()
                 else {}
             )
+            evidence = load_object(
+                workdir / "probe-controls" / "probe-evidence.json",
+                21,
+                "control-flip",
+            )
+            try:
+                probed_at = datetime.fromisoformat(
+                    str(evidence.get("probed_at") or "").replace("Z", "+00:00")
+                )
+                age = datetime.now(timezone.utc) - probed_at.astimezone(
+                    timezone.utc
+                )
+            except ValueError:
+                age = None
+            expected_controls = {
+                str(row.get("controlId") or row.get("id"))
+                for row in controls
+                if row.get("controlId") or row.get("id")
+            }
+            skipped_controls = {
+                str(row.get("control"))
+                for row in skips
+                if row.get("control")
+            }
+            marker_controls = {
+                str(row.get("control"))
+                for row in marker.get("unprobed") or []
+                if isinstance(row, dict) and row.get("control")
+            }
             if (
                 marker.get("workbookId") == workbook_id
                 and isinstance(marker.get("unprobed"), list)
                 and marker["unprobed"]
+                and str(evidence.get("workbook_id") or "") == workbook_id
+                and str(evidence.get("doc_version") or "") == document_version
+                and age is not None
+                and age.total_seconds() <= 24 * 3600
+                and expected_controls == skipped_controls == marker_controls
             ):
                 return
             fail(
@@ -729,8 +763,31 @@ def gate_anchors(workdir: Path, render: dict[str, Any], waiver_reason: str | Non
 
 
 def gate_security(workdir: Path) -> dict[str, str] | None:
-    app_meta = load_object(workdir / "app-meta.json", 32, "security")
-    if app_meta.get("hasSectionAccess") is not True:
+    app_meta_path = workdir / "app-meta.json"
+    app_meta = (
+        load_object(app_meta_path, 32, "security")
+        if app_meta_path.is_file()
+        else {}
+    )
+    try:
+        load_script = (workdir / "script.qvs").read_text(
+            encoding="utf-8-sig"
+        )
+    except OSError:
+        load_script = ""
+    security_path = workdir / "security.json"
+    security = load_json(security_path, 32, "security") if security_path.is_file() else []
+    security_rows = (
+        security.get("security") or []
+        if isinstance(security, dict)
+        else security
+    )
+    section_access = (
+        app_meta.get("hasSectionAccess") is True
+        or re.search(r"(?im)^\s*SECTION\s+ACCESS\s*;", load_script) is not None
+        or bool(security_rows)
+    )
+    if not section_access:
         return None
     decision = load_object(workdir / "security-decision.json", 32, "security")
     choice = str(decision.get("decision") or "")

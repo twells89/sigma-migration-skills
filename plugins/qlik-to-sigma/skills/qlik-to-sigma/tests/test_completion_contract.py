@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 import zlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -447,6 +448,25 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(32, result.returncode, result.stdout + result.stderr)
         self.assertFalse((self.workdir / "phase6-success.json").exists())
 
+    def test_section_access_load_script_cannot_hide_behind_false_metadata(self):
+        with (self.workdir / "script.qvs").open("a", encoding="utf-8") as handle:
+            handle.write("\nSECTION ACCESS;\nLOAD USERID, REDUCTION INLINE [];\n")
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(32, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_missing_app_meta_is_valid_for_unsecured_offline_project(self):
+        (self.workdir / "app-meta.json").unlink()
+        self.complete_python_gate()
+        result = self.run_script(
+            "verify-complete.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
     def test_all_unprobeable_controls_use_advisory_marker(self):
         control = {
             "id": "control-element",
@@ -490,6 +510,12 @@ class CompletionContractTest(unittest.TestCase):
             "result": "SKIP",
             "note": "date range has no safe automatic sample",
         }])
+        write_json(self.workdir / "probe-controls" / "probe-evidence.json", {
+            "workbook_id": "wb-1",
+            "doc_version": "1",
+            "probed_at": datetime.now(timezone.utc).isoformat(),
+            "exports": {},
+        })
         write_json(self.workdir / "control-flip-unverified.json", {
             "workbookId": "wb-1",
             "status": "ADVISORY",
