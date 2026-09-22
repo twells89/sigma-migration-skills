@@ -42,6 +42,11 @@ class VerifyCompleteTest(unittest.TestCase):
                 "render_health": {"path": str(self.target_png)},
             },
             "semantic-edits.json": {"match": True},
+            "reconstruction-integrity.json": {
+                "status": "PASS",
+                "unresolved_controls": [],
+                "renamed_chart_family_mismatches": [],
+            },
             "source-object-census.json": {
                 "summary": {"complete": True, "total": 0},
                 "objects": [],
@@ -173,6 +178,30 @@ class VerifyCompleteTest(unittest.TestCase):
         result = verify_complete.evaluate(self.workdir, self.blind)
         self.assertFalse(result["complete"])
         self.assertTrue(any("destination" in item for item in result["failures"]))
+
+    def test_reconstruction_integrity_failure_blocks_completion(self):
+        (self.workdir / "reconstruction-integrity.json").write_text(
+            json.dumps(
+                {
+                    "status": "FAIL",
+                    "unresolved_controls": [
+                        {
+                            "kind": "parameter",
+                            "name": "Date Grain",
+                            "status": "needs-wiring",
+                        }
+                    ],
+                    "renamed_chart_family_mismatches": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.write_blind("pass")
+        result = verify_complete.evaluate(self.workdir, self.blind)
+        self.assertFalse(result["complete"])
+        self.assertTrue(
+            any("reconstruction_integrity" in item for item in result["failures"])
+        )
 
     def test_stale_blind_grade_hash_blocks_completion(self):
         self.write_blind("pass")

@@ -54,6 +54,7 @@ you to.
 | `derive-ground-truth.rb` → `run-ground-truth.rb` → `verify-ground-truth.rb` | Phase 6 tile-grain warehouse oracle → `ground-truth-plan.json` + per-tile `numeric_parity` |
 | `verify-anchors.rb` | Phase 6 measured value bar → `anchors-verdict.json` |
 | `assert-phase6-ran.rb` | **The conversion hard gate** — exit-code table: `refs/gates.md` |
+| `assert-reconstruction-integrity.rb` / `assert-reconstruction-integrity.py` | Tableau-local completion gate: unresolved control wiring and renamed chart-family substitutions block unless explicitly waived with a reason; writes `reconstruction-integrity.json` |
 | `fidelity-loop.rb` | Phase 5g RCF mechanics (init/render/record/apply-patch/resolve/status) → `fidelity-ledger.json` |
 | `assert-run-state.rb` | Phase-chain ledger audit (`run-state.json`; `--skip-run-state "<reason>"`) |
 | `probe-controls.rb` | Runtime control flip test (gate 7b) → `probe-controls/probe-results.json` |

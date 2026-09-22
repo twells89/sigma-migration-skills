@@ -37,7 +37,7 @@ require 'uri'
 require 'set'
 require_relative 'lib/workbook_code'
 
-opts = { renames: {} }
+opts = { renames: {}, trusted_rename_sources: Set.new }
 OptionParser.new do |p|
   p.on('--tableau DIR')          { |v| opts[:tab] = v }
   p.on('--workbook-spec PATH')   { |v| opts[:wb]  = v }
@@ -48,7 +48,11 @@ OptionParser.new do |p|
        'Default: auto-detect every element where source.kind=="table" and ' \
        'elementId starts with "master" (handles multi-master specs like ' \
        'master-absences / master-employees / master-time).') { |v| (opts[:master_ids] ||= []) << v }
-  p.on('--rename PAIR')          { |v| from, to = v.split('=', 2); opts[:renames][from] = to }
+  p.on('--rename PAIR')          do |v|
+    from, to = v.split('=', 2)
+    opts[:renames][from] = to
+    opts[:trusted_rename_sources] << from
+  end
   p.on('--no-fetch')             {     opts[:no_fetch] = true }
   # Per-dashboard parity scoping (large-workbook one-tab-at-a-time gating). When
   # set, only chart elements on the matching workbook PAGE(s) are planned/gated —
@@ -200,6 +204,26 @@ if File.exist?(_dl_path)
   end
 end
 
+# Persisted layout renames are also source→Sigma chart provenance. Manual
+# reconstruction commonly creates valid chart elements after the initial
+# chart-provenance sidecar was written; without this bridge, those elements
+# disappear from both the parity inventory and the tile census on re-entry.
+# Explicit --rename flags and dashboard display-title mappings retain priority.
+_layout_renames_path = File.join(opts[:tab], 'layout-renames.json')
+if File.exist?(_layout_renames_path)
+  begin
+    _layout_renames = JSON.parse(File.read(_layout_renames_path))
+    if _layout_renames.is_a?(Hash)
+      _layout_renames.each do |source_name, sigma_name|
+        opts[:renames][source_name] ||= sigma_name
+        opts[:trusted_rename_sources] << source_name if opts[:renames][source_name] == sigma_name
+      end
+    end
+  rescue JSON::ParserError => e
+    warn "layout-renames.json unreadable (#{e.message}) — persisted reconstruction renames ignored"
+  end
+end
+
 # Build reverse-rename map: tableau-name → sigma-name was the input;
 # we want sigma-name → tableau-name for lookup.
 # ⚠️ COLLISION-PRONE BY CONSTRUCTION: two worksheets sharing one display_title
@@ -209,6 +233,10 @@ end
 # same-titled view). This map is therefore only the FALLBACK — the provenance
 # join below (element id → worksheet, unique) is consumed first.
 rev_renames = opts[:renames].each_with_object({}) { |(k, v), h| h[v] = k }
+trusted_rev_renames = opts[:trusted_rename_sources].each_with_object({}) do |source_name, index|
+  sigma_name = opts[:renames][source_name]
+  index[sigma_name] = source_name if sigma_name
+end
 
 # ---- Chart provenance (v5.5 — the collision-free join) ----------------------
 # build-charts-from-signals.rb writes <tableau-dir>/chart-provenance.json:
@@ -238,12 +266,16 @@ if provenance.empty?
 end
 
 plan_entries = []
+chart_inventory = []
 sigma_charts.each do |el|
   sigma_name = el_display_name(el)
   prov = provenance[el['id'].to_s]
   if prov && !prov['worksheet'].to_s.strip.empty?
     tableau_name = prov['worksheet'].to_s
     matched_via  = 'provenance'
+  elsif trusted_rev_renames.key?(sigma_name)
+    tableau_name = trusted_rev_renames[sigma_name]
+    matched_via  = 'rename'
   else
     tableau_name = rev_renames[sigma_name] || sigma_name
     matched_via  = 'name-fallback'
@@ -252,6 +284,18 @@ sigma_charts.each do |el|
            'display-name matching (hand-added chart?); verify its tableau_view'
     end
   end
+
+  # Structural inventory is deliberately separate from value-parity charts.
+  # Composite dashboards often expose only one dashboard-level CSV, so there
+  # is no per-worksheet expected-value oracle. The built tile still belongs in
+  # the census; omitting it made every reconstructed tile read as missing.
+  chart_inventory << {
+    'chart' => sigma_name,
+    'tableau_view' => tableau_name,
+    'sigma_element_id' => el['id'],
+    'sigma_kind' => el['kind'],
+    'matched_via' => matched_via
+  }
 
   view = view_by_name[tableau_name]
   view ||= view_by_name.find { |n, _| normalize(n) == normalize(tableau_name) }&.last
@@ -578,6 +622,7 @@ output = {
   'workbook_id'          => opts[:wb_id],
   'extract'              => extract,
   'charts'               => plan_entries,
+  'chart_inventory'      => chart_inventory,
   'hidden_filters'       => hidden_filters_gate,
   'plan_status'          => plan_status,
   'composite_stub'       => false,

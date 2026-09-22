@@ -5,11 +5,10 @@
 #
 # Live GET /v2/workbooks/{id}/spec now nests non-metadata fields under a
 # top-level `document` key (verified 2026-08-03/04). phase6-parity.rb GETs the
-# live spec in PASS 1 and writes it to wb-readback.json for every downstream
-# parity script (auto-parity-plan.rb, verify-anchors.rb, ...) to consume FLAT
-# ({pages:[...]}) — this checks the read routes through the vendored
-# Sigma::CodeRep.document() adapter rather than re-serializing the raw
-# (now-nested) GET response straight to disk.
+# live spec in PASS 1 and writes the FULL release response to wb-readback.json.
+# WorkbookCode consumers resolve the nested document through CodeRep, while
+# freshness/evidence gates retain workbookId + latestDocumentVersion. Dropping
+# that outer metadata made stale readbacks and parity plans indistinguishable.
 #
 # Run: ruby scripts/tests/test_phase6_parity_shape.rb
 
@@ -28,12 +27,12 @@ class TestPhase6ParityShape < Minitest::Test
     assert_nil readback['pages'], 'proves the old flat read was nil'
   end
 
-  # Real regression signal: the script must route its GET readback through
-  # Sigma::CodeRep.document(...) before writing wb-readback.json / reading
-  # spec['pages'] -- not the raw (now-nested) GET response.
-  def test_script_uses_code_rep_for_readback
+  # Real regression signal: retain outer metadata in wb-readback and bind the
+  # parity plan to the live document version.
+  def test_script_preserves_release_readback_and_version
     src = File.read(File.join(__dir__, '..', SCRIPT_NAME))
-    assert_match(/Sigma::CodeRep\.document\(/, src,
-                 "#{SCRIPT_NAME} must unwrap the GET readback via Sigma::CodeRep.document(...)")
+    assert_includes src, 'JSON.pretty_generate(raw_spec)'
+    assert_includes src, "plan['workbook_document_version']"
+    assert_includes src, 'Phase 6 finalize blocked: parity-plan.json is STALE'
   end
 end
