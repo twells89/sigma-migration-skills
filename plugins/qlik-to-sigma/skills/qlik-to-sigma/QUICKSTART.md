@@ -65,8 +65,10 @@ Duration: 2
     via the developer-opt-in `-prj` project folder — `python3
     scripts/migrate-qlik.py --prj <Name-prj> --connection <ID>` (or the
     selected Ruby entrypoint) runs the full pipeline (**data model +
-    workbook**, laid out from the `-prj` sheet geometry). Parity is warehouse-only
-    (no live Qlik engine) — see the QlikView note in SKILL.md.
+    workbook**, laid out from the `-prj` sheet geometry). With no live Qlik
+    engine, the default warehouse-executability check stays non-strict/RED;
+    pass independently queried values through `--warehouse-expected` for strict
+    completion — see the QlikView note in SKILL.md.
 - **Qlik Cloud access for live discovery** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible). Not required for `--unbuild`.
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity). The skill discovers its tables and columns through Sigma REST, so no Snowflake credentials, SQL CLI, or MCP are required.

@@ -185,6 +185,16 @@ class CompletionContractTest(unittest.TestCase):
         })
         healthy_png(wd / "source-pages" / "sheet-1.png")
         healthy_png(wd / "visual-qa" / "sheet-1.png")
+        target = wd / "visual-qa" / "sheet-1.png"
+        write_json(wd / "render-evidence.json", {
+            "workbookId": "wb-1",
+            "documentVersion": "1",
+            "run_id": "fixture-run",
+            "images": [{
+                "path": str(target.resolve()),
+                "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            }],
+        })
 
     def finalize(self):
         return self.run_script("finalize-qlik-report.py", "--workdir", self.workdir)
@@ -235,6 +245,24 @@ class CompletionContractTest(unittest.TestCase):
         self.assertNotEqual(blank.returncode, 0)
         health = json.loads((self.workdir / "render-health.json").read_text())
         self.assertEqual(health["sources"][0]["status"], "FAIL")
+
+    def test_render_hash_blocks_reused_or_replaced_page_png(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        write_png(
+            target,
+            600,
+            300,
+            lambda x, y: (
+                (15, 70, 130)
+                if y < 50 or (x % 80 < 35 and 60 < y < 250)
+                else (250, 250, 250)
+            ),
+        )
+        result = self.assert_phase6()
+        self.assertEqual(10, result.returncode, result.stdout + result.stderr)
+        self.assertIn("hash", result.stderr)
 
     def test_visible_page_named_data_is_still_finalized(self):
         for filename in ("wb-spec.json", "wb-readback.json"):

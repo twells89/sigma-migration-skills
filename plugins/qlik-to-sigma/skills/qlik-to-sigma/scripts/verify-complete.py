@@ -15,6 +15,7 @@ Exit codes intentionally preserve the existing Qlik verifier contract:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -340,6 +341,40 @@ def main(argv: list[str] | None = None) -> int:
             for row in sources
         ):
             png_errors.append("one or more health-checked Qlik source PNGs are missing or invalid")
+        render_evidence = load_json(workdir / "render-evidence.json")
+        evidence_images = (
+            render_evidence.get("images")
+            if isinstance(render_evidence, dict)
+            else None
+        )
+        expected_paths = {
+            path_from(row.get("path"), workdir)
+            for row in sigma_pages or []
+            if isinstance(row, dict)
+        }
+        evidence_paths = {
+            path_from(row.get("path"), workdir)
+            for row in evidence_images or []
+            if isinstance(row, dict)
+        }
+        if (
+            not isinstance(render_evidence, dict)
+            or render_evidence.get("workbookId") != marker.get("workbookId")
+            or str(render_evidence.get("documentVersion") or "")
+            != str(readback_version or "")
+            or render_evidence.get("run_id") != run_state.get("run_id")
+            or expected_paths != evidence_paths
+        ):
+            png_errors.append("render evidence is stale or belongs to another run/version")
+        elif any(
+            not path
+            or not path.is_file()
+            or hashlib.sha256(path.read_bytes()).hexdigest()
+            != str(row.get("sha256") or "").lower()
+            for row in evidence_images
+            for path in [path_from(row.get("path"), workdir)]
+        ):
+            png_errors.append("render evidence hash no longer matches a page PNG")
     if (
         not isinstance(blank, dict)
         or blank.get("status") != "PASS"

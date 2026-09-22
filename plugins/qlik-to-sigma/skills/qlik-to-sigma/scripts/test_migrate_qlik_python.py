@@ -476,11 +476,36 @@ class OrchestrationTests(unittest.TestCase):
                     },
                 )
 
-            self.assertTrue(parity_ok and layout_ok and controls_ok and flip_ok)
+            self.assertFalse(parity_ok)
+            self.assertTrue(layout_ok and controls_ok and flip_ok)
             self.assertEqual("warehouse", parity["mode"])
-            self.assertEqual("warehouse", parity["verified_against"])
+            self.assertEqual("warehouse-executability", parity["verified_against"])
             self.assertEqual("WAREHOUSE-PASS", parity["per_chart"][0]["status"])
-            self.assertEqual(["--source-parity-unavailable"], parity["waivers"])
+            self.assertFalse(parity["strict"])
+            self.assertEqual("WAREHOUSE-ONLY", parity["status"])
+
+            expected = workdir / "warehouse-expected.json"
+            expected.write_text(
+                json.dumps({"Sales": [["West", "10"]]}),
+                encoding="utf-8",
+            )
+            migration.args.warehouse_expected = str(expected)
+            with mock.patch.object(migrate.sigma_rest, "request", side_effect=api):
+                strict_ok, _, _, _, strict = migration.parity(
+                    {"workbookId": "wb-1"},
+                    "dm-1",
+                    {},
+                    {},
+                    [{"id": "chart-1", "title": "Sales"}],
+                    {
+                        "sourceVisualIds": ["chart-1"],
+                        "builtSourceVisualIds": ["chart-1"],
+                    },
+                )
+            self.assertTrue(strict_ok)
+            self.assertTrue(strict["strict"])
+            self.assertEqual("warehouse-expected", strict["mode"])
+            self.assertEqual("MATCH", strict["per_chart"][0]["status"])
 
     def test_progress_visual_participates_in_source_value_parity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -558,6 +583,46 @@ class OrchestrationTests(unittest.TestCase):
             self.assertEqual(1, parity["charts_total"])
             self.assertEqual("MATCH", parity["per_chart"][0]["status"])
             self.assertEqual("progress", parity["per_chart"][0]["kind"])
+
+    def test_render_failure_cannot_reuse_prior_page_png(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workdir = Path(temporary)
+            visual = workdir / "visual-qa"
+            visual.mkdir()
+            stale = visual / "page-1.png"
+            stale.write_bytes(b"\x89PNG\r\n\x1a\n" + b"stale" * 20)
+            (workdir / "wb-spec.json").write_text(
+                json.dumps({
+                    "document": {
+                        "pages": [{"id": "page-1", "name": "Overview"}],
+                        "elements": [],
+                    }
+                }),
+                encoding="utf-8",
+            )
+            migration = migrate.Migration(self.args())
+            migration.workdir = workdir
+            migration.execute = lambda *_args, **_kwargs: SimpleNamespace(
+                returncode=1,
+                stdout="render failed",
+            )
+            with mock.patch.object(
+                migrate.sigma_rest,
+                "request",
+                return_value={
+                    "workbookId": "wb-1",
+                    "latestDocumentVersion": 9,
+                    "document": {},
+                },
+            ):
+                rendered = migration.render_pages("wb-1")
+            self.assertIsNone(rendered)
+            self.assertFalse(stale.exists())
+            evidence = json.loads(
+                (workdir / "render-evidence.json").read_text()
+            )
+            self.assertEqual([], evidence["images"])
+            self.assertEqual("9", evidence["documentVersion"])
 
     def test_terminal_gate_order_is_cleanup_finalize_assert_finalize(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

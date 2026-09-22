@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -172,6 +173,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--skip-visual-comparison")
     parser.add_argument("--skip-visual-similarity")
     parser.add_argument("--skip-anchors-gate")
+    parser.add_argument(
+        "--warehouse-expected",
+        help="independently queried expected rows for strict offline parity",
+    )
     parser.add_argument("--print-converter", action="store_true")
     return parser.parse_args(argv)
 
@@ -1189,7 +1194,17 @@ class Migration:
     def render_pages(self, workbook_id: str) -> Path | None:
         assert self.workdir
         directory = self.workdir / "visual-qa"
+        if directory.exists():
+            shutil.rmtree(directory)
         directory.mkdir(parents=True, exist_ok=True)
+        live = sigma_rest.request(
+            "get", f"/v2/workbooks/{workbook_id}/spec"
+        ) or {}
+        document_version = live.get("latestDocumentVersion") or live.get(
+            "latestVersion"
+        )
+        if document_version in (None, ""):
+            raise RuntimeError("live workbook spec has no document version before render")
         spec = load_json(self.workdir / "wb-spec.json")
         content_pages = [
             page
@@ -1224,6 +1239,26 @@ class Migration:
         print(
             f"   ✓ rendered {len(rendered)}/{len(content_pages)} "
             f"full-page PNG(s) for visual QA → {directory}"
+        )
+        (self.workdir / "render-evidence.json").write_text(
+            json.dumps(
+                {
+                    "workbookId": workbook_id,
+                    "documentVersion": str(document_version),
+                    "run_id": self.run_id,
+                    "generatedAt": utc_now(),
+                    "images": [
+                        {
+                            "path": str(path.resolve()),
+                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                        }
+                        for path in rendered
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
         )
         return rendered[0] if rendered else None
 
@@ -1473,6 +1508,9 @@ class Migration:
             or (snapshot.get("kpis") or [])
             or (snapshot.get("buckets") or [])
         )
+        strict_parity = source_oracle_available
+        parity_mode = "live-engine"
+        verified_against = "qlik-engine"
         if not source_oracle_available:
             warehouse_rows = []
             error_cell = re.compile(
@@ -1519,12 +1557,60 @@ class Migration:
                     }
                 )
             chart_rows = warehouse_rows
+            parity_mode = "warehouse"
+            verified_against = "warehouse-executability"
+            if self.args.warehouse_expected:
+                expected = load_json(
+                    Path(self.args.warehouse_expected).expanduser().resolve()
+                )
+                if not isinstance(expected, dict):
+                    raise ValueError("--warehouse-expected must contain a JSON object")
+
+                def normalized_rows(rows: Any) -> list[list[str]]:
+                    return [
+                        [str(cell) for cell in row]
+                        for row in rows or []
+                        if isinstance(row, list)
+                    ]
+
+                compared_rows = []
+                for element in element_map:
+                    name = str(
+                        element.get("name") or element.get("elementId") or ""
+                    )
+                    actual_rows = normalized_rows(actuals.get(name))
+                    expected_rows = normalized_rows(expected.get(name))
+                    matched = bool(expected_rows) and actual_rows == expected_rows
+                    compared_rows.append(
+                        {
+                            "chart": name,
+                            "source_object_id": (
+                                element.get("qlik") or {}
+                            ).get("objectId"),
+                            "kind": element.get("kind"),
+                            "expected_rows": len(expected_rows),
+                            "actual_rows": len(actual_rows),
+                            "status": "MATCH" if matched else "MISMATCH",
+                            "pass": matched,
+                        }
+                    )
+                unexpected = sorted(set(expected) - {row["chart"] for row in compared_rows})
+                if unexpected:
+                    raise ValueError(
+                        "--warehouse-expected contains unknown chart(s): "
+                        + ", ".join(unexpected)
+                    )
+                chart_rows = compared_rows
+                strict_parity = True
+                parity_mode = "warehouse-expected"
+                verified_against = "independent-warehouse-expected"
         failed_rows = [row for row in chart_rows if not row["pass"]]
         parity_ok = (
             not errors
             and bool(entries)
             and bool(chart_rows)
             and not failed_rows
+            and strict_parity
         )
         source_ids = [str(item) for item in coverage.get("sourceVisualIds") or []]
         built_ids = [
@@ -1538,14 +1624,16 @@ class Migration:
         parity_final = {
             "schema_version": 1,
             "source": "qlik",
-            "status": "PASS" if parity_ok else "FAIL",
-            "strict": True,
-            "mode": (
-                "live-engine" if source_oracle_available else "warehouse"
+            "status": (
+                "PASS"
+                if parity_ok
+                else "WAREHOUSE-ONLY"
+                if parity_mode == "warehouse" and not failed_rows
+                else "FAIL"
             ),
-            "verified_against": (
-                "qlik-engine" if source_oracle_available else "warehouse"
-            ),
+            "strict": strict_parity,
+            "mode": parity_mode,
+            "verified_against": verified_against,
             "charts_total": len(chart_rows),
             "charts_pass": sum(row["pass"] for row in chart_rows),
             "charts_fail": len(failed_rows),
@@ -1574,20 +1662,13 @@ class Migration:
             },
             "generated_at": utc_now(),
         }
-        if not source_oracle_available:
+        if parity_mode == "warehouse":
             parity_final["note"] = (
                 "Offline source mode: every built element was verified to "
                 "evaluate against the live Sigma warehouse and return real "
-                "data. Values were not diffed against a live Qlik engine."
+                "data, but values were not diffed against an independent "
+                "source or warehouse-expected artifact. Completion remains RED."
             )
-            parity_final["waivers"] = ["--source-parity-unavailable"]
-            parity_final["waiver_count"] = 1
-            parity_final["waiver_reasons"] = {
-                "--source-parity-unavailable": (
-                    "offline Qlik export has no live engine value oracle; "
-                    "warehouse executability verified instead"
-                )
-            }
         (self.workdir / "parity-final.json").write_text(
             json.dumps(parity_final, indent=2) + "\n", encoding="utf-8"
         )

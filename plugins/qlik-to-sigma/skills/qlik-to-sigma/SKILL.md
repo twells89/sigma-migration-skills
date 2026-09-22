@@ -304,7 +304,10 @@ staleness) blocks GREEN.
 >   (measures, same Set Analysis / Range / Dual / Class translation) → the workbook charts.
 >
 > **Scope / caveats (be honest with customers):** a `-prj` folder has **no live engine**, so
-> parity is **warehouse-only** (Sigma vs. the source warehouse — no Qlik-side value snapshot), and
+> without a live engine the default check is **warehouse executability only**
+> (nonempty/error-free exports, explicitly non-strict and RED for completion).
+> Supply `--warehouse-expected <json>` from independently queried warehouse
+> results to arm strict value parity, and
 > chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against). Because
 > QlikView has **no capture API**, the `--prj` discovery step (`qlik-prj-discover.py`) prints an
 > `[ASSIST]` telling you to **`AskUserQuestion` for a screenshot of each sheet** and drop them in

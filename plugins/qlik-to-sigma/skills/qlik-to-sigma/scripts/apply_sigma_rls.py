@@ -251,6 +251,7 @@ def apply_from_security(
     decision_out=None,
     run_id=None,
     decision="port",
+    required_element_id=None,
 ):
     """Provision attrs/teams + apply RLS calc/filter and CLS for each result.security entry."""
     spec = api("GET", f"/v2/dataModels/{dm_id}/spec")
@@ -259,7 +260,11 @@ def apply_from_security(
     applied = 0
     def _elname(e): return e.get('name') or ((e.get('source') or {}).get('path') or ['?'])[-1]
     for rule in security:
-        el = _resolve_element(spec, rule.get("elementId"), rule.get("elementName"))
+        el = _resolve_element(
+            spec,
+            required_element_id or rule.get("elementId"),
+            None if required_element_id else rule.get("elementName"),
+        )
         if not el:
             print(f"⚠ {rule.get('kind')} on element '{rule.get('elementName')}' — not found in DM {dm_id}; skipped."); continue
         if rule.get("kind") == "rls" and rule.get("rls"):
@@ -294,7 +299,31 @@ def apply_from_security(
         res = api("PUT", f"/v2/dataModels/{dm_id}/spec", spec)
         print(f"PUT spec -> applied {applied} rule(s):", (json.dumps(res)[:200] if isinstance(res, dict) else str(res)[:200]))
         readback = api("GET", f"/v2/dataModels/{dm_id}/spec")
-        verified = isinstance(readback, dict) and applied == expected_rules
+        secured = (
+            _resolve_element(readback, required_element_id, None)
+            if isinstance(readback, dict) and required_element_id
+            else None
+        )
+        expects_rls = any(
+            isinstance(rule, dict) and rule.get("kind") == "rls" and rule.get("rls")
+            for rule in security
+        )
+        expects_cls = any(
+            isinstance(rule, dict) and rule.get("kind") == "cls" and rule.get("cls")
+            for rule in security
+        )
+        has_rls = bool(secured and secured.get("filters")) and any(
+            "CurrentUserAttribute" in str(column.get("formula") or "")
+            for column in (secured or {}).get("columns") or []
+            if isinstance(column, dict)
+        )
+        has_cls = bool(secured and secured.get("columnSecurities"))
+        verified = (
+            isinstance(readback, dict)
+            and applied == expected_rules
+            and (not expects_rls or has_rls)
+            and (not expects_cls or has_cls)
+        )
         if decision_out:
             decision_path = Path(decision_out).expanduser().resolve()
             decision_path.parent.mkdir(parents=True, exist_ok=True)
@@ -312,6 +341,7 @@ def apply_from_security(
                         "rules_detected": len(security),
                         "rules_applied": applied,
                         "dataModelId": dm_id,
+                        "securedElementId": required_element_id,
                         "run_id": run_id,
                         "readback_sha256": hashlib.sha256(
                             readback_path.read_bytes()
@@ -364,6 +394,14 @@ def main():
         workdir = Path(a.workdir).expanduser().resolve() if a.workdir else Path(a.from_security).expanduser().resolve().parent
         run_state_path = workdir / "run-state.json"
         run_state = json.loads(run_state_path.read_text(encoding="utf-8-sig")) if run_state_path.is_file() else {}
+        dm_result_path = workdir / "dm-result.json"
+        dm_result = json.loads(dm_result_path.read_text(encoding="utf-8-sig")) if dm_result_path.is_file() else {}
+        denorm_element_id = dm_result.get("denormElementId")
+        if a.apply and not denorm_element_id:
+            sys.exit(
+                "Qlik security apply requires <workdir>/dm-result.json with "
+                "denormElementId so RLS/CLS protects the workbook source."
+            )
         return apply_from_security(
             a.dm_id,
             security,
@@ -372,6 +410,7 @@ def main():
             decision_out=workdir / "security-decision.json" if a.apply else None,
             run_id=run_state.get("run_id"),
             decision=a.decision,
+            required_element_id=denorm_element_id,
         )
 
     if not a.attr:

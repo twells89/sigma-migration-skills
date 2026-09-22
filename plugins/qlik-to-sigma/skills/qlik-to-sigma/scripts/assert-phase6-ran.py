@@ -648,7 +648,13 @@ def valid_png(path: Path) -> bool:
     return len(data) > 64 and data.startswith(b"\x89PNG\r\n\x1a\n")
 
 
-def gate_render(workdir: Path, sigma_render: Path | None) -> dict[str, Any]:
+def gate_render(
+    workdir: Path,
+    sigma_render: Path | None,
+    workbook_id: str,
+    document_version: str,
+    run_id: str,
+) -> dict[str, Any]:
     render = load_object(workdir / "render-health.json", 10, "render")
     pages = render.get("sigma_pages")
     expected = integer(render.get("expected_sigma_pages"))
@@ -674,6 +680,28 @@ def gate_render(workdir: Path, sigma_render: Path | None) -> dict[str, Any]:
             fail(10, "render", "--sigma-render is not one of the health-checked page renders")
     if any(not valid_png(path) for path in paths):
         fail(10, "render", "a health-checked Sigma render is now missing or invalid")
+    evidence = load_object(workdir / "render-evidence.json", 10, "render")
+    image_rows = evidence.get("images")
+    if (
+        evidence.get("workbookId") != workbook_id
+        or str(evidence.get("documentVersion") or "") != document_version
+        or evidence.get("run_id") != run_id
+        or not isinstance(image_rows, list)
+        or len(image_rows) != expected
+    ):
+        fail(10, "render", "render evidence is stale or belongs to another run/version")
+    evidence_paths = set()
+    for row in image_rows:
+        path = Path(str(row.get("path") or "")).expanduser().resolve()
+        evidence_paths.add(path)
+        if (
+            not path.is_file()
+            or hashlib.sha256(path.read_bytes()).hexdigest()
+            != str(row.get("sha256") or "").lower()
+        ):
+            fail(10, "render", f"render evidence hash is stale: {path}")
+    if evidence_paths != set(paths):
+        fail(10, "render", "render evidence does not cover exactly the health-checked pages")
     blank = load_object(workdir / "blank-risk.json", 10, "render")
     if (
         blank.get("status") != "PASS"
@@ -865,6 +893,53 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             32,
             "security",
             f"Section Access decision {choice!r} is not applied and readback-verified",
+        )
+    if not isinstance(security_rows, list) or not security_rows:
+        fail(
+            32,
+            "security",
+            "Section Access was detected but no concrete RLS/CLS rules were supplied",
+        )
+    dm_result = load_object(workdir / "dm-result.json", 32, "security")
+    denorm_id = str(dm_result.get("denormElementId") or "")
+    secured_id = str(decision.get("securedElementId") or "")
+    if not denorm_id or secured_id != denorm_id:
+        fail(
+            32,
+            "security",
+            "security evidence is not bound to the denormalized workbook source element",
+        )
+    readback = load_object(readback_path, 32, "security")
+    secured = next(
+        (
+            element
+            for element in all_elements(readback)
+            if str(element.get("id") or element.get("elementId") or "")
+            == secured_id
+        ),
+        None,
+    )
+    if not isinstance(secured, dict):
+        fail(32, "security", "secured denormalized element is absent from readback")
+    expects_rls = any(
+        isinstance(row, dict) and row.get("kind") == "rls" and row.get("rls")
+        for row in security_rows
+    )
+    expects_cls = any(
+        isinstance(row, dict) and row.get("kind") == "cls" and row.get("cls")
+        for row in security_rows
+    )
+    has_rls = bool(secured.get("filters")) and any(
+        "CurrentUserAttribute" in str(column.get("formula") or "")
+        for column in secured.get("columns") or []
+        if isinstance(column, dict)
+    )
+    has_cls = bool(secured.get("columnSecurities"))
+    if (expects_rls and not has_rls) or (expects_cls and not has_cls):
+        fail(
+            32,
+            "security",
+            "persisted denormalized element lacks the expected RLS/CLS structures",
         )
     return None
 
@@ -1129,6 +1204,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     render = gate_render(
         workdir,
         Path(args.sigma_render) if args.sigma_render else None,
+        workbook_id,
+        document_version,
+        run_id,
     )
     gate_visual_comparison(
         workdir,
