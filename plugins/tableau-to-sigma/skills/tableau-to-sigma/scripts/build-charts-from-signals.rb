@@ -5679,6 +5679,11 @@ layout.each do |dash|
     if (legend = legend_config_for(z, dash))
       element['legend'] = legend
       warnings << "'#{cap}' explicit Tableau legend zone mapped to Sigma legend.position=#{legend['position']}"
+    elsif element['color']
+      # Sigma shows a legend by default whenever a color channel exists.
+      # Tableau only shows one when the dashboard carries a legend zone; axis
+      # labels / pie labels already identify categories otherwise.
+      element['legend'] = { 'visibility' => 'hidden' }
     end
 
     # Null-dim exclusion (Tableau↔Sigma join-semantics parity): Sigma DM
