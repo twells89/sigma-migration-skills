@@ -44,6 +44,8 @@ ok(AnchorVerify.ranked_elements(a_hint_fuzzy, els).first == 'YoY Growth by Regio
 
 puts '-- pure core: cell parsing --'
 ok(AnchorVerify.cell_numbers('$1,234.50') == [1234.5], 'currency + commas parse')
+ok(AnchorVerify.cell_numbers('$106.801', '.') == [106.801, 106_801.0],
+   'dot-grouped export cell keeps its decimal reading plus a grouping interpretation')
 ok(AnchorVerify.cell_numbers('(42)') == [-42.0], 'paren negative parses')
 ok(AnchorVerify.cell_numbers('12%') == [12.0, 0.12], 'percent cell keeps points + fraction')
 ok(AnchorVerify.cell_numbers('United Widgets').empty?, 'non-numeric cell yields nothing')
