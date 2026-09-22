@@ -68,6 +68,9 @@ check(f == 'DateTrunc("month", [Master/Order Date])',
       "x-axis wraps the BASE date column (got #{f.inspect})", fails)
 check(f !~ /Month of Order Date/,
       'x-axis does NOT reference the broken passthrough [Master/Month of Order Date]', fails)
+check(xcol && xcol.dig('format', 'kind') == 'datetime' &&
+      xcol.dig('format', 'formatString') == '%B %Y',
+      "month-grain axis preserves full month-year labels (got #{xcol && xcol['format'].inspect})", fails)
 
 puts
 if fails.empty?

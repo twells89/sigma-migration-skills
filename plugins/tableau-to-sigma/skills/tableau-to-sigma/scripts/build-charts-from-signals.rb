@@ -5094,7 +5094,14 @@ layout.each do |dash|
     dim_col_obj = { 'id' => "x-#{el_id}", 'name' => dim['name'], 'formula' => dim_formula }
     if dim_trunc
       dim_col_obj['format'] = { 'kind' => 'datetime',
-                                'formatString' => dim_trunc == 'week' ? '%b %d, %Y' : '%b %Y' }
+                                'formatString' =>
+                                  if dim_trunc == 'week'
+                                    '%b %d, %Y'
+                                  elsif dim_trunc == 'month'
+                                    '%B %Y'
+                                  else
+                                    '%b %Y'
+                                  end }
     end
     color_col_obj = nil
     if color_dim

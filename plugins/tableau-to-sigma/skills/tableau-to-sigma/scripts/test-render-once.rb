@@ -29,6 +29,9 @@ DIR = __dir__
 SRC = File.read(File.join(DIR, 'migrate-tableau.rb'), encoding: 'UTF-8')
 m = SRC.match(/^def render_reuse_plan.*?\n^end$/m) or abort('could not extract render_reuse_plan')
 eval(m[0]) # rubocop:disable Security/Eval — test-only extraction of first-party code
+dim_method = SRC.match(/^def visual_render_dimensions.*?\n^end$/m) or
+  abort('could not extract visual_render_dimensions')
+eval(dim_method[0]) # rubocop:disable Security/Eval
 
 fails = []
 def check(cond, msg, fails)
@@ -122,6 +125,14 @@ check(SRC =~ /documentVersion .* is unchanged since 5b — START pass 1 from the
       'RCF banner starts pass 1 from the staged 6f render only under an unchanged version', fails)
 check(m[0] !~ /parity-final|visual_verdict|blind_grade|visual_match/,
       'the pure reuse plan never touches verdict artifacts (raw evidence only)', fails)
+
+puts 'T6 — fixed Tableau canvas drives Sigma render dimensions'
+fixed = [{ 'dashboard' => 'Alpha Overview',
+           'canvas_px' => { 'w' => 1600, 'h' => 1000, 'sizing_mode' => 'fixed' } }]
+check(visual_render_dimensions({ 'name' => 'Alpha Overview' }, fixed) == [1600, 1000],
+      'fixed source canvas replaces the old hard-coded 1800×1000 render', fails)
+check(visual_render_dimensions({ 'name' => 'Other' }, fixed) == [1800, 1000],
+      'unmatched/automatic dashboard keeps the safe render fallback', fails)
 
 puts
 if fails.empty?

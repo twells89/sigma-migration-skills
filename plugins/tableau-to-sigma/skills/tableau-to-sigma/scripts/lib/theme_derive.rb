@@ -92,6 +92,10 @@ module ThemeDerive
       v = (d['style_rules'] || {}).dig('dashboard', 'table', 'background-color')
       v.to_s.downcase == '#00000000' ? nil : v
     end
+    # Tableau's undeclared fixed-dashboard canvas defaults to white. Sigma's
+    # undeclared page canvas is gray, which creates visible gutters/card chrome
+    # around an otherwise faithful white dashboard.
+    c ||= '#ffffff' if d.dig('canvas_px', 'sizing_mode') == 'fixed'
     return nil unless c.is_a?(String) && c =~ /\A#[0-9a-fA-F]{6}/
     c[0, 7].downcase
   end

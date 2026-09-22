@@ -5752,6 +5752,24 @@ rescue StandardError
   nil
 end
 
+# Render the Sigma page at the authored Tableau canvas dimensions. A fixed
+# 1600×1000 source rendered into the old hard-coded 1800×1000 target produced
+# gray side gutters, shrunken content, and artificially small labels in the
+# visual grader even when the workbook layout itself was faithful.
+def visual_render_dimensions(page, dash_layout)
+  dashboard = Array(dash_layout).find do |candidate|
+    candidate.is_a?(Hash) &&
+      candidate['dashboard'].to_s.strip.casecmp?(page['name'].to_s.strip)
+  end
+  canvas = dashboard && dashboard['canvas_px']
+  if canvas.is_a?(Hash) && canvas['sizing_mode'] == 'fixed' &&
+     canvas['w'].to_i >= 600 && canvas['h'].to_i >= 400
+    [canvas['w'].to_i, canvas['h'].to_i]
+  else
+    [1800, 1000]
+  end
+end
+
 # ---------------------------------------------------------------------------
 # Phase 5b — Visual QA: render each content page to a full-page PNG so the
 # layout can be reviewed against refs/layout-visual-qa.md AND compared to the
@@ -5765,6 +5783,7 @@ hdr('5b', 'Visual QA')
 vqa = File.join(WORK, 'visual-qa'); FileUtils.mkdir_p(vqa)
 wbspec_local = (JSON.parse(File.read(wb_spec_path)) rescue {})
 content_pages = WorkbookCode.pages(wbspec_local).reject { |p| p['id'].to_s.downcase.include?('data') }
+vqa_dash_layout = (JSON.parse(File.read(File.join(WORK, 'dashboard-layout.json'))) rescue [])
 # v5.2 (speed): pages render CONCURRENTLY (pool 3) — each export is a 30-90s
 # server-side render; multi-page workbooks paid it serially.
 rendered = 0
@@ -5781,9 +5800,11 @@ Array.new([3, content_pages.size].min.clamp(1, 3)) do
         break
       end
       out = File.join(vqa, "#{pg['id']}.png")
+      render_width, render_height = visual_render_dimensions(pg, vqa_dash_layout)
       o, st = Open3.capture2e({ 'SIGMA_API_TOKEN' => vqa_tok },
                               *PyResolve.argv, PyResolve.winpath(File.join(HERE, 'sigma-export-png.py')),
-                              '--workbook', wb_id, '--page', pg['id'], '--out', PyResolve.winpath(out), '--w', '1800', '--h', '1000')
+                              '--workbook', wb_id, '--page', pg['id'], '--out', PyResolve.winpath(out),
+                              '--w', render_width.to_s, '--h', render_height.to_s)
       # K11: the PNG-export subprocess emits console-codepage bytes on Windows.
       # Ruby tags Open3 output UTF-8 regardless, so `o.strip` on invalid bytes
       # raises Encoding::CompatibilityError and kills this render thread. Scrub
