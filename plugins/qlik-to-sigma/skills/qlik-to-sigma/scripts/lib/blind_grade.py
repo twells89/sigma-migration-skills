@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .code_rep import workbook_elements
+from .code_rep import workbook_elements_with_pages
 
 DIMENSION_KEYS = (
     "element_titles_hidden",
@@ -80,8 +80,14 @@ def resolve_image(value: Any, grade_path: Path) -> Path:
 
 def built_families(readback: dict[str, Any]) -> list[str]:
     result = []
-    for element in workbook_elements(readback):
+    for element, page in workbook_elements_with_pages(readback):
         if element.get("visibleAsSource") is False:
+            continue
+        if isinstance(page, dict) and (
+            page.get("visibility") == "hidden"
+            or str(page.get("name") or "").strip().casefold() == "data"
+            or "data" in str(page.get("id") or "").casefold()
+        ):
             continue
         normalized = family(element.get("kind"))
         if normalized in CHART_FAMILIES:

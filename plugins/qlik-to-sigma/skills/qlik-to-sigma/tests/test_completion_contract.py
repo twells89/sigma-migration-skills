@@ -480,6 +480,63 @@ class CompletionContractTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("census", result.stderr)
 
+    def test_visual_census_ignores_hidden_data_page_master(self):
+        readback_path = self.workdir / "wb-readback.json"
+        readback = json.loads(readback_path.read_text())
+        readback["document"]["pages"].append({
+            "id": "page-data",
+            "name": "Data",
+            "visibility": "hidden",
+            "elements": [{
+                "id": "m-master",
+                "name": "Master",
+                "kind": "table",
+                "columns": [{"id": "master-country"}],
+            }],
+        })
+        readback["document"]["layout"] += (
+            '<Page id="page-data" type="grid">'
+            '<Element elementId="m-master" gridColumn="1 / 25" '
+            'gridRow="1 / 13"/></Page>'
+        )
+        write_json(readback_path, readback)
+        source = self.workdir / "source-pages" / "sheet-1.png"
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        dimensions = {
+            name: {"verdict": "pass"}
+            for name in (
+                "element_titles_hidden",
+                "palette_match",
+                "composition_match",
+                "chart_shapes_match",
+                "labels_legible",
+                "numbers_formatted",
+            )
+        }
+        grade = self.workdir / "blind-grade.json"
+        write_json(grade, {
+            "verdict": "pass",
+            "source_png": str(source),
+            "target_png": str(target),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "target_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "dimensions": dimensions,
+            "per_tile": [{
+                "position": "main",
+                "source_family": "bar",
+                "target_family": "bar",
+            }],
+        })
+        result = self.run_script(
+            "record_visual_check.py",
+            "--workdir", self.workdir,
+            "--verdict", "pass",
+            "--agent-vision", "true",
+            "--checklist", ",".join(f"{name}=pass" for name in dimensions),
+            "--blind-grade", grade,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
     def test_report_check_is_deterministic_and_read_only(self):
         final = self.finalize()
         self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
