@@ -1413,6 +1413,16 @@ def main() -> int:
         ],
         check=False,
     )
+    print("── Tableau reconstruction integrity gate")
+    reconstruction_gate = subprocess.run(
+        [
+            sys.executable,
+            str(HERE / "assert-reconstruction-integrity.py"),
+            "--workdir",
+            str(workdir),
+        ],
+        check=False,
+    )
     print("── Final gate: verify-complete.py")
     completed = subprocess.run(
         [
@@ -1452,6 +1462,7 @@ def main() -> int:
         relationship_gate.returncode
         or dashboard_gate.returncode
         or sql_gate.returncode
+        or reconstruction_gate.returncode
         or hard_gate.returncode
         or completed.returncode
     )

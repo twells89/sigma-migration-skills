@@ -94,6 +94,35 @@ def success_marker(wd, extra = {})
   write_source_accounting(wd)
 end
 
+# Tableau-local reconstruction gate must remain load-bearing even though the
+# shared assert-phase6 marker was already stamped.
+Dir.mktmpdir do |wd|
+  success_marker(wd)
+  File.write(File.join(wd, 'neutral-controls-coverage.json'), JSON.generate('detail' => []))
+  code, out = run_vc(VC, wd)
+  check(code == 11 && out.include?('reconstruction-integrity.json is missing'),
+        "reconstruction surface + missing local gate => exit 11 (got #{code})", fails)
+
+  File.write(File.join(wd, 'reconstruction-integrity.json'), JSON.generate(
+    'status' => 'FAIL',
+    'unresolved_controls' => [
+      { 'kind' => 'parameter', 'name' => 'Date Grain', 'status' => 'needs-wiring' }
+    ],
+    'renamed_chart_family_mismatches' => []
+  ))
+  code, out = run_vc(VC, wd)
+  check(code == 11 && out.include?('parameter:Date Grain'),
+        "failed reconstruction artifact blocks DONE by name (got #{code})", fails)
+
+  File.write(File.join(wd, 'reconstruction-integrity.json'), JSON.generate(
+    'status' => 'PASS',
+    'unresolved_controls' => [],
+    'renamed_chart_family_mismatches' => []
+  ))
+  code, = run_vc(VC, wd)
+  check(code == 0, "passing reconstruction artifact restores DONE (got #{code})", fails)
+end
+
 # Clean workdir → DONE with VERDICT: GREEN and an explicitly-empty ledger.
 Dir.mktmpdir do |wd|
   success_marker(wd, 'verdict' => 'GREEN')

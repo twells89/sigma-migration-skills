@@ -44,6 +44,7 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         "relationship_coverage": workdir / "relationship-coverage.json",
         "dashboard_coverage": workdir / "dashboard-coverage.json",
         "sql_provenance": workdir / "sql-provenance.json",
+        "reconstruction_integrity": workdir / "reconstruction-integrity.json",
         "source_census": workdir / "source-object-census.json",
         "security_decision": workdir / "security-decision.json",
         "data_model_ids": workdir / "dm-ids.json",
@@ -177,6 +178,14 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         failures.append(
             "sql_provenance: a data-model SQL element is unattributed or the artifact is stale"
         )
+    reconstruction_pass = (
+        documents.get("reconstruction_integrity", {}).get("status") == "PASS"
+    )
+    if not reconstruction_pass:
+        failures.append(
+            "reconstruction_integrity: unfinished controls or renamed chart-family "
+            "substitutions remain"
+        )
     census = documents.get("source_census") or {}
     census_summary = census.get("summary") or {}
     source_objects = census.get("objects") or []
@@ -244,6 +253,7 @@ def evaluate(workdir: Path, blind_grade: Path) -> dict:
         "relationship_coverage": relationship_gate_pass,
         "dashboard_coverage": dashboard_gate_pass,
         "sql_provenance": sql_gate_pass,
+        "reconstruction_integrity": reconstruction_pass,
         "security_decision": security.get("decision") in {"not-required", "port", "customize", "skip"},
     }
     return {

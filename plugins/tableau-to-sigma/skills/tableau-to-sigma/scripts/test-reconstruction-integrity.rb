@@ -6,7 +6,10 @@ require 'open3'
 require 'rbconfig'
 require 'tmpdir'
 
-SCRIPT = File.join(__dir__, 'assert-reconstruction-integrity.rb')
+BACKENDS = {
+  'ruby' => [RbConfig.ruby, File.join(__dir__, 'assert-reconstruction-integrity.rb')],
+  'python' => ['python3', File.join(__dir__, 'assert-reconstruction-integrity.py')]
+}.freeze
 
 fails = []
 check = lambda do |condition, message|
@@ -14,8 +17,8 @@ check = lambda do |condition, message|
   puts "  #{condition ? 'PASS' : 'FAIL'}  #{message}"
 end
 
-run_gate = lambda do |dir|
-  Open3.capture3(RbConfig.ruby, SCRIPT, '--workdir', dir)
+run_gate = lambda do |dir, command|
+  Open3.capture3(*command, '--workdir', dir)
 end
 
 write_controls = lambda do |dir, status|
@@ -47,53 +50,55 @@ write_kind_fixture = lambda do |dir|
   ))
 end
 
-Dir.mktmpdir do |dir|
-  out, err, status = run_gate.call(dir)
-  check.call(status.success?, "no reconstruction residues passes (#{err})")
-  check.call(out.include?('[OK] reconstruction integrity'), 'clean gate states its result')
-end
+BACKENDS.each do |backend, command|
+  Dir.mktmpdir do |dir|
+    out, err, status = run_gate.call(dir, command)
+    check.call(status.success?, "#{backend}: no reconstruction residues passes (#{err})")
+    check.call(out.include?('[OK] reconstruction integrity'), "#{backend}: clean gate states its result")
+  end
 
-Dir.mktmpdir do |dir|
-  write_controls.call(dir, 'needs-wiring')
-  _out, err, status = run_gate.call(dir)
-  check.call(!status.success? && err.include?('parameter:Date Grain') && err.include?('needs-wiring'),
-             'declared needs-wiring remains blocking by name')
-  result = JSON.parse(File.read(File.join(dir, 'reconstruction-integrity.json')))
-  check.call(result['status'] == 'FAIL' && result['unresolved_controls'].length == 1,
-             'control blocker is persisted in the integrity artifact')
-end
+  Dir.mktmpdir do |dir|
+    write_controls.call(dir, 'needs-wiring')
+    _out, err, status = run_gate.call(dir, command)
+    check.call(!status.success? && err.include?('parameter:Date Grain') && err.include?('needs-wiring'),
+               "#{backend}: declared needs-wiring remains blocking by name")
+    result = JSON.parse(File.read(File.join(dir, 'reconstruction-integrity.json')))
+    check.call(result['status'] == 'FAIL' && result['unresolved_controls'].length == 1,
+               "#{backend}: control blocker is persisted in the integrity artifact")
+  end
 
-Dir.mktmpdir do |dir|
-  write_controls.call(dir, 'needs-materialization')
-  File.write(File.join(dir, 'controls-waivers.json'), JSON.pretty_generate(
-    [{ 'control' => 'parameter:Date Grain', 'reason' => 'source parameter is outside retained scope' }]
-  ))
-  _out, _err, status = run_gate.call(dir)
-  check.call(status.success?, 'reasoned control waiver terminally accepts the scope cut')
-end
+  Dir.mktmpdir do |dir|
+    write_controls.call(dir, 'needs-materialization')
+    File.write(File.join(dir, 'controls-waivers.json'), JSON.pretty_generate(
+      [{ 'control' => 'parameter:Date Grain', 'reason' => 'source parameter is outside retained scope' }]
+    ))
+    _out, _err, status = run_gate.call(dir, command)
+    check.call(status.success?, "#{backend}: reasoned control waiver terminally accepts the scope cut")
+  end
 
-Dir.mktmpdir do |dir|
-  write_kind_fixture.call(dir)
-  _out, err, status = run_gate.call(dir)
-  check.call(!status.success? && err.include?('expected line, built bar'),
-             'renamed reconstructed bar cannot hide a verified source line')
-  result = JSON.parse(File.read(File.join(dir, 'reconstruction-integrity.json')))
-  mismatch = result['renamed_chart_family_mismatches'].first
-  check.call(mismatch && mismatch['source_tile'] == 'Volume Trend',
-             'chart-family mismatch artifact retains source and renamed identities')
-end
+  Dir.mktmpdir do |dir|
+    write_kind_fixture.call(dir)
+    _out, err, status = run_gate.call(dir, command)
+    check.call(!status.success? && err.include?('expected line, built bar'),
+               "#{backend}: renamed reconstructed bar cannot hide a verified source line")
+    result = JSON.parse(File.read(File.join(dir, 'reconstruction-integrity.json')))
+    mismatch = result['renamed_chart_family_mismatches'].first
+    check.call(mismatch && mismatch['source_tile'] == 'Volume Trend',
+               "#{backend}: chart-family mismatch artifact retains source and renamed identities")
+  end
 
-Dir.mktmpdir do |dir|
-  write_kind_fixture.call(dir)
-  png_path = File.join(dir, 'png-read.json')
-  png = JSON.parse(File.read(png_path))
-  png['kind_waivers'] = [{
-    'tile' => 'Volume Trend',
-    'reason' => 'documented capability substitution'
-  }]
-  File.write(png_path, JSON.pretty_generate(png))
-  _out, _err, status = run_gate.call(dir)
-  check.call(status.success?, 'reasoned kind waiver records a deliberate substitution')
+  Dir.mktmpdir do |dir|
+    write_kind_fixture.call(dir)
+    png_path = File.join(dir, 'png-read.json')
+    png = JSON.parse(File.read(png_path))
+    png['kind_waivers'] = [{
+      'tile' => 'Volume Trend',
+      'reason' => 'documented capability substitution'
+    }]
+    File.write(png_path, JSON.pretty_generate(png))
+    _out, _err, status = run_gate.call(dir, command)
+    check.call(status.success?, "#{backend}: reasoned kind waiver records a deliberate substitution")
+  end
 end
 
 puts

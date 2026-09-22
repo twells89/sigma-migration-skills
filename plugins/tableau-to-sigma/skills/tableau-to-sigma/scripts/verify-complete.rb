@@ -58,6 +58,8 @@
 #      no Sigma page, or the coverage artifact is missing/stale.
 #  10  SQL PROVENANCE INVALID — a data-model SQL element is unattributed, or
 #      the provenance artifact is stale.
+#  11  RECONSTRUCTION INTEGRITY INVALID — Tableau reconstruction artifacts are
+#      present but the local completion gate is missing or failed.
 
 require 'json'
 require 'optparse'
@@ -152,6 +154,35 @@ if opts[:wb] && !sj['workbookId'].to_s.empty? && sj['workbookId'] != opts[:wb]
   warn "⛔ DONE marker is for a DIFFERENT workbook (#{sj['workbookId']}) than --workbook-id #{opts[:wb]}."
   warn '   You are likely looking at a stale workdir or the wrong run.'
   exit 4
+end
+
+# assert-phase6-ran.rb is shared across converters, so Tableau's reconstruction
+# residue gate is standalone. A shared success marker cannot override a failed
+# or missing local gate when controls coverage / layout renames show that the
+# reconstruction surface exists.
+reconstruction_path = File.join(wd, 'reconstruction-integrity.json')
+reconstruction_relevant = Dir[File.join(wd, '*-controls-coverage.json')].any? ||
+                          File.exist?(File.join(wd, 'layout-renames.json'))
+if reconstruction_relevant
+  unless File.exist?(reconstruction_path)
+    warn '⛔ RECONSTRUCTION INTEGRITY INVALID — controls/rename artifacts exist but ' \
+         'reconstruction-integrity.json is missing.'
+    warn "   Run: ruby scripts/assert-reconstruction-integrity.rb --workdir #{wd}"
+    exit 11
+  end
+  reconstruction = load(reconstruction_path)
+  unless reconstruction['status'] == 'PASS'
+    warn '⛔ RECONSTRUCTION INTEGRITY INVALID — unfinished controls or an undeclared ' \
+         'renamed chart-family substitution remains.'
+    Array(reconstruction['unresolved_controls']).each do |record|
+      warn "   • #{record['kind']}:#{record['name']} (#{record['status']})"
+    end
+    Array(reconstruction['renamed_chart_family_mismatches']).each do |record|
+      warn "   • #{record['source_tile']} -> #{record['renamed_element']}: " \
+           "expected #{record['expected_family']}, built #{Array(record['built_families']).join('/')}"
+    end
+    exit 11
+  end
 end
 
 source_path = File.join(wd, 'workbook-content.twb')
