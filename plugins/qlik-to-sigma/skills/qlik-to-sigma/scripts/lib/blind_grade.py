@@ -36,8 +36,18 @@ FAMILY_MAP = {
     "kpi-chart": "kpi",
     "single-value": "kpi",
     "big-number": "kpi",
+    "progress": "kpi",
+    "progress-chart": "kpi",
+    "gauge-chart": "kpi",
     "region-map": "map",
     "point-map": "map",
+    "waterfall-chart": "bar",
+    "funnel-chart": "bar",
+    "box-chart": "other",
+    "sankey-chart": "other",
+    "treemap-chart": "other",
+    "heatmap-chart": "other",
+    "word-cloud": "other",
     "pivot-table": "table",
     "pivot": "table",
     "crosstab": "table",
@@ -47,6 +57,7 @@ FAMILY_MAP = {
 }
 CHART_FAMILIES = {
     "bar", "line", "area", "combo", "scatter", "pie", "kpi", "map", "table",
+    "other",
 }
 
 

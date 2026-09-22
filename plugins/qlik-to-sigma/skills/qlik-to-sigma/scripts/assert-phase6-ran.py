@@ -886,6 +886,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     parity, chart_count = gate_parity(workdir)
     parity_reasons = parity.get("waiver_reasons") or {}
     mode_waivers: list[dict[str, str]] = []
+    declared_parity_waivers = set(parity.get("waivers") or [])
+    if (
+        parity.get("mode") == "warehouse"
+        and "--source-parity-unavailable" not in declared_parity_waivers
+    ):
+        fail(
+            19,
+            "waiver-budget",
+            "warehouse-only parity requires the named "
+            "--source-parity-unavailable disposition",
+        )
     for flag in parity.get("waivers") or []:
         if flag != "--source-parity-unavailable":
             continue

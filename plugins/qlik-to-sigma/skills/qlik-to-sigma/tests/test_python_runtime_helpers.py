@@ -23,6 +23,8 @@ SCRIPTS = SKILL / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from lib import blind_grade as blind_grade_lib
+
 
 def load_script(filename: str):
     """Load a hyphenated script without executing its command-line entrypoint."""
@@ -154,6 +156,14 @@ class WorkbookPreflightTest(unittest.TestCase):
 
 
 class RenderAndLayoutTest(unittest.TestCase):
+    def test_blind_grade_maps_supported_chart_families(self):
+        self.assertEqual("kpi", blind_grade_lib.family("progress"))
+        self.assertEqual("other", blind_grade_lib.family("box-chart"))
+        self.assertEqual("bar", blind_grade_lib.family("waterfall-chart"))
+        self.assertTrue(
+            {"kpi", "other", "bar"}.issubset(blind_grade_lib.CHART_FAMILIES)
+        )
+
     def test_render_integrity_reports_data_elements_without_usable_bindings(self):
         spec = workbook(
             [

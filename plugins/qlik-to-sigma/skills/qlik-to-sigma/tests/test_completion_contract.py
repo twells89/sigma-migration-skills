@@ -392,6 +392,20 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(19, result.returncode, result.stdout + result.stderr)
         self.assertFalse((self.workdir / "phase6-success.json").exists())
 
+    def test_warehouse_mode_requires_named_source_parity_disposition(self):
+        parity_path = self.workdir / "parity-final.json"
+        parity = json.loads(parity_path.read_text())
+        parity["mode"] = "warehouse"
+        parity["verified_against"] = "warehouse"
+        parity.pop("waivers", None)
+        parity.pop("waiver_reasons", None)
+        write_json(parity_path, parity)
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(19, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
     def test_visual_recorder_rejects_incomplete_blind_grade(self):
         source = self.workdir / "source-pages" / "sheet-1.png"
         target = self.workdir / "visual-qa" / "sheet-1.png"
