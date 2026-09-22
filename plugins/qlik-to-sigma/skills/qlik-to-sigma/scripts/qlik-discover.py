@@ -438,6 +438,21 @@ def qlik_chart_rows(app, ctx_args, chart):
                 found.extend(matrices(child))
         return found
 
+    def pivot_matrices(value):
+        found = []
+        if isinstance(value, dict):
+            matrix = value.get("qData")
+            if isinstance(matrix, list) and matrix and all(
+                isinstance(row, list) for row in matrix
+            ):
+                found.append(matrix)
+            for child in value.values():
+                found.extend(pivot_matrices(child))
+        elif isinstance(value, list):
+            for child in value:
+                found.extend(pivot_matrices(child))
+        return found
+
     rows = []
     sizes = []
     areas = []
@@ -462,15 +477,21 @@ def qlik_chart_rows(app, ctx_args, chart):
 
     collect_sizes(data)
     dimension_count = len(chart.get("dimensions") or [])
-    for matrix in matrices(data):
+    straight_matrices = matrices(data)
+    pivot = not straight_matrices
+    for matrix in straight_matrices or pivot_matrices(data):
         for raw_row in matrix:
             if not isinstance(raw_row, list):
                 continue
             row = []
             for index, cell in enumerate(raw_row):
-                if not isinstance(cell, dict) or cell.get("qIsNull"):
+                if (
+                    not isinstance(cell, dict)
+                    or cell.get("qIsNull")
+                    or cell.get("qType") == "U"
+                ):
                     row.append(None)
-                elif index >= dimension_count and isinstance(
+                elif (pivot or index >= dimension_count) and isinstance(
                     cell.get("qNum"), (int, float)
                 ):
                     row.append(cell["qNum"])
@@ -492,6 +513,7 @@ def qlik_chart_rows(app, ctx_args, chart):
             and starts_at_zero
         ),
         "expectedRows": expected_rows,
+        "pivot": pivot,
     }
 
 
@@ -595,6 +617,7 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
             "rows": result.get("rows") or [],
             "complete": result.get("complete") is True,
             "expectedRows": result.get("expectedRows"),
+            "pivot": result.get("pivot") is True,
         })
     return snapshot
 

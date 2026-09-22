@@ -956,6 +956,8 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
             if not column or not any(
                 candidate.get("columnId") == column.get("id")
                 and candidate.get("values") == [True]
+                and candidate.get("kind") == "list"
+                and candidate.get("mode") == "include"
                 for candidate in filters
             ):
                 fail(
@@ -978,6 +980,9 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 )
                 in expected_names
             }
+            expected_criteria = row["cls"].get("criteria") or {
+                "kind": "no-one-can-view"
+            }
             if (
                 not expected_names
                 or len(column_ids) != len(expected_names)
@@ -985,6 +990,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 column_ids.issubset(
                     {str(value) for value in security.get("restrictedColumns") or []}
                 )
+                and security.get("criteria") == expected_criteria
                 for security in securities
                 )
             ):
@@ -993,6 +999,38 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                     "security",
                     "a supplied CLS restriction is absent from persisted readback",
                 )
+    required_principals = {
+        str(value)
+        for row in expected_rules
+        if isinstance(row.get("rls"), dict)
+        for value in (
+            (row["rls"].get("userAttributes") or [])
+            + (row["rls"].get("teams") or [])
+        )
+        if str(value)
+    }
+    if required_principals:
+        membership_evidence = decision.get("membership_evidence")
+        if (
+            decision.get("membership_verified") is not True
+            or not isinstance(membership_evidence, list)
+            or not membership_evidence
+        ):
+            fail(
+                32,
+                "security",
+                "security principals require membership/attribute assignment evidence",
+            )
+        for evidence in membership_evidence:
+            path = Path(str((evidence or {}).get("path") or "")).expanduser()
+            if not path.is_absolute():
+                path = workdir / path
+            if (
+                not path.is_file()
+                or hashlib.sha256(path.read_bytes()).hexdigest()
+                != str((evidence or {}).get("sha256") or "").lower()
+            ):
+                fail(32, "security", f"membership evidence is missing or stale: {path}")
     return None
 
 

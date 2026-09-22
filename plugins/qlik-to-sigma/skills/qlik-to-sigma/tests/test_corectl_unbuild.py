@@ -57,6 +57,37 @@ def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
     assert result["expectedRows"] == 2
 
 
+def test_pivot_hypercube_rows_capture_numeric_value_matrix():
+    module = load_discovery()
+    module.qlik = lambda *_args, **_kwargs: {
+        "qPivotDataPages": [{
+            "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
+            "qData": [
+                [
+                    {"qText": "42", "qNum": 42.0, "qType": "V"},
+                    {"qText": "-", "qNum": float("nan"), "qType": "U"},
+                ],
+                [
+                    {"qText": "10.5", "qNum": 10.5, "qType": "V"},
+                    {"qText": "3", "qNum": 3.0, "qType": "V"},
+                ],
+            ],
+        }]
+    }
+    result = module.qlik_chart_rows(
+        "app",
+        ["--context", "fixture"],
+        {
+            "id": "pivot-1",
+            "dimensions": ["Region"],
+            "measures": ["Sum(Sales)"],
+        },
+    )
+    assert result["pivot"] is True
+    assert result["complete"] is True
+    assert result["rows"] == [[42.0, None], [10.5, 3.0]]
+
+
 def test_normalizes_nested_children_with_empty_master_items():
     with tempfile.TemporaryDirectory() as output:
         run(sys.executable, os.path.join(SCRIPTS, "qlik-unbuild-discover.py"),

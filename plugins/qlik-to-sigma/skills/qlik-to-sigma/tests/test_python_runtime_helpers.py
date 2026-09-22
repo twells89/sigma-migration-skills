@@ -566,6 +566,7 @@ class OfflineBoundaryTest(unittest.TestCase):
             self.assertEqual("run-1", decision["run_id"])
             self.assertTrue(decision["readback_verified"])
             self.assertEqual(1, decision["rules_applied"])
+            self.assertFalse(decision["membership_verified"])
 
     def test_mixed_control_probe_requires_complete_skip_marker(self):
         with tempfile.TemporaryDirectory() as temporary:

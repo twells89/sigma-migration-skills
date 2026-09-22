@@ -669,9 +669,10 @@ it never treats missing rules as an unsecured success.
    # Python profile self-mints; optional shell-neutral token handoff:
    python3 scripts/vendor/get_token.py --workdir <WORK>
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK>            # plan only (default)
-   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK> --provision --apply
+   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK> --provision --apply \
+     [--membership-evidence <assignment-readback.json>]
    ```
-   `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element, reads the model back, and writes run/model/hash-bound `security-decision.json`.
+   `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element, reads every requested rule back, and writes run/model/hash-bound `security-decision.json`. When rules name teams or user attributes, completion also requires hash-bound `--membership-evidence` from the assignment/readback step.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 
 For a detected Section Access app, unattended Python runs default to **abort

@@ -1313,7 +1313,9 @@ class Migration:
 
     @staticmethod
     def numeric(value: Any) -> float | None:
-        raw = str(value or "").strip()
+        if value is None:
+            return None
+        raw = str(value).strip()
         is_percent = raw.endswith("%")
         text = re.sub(r"[$,%\s]", "", raw)
         try:
@@ -1343,6 +1345,102 @@ class Migration:
                 )
             normalized.append(tuple(row))
         return sorted(normalized, key=repr)
+
+    @classmethod
+    def canonical_numeric_cells(cls, rows: Any) -> list[float]:
+        values = []
+        for row in rows or []:
+            if not isinstance(row, list):
+                continue
+            for cell in row:
+                number = cls.numeric(cell)
+                if number is not None:
+                    values.append(round(number, 9))
+        return sorted(values)
+
+    @classmethod
+    def numbers_match(cls, source: Any, target: Any) -> bool:
+        source_number = cls.numeric(source)
+        target_number = cls.numeric(target)
+        if source_number is None or target_number is None:
+            return str(source or "").strip() == str(target or "").strip()
+        raw = str(target).strip().replace(",", "").replace("$", "")
+        is_percent = raw.endswith("%")
+        raw = raw.rstrip("%")
+        decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
+        tolerance = 0.5 * (10 ** -decimals)
+        if is_percent:
+            tolerance /= 100.0
+        tolerance += max(abs(source_number), abs(target_number)) * 1e-6
+        return abs(source_number - target_number) <= tolerance
+
+    @classmethod
+    def chart_rows_match(
+        cls,
+        source_rows: Any,
+        target_rows: Any,
+        dimension_count: int,
+    ) -> bool:
+        source = [
+            row for row in source_rows or [] if isinstance(row, list)
+        ]
+        target = [
+            row for row in target_rows or [] if isinstance(row, list)
+        ]
+        source.sort(
+            key=lambda row: repr(
+                tuple(str(value or "").strip() for value in row[:dimension_count])
+            )
+        )
+        target.sort(
+            key=lambda row: repr(
+                tuple(str(value or "").strip() for value in row[:dimension_count])
+            )
+        )
+        if len(source) != len(target):
+            return False
+        for left, right in zip(source, target):
+            if len(left) != len(right):
+                return False
+            if any(
+                str(left[index] or "").strip()
+                != str(right[index] or "").strip()
+                for index in range(dimension_count)
+            ):
+                return False
+            if any(
+                not cls.numbers_match(left[index], right[index])
+                for index in range(dimension_count, len(left))
+            ):
+                return False
+        return True
+
+    @classmethod
+    def numeric_cells_match(cls, source_rows: Any, target_rows: Any) -> bool:
+        source = sorted(
+            (
+                value
+                for row in source_rows or []
+                if isinstance(row, list)
+                for value in row
+                if cls.numeric(value) is not None
+            ),
+            key=lambda value: cls.numeric(value),
+        )
+        target = sorted(
+            (
+                value
+                for row in target_rows or []
+                if isinstance(row, list)
+                for value in row
+                if cls.numeric(value) is not None
+            ),
+            key=lambda value: cls.numeric(value),
+        )
+        return len(source) == len(target) and all(
+            cls.numbers_match(left, right)
+            for left, right in zip(source, target)
+        )
 
     def export_elements(
         self, workbook_id: str, element_map: list[dict[str, Any]]
@@ -1548,23 +1646,41 @@ class Migration:
             sigma_count = len(sigma_rows) if body else None
             object_id = str((element.get("qlik") or {}).get("objectId") or "")
             source_data = snapshot_chart_data.get(object_id)
-            full_rows_match = bool(
-                source_data
-                and source_data.get("complete") is True
-                and self.canonical_chart_rows(
-                    source_data.get("rows"),
-                    int(source_data.get("dimensionCount") or len(dimensions)),
+            pivot_data = bool(source_data and source_data.get("pivot") is True)
+            if pivot_data:
+                full_rows_match = bool(
+                    source_data.get("complete") is True
+                    and self.canonical_numeric_cells(source_data.get("rows"))
+                    and self.numeric_cells_match(
+                        source_data.get("rows"),
+                        sigma_rows,
+                    )
                 )
-                == self.canonical_chart_rows(sigma_rows, len(dimensions))
-            )
+            else:
+                full_rows_match = bool(
+                    source_data
+                    and source_data.get("complete") is True
+                    and self.chart_rows_match(
+                        source_data.get("rows"),
+                        sigma_rows,
+                        int(
+                            source_data.get("dimensionCount")
+                            or len(dimensions)
+                        ),
+                    )
+                )
             if (
-                qlik_count is not None
-                and sigma_count == qlik_count
+                (pivot_data or (
+                    qlik_count is not None
+                    and sigma_count == qlik_count
+                ))
                 and full_rows_match
             ):
                 state = "MATCH"
             elif not source_data or source_data.get("complete") is not True:
                 state = "SOURCE-DATA-MISSING"
+            elif pivot_data:
+                state = "VALUE-MISMATCH"
             elif qlik_count is None or sigma_count is None:
                 state = "NO-DATA"
             elif qlik_count != sigma_count:

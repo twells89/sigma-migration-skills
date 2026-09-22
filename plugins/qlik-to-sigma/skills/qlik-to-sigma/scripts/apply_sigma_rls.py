@@ -267,6 +267,7 @@ def apply_from_security(
     run_id=None,
     decision="port",
     required_element_id=None,
+    membership_evidence=None,
 ):
     """Provision attrs/teams + apply RLS calc/filter and CLS for each result.security entry."""
     spec = api("GET", f"/v2/dataModels/{dm_id}/spec")
@@ -310,6 +311,16 @@ def apply_from_security(
         for rule in security
         if isinstance(rule, dict)
     )
+    required_principals = sorted({
+        str(value)
+        for rule in security
+        if isinstance(rule, dict) and isinstance(rule.get("rls"), dict)
+        for value in (
+            (rule["rls"].get("userAttributes") or [])
+            + (rule["rls"].get("teams") or [])
+        )
+        if str(value)
+    })
     if do_apply and applied:
         res = api("PUT", f"/v2/dataModels/{dm_id}/spec", spec)
         print(f"PUT spec -> applied {applied} rule(s):", (json.dumps(res)[:200] if isinstance(res, dict) else str(res)[:200]))
@@ -342,6 +353,8 @@ def apply_from_security(
                 if column and any(
                     row.get("columnId") == column.get("id")
                     and row.get("values") == [True]
+                    and row.get("kind") == "list"
+                    and row.get("mode") == "include"
                     for row in filters
                 ):
                     verified_rules += 1
@@ -352,10 +365,14 @@ def apply_from_security(
                         rule["cls"].get("restrictedColumnNames"),
                     )
                 )
+                expected_criteria = rule["cls"].get("criteria") or {
+                    "kind": "no-one-can-view"
+                }
                 if expected_ids and any(
                     expected_ids.issubset(
                         set(row.get("restrictedColumns") or [])
                     )
+                    and row.get("criteria") == expected_criteria
                     for row in securities
                 ):
                     verified_rules += 1
@@ -383,6 +400,12 @@ def apply_from_security(
                         "dataModelId": dm_id,
                         "securedElementId": required_element_id,
                         "run_id": run_id,
+                        "requiredPrincipals": required_principals,
+                        "membership_verified": (
+                            not required_principals
+                            or bool(membership_evidence)
+                        ),
+                        "membership_evidence": membership_evidence or [],
                         "readback_sha256": hashlib.sha256(
                             readback_path.read_bytes()
                         ).hexdigest(),
@@ -423,6 +446,12 @@ def main():
     ap.add_argument("--provision", action="store_true", help="create missing user attributes / teams (with --from-security)")
     ap.add_argument("--workdir", help="migration workdir for bound security-decision/readback evidence")
     ap.add_argument("--decision", choices=("port", "customize"), default="port")
+    ap.add_argument(
+        "--membership-evidence",
+        action="append",
+        default=[],
+        help="path to membership/attribute assignment evidence (repeatable)",
+    )
     a = ap.parse_args()
     configure_auth(a.workdir or (Path(a.from_security).parent if a.from_security else None))
 
@@ -443,6 +472,15 @@ def main():
                 "Qlik security apply requires <workdir>/dm-result.json with "
                 "denormElementId so RLS/CLS protects the workbook source."
             )
+        membership_evidence = []
+        for value in a.membership_evidence:
+            path = Path(value).expanduser().resolve()
+            if not path.is_file():
+                sys.exit(f"membership evidence not found: {path}")
+            membership_evidence.append({
+                "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            })
         return apply_from_security(
             a.dm_id,
             security,
@@ -452,6 +490,7 @@ def main():
             run_id=run_state.get("run_id"),
             decision=a.decision,
             required_element_id=denorm_element_id,
+            membership_evidence=membership_evidence,
         )
 
     if not a.attr:

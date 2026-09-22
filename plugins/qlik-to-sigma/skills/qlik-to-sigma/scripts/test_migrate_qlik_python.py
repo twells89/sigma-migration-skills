@@ -150,6 +150,24 @@ class CliContractTests(unittest.TestCase):
             "visibility": "hidden",
         }))
 
+    def test_numeric_parity_handles_zero_percent_and_display_rounding(self) -> None:
+        self.assertEqual(0.0, migrate.Migration.numeric(0))
+        self.assertEqual(0.42, migrate.Migration.numeric("42%"))
+        self.assertTrue(
+            migrate.Migration.chart_rows_match(
+                [["West", 10.504]],
+                [["West", "10.50"]],
+                1,
+            )
+        )
+        self.assertFalse(
+            migrate.Migration.chart_rows_match(
+                [["West", 10.51]],
+                [["West", "10.50"]],
+                1,
+            )
+        )
+
 
 class NoRubyContractTests(unittest.TestCase):
     RUNTIME_FILES = (
