@@ -194,6 +194,9 @@ Dir.mktmpdir do |d|
                                    { 'title' => 'Tier Bars', 'kind' => 'bar-chart', 'orientation' => 'vertical' }],
                        'text_elements' => [], 'filter_shelf' => []))
   abort 'parse-twb-layout failed' unless system('ruby', PARSER, twb, lay, out: File::NULL, err: File::NULL)
+  parsed_layout = JSON.parse(File.read(lay))
+  parsed_layout.first['brand_palette'] = %w[#4e79a7 #f28e2b #e15759 #76b7b2 #59a14f]
+  File.write(lay, JSON.dump(parsed_layout))
   out = File.join(d, 'specs.json')
   build_log = IO.popen(['ruby', BUILD, '--tableau-dir', d, '--layout', lay, '--meta', lay.sub(/\.json$/, '-meta.json'), '--master-map', mm, '--master-element-id', 'master', '--out', out], err: %i[child out], &:read)
   build_out = JSON.parse(File.read(out)) if File.exist?(out)
@@ -219,6 +222,10 @@ check(same_axis_color && same_axis_color.dig('color', 'by') == 'category',
       "axis+Color-shelf chart emits a category color channel (got #{same_axis_color && same_axis_color['color'].inspect})", fails)
 check(same_axis_color && same_axis_color.dig('color', 'column') != same_axis_color.dig('xAxis', 'columnId'),
       'axis+Color-shelf chart uses a duplicate column to satisfy channel exclusivity', fails)
+check(same_axis_color && same_axis_color.dig('color', 'scheme') ==
+        %w[#76b7b2 #e15759 #4e79a7 #f28e2b],
+      "source member order is rebound to Sigma's alphabetical color slots " \
+      "(got #{same_axis_color && same_axis_color.dig('color', 'scheme').inspect})", fails)
 
 # ---- 2. number format from the column default-format ------------------------
 ycol = tier && (tier['columns'] || []).find { |c| tier.dig('yAxis', 'columnIds')&.include?(c['id']) }

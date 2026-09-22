@@ -5118,9 +5118,23 @@ layout.each do |dash|
                                   end }
     end
     color_col_obj = nil
+    source_default_color_scheme = nil
     if color_dim
       color_col_obj = { 'id' => "c-#{el_id}", 'name' => color_dim['name'],
                         'formula' => color_dim['formula'] || "[Master/#{color_dim['name']}]" }
+      if z.dig('channels', 'color', 'column')
+        palette = Array(dash['brand_palette'])
+        category_index = color_csv_idx || dim_csv_idx
+        members = rows.map { |row| row[category_index].to_s.strip }
+                      .reject(&:empty?).uniq
+        if members.any? && palette.size >= members.size
+          assignments = members.each_with_index.map do |member, index|
+            { 'member' => member, 'color' => palette[index] }
+          end
+          source_default_color_scheme = assignments.sort_by { |pair| pair['member'].downcase }
+                                                     .map { |pair| pair['color'] }
+        end
+      end
     end
 
     # By-MEASURE (continuous) color: a measure on Tableau's Color shelf is a
@@ -5643,6 +5657,10 @@ layout.each do |dash|
         warnings << "'#{cap}' category colors pinned from a SIBLING chart's explicit .twb map for " \
                     "'#{color_col_obj['name']}' (per-category consistency: same category, same color " \
                     'on every chart of the dashboard)'
+      elsif source_default_color_scheme
+        element['color']['scheme'] = source_default_color_scheme
+        warnings << "'#{cap}' category colors derived from Tableau member order + source palette " \
+                    "(reordered by member for Sigma's positional category binding)"
       end
     elsif color_scale && %w[bar-chart line-chart area-chart combo-chart].include?(kind)
       # By-measure color ramp: add a DUPLICATE measure column (Sigma forbids a
