@@ -999,16 +999,38 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                     "security",
                     "a supplied CLS restriction is absent from persisted readback",
                 )
-    required_principals = {
-        str(value)
-        for row in expected_rules
-        if isinstance(row.get("rls"), dict)
-        for value in (
-            (row["rls"].get("userAttributes") or [])
-            + (row["rls"].get("teams") or [])
+    required_principals = set()
+    for row in expected_rules:
+        rls = row.get("rls")
+        if not isinstance(rls, dict):
+            continue
+        formula = str(rls.get("formula") or "")
+        if re.search(r"CurrentUserInTeam\s*\(\s*\[", formula):
+            fail(
+                32,
+                "security",
+                "dynamic CurrentUserInTeam([field]) must be customized to explicit teams",
+            )
+        required_principals.update(
+            str(value)
+            for value in (
+                (rls.get("userAttributes") or [])
+                + (rls.get("teams") or [])
+            )
+            if str(value)
         )
-        if str(value)
-    }
+        required_principals.update(
+            re.findall(
+                r'CurrentUserInTeam\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                formula,
+            )
+        )
+        required_principals.update(
+            re.findall(
+                r'CurrentUserAttribute\w*\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                formula,
+            )
+        )
     if required_principals:
         membership_evidence = decision.get("membership_evidence")
         if (
@@ -1021,6 +1043,7 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 "security",
                 "security principals require membership/attribute assignment evidence",
             )
+        assigned_principals = set()
         for evidence in membership_evidence:
             path = Path(str((evidence or {}).get("path") or "")).expanduser()
             if not path.is_absolute():
@@ -1031,6 +1054,26 @@ def gate_security(workdir: Path) -> dict[str, str] | None:
                 != str((evidence or {}).get("sha256") or "").lower()
             ):
                 fail(32, "security", f"membership evidence is missing or stale: {path}")
+            document = load_object(path, 32, "security")
+            if (
+                document.get("dataModelId") != dm_ids.get("dataModelId")
+                or document.get("run_id") != run_state.get("run_id")
+                or not isinstance(document.get("assignments"), list)
+            ):
+                fail(32, "security", "membership evidence belongs to another run/model")
+            assigned_principals.update(
+                str(assignment.get("principal") or assignment.get("name") or "")
+                for assignment in document["assignments"]
+                if isinstance(assignment, dict)
+                and assignment.get("readback_verified") is True
+                and (assignment.get("members") or assignment.get("values"))
+            )
+        if not required_principals.issubset(assigned_principals):
+            fail(
+                32,
+                "security",
+                "membership evidence does not cover every required team/user attribute",
+            )
     return None
 
 

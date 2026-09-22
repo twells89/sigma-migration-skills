@@ -548,6 +548,16 @@ class CompletionContractTest(unittest.TestCase):
             "values": [True],
         }]
         write_json(readback_path, readback)
+        membership_path = self.workdir / "membership-readback.json"
+        write_json(membership_path, {
+            "dataModelId": "dm-1",
+            "run_id": "fixture-run",
+            "assignments": [{
+                "principal": "Region",
+                "readback_verified": True,
+                "values": {"member-1": "West"},
+            }],
+        })
         write_json(self.workdir / "security-decision.json", {
             "decision": "port",
             "status": "applied",
@@ -557,6 +567,14 @@ class CompletionContractTest(unittest.TestCase):
             "dataModelId": "dm-1",
             "securedElementId": "dm-orders",
             "run_id": "fixture-run",
+            "requiredPrincipals": ["Region"],
+            "membership_verified": True,
+            "membership_evidence": [{
+                "path": str(membership_path),
+                "sha256": hashlib.sha256(
+                    membership_path.read_bytes()
+                ).hexdigest(),
+            }],
             "readback_sha256": hashlib.sha256(
                 readback_path.read_bytes()
             ).hexdigest(),

@@ -1347,18 +1347,6 @@ class Migration:
         return sorted(normalized, key=repr)
 
     @classmethod
-    def canonical_numeric_cells(cls, rows: Any) -> list[float]:
-        values = []
-        for row in rows or []:
-            if not isinstance(row, list):
-                continue
-            for cell in row:
-                number = cls.numeric(cell)
-                if number is not None:
-                    values.append(round(number, 9))
-        return sorted(values)
-
-    @classmethod
     def numbers_match(cls, source: Any, target: Any) -> bool:
         source_number = cls.numeric(source)
         target_number = cls.numeric(target)
@@ -1414,33 +1402,6 @@ class Migration:
             ):
                 return False
         return True
-
-    @classmethod
-    def numeric_cells_match(cls, source_rows: Any, target_rows: Any) -> bool:
-        source = sorted(
-            (
-                value
-                for row in source_rows or []
-                if isinstance(row, list)
-                for value in row
-                if cls.numeric(value) is not None
-            ),
-            key=lambda value: cls.numeric(value),
-        )
-        target = sorted(
-            (
-                value
-                for row in target_rows or []
-                if isinstance(row, list)
-                for value in row
-                if cls.numeric(value) is not None
-            ),
-            key=lambda value: cls.numeric(value),
-        )
-        return len(source) == len(target) and all(
-            cls.numbers_match(left, right)
-            for left, right in zip(source, target)
-        )
 
     def export_elements(
         self, workbook_id: str, element_map: list[dict[str, Any]]
@@ -1648,14 +1609,11 @@ class Migration:
             source_data = snapshot_chart_data.get(object_id)
             pivot_data = bool(source_data and source_data.get("pivot") is True)
             if pivot_data:
-                full_rows_match = bool(
-                    source_data.get("complete") is True
-                    and self.canonical_numeric_cells(source_data.get("rows"))
-                    and self.numeric_cells_match(
-                        source_data.get("rows"),
-                        sigma_rows,
-                    )
-                )
+                # Pivot qData omits a flat coordinate binding between qLeft/qTop
+                # hierarchy cells and Sigma's exported grid. A numeric multiset
+                # can hide swapped row/column associations, so remain fail-closed
+                # until an axis-aware oracle is supplied.
+                full_rows_match = False
             else:
                 full_rows_match = bool(
                     source_data
@@ -1680,7 +1638,7 @@ class Migration:
             elif not source_data or source_data.get("complete") is not True:
                 state = "SOURCE-DATA-MISSING"
             elif pivot_data:
-                state = "VALUE-MISMATCH"
+                state = "PIVOT-UNVERIFIED"
             elif qlik_count is None or sigma_count is None:
                 state = "NO-DATA"
             elif qlik_count != sigma_count:

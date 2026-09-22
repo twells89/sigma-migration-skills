@@ -286,6 +286,13 @@ def apply_from_security(
         if rule.get("kind") == "rls" and rule.get("rls"):
             r = rule["rls"]
             print(f"RLS → element '{_elname(el)}': {r['formula'][:80]}")
+            if re.search(r"CurrentUserInTeam\s*\(\s*\[", r.get("formula") or ""):
+                print(
+                    "  FATAL: dynamic CurrentUserInTeam([field]) cannot be "
+                    "provisioned safely; customize the rule to explicit team names.",
+                    file=sys.stderr,
+                )
+                continue
             for attr in (r.get("userAttributes") or []):
                 ex = find_attribute(attr)
                 if ex: print(f"  REUSE attribute '{attr}'.")
@@ -311,16 +318,46 @@ def apply_from_security(
         for rule in security
         if isinstance(rule, dict)
     )
-    required_principals = sorted({
-        str(value)
-        for rule in security
-        if isinstance(rule, dict) and isinstance(rule.get("rls"), dict)
-        for value in (
-            (rule["rls"].get("userAttributes") or [])
-            + (rule["rls"].get("teams") or [])
+    required_principals = set()
+    for rule in security:
+        rls = rule.get("rls") if isinstance(rule, dict) else None
+        if not isinstance(rls, dict):
+            continue
+        required_principals.update(
+            str(value)
+            for value in (
+                (rls.get("userAttributes") or [])
+                + (rls.get("teams") or [])
+            )
+            if str(value)
         )
-        if str(value)
-    })
+        required_principals.update(
+            re.findall(
+                r'CurrentUserInTeam\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                str(rls.get("formula") or ""),
+            )
+        )
+        required_principals.update(
+            re.findall(
+                r'CurrentUserAttribute\w*\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                str(rls.get("formula") or ""),
+            )
+        )
+    required_principals = sorted(required_principals)
+    evidenced_principals = {
+        str(assignment.get("principal") or assignment.get("name") or "")
+        for evidence in membership_evidence or []
+        for assignment in evidence.get("assignments") or []
+        if isinstance(assignment, dict)
+        and assignment.get("readback_verified") is True
+        and (
+            assignment.get("members")
+            or assignment.get("values")
+        )
+    }
+    membership_verified = set(required_principals).issubset(
+        evidenced_principals
+    )
     if do_apply and applied:
         res = api("PUT", f"/v2/dataModels/{dm_id}/spec", spec)
         print(f"PUT spec -> applied {applied} rule(s):", (json.dumps(res)[:200] if isinstance(res, dict) else str(res)[:200]))
@@ -403,7 +440,7 @@ def apply_from_security(
                         "requiredPrincipals": required_principals,
                         "membership_verified": (
                             not required_principals
-                            or bool(membership_evidence)
+                            or membership_verified
                         ),
                         "membership_evidence": membership_evidence or [],
                         "readback_sha256": hashlib.sha256(
@@ -477,9 +514,21 @@ def main():
             path = Path(value).expanduser().resolve()
             if not path.is_file():
                 sys.exit(f"membership evidence not found: {path}")
+            document = json.loads(path.read_text(encoding="utf-8-sig"))
+            if (
+                not isinstance(document, dict)
+                or document.get("dataModelId") != a.dm_id
+                or document.get("run_id") != run_state.get("run_id")
+                or not isinstance(document.get("assignments"), list)
+            ):
+                sys.exit(
+                    "membership evidence must be bound to the current "
+                    "dataModelId/run_id and contain assignments[]"
+                )
             membership_evidence.append({
                 "path": str(path),
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "assignments": document["assignments"],
             })
         return apply_from_security(
             a.dm_id,
