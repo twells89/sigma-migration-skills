@@ -23,6 +23,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import degradation_ledger  # noqa: E402
+from lib import blind_grade  # noqa: E402
 import control_lint  # noqa: E402
 import layout_lint  # noqa: E402
 import render_integrity  # noqa: E402
@@ -634,45 +635,15 @@ def gate_visual_comparison(
         grade_path = Path(str(blind.get("path") or "")).expanduser()
         if not grade_path.is_absolute():
             grade_path = workdir / grade_path
-        grade = load_object(grade_path, 19, "visual-comparison")
-        dimensions = grade.get("dimensions")
-        per_tile = grade.get("per_tile")
+        try:
+            verified = blind_grade.validate(grade_path, workdir)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            fail(19, "visual-comparison", str(exc))
         if (
-            grade.get("verdict") != "pass"
-            or not isinstance(dimensions, dict)
-            or any(
-                not isinstance(dimensions.get(name), dict)
-                or dimensions[name].get("verdict") != "pass"
-                for name in required
-            )
-            or not isinstance(per_tile, list)
-            or not per_tile
-            or any(
-                not isinstance(row, dict)
-                or not str(row.get("source_family") or "").strip()
-                or not str(row.get("target_family") or "").strip()
-                for row in per_tile
-            )
+            verified.get("source_sha256") != blind.get("source_sha256")
+            or verified.get("target_sha256") != blind.get("target_sha256")
         ):
-            fail(
-                19,
-                "visual-comparison",
-                "blind grade lacks six passing dimensions or per-tile family evidence",
-            )
-        for path_key, hash_key in (
-            ("source_png", "source_sha256"),
-            ("target_png", "target_sha256"),
-        ):
-            image = Path(str(grade.get(path_key) or "")).expanduser()
-            if not image.is_absolute():
-                image = grade_path.parent / image
-            expected = str(grade.get(hash_key) or "").lower()
-            if (
-                not image.is_file()
-                or len(expected) != 64
-                or hashlib.sha256(image.read_bytes()).hexdigest() != expected
-            ):
-                fail(19, "visual-comparison", f"blind grade has stale {path_key}")
+            fail(19, "visual-comparison", "blind grade metadata drifted after recording")
     elif not (
         isinstance(blind_waiver, dict)
         and str(blind_waiver.get("reason") or "").strip()
@@ -939,11 +910,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "reason": str(blind_waiver["reason"]).strip(),
             }
         )
-    if len(waivers) > 2:
+    if len(mode_waivers) + len(waivers) > 2:
         fail(
             19,
             "waiver-budget",
-            f"{len(waivers)} quality waivers exceed the maximum of 2",
+            f"{len(mode_waivers) + len(waivers)} quality waivers exceed the maximum of 2",
         )
     gate_coverage(workdir, parity)
     document, _spec_path, document_version = workbook_spec(workdir, workbook_id)
@@ -976,7 +947,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         args.skip_visual_comparison,
         args.skip_visual_similarity,
     )
-    gate_anchors(workdir, render, args.skip_anchors_gate)
+    gate_anchors(
+        workdir,
+        render,
+        args.skip_anchors_gate or args.skip_visual_comparison,
+    )
     gate_cleanup(workdir, workbook_id)
     gate_accounting_and_report(workdir)
 
