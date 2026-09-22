@@ -182,7 +182,23 @@ def test_auto_chart_uses_generated_visualization_and_primary_color():
 
 def test_one_command_dry_run_builds_both_source_visuals():
     with tempfile.TemporaryDirectory() as output:
-        result = run("ruby", os.path.join(SCRIPTS, "migrate-qlik.rb"),
+        runtime_profile = {
+            "selected": "python",
+            "required_runtimes": ["python", "node"],
+        }
+        json.dump(
+            {
+                "pass": True,
+                "runtime_profile": runtime_profile,
+                "runtimes": {"python": True, "node": True, "ruby": False},
+            },
+            open(os.path.join(output, "doctor.json"), "w"),
+        )
+        json.dump(
+            {"doctor_pass": True, "runtime_profile": runtime_profile},
+            open(os.path.join(output, "bootstrap.json"), "w"),
+        )
+        result = run(sys.executable, os.path.join(SCRIPTS, "migrate-qlik.py"),
                      "--unbuild", FIXTURE, "--connection", "00000000-0000-0000-0000-000000000000",
                      "--database", "ANALYTICS", "--schema", "PUBLIC", "--dry-run", "--yes", "--out", output)
         coverage = json.load(open(os.path.join(output, "workbook-coverage.json")))

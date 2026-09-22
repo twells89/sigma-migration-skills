@@ -17,6 +17,8 @@ from pathlib import Path
 
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "lib"))
+import degradation_ledger  # noqa: E402
 
 
 def fold(value):
@@ -246,13 +248,12 @@ def page_tiles(workdir, page, index, output):
 
 
 def refresh_ledger(workdir):
-    expression = (
-        "entries=DegradationLedger.derive(ARGV.fetch(0));"
-        "exit(DegradationLedger.write(ARGV.fetch(0),entries) ? 0 : 1)"
-    )
-    return run([
-        "ruby", "-I", HERE / "lib", "-rdegradation_ledger", "-e", expression, workdir,
-    ])
+    try:
+        entries = degradation_ledger.derive(workdir)
+        return 0 if degradation_ledger.write(workdir, entries) else 1
+    except (OSError, ValueError, TypeError) as exc:
+        print("   degradation ledger: %s" % exc, file=sys.stderr)
+        return 1
 
 
 def parse_args(argv):
@@ -422,7 +423,7 @@ def main(argv=None):
     if ledger_rc:
         failures.append("degradation ledger refresh exited %d" % ledger_rc)
     report_command = [
-        "ruby", HERE / "build-migration-report.rb", "--workdir", workdir,
+        sys.executable, HERE / "build-migration-report.py", "--workdir", workdir,
         "--inventory", workdir / "source-object-census.json",
     ]
     report_rc = run(report_command)

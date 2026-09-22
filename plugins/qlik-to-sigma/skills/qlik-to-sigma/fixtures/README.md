@@ -21,7 +21,7 @@ node converter build, nor network access.
 ## Offline smoke (no Qlik tenant, no Sigma org, no network)
 
 ```bash
-ruby scripts/migrate-qlik.rb \
+python3 scripts/migrate-qlik.py \
   --from-discovery fixtures/retail-orders \
   --connection 00000000-0000-0000-0000-000000000000 \
   --dry-run --yes --out /tmp/qlik-smoke
@@ -49,7 +49,7 @@ control path in `build-sigma-workbook.py`:
 | `lb-6` FULL_DATE, qTags `$date` | date-typed field | **`date-range` control** (a `list` on a datetime column gets its targets silently stripped) |
 
 `control-scope.json` must report `sourceFilterSignals: 5` and pass
-`ruby scripts/lib/control_lint.rb /tmp/qlik-smoke/wb-spec.json /tmp/qlik-smoke/control-scope.json`.
+`python3 scripts/control_lint.py /tmp/qlik-smoke/wb-spec.json /tmp/qlik-smoke/control-scope.json`.
 
 ## corectl-country-unbuild/
 
@@ -60,7 +60,7 @@ sheet's recursive `qChildren`. Its load script also defines
 on the denormalized SQL element.
 
 ```bash
-ruby scripts/migrate-qlik.rb \
+python3 scripts/migrate-qlik.py \
   --unbuild fixtures/corectl-country-unbuild \
   --connection 00000000-0000-0000-0000-000000000000 \
   --database ANALYTICS --schema PUBLIC --dry-run --yes --out /tmp/qlik-corectl-smoke

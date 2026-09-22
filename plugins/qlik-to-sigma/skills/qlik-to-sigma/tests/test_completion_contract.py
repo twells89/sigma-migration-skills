@@ -70,8 +70,8 @@ class CompletionContractTest(unittest.TestCase):
         self.temp.cleanup()
 
     def run_script(self, name, *args):
-        command = [sys.executable if name.endswith(".py") else "ruby",
-                   str(SCRIPTS / name), *map(str, args)]
+        self.assertTrue(name.endswith(".py"), "completion fixtures must be Python-only")
+        command = [sys.executable, str(SCRIPTS / name), *map(str, args)]
         return subprocess.run(command, text=True, capture_output=True, check=False)
 
     def make_complete_workdir(self):
@@ -105,11 +105,28 @@ class CompletionContractTest(unittest.TestCase):
                 "columns": [{"id": "country", "name": "Country"}],
             }]}],
         })
-        write_json(wd / "wb-spec.json", {
+        workbook_spec = {
             "pages": [{"id": "sheet-1", "name": "Overview", "elements": [{
                 "id": "sigma-chart-1", "name": "Sales", "kind": "bar-chart",
                 "columns": [{"id": "country"}, {"id": "sales"}],
             }]}],
+        }
+        layout_xml = (
+            '<Page id="sheet-1"><Element elementId="sigma-chart-1"/></Page>\n'
+        )
+        write_json(wd / "wb-spec.json", workbook_spec)
+        write_json(wd / "wb-readback.json", {
+            "workbookId": "wb-1",
+            "latestDocumentVersion": 1,
+            "document": {**workbook_spec, "layout": layout_xml},
+        })
+        (wd / "layout.xml").write_text(layout_xml, encoding="utf-8")
+        write_json(wd / "run-state.json", {
+            "run_id": "fixture-run",
+            "runtime_profile": "python",
+        })
+        write_json(wd / "column-scan.json", {
+            "status": "complete-clean", "columns_read": 2, "errors": [],
         })
         write_json(wd / "workbook-coverage.json", {
             "sourceVisuals": 1,
@@ -133,6 +150,20 @@ class CompletionContractTest(unittest.TestCase):
             "verified_against": "qlik-engine", "charts_total": 1,
             "charts_pass": 1, "charts_fail": 0, "charts_stale_explained": 0,
             "fail_names": [], "pending_names": [], "divergent": False,
+            "visual_checked": True, "visual_verdict": "pass",
+            "agent_vision": True,
+            "style_checklist": {
+                "element_titles_hidden": "na",
+                "palette_match": "pass",
+                "composition_match": "pass",
+                "chart_shapes_match": "pass",
+                "labels_legible": "pass",
+                "numbers_formatted": "pass",
+            },
+            "blind_grade_waiver": {
+                "kind": "no-vision-grader",
+                "reason": "fixture visual review is deterministic",
+            },
             "per_chart": [{"chart": "Sales", "status": "MATCH", "pass": True}],
             "tile_census": {
                 "zones_total": 1, "charts_built": 1, "zones_unmatched": 0,
@@ -145,11 +176,24 @@ class CompletionContractTest(unittest.TestCase):
     def finalize(self):
         return self.run_script("finalize-qlik-report.py", "--workdir", self.workdir)
 
-    def stamp_shared_gate_success(self):
-        write_json(self.workdir / "phase6-success.json", {
-            "workbookId": "wb-1", "chartCount": 1, "gates": "all-pass",
-            "waivers": [], "generatedAt": "2026-08-20T00:00:00Z",
-        })
+    def assert_phase6(self):
+        return self.run_script(
+            "assert-phase6-ran.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+            "--control-scope", self.workdir / "control-scope.json",
+            "--require-control-flip",
+            "--sigma-render", self.workdir / "visual-qa" / "sheet-1.png",
+            "--skip-anchors-gate", "fixture has no transcribed source values",
+        )
+
+    def complete_python_gate(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        asserted = self.assert_phase6()
+        self.assertEqual(asserted.returncode, 0, asserted.stdout + asserted.stderr)
+        terminal = self.finalize()
+        self.assertEqual(terminal.returncode, 0, terminal.stdout + terminal.stderr)
 
     def test_unaccounted_source_object_fails_closed(self):
         dm = json.loads((self.workdir / "dm-spec.json").read_text())
@@ -254,26 +298,44 @@ class CompletionContractTest(unittest.TestCase):
         self.assertIn("assert_ok = run_terminal.call", text)
         self.assertIn("mechanical_ok && cleanup_ok && pre_finalizer_ok && assert_ok", text)
 
+        python = (SCRIPTS / "migrate-qlik.py").read_text(encoding="utf-8")
+        normalize = python.index('"normalize-qlik-expressions.py"')
+        lint = python.index('"blank-risk-elements.json"', normalize)
+        post = python.index("self.execute(workbook_command)", lint)
+        parity = python.index("    def parity(", post)
+        cleanup = python.index('"cleanup_orphan_workbooks.py"', parity)
+        shared_assert = python.index(
+            "assertion = self.execute(assert_command", cleanup
+        )
+        terminal_report = python.index(
+            "post_finalizer = self.execute(finalizer_command", shared_assert
+        )
+        verify = python.index('"verify-complete.py"', terminal_report)
+        self.assertLess(normalize, lint)
+        self.assertLess(lint, post)
+        self.assertLess(post, parity)
+        self.assertLess(parity, cleanup)
+        self.assertLess(cleanup, shared_assert)
+        self.assertLess(shared_assert, terminal_report)
+        self.assertLess(terminal_report, verify)
+        self.assertNotIn("write_text(phase6-success", python)
+
     def test_report_contradiction_fails_completion(self):
-        final = self.finalize()
-        self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
-        self.stamp_shared_gate_success()
+        self.complete_python_gate()
         report = json.loads((self.workdir / "migration-result.json").read_text())
         report["source_objects"][0]["status"] = "skipped"
         write_json(self.workdir / "migration-result.json", report)
         result = self.run_script(
-            "verify-complete.rb", "--workdir", self.workdir,
+            "verify-complete.py", "--workdir", self.workdir,
             "--workbook-id", "wb-1",
         )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("CONTRADICTION", result.stderr)
+        self.assertEqual(result.returncode, 7)
+        self.assertIn("does not exactly match", result.stderr)
 
     def test_complete_success(self):
-        final = self.finalize()
-        self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
-        self.stamp_shared_gate_success()
+        self.complete_python_gate()
         result = self.run_script(
-            "verify-complete.rb", "--workdir", self.workdir,
+            "verify-complete.py", "--workdir", self.workdir,
             "--workbook-id", "wb-1",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -295,6 +357,42 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(tiles[0]["kind"], "chart")
         similarity = json.loads((self.workdir / "visual-similarity.json").read_text())
         self.assertEqual(similarity["pages"][0]["tiles_measured"], 1)
+
+    def test_failed_assert_clears_stale_success_marker(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        write_json(self.workdir / "phase6-success.json", {
+            "workbookId": "stale", "chartCount": 99, "gates": "all-pass",
+            "waivers": [], "generatedAt": "2026-08-20T00:00:00Z",
+        })
+        parity = json.loads((self.workdir / "parity-final.json").read_text())
+        parity["strict"] = False
+        write_json(self.workdir / "parity-final.json", parity)
+        result = self.assert_phase6()
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_report_check_is_deterministic_and_read_only(self):
+        final = self.finalize()
+        self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
+        before = (self.workdir / "MIGRATION_REPORT.md").read_bytes()
+        check = self.run_script(
+            "build-migration-report.py", "--workdir", self.workdir, "--check"
+        )
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+        self.assertEqual(before, (self.workdir / "MIGRATION_REPORT.md").read_bytes())
+        (self.workdir / "MIGRATION_REPORT.md").write_text(
+            before.decode("utf-8") + "stale\n", encoding="utf-8"
+        )
+        stale = self.run_script(
+            "build-migration-report.py", "--workdir", self.workdir, "--check"
+        )
+        self.assertEqual(stale.returncode, 1)
+
+    def test_finalizer_has_no_ruby_subprocess(self):
+        text = (SCRIPTS / "finalize-qlik-report.py").read_text(encoding="utf-8")
+        self.assertNotIn('"ruby"', text)
+        self.assertIn("build-migration-report.py", text)
 
 
 if __name__ == "__main__":

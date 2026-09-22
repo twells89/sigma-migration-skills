@@ -853,7 +853,8 @@ def main():
     print(f"lastReloadTime={app_meta.get('lastReloadTime', '?')}")
     print(f"timing: {time.time() - T0:.1f}s wall (pool={a.pool}, retries={RETRIES['n']}; "
           f"per-stage breakdown in timings.json)")
-    print("Next: scripts/migrate-qlik.rb runs the whole pipeline from this directory in one command.")
+    print("Next: scripts/migrate-qlik.py runs the no-Ruby pipeline from this directory "
+          "(migrate-qlik.rb remains supported).")
 
 if __name__ == "__main__":
     main()

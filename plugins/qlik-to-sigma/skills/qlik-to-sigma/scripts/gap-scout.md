@@ -44,7 +44,7 @@ INPUTS
 - Sigma data-model id: <dm-id>
 - Sigma denormalized element id: <element-id>   (the master that holds all fields)
 - Sigma folder id: <folder-id>
-- Gate id + workdir: <measure:... and --workdir from migrate-qlik.rb's GAP-SCOUT REQUIRED block>
+- Gate id + workdir: <measure:... and --workdir from the migration entrypoint's GAP-SCOUT REQUIRED block>
 
 PROCEDURE
 1. Read refs/sigma-build-gotchas.md (function context rules: *Over window fns error in
@@ -66,7 +66,7 @@ PROCEDURE
    # --kind: default kpi-chart; use table for row-level/dimension formulas.
    # --gap-id + --workdir feed the run-each-time gate (bead beads-sigma-5l5e): the
    # result is recorded to <workdir>/scout-ledger.jsonl keyed by --gap-id, so
-   # migrate-qlik.rb's gate sees the measure as scouted and stops blocking it on
+   # the Python or Ruby migration gate sees the measure as scouted and stops blocking it on
    # the re-run. Pass the exact --gap-id/--workdir the GAP-SCOUT REQUIRED block printed.
 4. Parse the JSON:
    - status=validated → rule is now in the local YAML; done.

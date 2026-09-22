@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""qlik-prj-discover.py — QlikView (.qvw) "-prj" project folder -> Qlik-Sense-shaped
 discovery artifacts, so the SAME convert -> data-model -> workbook pipeline
-(migrate-qlik.rb --from-discovery) runs unchanged.
+(migrate-qlik.py or migrate-qlik.rb --from-discovery) runs unchanged.
 
 QlikView .qvw binaries have no parser and QlikView has no Cloud/REST API. The
 developer-opt-in <name>-prj/ project folder is the migration surface:
@@ -13,7 +13,7 @@ developer-opt-in <name>-prj/ project folder is the migration surface:
                           (ArrayOfMainExpressionData/.../Definition + Label)
   SH<id>.xml           -> sheet <Name>
 
-Emits, into --out, the exact artifact set migrate-qlik.rb --from-discovery consumes:
+Emits, into --out, the exact artifact set both migration entrypoints consume:
   script.qvs, converter-input.json, charts.json, measures.json, layout.json
 
 QlikView delivers what a -prj folder actually carries: the data model + the charts'
