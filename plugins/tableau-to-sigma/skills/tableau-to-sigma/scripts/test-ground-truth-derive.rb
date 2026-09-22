@@ -24,6 +24,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require 'rbconfig'
+require_relative 'lib/ground_truth_sql'
 
 SCRIPTS = __dir__
 FIXTURE = File.join(SCRIPTS, 'test-fixtures', 'ground-truth.twb')
@@ -187,6 +188,29 @@ Dir.mktmpdir do |dir|
   end
 end
 
+puts '-- object-graph duplicate-caption relationship keys stay physical --'
+relationship_ds = {
+  'objects' => [
+    { 'id' => 'fact-id', 'caption' => 'FACT', 'fqn' => 'DB.SC.FACT' },
+    { 'id' => 'product-id', 'caption' => 'PRODUCT_DIM', 'fqn' => 'DB.SC.PRODUCT_DIM' }
+  ],
+  'relationships' => [
+    { 'first' => 'fact-id', 'second' => 'product-id', 'second_unique' => true,
+      'lexpr' => '[fact-guid]', 'rexpr' => '[product-guid]' }
+  ]
+}
+relationship_meta = {
+  'columns_by_guid' => {
+    'fact-guid' => { 'caption' => 'Product Key' },
+    'product-guid' => { 'caption' => 'Product Key (PRODUCT_DIM)' }
+  }
+}
+relationship_from = GroundTruthSql.build_from_relationships(relationship_ds, relationship_meta)
+ok(relationship_from['sql'].include?('T1.PRODUCT_KEY = T2.PRODUCT_KEY'),
+   'display-only logical-table suffix is stripped from the target warehouse key')
+ok(!relationship_from['sql'].include?('PRODUCT_KEY_('),
+   'duplicate-caption disambiguation never leaks into the SQL identifier')
+
 puts '-- corpus smoke: orders-overview derives a complete ledger --'
 if File.exist?(CORPUS_TWB)
   Dir.mktmpdir do |dir|
@@ -213,12 +237,6 @@ if File.exist?(CORPUS_TWB)
        'corpus tiles all classify better than unverifiable (anchor-only reasons are named, not dead ends)')
     ok(doc['entries'].all? { |e| e['classification'] == 'warehouse-sql' || !e['reason'].to_s.empty? },
        'every non-SQL corpus entry names its reason')
-    corpus_sql = doc['entries'].select { |e| e['classification'] == 'warehouse-sql' }
-                               .map { |e| e['sql'].to_s }.join("\n")
-    ok(corpus_sql.include?('.PRODUCT_KEY') && corpus_sql.include?('.PROMO_KEY'),
-       'object-graph relationship SQL uses the physical product/promo key names')
-    ok(!corpus_sql.include?('PRODUCT_KEY_(') && !corpus_sql.include?('PROMO_KEY_('),
-       'logical-table disambiguation suffixes never leak into warehouse identifiers')
     counts = doc['entries'].group_by { |e| e['classification'] }.map { |k, v| "#{k}=#{v.size}" }.join(', ')
     puts "  INFO  orders-overview classification mix: #{counts}"
   end
