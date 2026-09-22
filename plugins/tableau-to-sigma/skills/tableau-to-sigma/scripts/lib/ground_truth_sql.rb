@@ -535,9 +535,11 @@ module GroundTruthSql
       caption = info['caption'].to_s.strip
       next if caption.empty?
       owner = field_owners[guid]
-      (owners[caption] ||= []) << owner unless owners[caption].include?(owner)
+      caption_owners = (owners[caption] ||= [])
+      caption_owners << owner unless caption_owners.include?(owner)
       physical = JoinPlan.physical_name(caption)
-      (owners[physical] ||= []) << owner unless owners[physical].include?(owner)
+      physical_owners = (owners[physical] ||= [])
+      physical_owners << owner unless physical_owners.include?(owner)
     end
     transformed_fields = Array(ds['transformed_fields'])
     lambda do |name, guid = nil|
