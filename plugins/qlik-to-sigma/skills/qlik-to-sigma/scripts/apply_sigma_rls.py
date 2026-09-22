@@ -66,6 +66,21 @@ BASE = os.environ.get("SIGMA_BASE_URL")
 TOK = os.environ.get("SIGMA_API_TOKEN")
 
 
+def configure_auth(workdir=None):
+    global BASE, TOK
+    if workdir:
+        auth_path = Path(workdir).expanduser().resolve() / "auth.json"
+        if auth_path.is_file():
+            auth = json.loads(auth_path.read_text(encoding="utf-8-sig"))
+            BASE = BASE or auth.get("SIGMA_BASE_URL")
+            TOK = TOK or auth.get("SIGMA_API_TOKEN")
+    if not BASE or not TOK:
+        from lib import sigma_rest
+
+        BASE = sigma_rest.base_url()
+        TOK = sigma_rest.auth_token()
+
+
 def api(method, path, body=None):
     if not BASE or not TOK:
         sys.exit("SIGMA_BASE_URL / SIGMA_API_TOKEN unset — run: eval \"$(scripts/get-token.sh)\"")
@@ -304,25 +319,50 @@ def apply_from_security(
             if isinstance(readback, dict) and required_element_id
             else None
         )
-        expects_rls = any(
-            isinstance(rule, dict) and rule.get("kind") == "rls" and rule.get("rls")
-            for rule in security
-        )
-        expects_cls = any(
-            isinstance(rule, dict) and rule.get("kind") == "cls" and rule.get("cls")
-            for rule in security
-        )
-        has_rls = bool(secured and secured.get("filters")) and any(
-            "CurrentUserAttribute" in str(column.get("formula") or "")
-            for column in (secured or {}).get("columns") or []
-            if isinstance(column, dict)
-        )
-        has_cls = bool(secured and secured.get("columnSecurities"))
+        columns = [
+            row for row in (secured or {}).get("columns") or []
+            if isinstance(row, dict)
+        ]
+        filters = [
+            row for row in (secured or {}).get("filters") or []
+            if isinstance(row, dict)
+        ]
+        securities = [
+            row for row in (secured or {}).get("columnSecurities") or []
+            if isinstance(row, dict)
+        ]
+        verified_rules = 0
+        for rule in security:
+            if rule.get("kind") == "rls" and isinstance(rule.get("rls"), dict):
+                formula = str(rule["rls"].get("formula") or "")
+                column = next(
+                    (row for row in columns if row.get("formula") == formula),
+                    None,
+                )
+                if column and any(
+                    row.get("columnId") == column.get("id")
+                    and row.get("values") == [True]
+                    for row in filters
+                ):
+                    verified_rules += 1
+            elif rule.get("kind") == "cls" and isinstance(rule.get("cls"), dict):
+                expected_ids = set(
+                    _resolve_col_ids(
+                        secured,
+                        rule["cls"].get("restrictedColumnNames"),
+                    )
+                )
+                if expected_ids and any(
+                    expected_ids.issubset(
+                        set(row.get("restrictedColumns") or [])
+                    )
+                    for row in securities
+                ):
+                    verified_rules += 1
         verified = (
             isinstance(readback, dict)
             and applied == expected_rules
-            and (not expects_rls or has_rls)
-            and (not expects_cls or has_cls)
+            and verified_rules == expected_rules
         )
         if decision_out:
             decision_path = Path(decision_out).expanduser().resolve()
@@ -384,6 +424,7 @@ def main():
     ap.add_argument("--workdir", help="migration workdir for bound security-decision/readback evidence")
     ap.add_argument("--decision", choices=("port", "customize"), default="port")
     a = ap.parse_args()
+    configure_auth(a.workdir or (Path(a.from_security).parent if a.from_security else None))
 
     # Batch mode: ingest a converter's result.security[] and provision + apply all rules.
     if a.from_security:

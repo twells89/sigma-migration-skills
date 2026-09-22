@@ -111,15 +111,21 @@ def is_content_page(page: dict[str, Any]) -> bool:
 def sigma_entries(path: str) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     page = None
+    page_parameter = "page"
     while True:
         separator = "&" if "?" in path else "?"
         request_path = f"{path}{separator}limit=1000"
         if page:
-            request_path += f"&page={page}"
+            request_path += f"&{page_parameter}={page}"
         response = sigma_rest.request("get", request_path) or {}
         rows = response.get("entries") or []
         entries.extend(row for row in rows if isinstance(row, dict))
-        page = response.get("nextPage")
+        if response.get("nextPageToken") not in (None, ""):
+            page = response["nextPageToken"]
+            page_parameter = "pageToken"
+        else:
+            page = response.get("nextPage")
+            page_parameter = "page"
         if page in (None, ""):
             return entries
 

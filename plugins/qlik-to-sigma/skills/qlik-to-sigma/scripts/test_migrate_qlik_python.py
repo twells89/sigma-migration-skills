@@ -117,7 +117,11 @@ class CliContractTests(unittest.TestCase):
         responses = [
             {
                 "entries": [{"label": "first", "type": {"type": "text"}}],
-                "nextPage": "p2",
+                "nextPageToken": "p2",
+            },
+            {
+                "entries": [{"label": "second", "type": {"type": "text"}}],
+                "nextPage": "p3",
             },
             {
                 "entries": [{"label": "broken", "type": {"type": "error"}}],
@@ -129,10 +133,11 @@ class CliContractTests(unittest.TestCase):
             side_effect=responses,
         ) as request:
             rows = migrate.sigma_entries("/v2/workbooks/wb-1/columns")
-        self.assertEqual(2, len(rows))
+        self.assertEqual(3, len(rows))
         self.assertEqual("error", rows[-1]["type"]["type"])
         self.assertIn("limit=1000", request.call_args_list[0].args[1])
-        self.assertIn("page=p2", request.call_args_list[1].args[1])
+        self.assertIn("pageToken=p2", request.call_args_list[1].args[1])
+        self.assertIn("page=p3", request.call_args_list[2].args[1])
 
     def test_content_page_filter_uses_reserved_ids_not_substrings(self) -> None:
         self.assertTrue(migrate.is_content_page({

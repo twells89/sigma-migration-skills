@@ -542,12 +542,10 @@ class OfflineBoundaryTest(unittest.TestCase):
             security = [{
                 "kind": "rls",
                 "rls": {
-                    "name": "Region RLS",
-                    "formula": (
-                        'CurrentUserAttributeText("Region") = [Region]'
-                    ),
+                    "name": "Sales Team RLS",
+                    "formula": 'CurrentUserInTeam("Sales")',
                     "userAttributes": [],
-                    "teams": [],
+                    "teams": ["Sales"],
                 },
             }]
             with mock.patch.object(RLS_APPLY, "api", side_effect=api):

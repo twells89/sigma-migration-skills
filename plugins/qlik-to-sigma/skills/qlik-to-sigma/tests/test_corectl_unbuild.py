@@ -33,8 +33,8 @@ def run(*args):
 def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
     module = load_discovery()
     module.qlik = lambda *_args, **_kwargs: {
-        "qHyperCube": {"qSize": {"qcx": 2, "qcy": 2}},
         "qDataPages": [{
+            "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
             "qMatrix": [
                 [
                     {"qText": "West", "qNum": 0},

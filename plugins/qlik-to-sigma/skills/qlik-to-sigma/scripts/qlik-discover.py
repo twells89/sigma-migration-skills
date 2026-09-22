@@ -440,12 +440,20 @@ def qlik_chart_rows(app, ctx_args, chart):
 
     rows = []
     sizes = []
+    areas = []
 
     def collect_sizes(value):
         if isinstance(value, dict):
             size = value.get("qSize")
             if isinstance(size, dict) and isinstance(size.get("qcy"), int):
                 sizes.append(size["qcy"])
+            area = value.get("qArea")
+            if (
+                isinstance(area, dict)
+                and isinstance(area.get("qTop"), int)
+                and isinstance(area.get("qHeight"), int)
+            ):
+                areas.append((area["qTop"], area["qHeight"]))
             for child in value.values():
                 collect_sizes(child)
         elif isinstance(value, list):
@@ -469,13 +477,19 @@ def qlik_chart_rows(app, ctx_args, chart):
                 else:
                     row.append(cell.get("qText"))
             rows.append(row)
-    expected_rows = max(sizes) if sizes else None
+    expected_rows = (
+        max(sizes)
+        if sizes
+        else max((top + height for top, height in areas), default=None)
+    )
+    starts_at_zero = not areas or min(top for top, _height in areas) == 0
     return {
         "rows": rows,
         "complete": bool(
             rows
             and expected_rows is not None
             and len(rows) >= expected_rows
+            and starts_at_zero
         ),
         "expectedRows": expected_rows,
     }
