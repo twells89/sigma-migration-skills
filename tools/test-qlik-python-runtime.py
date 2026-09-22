@@ -345,6 +345,61 @@ def main() -> int:
         assert doctor["runtime_profile"]["selected"] == "python"
         assert doctor["runtime_profile"]["required_runtimes"] == ["python", "node"]
 
+        if os.name == "nt":
+            powershell = executable("powershell")
+            powershell_work = root / "doctor-powershell"
+            run(
+                "PowerShell Python-profile doctor contract",
+                [
+                    powershell,
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    SCRIPTS / "doctor.ps1",
+                    "-RuntimeProfile",
+                    "python",
+                    "-WorkDir",
+                    powershell_work,
+                ],
+                environment,
+                cwd=SKILL,
+            )
+            powershell_doctor = read_json(powershell_work / "doctor.json")
+            assert powershell_doctor["pass"] is True
+            assert powershell_doctor["runtimes"]["ruby"] is False
+            assert powershell_doctor["runtime_profile"]["selected"] == "python"
+        else:
+            fake_bin = root / "fake-ruby-bin"
+            fake_bin.mkdir()
+            ruby_probe = root / "ruby-was-executed"
+            fake_ruby = fake_bin / "ruby"
+            fake_ruby.write_text(
+                "#!/bin/sh\n"
+                f": > {ruby_probe}\n"
+                "exit 99\n",
+                encoding="utf-8",
+            )
+            fake_ruby.chmod(0o755)
+            optional_ruby_environment = dict(environment)
+            optional_ruby_environment["PATH"] = (
+                str(fake_bin) + os.pathsep + environment["PATH"]
+            )
+            run(
+                "Python doctor ignores optional broken Ruby",
+                [
+                    bash,
+                    SCRIPTS / "doctor.sh",
+                    "--runtime-profile",
+                    "python",
+                    "--workdir",
+                    root / "optional-ruby-doctor",
+                ],
+                optional_ruby_environment,
+                cwd=SKILL,
+            )
+            if ruby_probe.exists():
+                raise AssertionError("Python runtime doctor executed optional Ruby")
+
         # The production front door must refuse a green doctor without the
         # bootstrap sentinel. This exercises its hard gate, not a test double.
         gate_work = root / "missing-bootstrap"

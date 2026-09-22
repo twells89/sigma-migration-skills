@@ -36,7 +36,7 @@ TERMINAL = {
     "not-applicable",
 }
 PROVENANCE = {"live", "engine-export", "inferred"}
-PASS_STATES = {"PASS", "MATCH", "PASSED", "GREEN", "OK"}
+PASS_STATES = {"PASS", "MATCH", "PASSED", "GREEN", "OK", "WAREHOUSE-PASS"}
 QUERYABLE_KINDS = {
     "table",
     "pivot-table",
@@ -635,6 +635,30 @@ def gate_visual_comparison(
         if not grade_path.is_absolute():
             grade_path = workdir / grade_path
         grade = load_object(grade_path, 19, "visual-comparison")
+        dimensions = grade.get("dimensions")
+        per_tile = grade.get("per_tile")
+        if (
+            grade.get("verdict") != "pass"
+            or not isinstance(dimensions, dict)
+            or any(
+                not isinstance(dimensions.get(name), dict)
+                or dimensions[name].get("verdict") != "pass"
+                for name in required
+            )
+            or not isinstance(per_tile, list)
+            or not per_tile
+            or any(
+                not isinstance(row, dict)
+                or not str(row.get("source_family") or "").strip()
+                or not str(row.get("target_family") or "").strip()
+                for row in per_tile
+            )
+        ):
+            fail(
+                19,
+                "visual-comparison",
+                "blind grade lacks six passing dimensions or per-tile family evidence",
+            )
         for path_key, hash_key in (
             ("source_png", "source_sha256"),
             ("target_png", "target_sha256"),
@@ -889,6 +913,38 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             fail(4, "workbook", "wb-ids.json belongs to a different workbook")
     waivers = waiver_rows(args)
     parity, chart_count = gate_parity(workdir)
+    parity_reasons = parity.get("waiver_reasons") or {}
+    mode_waivers: list[dict[str, str]] = []
+    for flag in parity.get("waivers") or []:
+        if flag != "--source-parity-unavailable":
+            continue
+        reason = str(parity_reasons.get(flag) or "").strip()
+        if not reason:
+            fail(19, "waiver-budget", f"{flag} requires a non-empty reason")
+        mode_waivers.append(
+            {
+                "flag": flag,
+                "gate": "source-parity",
+                "reason": reason,
+            }
+        )
+    blind_waiver = parity.get("blind_grade_waiver")
+    if isinstance(blind_waiver, dict) and str(
+        blind_waiver.get("reason") or ""
+    ).strip():
+        waivers.append(
+            {
+                "flag": "--no-vision-grader",
+                "gate": "visual-comparison",
+                "reason": str(blind_waiver["reason"]).strip(),
+            }
+        )
+    if len(waivers) > 2:
+        fail(
+            19,
+            "waiver-budget",
+            f"{len(waivers)} quality waivers exceed the maximum of 2",
+        )
     gate_coverage(workdir, parity)
     document, _spec_path, document_version = workbook_spec(workdir, workbook_id)
     gate_layout(workdir, document, args.skip_layout_lint)
@@ -924,11 +980,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     gate_cleanup(workdir, workbook_id)
     gate_accounting_and_report(workdir)
 
-    waiver_flags = [row["flag"] for row in waivers]
-    waiver_reasons = {row["flag"]: row["reason"] for row in waivers}
+    all_waivers = mode_waivers + waivers
+    waiver_flags = [row["flag"] for row in all_waivers]
+    waiver_reasons = {row["flag"]: row["reason"] for row in all_waivers}
     write_json(
         workdir / "waivers.json",
-        {"version": 1, "count": len(waivers), "waivers": waivers},
+        {"version": 1, "count": len(all_waivers), "waivers": all_waivers},
     )
     parity["waivers"] = waiver_flags
     parity["waiver_count"] = len(waiver_flags)
@@ -982,7 +1039,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ledger_verdict,
         workbook_id,
         "parity-final.json",
-        {"waivers": len(waivers), "degradations": len(entries)},
+        {"waivers": len(all_waivers), "degradations": len(entries)},
     )
     return marker
 

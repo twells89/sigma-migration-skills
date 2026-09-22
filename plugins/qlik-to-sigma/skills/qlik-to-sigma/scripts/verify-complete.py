@@ -34,7 +34,7 @@ TERMINAL = {
     "not-applicable",
 }
 PROVENANCE = {"live", "engine-export", "inferred"}
-PASS_STATES = {"PASS", "MATCH", "PASSED", "GREEN", "OK"}
+PASS_STATES = {"PASS", "MATCH", "PASSED", "GREEN", "OK", "WAREHOUSE-PASS"}
 
 
 def load_json(path: Path) -> Any:

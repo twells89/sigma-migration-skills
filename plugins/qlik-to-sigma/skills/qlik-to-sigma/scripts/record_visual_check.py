@@ -67,14 +67,35 @@ def validate_blind_grade(path: Path) -> dict[str, Any]:
         raise ValueError("blind grade must be a JSON object")
     if grade.get("verdict") != "pass":
         raise ValueError("blind grade verdict is not pass")
-    dimensions = grade.get("dimensions") or {}
+    dimensions = grade.get("dimensions")
+    if not isinstance(dimensions, dict):
+        raise ValueError("blind grade has no dimensions object")
     failing = [
         name
-        for name, row in dimensions.items()
-        if not isinstance(row, dict) or row.get("verdict") != "pass"
+        for name in CHECKLIST_KEYS
+        if not isinstance(dimensions.get(name), dict)
+        or dimensions[name].get("verdict") != "pass"
     ]
     if failing:
-        raise ValueError("blind grade has failing dimension(s): " + ", ".join(failing))
+        raise ValueError(
+            "blind grade dimension(s) missing or not passing: "
+            + ", ".join(failing)
+        )
+    per_tile = grade.get("per_tile")
+    if (
+        not isinstance(per_tile, list)
+        or not per_tile
+        or any(
+            not isinstance(row, dict)
+            or not str(row.get("source_family") or "").strip()
+            or not str(row.get("target_family") or "").strip()
+            for row in per_tile
+        )
+    ):
+        raise ValueError(
+            "blind grade per_tile must cover source_family and target_family "
+            "for every observed tile"
+        )
     for path_key, hash_key in (
         ("source_png", "source_sha256"),
         ("target_png", "target_sha256"),
@@ -95,7 +116,7 @@ def validate_blind_grade(path: Path) -> dict[str, Any]:
             for key, value in dimensions.items()
             if isinstance(value, dict)
         },
-        "per_tile_count": len(grade.get("per_tile") or []),
+        "per_tile_count": len(per_tile),
         "top_gaps": (grade.get("top_gaps") or [])[:3],
         "recorded_at": datetime.now(timezone.utc)
         .replace(microsecond=0)

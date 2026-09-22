@@ -137,6 +137,38 @@ def main(argv: list[str] | None = None) -> int:
         root = Path(temporary)
         ruby_workdir = root / "ruby"
         python_workdir = root / "python"
+        python_workdir.mkdir()
+        runtime_profile = {
+            "selected": "python",
+            "required_runtimes": ["python", "node"],
+        }
+        (python_workdir / "doctor.json").write_text(
+            json.dumps(
+                {
+                    "pass": True,
+                    "runtime_profile": runtime_profile,
+                    "runtimes": {
+                        "python": True,
+                        "node": True,
+                        "ruby": False,
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (python_workdir / "bootstrap.json").write_text(
+            json.dumps(
+                {
+                    "doctor_pass": True,
+                    "runtime_profile": runtime_profile,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         run_entrypoint([ruby, str(HERE / "migrate-qlik.rb")], fixture, ruby_workdir)
         run_entrypoint(
             [sys.executable, str(HERE / "migrate-qlik.py")],

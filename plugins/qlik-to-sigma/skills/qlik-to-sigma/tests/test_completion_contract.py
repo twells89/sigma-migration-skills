@@ -3,6 +3,7 @@
 
 import importlib.util
 import binascii
+import hashlib
 import json
 import struct
 import subprocess
@@ -374,6 +375,61 @@ class CompletionContractTest(unittest.TestCase):
         result = self.assert_phase6()
         self.assertEqual(result.returncode, 2)
         self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_waiver_budget_rejects_more_than_two_quality_waivers(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.run_script(
+            "assert-phase6-ran.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+            "--control-scope", self.workdir / "control-scope.json",
+            "--require-control-flip",
+            "--sigma-render", self.workdir / "visual-qa" / "sheet-1.png",
+            "--skip-anchors-gate", "fixture has no transcribed source values",
+            "--skip-layout-lint", "fixture layout waiver",
+        )
+        self.assertEqual(19, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_visual_recorder_rejects_incomplete_blind_grade(self):
+        source = self.workdir / "source-pages" / "sheet-1.png"
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        grade = self.workdir / "blind-grade.json"
+        write_json(grade, {
+            "verdict": "pass",
+            "source_png": str(source),
+            "target_png": str(target),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "target_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "dimensions": {},
+            "per_tile": [{
+                "position": "main",
+                "source_family": "bar",
+                "target_family": "bar",
+            }],
+        })
+        checklist = ",".join(
+            f"{name}=pass"
+            for name in (
+                "element_titles_hidden",
+                "palette_match",
+                "composition_match",
+                "chart_shapes_match",
+                "labels_legible",
+                "numbers_formatted",
+            )
+        )
+        result = self.run_script(
+            "record_visual_check.py",
+            "--workdir", self.workdir,
+            "--verdict", "pass",
+            "--agent-vision", "true",
+            "--checklist", checklist,
+            "--blind-grade", grade,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("dimension", result.stderr)
 
     def test_report_check_is_deterministic_and_read_only(self):
         final = self.finalize()

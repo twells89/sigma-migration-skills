@@ -1404,6 +1404,57 @@ class Migration:
                 }
             )
         chart_rows = kpi_rows + bucket_rows
+        source_oracle_available = bool(
+            self.args.app
+            or (snapshot.get("kpis") or [])
+            or (snapshot.get("buckets") or [])
+        )
+        if not source_oracle_available:
+            warehouse_rows = []
+            error_cell = re.compile(
+                r"^\s*(?:Invalid Query|Error\b|#REF|#ERROR|#VALUE|#NAME)",
+                re.I,
+            )
+            for element in element_map:
+                body = csv_by_element.get(str(element.get("elementId")), "")
+                parsed = list(csv.reader(body.splitlines())) if body else []
+                data_rows = parsed[1:] if parsed else []
+                bad_cell = next(
+                    (
+                        cell
+                        for row in data_rows
+                        for cell in row
+                        if error_cell.search(str(cell or ""))
+                    ),
+                    None,
+                )
+                has_value = any(
+                    str(cell or "").strip()
+                    for row in data_rows
+                    for cell in row
+                )
+                passed = bool(data_rows and has_value and bad_cell is None)
+                warehouse_rows.append(
+                    {
+                        "chart": str(
+                            element.get("name") or element.get("elementId") or ""
+                        ),
+                        "source_object_id": (element.get("qlik") or {}).get(
+                            "objectId"
+                        ),
+                        "kind": element.get("kind"),
+                        "warehouse_rows": len(data_rows),
+                        "status": (
+                            "WAREHOUSE-PASS"
+                            if passed
+                            else "QUERY-ERROR"
+                            if bad_cell is not None
+                            else "NO-DATA"
+                        ),
+                        "pass": passed,
+                    }
+                )
+            chart_rows = warehouse_rows
         failed_rows = [row for row in chart_rows if not row["pass"]]
         parity_ok = (
             not errors
@@ -1425,8 +1476,12 @@ class Migration:
             "source": "qlik",
             "status": "PASS" if parity_ok else "FAIL",
             "strict": True,
-            "mode": "live-engine",
-            "verified_against": "qlik-engine",
+            "mode": (
+                "live-engine" if source_oracle_available else "warehouse"
+            ),
+            "verified_against": (
+                "qlik-engine" if source_oracle_available else "warehouse"
+            ),
             "charts_total": len(chart_rows),
             "charts_pass": sum(row["pass"] for row in chart_rows),
             "charts_fail": len(failed_rows),
@@ -1455,6 +1510,20 @@ class Migration:
             },
             "generated_at": utc_now(),
         }
+        if not source_oracle_available:
+            parity_final["note"] = (
+                "Offline source mode: every built element was verified to "
+                "evaluate against the live Sigma warehouse and return real "
+                "data. Values were not diffed against a live Qlik engine."
+            )
+            parity_final["waivers"] = ["--source-parity-unavailable"]
+            parity_final["waiver_count"] = 1
+            parity_final["waiver_reasons"] = {
+                "--source-parity-unavailable": (
+                    "offline Qlik export has no live engine value oracle; "
+                    "warehouse executability verified instead"
+                )
+            }
         (self.workdir / "parity-final.json").write_text(
             json.dumps(parity_final, indent=2) + "\n", encoding="utf-8"
         )
