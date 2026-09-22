@@ -671,6 +671,31 @@ module GroundTruthSql
     (info && info['caption']) || guid
   end
 
+  # Tableau relationship culling evaluates a chart that uses only one related
+  # dimension table at that table's own grain (for example Avg(Customer
+  # Lifetime Revenue) over CUSTOMER_DIM rows, not fact-weighted joined rows).
+  # The v1 warehouse oracle cannot reproduce that culling/null-bucket contract
+  # from the object graph alone, so route such tiles to valued anchors instead
+  # of emitting a confidently wrong fact-rooted query.
+  def related_object_grain(ds, fields)
+    objects = Array(ds['objects'])
+    relationships = Array(ds['relationships'])
+    return nil if objects.empty? || relationships.empty?
+    root = objects.find { |object| object['id'] == relationships.first['first'] }
+    return nil unless root
+    owners_by_guid = ds['field_owners'] || {}
+    relevant = Array(fields).reject { |field| field['role'] == 'measure-names' }
+    return nil if relevant.empty?
+    owners = relevant.map do |field|
+      guid = field['guid'] || shelf_guid(field['raw'])
+      owners_by_guid[guid]
+    end
+    return nil if owners.any? { |owner| owner.to_s.empty? }
+    unique = owners.uniq
+    return nil unless unique.size == 1 && unique.first != root['caption']
+    unique.first
+  end
+
   # ---------------------------------------------------------------------------
   # Per-tile derivation. Returns the ledger entry.
   # ---------------------------------------------------------------------------
@@ -717,6 +742,13 @@ module GroundTruthSql
     end
 
     fields = shelf_fields(zone)
+    if (grain_owner = related_object_grain(ds, fields))
+      return classify.call(
+        'anchor-only',
+        "tile aggregates only #{grain_owner} fields; per-viz relationship culling/null semantics " \
+        'require rendered-source anchors'
+      )
+    end
     dims = []
     measures = []
     calc_deps = []

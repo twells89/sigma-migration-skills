@@ -214,8 +214,13 @@ ok(!relationship_from['sql'].include?('PRODUCT_KEY_('),
 puts '-- object-graph shelf fields retain GUID ownership --'
 resolver_ds = {
   'objects' => [
-    { 'caption' => 'CUSTOMER_DIM', 'columns' => [] },
-    { 'caption' => 'STORE_DIM', 'columns' => [] }
+    { 'id' => 'fact-id', 'caption' => 'FACT', 'columns' => [] },
+    { 'id' => 'customer-id', 'caption' => 'CUSTOMER_DIM', 'columns' => [] },
+    { 'id' => 'store-id', 'caption' => 'STORE_DIM', 'columns' => [] }
+  ],
+  'relationships' => [
+    { 'first' => 'fact-id', 'second' => 'customer-id' },
+    { 'first' => 'fact-id', 'second' => 'store-id' }
   ],
   'field_owners' => {
     'customer-region-guid' => 'CUSTOMER_DIM',
@@ -242,6 +247,17 @@ ok(resolver.call('Region', 'store-region-guid') == 'T2.REGION',
    'same-named field on another logical table resolves to its own alias')
 ok(resolver.call('Order Date', 'parsed-date-guid').nil?,
    'date-parse aliases without a physical warehouse identity route to anchor-only')
+ok(GroundTruthSql.related_object_grain(
+     resolver_ds,
+     [{ 'role' => 'dim', 'guid' => 'customer-region-guid' }]
+   ) == 'CUSTOMER_DIM',
+   'single-related-object tile is identified as dimension-grain/anchor-only')
+ok(GroundTruthSql.related_object_grain(
+     resolver_ds,
+     [{ 'role' => 'dim', 'guid' => 'customer-region-guid' },
+      { 'role' => 'dim', 'guid' => 'store-region-guid' }]
+   ).nil?,
+   'mixed-object tile remains eligible for explicit warehouse SQL derivation')
 
 puts '-- corpus smoke: orders-overview derives a complete ledger --'
 if File.exist?(CORPUS_TWB)
