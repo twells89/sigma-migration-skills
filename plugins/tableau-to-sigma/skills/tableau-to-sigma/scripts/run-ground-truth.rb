@@ -51,6 +51,7 @@ require 'json'
 require 'csv'
 require 'optparse'
 require 'securerandom'
+require_relative 'lib/workbook_code'
 
 opts = { timeout: 600, row_limit: 5000, pool: 5 }
 OptionParser.new do |p|
@@ -107,7 +108,8 @@ def sigma_sql_rows(conn_id, folder_id, sql, columns, deadline, workdir: nil)
   }
   spec['folderId'] = folder_id if folder_id # omitted key = My Documents (API default)
   begin
-    r = Sigma.request(:post, '/v2/workbooks/spec', body: JSON.generate(spec))
+    post_body = WorkbookCode.canonicalize(spec)
+    r = Sigma.request(:post, '/v2/workbooks/spec', body: JSON.generate(post_body))
   rescue Sigma::Error => e
     raise "probe workbook POST failed: #{e.message.to_s.gsub(/\s+/, ' ').strip[0, 240]}"
   end
