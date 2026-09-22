@@ -113,9 +113,26 @@ module GroundTruthSql
         objects << {
           'id' => obj.attributes['id'].to_s,
           'caption' => (obj.attributes['caption'] || tname).to_s,
+          'table_name' => tname,
           'fqn' => JoinPlan.vc_physical_fqn(tname, db, schema) || JoinPlan.twb_table_fqn(doc, rel),
           'columns' => cols
         }
+      end
+      field_owners = {}
+      ds.elements.each('.//cols/map') do |map|
+        key = map.attributes['key'].to_s.sub(/\A\[/, '').sub(/\]\z/, '')
+        value = map.attributes['value'].to_s
+        match = value.match(/\A\[([^\]]+)\]\.\[([^\]]+)\]\z/)
+        next unless match
+        owner = objects.find do |object|
+          object['table_name'] == match[1] || object['caption'] == match[1]
+        end
+        field_owners[key] = owner['caption'] if owner
+      end
+      transformed_fields = []
+      ds.elements.each(".//object-graph/objects/object//relation/columns/column") do |column|
+        next if column.attributes['date-parse-format'].to_s.empty?
+        transformed_fields << column.attributes['name'].to_s
       end
       relationships = []
       ds.elements.each('.//object-graph/relationships/relationship') do |r|
@@ -163,6 +180,8 @@ module GroundTruthSql
       out['datasources'][name] = { 'name' => name, 'caption' => caption,
                                    'tables' => tables, 'joins' => joins,
                                    'objects' => objects, 'relationships' => relationships,
+                                   'field_owners' => field_owners,
+                                   'transformed_fields' => transformed_fields,
                                    'custom_sql' => custom_sql }
     end
     doc.elements.each('//worksheet') do |ws|
@@ -502,16 +521,31 @@ module GroundTruthSql
 
   # Column resolver for one datasource: physical name (or renamed
   # 'COL (TABLE)' cross-table form) → alias-qualified SQL identifier.
-  def column_resolver(ds, aliases)
+  def column_resolver(ds, aliases, meta = {})
     named = (ds['tables'] || []).map { |t| { 'key' => t['name'], 'columns' => t['columns'] } } +
             Array(ds['objects']).map { |o| { 'key' => o['caption'], 'columns' => o['columns'] } }
     owners = {}
     named.each do |t|
       (t['columns'] || []).each { |c| (owners[c] ||= []) << t['key'] }
     end
-    lambda do |name|
+    field_owners = ds['field_owners'] || {}
+    columns_by_guid = meta.is_a?(Hash) ? (meta['columns_by_guid'] || {}) : {}
+    columns_by_guid.each do |guid, info|
+      next unless info.is_a?(Hash) && field_owners[guid]
+      caption = info['caption'].to_s.strip
+      next if caption.empty?
+      owner = field_owners[guid]
+      (owners[caption] ||= []) << owner unless owners[caption].include?(owner)
+      physical = JoinPlan.physical_name(caption)
+      (owners[physical] ||= []) << owner unless owners[physical].include?(owner)
+    end
+    transformed_fields = Array(ds['transformed_fields'])
+    lambda do |name, guid = nil|
       n = name.to_s.strip
+      field_guid = guid.to_s.sub(/\A\[/, '').sub(/\]\z/, '')
+      return nil if !field_guid.empty? && transformed_fields.include?(field_guid)
       table_hint = nil
+      table_hint = field_owners[field_guid] unless field_guid.empty?
       if (m = n.match(/\A(.+?)\s+\(([^()]+)\)\z/))
         # Tableau's cross-table rename: 'REGION (REGION_DIM)'.
         cand_t = named.find { |t| t['key'] == m[2] || t['key'].start_with?("#{m[2]} (") }
@@ -669,7 +703,7 @@ module GroundTruthSql
     # underivable datasource is still `vds` (Tableau computes it), not
     # anchor-only/unverifiable.
     from = build_from(ds, meta)
-    resolve_col = column_resolver(ds, from['aliases'] || {})
+    resolve_col = column_resolver(ds, from['aliases'] || {}, meta)
     ctx = { 'calcs' => calcs, 'params' => params, 'resolve_col' => resolve_col }
     from_fail = lambda do
       classify.call(from['anchor_only'] ? 'anchor-only' : 'unverifiable', from['error'])
@@ -713,11 +747,11 @@ module GroundTruthSql
           params_used.merge!(t['params_used'])
           dims << { 'raw' => fld['raw'], 'sql' => "(#{t['sql']})", 'alias' => cap }
         elsif deriv.empty? || deriv == 'none'
-          col = resolve_col.call(cap)
+          col = resolve_col.call(cap, fld['guid'])
           return classify.call('anchor-only', "dimension #{cap.inspect} does not resolve to a warehouse column") if col.nil?
           dims << { 'raw' => fld['raw'], 'sql' => col, 'alias' => cap }
         elsif TRUNC_PARTS[deriv]
-          col = resolve_col.call(cap)
+          col = resolve_col.call(cap, fld['guid'])
           return classify.call('anchor-only', "date dimension #{cap.inspect} does not resolve to a warehouse column") if col.nil?
           if deriv.start_with?('t')
             dims << { 'raw' => fld['raw'], 'sql' => "DATE_TRUNC('#{TRUNC_PARTS[deriv]}', #{col})",
@@ -753,7 +787,7 @@ module GroundTruthSql
             params_used.merge!(t['params_used'])
             inner = "(#{t['sql']})"
           else
-            inner = resolve_col.call(cap)
+            inner = resolve_col.call(cap, fld['guid'])
             return classify.call('anchor-only', "measure #{cap.inspect} does not resolve to a warehouse column") if inner.nil?
           end
           agg = AGG_BY_DERIV[deriv]
@@ -785,7 +819,8 @@ module GroundTruthSql
           params_used.merge!(t['params_used'])
           measures << { 'raw' => mz['column'], 'agg' => 'usr', 'sql' => sql, 'alias' => cap }
         elsif AGG_BY_DERIVATION_ATTR[d]
-          inner = resolve_col.call(cap)
+          measure_guid = mz['column'].to_s.sub(/\A\[/, '').sub(/\]\z/, '')
+          inner = resolve_col.call(cap, measure_guid)
           return classify.call('anchor-only', "measure #{cap.inspect} does not resolve to a warehouse column") if inner.nil?
           agg = AGG_BY_DERIVATION_ATTR[d]
           sql = agg.end_with?('(DISTINCT') ? "#{agg} #{inner})" : "#{agg}(#{inner})"

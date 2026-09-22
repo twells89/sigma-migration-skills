@@ -211,6 +211,38 @@ ok(relationship_from['sql'].include?('T1.PRODUCT_KEY = T2.PRODUCT_KEY'),
 ok(!relationship_from['sql'].include?('PRODUCT_KEY_('),
    'duplicate-caption disambiguation never leaks into the SQL identifier')
 
+puts '-- object-graph shelf fields retain GUID ownership --'
+resolver_ds = {
+  'objects' => [
+    { 'caption' => 'CUSTOMER_DIM', 'columns' => [] },
+    { 'caption' => 'STORE_DIM', 'columns' => [] }
+  ],
+  'field_owners' => {
+    'customer-region-guid' => 'CUSTOMER_DIM',
+    'store-region-guid' => 'STORE_DIM',
+    'parsed-date-guid' => 'CUSTOMER_DIM'
+  },
+  'transformed_fields' => ['parsed-date-guid']
+}
+resolver_meta = {
+  'columns_by_guid' => {
+    'customer-region-guid' => { 'caption' => 'Region' },
+    'store-region-guid' => { 'caption' => 'Region' },
+    'parsed-date-guid' => { 'caption' => 'Order Date' }
+  }
+}
+resolver = GroundTruthSql.column_resolver(
+  resolver_ds,
+  { 'CUSTOMER_DIM' => 'T1', 'STORE_DIM' => 'T2' },
+  resolver_meta
+)
+ok(resolver.call('Region', 'customer-region-guid') == 'T1.REGION',
+   'ambiguous display caption resolves through the source field GUID owner')
+ok(resolver.call('Region', 'store-region-guid') == 'T2.REGION',
+   'same-named field on another logical table resolves to its own alias')
+ok(resolver.call('Order Date', 'parsed-date-guid').nil?,
+   'date-parse aliases without a physical warehouse identity route to anchor-only')
+
 puts '-- corpus smoke: orders-overview derives a complete ledger --'
 if File.exist?(CORPUS_TWB)
   Dir.mktmpdir do |dir|
