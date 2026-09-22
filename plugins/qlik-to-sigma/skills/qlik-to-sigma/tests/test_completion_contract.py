@@ -227,6 +227,19 @@ class CompletionContractTest(unittest.TestCase):
         health = json.loads((self.workdir / "render-health.json").read_text())
         self.assertEqual(health["sources"][0]["status"], "FAIL")
 
+    def test_visible_page_named_data_is_still_finalized(self):
+        for filename in ("wb-spec.json", "wb-readback.json"):
+            path = self.workdir / filename
+            document = json.loads(path.read_text())
+            root = document.get("document") or document
+            root["pages"][0]["name"] = "Data"
+            write_json(path, document)
+        result = self.finalize()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        health = json.loads((self.workdir / "render-health.json").read_text())
+        self.assertEqual(1, health["expected_sigma_pages"])
+        self.assertEqual(1, health["sigma_pages_checked"])
+
     def test_tile_aware_majority_blank_fails(self):
         source = self.workdir / "source.png"
         render = self.workdir / "render.png"

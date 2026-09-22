@@ -70,7 +70,9 @@ def workbook_pages(workdir):
             continue
         page_id = str(row.get("id") or row.get("pageId") or "")
         name = str(row.get("name") or row.get("title") or page_id)
-        if row.get("visibility") == "hidden" or "data" in fold(page_id) or fold(name) == "data":
+        if row.get("visibility") == "hidden" or page_id.strip().casefold() in {
+            "data", "page-data", "pg-data",
+        }:
             continue
         pages.append({"id": page_id, "name": name})
     return pages
