@@ -594,20 +594,10 @@ def gate_flip(
                 f"{len(failures)} FAIL row(s)",
             )
         return
-    marker_path = workdir / "control-flip-unverified.json"
-    if marker_path.is_file():
-        marker = load_object(marker_path, 21, "control-flip")
-        if (
-            marker.get("workbookId") in (None, "", workbook_id)
-            and isinstance(marker.get("unprobed"), list)
-            and marker["unprobed"]
-        ):
-            return
     fail(
         21,
         "control-flip",
-        "controls exist but no passing runtime flip proof, all-unprobeable marker, "
-        "or named waiver is present",
+        "controls exist but no current probe results or named waiver are present",
     )
 
 

@@ -99,6 +99,30 @@ def python_command(script: str, *arguments: Any) -> list[str]:
     return [sys.executable, str(HERE / script), *(str(item) for item in arguments)]
 
 
+def is_content_page(page: dict[str, Any]) -> bool:
+    page_id = str(page.get("id") or "").strip().casefold()
+    return (
+        page.get("visibility") != "hidden"
+        and page_id not in {"data", "page-data", "pg-data"}
+    )
+
+
+def sigma_entries(path: str) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    page = None
+    while True:
+        separator = "&" if "?" in path else "?"
+        request_path = f"{path}{separator}limit=1000"
+        if page:
+            request_path += f"&page={page}"
+        response = sigma_rest.request("get", request_path) or {}
+        rows = response.get("entries") or []
+        entries.extend(row for row in rows if isinstance(row, dict))
+        page = response.get("nextPage")
+        if page in (None, ""):
+            return entries
+
+
 def resolve_converter(
     development_dir: str | None,
 ) -> tuple[Path | None, str]:
@@ -667,7 +691,19 @@ class Migration:
                     "default": "proceed (measure best-effort/dropped; original Qlik expr kept in DM description)",
                 }
             )
-        if app_meta.get("hasSectionAccess") is True:
+        try:
+            load_script = (self.workdir / "script.qvs").read_text(
+                encoding="utf-8-sig"
+            )
+        except OSError:
+            load_script = ""
+        has_section_access = (
+            app_meta.get("hasSectionAccess") is True
+            or re.search(r"(?im)^\s*SECTION\s+ACCESS\s*;", load_script)
+            is not None
+            or bool(converted.get("security") or [])
+        )
+        if has_section_access:
             questions.append(
                 {
                     "id": "section_access",
@@ -707,7 +743,10 @@ class Migration:
                     "visual": chart.get("title") or chart.get("id"),
                     "qlik_type": visual_type,
                     "detail": f"Qlik {visual_type!r} has no native Sigma kind",
-                    "options": ["approximate-to-bar", "skip this chart"],
+                    "options": [
+                        "approximate-to-bar",
+                        "abort and redesign this chart",
+                    ],
                     "default": "approximate-to-bar",
                 }
             )
@@ -801,6 +840,11 @@ class Migration:
             )
             for question in questions:
                 chosen = (answers or {}).get(question["id"], question["default"])
+                if chosen not in question["options"]:
+                    raise ValueError(
+                        f"invalid answer for {question['id']!r}: {chosen!r}; "
+                        f"choose one of {question['options']!r}"
+                    )
                 label = question.get("measure") or question.get("visual")
                 print(
                     f"     - {question['id']}"
@@ -1141,7 +1185,7 @@ class Migration:
         content_pages = [
             page
             for page in document(spec).get("pages") or []
-            if "data" not in str(page.get("id") or "").lower()
+            if isinstance(page, dict) and is_content_page(page)
         ]
         rendered = []
         for page in content_pages:
@@ -1275,10 +1319,7 @@ class Migration:
             else:
                 self.snapshot_lane.print_log()
                 print("   snapshot lane FAILED — using live eval fallbacks")
-        columns_response = sigma_rest.request(
-            "get", f"/v2/workbooks/{workbook_id}/columns"
-        ) or {}
-        entries = columns_response.get("entries") or []
+        entries = sigma_entries(f"/v2/workbooks/{workbook_id}/columns")
         errors = [
             row for row in entries if (row.get("type") or {}).get("type") == "error"
         ]

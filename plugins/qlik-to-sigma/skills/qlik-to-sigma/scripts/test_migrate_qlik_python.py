@@ -113,6 +113,38 @@ class CliContractTests(unittest.TestCase):
             r"(?:write_text|open)\s*\([^\\n]*phase6-success\\.json",
         )
 
+    def test_columns_endpoint_is_exhaustively_paginated(self) -> None:
+        responses = [
+            {
+                "entries": [{"label": "first", "type": {"type": "text"}}],
+                "nextPage": "p2",
+            },
+            {
+                "entries": [{"label": "broken", "type": {"type": "error"}}],
+            },
+        ]
+        with mock.patch.object(
+            migrate.sigma_rest,
+            "request",
+            side_effect=responses,
+        ) as request:
+            rows = migrate.sigma_entries("/v2/workbooks/wb-1/columns")
+        self.assertEqual(2, len(rows))
+        self.assertEqual("error", rows[-1]["type"]["type"])
+        self.assertIn("limit=1000", request.call_args_list[0].args[1])
+        self.assertIn("page=p2", request.call_args_list[1].args[1])
+
+    def test_content_page_filter_uses_reserved_ids_not_substrings(self) -> None:
+        self.assertTrue(migrate.is_content_page({
+            "id": "customer-data",
+            "name": "Data",
+        }))
+        self.assertFalse(migrate.is_content_page({
+            "id": "page-data",
+            "name": "Data",
+            "visibility": "hidden",
+        }))
+
 
 class NoRubyContractTests(unittest.TestCase):
     RUNTIME_FILES = (
@@ -318,6 +350,45 @@ class OrchestrationTests(unittest.TestCase):
             )
             self.assertEqual(10, result)
             self.assertFalse((Path(temporary) / "security-decision.json").exists())
+
+    def test_section_access_script_stops_even_when_metadata_is_false(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workdir = Path(temporary)
+            (workdir / "script.qvs").write_text(
+                "SECTION ACCESS;\nLOAD USERID, REDUCTION INLINE [];\n",
+                encoding="utf-8",
+            )
+            migration = migrate.Migration(self.args())
+            migration.workdir = workdir
+            result = migration.decisions(
+                "Secured App",
+                {"warnings": []},
+                {"hasSectionAccess": False},
+                [],
+            )
+            self.assertEqual(10, result)
+
+    def test_removed_skip_chart_answer_fails_instead_of_being_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            migration = migrate.Migration(
+                migrate.parse_args([
+                    "--app", "app-id",
+                    "--connection", "connection-id",
+                    "--answers", '{"chart_no_native_kind":"skip this chart"}',
+                ])
+            )
+            migration.workdir = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "invalid answer"):
+                migration.decisions(
+                    "Orders",
+                    {"warnings": []},
+                    {},
+                    [{
+                        "id": "unsupported-1",
+                        "title": "Unsupported",
+                        "vizType": "unsupported-kind",
+                    }],
+                )
 
     def test_dry_run_exits_zero_before_render_and_terminal_gates(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -528,6 +528,10 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         result = self.assert_phase6()
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        (self.workdir / "probe-controls" / "probe-results.json").unlink()
+        stale = self.assert_phase6()
+        self.assertEqual(21, stale.returncode, stale.stdout + stale.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
 
     def test_visual_recorder_rejects_incomplete_blind_grade(self):
         source = self.workdir / "source-pages" / "sheet-1.png"
