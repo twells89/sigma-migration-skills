@@ -198,10 +198,12 @@ check(pc && pc['scheme'] == PINNED,
 check(build_log.include?("pinned from a SIBLING chart's explicit .twb map"),
       'sibling pin is logged (stated, never silent)', fails)
 
-# ---- 3. a chart colored by an UNRELATED field inherits nothing ---------------
+# ---- 3. unrelated field never inherits the sibling's explicit member map -----
 tc = tier && tier['color']
-check(tc.is_a?(Hash) ? tc['scheme'].nil? : true,
-      "different-field chart gets NO borrowed scheme (theme palette applies; got #{tc.inspect})", fails)
+check(tc.is_a?(Hash) && tc['scheme'].is_a?(Array) &&
+      tc['scheme'] != %w[#07b4a2 #e8519a],
+      "different-field chart uses its own source-order palette, not the sibling's member map " \
+      "(got #{tc.inspect})", fails)
 
 puts
 if fails.empty?
