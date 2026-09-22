@@ -449,7 +449,7 @@ class OrchestrationTests(unittest.TestCase):
             }
 
             def api(_method, path, **_kwargs):
-                if path.endswith("/columns"):
+                if "/columns" in path:
                     return {
                         "entries": [{
                             "elementId": "el-1",
