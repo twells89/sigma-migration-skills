@@ -91,10 +91,18 @@ def stage_fixture(dir, extra_worksheet_csv: false)
         'yAxis' => { 'columnIds' => ['y-volume'] }
       },
       {
+        'id' => 'helper-latency',
+        'kind' => 'table',
+        'name' => 'Latency Grain',
+        # Deliberately omit visibleAsSource:false: live readback may strip it.
+        'source' => { 'kind' => 'data-model' },
+        'columns' => [{ 'id' => 'helper-latency-value', 'name' => 'Latency' }]
+      },
+      {
         'id' => 'el-rebuilt-latency',
         'kind' => 'line-chart',
         'name' => 'REBUILT Latency',
-        'source' => { 'kind' => 'table', 'elementId' => 'master' },
+        'source' => { 'kind' => 'table', 'elementId' => 'helper-latency' },
         'columns' => [
           { 'id' => 'x-period-2', 'name' => 'Period' },
           { 'id' => 'y-latency', 'name' => 'Latency' }
@@ -103,7 +111,8 @@ def stage_fixture(dir, extra_worksheet_csv: false)
         'yAxis' => { 'columnIds' => ['y-latency'] }
       }
     ],
-    'layout' => '<Page id="page-data"><Element elementId="master"/></Page>' \
+    'layout' => '<Page id="page-data"><Element elementId="master"/>' \
+                '<Element elementId="helper-latency"/></Page>' \
                 '<Page id="page-dashboard"><Element elementId="el-volume"/>' \
                 '<Element elementId="el-rebuilt-latency"/></Page>'
   ))
@@ -133,6 +142,8 @@ Dir.mktmpdir do |dir|
   rebuilt = plan && plan['chart_inventory'].find { |chart| chart['sigma_element_id'] == 'el-rebuilt-latency' }
   check.call(rebuilt && rebuilt['tableau_view'] == 'Embedded Latency' && rebuilt['matched_via'] == 'rename',
              'persisted layout rename maps a reconstructed tile back to its source zone')
+  check.call(log.include?('helper-latency'),
+             'chart-referenced data-model helper is detected even when readback drops visibleAsSource:false')
   layout = JSON.parse(File.read(File.join(dir, 'dashboard-layout.json')))
   census = plan && ZoneCensus.tile_census(layout, plan['chart_inventory'], ['Operations Dashboard'])
   check.call(census && census['zones_total'] == 2 && census['zones_unmatched'].zero?,

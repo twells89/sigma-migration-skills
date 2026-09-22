@@ -68,6 +68,14 @@ check(f == 'DateTrunc("month", [Master/Order Date])',
       "x-axis wraps the BASE date column (got #{f.inspect})", fails)
 check(f !~ /Month of Order Date/,
       'x-axis does NOT reference the broken passthrough [Master/Month of Order Date]', fails)
+check(xcol && xcol.dig('format', 'kind') == 'datetime' &&
+      xcol.dig('format', 'formatString') == '%B %Y',
+      "month-grain axis preserves full month-year labels (got #{xcol && xcol['format'].inspect})", fails)
+check(line && line.dig('xAxis', 'format', 'labels') ==
+      { 'labelAngle' => 0, 'fontSize' => 11, 'allowLongerLabels' => true },
+      "x-axis labels are kept horizontal and long-form (got #{line && line.dig('xAxis', 'format', 'labels').inspect})", fails)
+check(line && line.dig('xAxis', 'format', 'title', 'text') == 'Order Date',
+      "x-axis title preserves the source field caption (got #{line && line.dig('xAxis', 'format', 'title').inspect})", fails)
 
 puts
 if fails.empty?

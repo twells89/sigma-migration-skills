@@ -101,6 +101,22 @@ Dir.mktmpdir do |d|
   ok(st.exitstatus.zero?, "rel diff ~8e-8 within default tol → exit 0 (got #{st.exitstatus})")
 end
 
+puts '-- Sigma display-formatted export precision → match only when rounded values agree --'
+Dir.mktmpdir do |d|
+  stage(d, [entry('Rounded KPI', 'warehouse-sql', dims: 0)],
+        { 'Rounded KPI' => [[2168.76]] }, { 'Rounded KPI' => [[2169.0]] })
+  _out, _err, st = run(d)
+  stamp = JSON.parse(File.read(File.join(d, 'numeric-parity.json')))['tiles']['Rounded KPI']
+  ok(st.exitstatus.zero? && stamp['verdict'] == 'match' && stamp['display_precision'] == true,
+     'ground truth rounds to the precision exposed by the Sigma element export')
+end
+Dir.mktmpdir do |d|
+  stage(d, [entry('Rounded Divergence', 'warehouse-sql', dims: 0)],
+        { 'Rounded Divergence' => [[2168.2]] }, { 'Rounded Divergence' => [[2169.0]] })
+  _out, _err, st = run(d)
+  ok(st.exitstatus == 2, 'difference that survives export rounding still diverges')
+end
+
 puts '-- divergence → FATAL naming tile + measure + both values --'
 Dir.mktmpdir do |d|
   stage(d, [entry('Revenue Trend', 'warehouse-sql')],

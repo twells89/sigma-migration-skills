@@ -84,6 +84,42 @@ def jaccard(exp_set, act_set)
   union.zero? ? 1.0 : ((exp_set & act_set).size.to_f / union).round(4)
 end
 
+# Sigma's element CSV export returns DISPLAY-formatted numbers (for example a
+# `$,.0f` chart exports 170642.0) while Tableau's worksheet CSV can retain the
+# underlying 170641.9. Compare at the precision the Sigma export can actually
+# represent; otherwise visually-identical, same-warehouse charts fail strict
+# parity solely because one side discarded hidden decimals. Ground-truth and
+# anchor gates still police the source values independently.
+def exported_decimal_precision(value)
+  return nil unless value.is_a?(Numeric) && value.to_f.finite?
+  scale = [value.to_f.abs, 1.0].max
+  (0..9).find { |places| (value.to_f - value.to_f.round(places)).abs <= scale * 1e-9 } || 9
+end
+
+def normalize_export_precision(exp, act)
+  width = [(exp.map(&:size) + act.map(&:size)).max || 0, 0].max
+  precisions = Array.new(width)
+  width.times do |index|
+    values = act.map { |row| row[index] }.compact
+    next if values.empty? || !values.all? { |value| value.is_a?(Numeric) }
+    precisions[index] = values.map { |value| exported_decimal_precision(value) }.max
+  end
+  normalize = lambda do |rows|
+    rows.map do |row|
+      row.each_with_index.map do |value, index|
+        places = precisions[index]
+        value.is_a?(Numeric) && places ? value.to_f.round(places) : value
+      end
+    end
+  end
+  normalized_exp = normalize.call(exp)
+  normalized_act = normalize.call(act)
+  changed = precisions.each_index.select do |index|
+    precisions[index] && normalized_exp.map { |row| row[index] } != exp.map { |row| row[index] }
+  end
+  [normalized_exp, normalized_act, changed]
+end
+
 def strict_compare(exp, act)
   # Compare the FULL tuple width the plan carries (bead s6fo): 3-channel charts
   # (stacked color / pivot row+col+value / scatter dim+x+y) must compare every
@@ -346,7 +382,18 @@ results = plan.map do |p|
 
   act = (p.dig('actual', 'rows') || []).map { |r| round_row(r) }
 
-  result = this_extract ? extract_compare(exp, act, tol: opts[:tol]) : strict_compare(exp, act)
+  score_exp = exp
+  score_act = act
+  display_precision_columns = []
+  unless this_extract
+    score_exp, score_act, display_precision_columns = normalize_export_precision(exp, act)
+  end
+  result = this_extract ? extract_compare(exp, act, tol: opts[:tol]) : strict_compare(score_exp, score_act)
+  if display_precision_columns.any?
+    result[:notes] = (result[:notes] || []) +
+                     ["compared at Sigma export display precision for column(s) " \
+                      "#{display_precision_columns.map { |index| "##{index}" }.join(', ')}"]
+  end
   # Trailing-partial-period guard: WARN only (deterministic detection, human
   # decision) — appended to the per-chart notes, never a status change.
   tp = trailing_partial_notes(exp, act)
@@ -355,7 +402,7 @@ results = plan.map do |p|
     result[:trailing_partial_warn] = true
   end
   result.merge(chart: p['chart'], extract: this_extract,
-               columns: per_column_scores(exp, act, p['sigma_columns']))
+               columns: per_column_scores(score_exp, score_act, p['sigma_columns']))
 end
 
 results.each do |r|

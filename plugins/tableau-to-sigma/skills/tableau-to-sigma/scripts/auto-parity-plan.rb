@@ -133,7 +133,25 @@ master_ids =
     end
     detected.uniq
   end
-if master_ids.empty?
+master_id_set = master_ids.to_set
+
+# Server readback can drop `visibleAsSource:false` from a hidden grain helper
+# even though a KPI/chart still sources that table. Seed every table referenced
+# by a scoped non-table visualization as a helper/master candidate. Otherwise a
+# valid chart disappears from both parity and tile census (live-caught on the
+# dimension-grain Avg Lifetime Revenue KPI).
+visual_source_ids = scoped_elements.each_with_object(Set.new) do |element, ids|
+  next if %w[table control text image container].include?(element['kind'].to_s)
+  source_id = element.dig('source', 'elementId')
+  ids << source_id if source_id
+end
+workbook_elements.each do |element|
+  next unless element['kind'] == 'table'
+  next unless visual_source_ids.include?(element['id'])
+  master_id_set << element['id']
+end
+
+if master_id_set.empty?
   # A hand-authored spec may have NO intermediate master tables at all — every
   # chart sources the data model directly. That's a valid documented shape,
   # not an error (the chart loop below matches DM-sourced charts on its own).
@@ -143,17 +161,20 @@ if master_ids.empty?
   abort('auto-parity-plan.rb: no master element(s) detected; pass --master-id explicitly') unless has_dm_charts
   warn 'no master tables detected — matching data-model-sourced charts directly'
 else
-  warn "matching charts that source from master element(s): #{master_ids.join(', ')}"
+  warn "matching charts that source from master/helper element(s): #{master_id_set.to_a.join(', ')}"
 end
 
-master_id_set = master_ids.to_set
 # Transitive: hidden helper tables that THEMSELVES source a master (e.g. the
 # scatter grouped-source tables, bead z1d0) count as masters for chart
 # matching — the scatter chart sources the helper, not the master.
-workbook_elements.each do |element|
-  next unless element['kind'] == 'table' && element['visibleAsSource'] == false
-  next unless element['source'] && master_id_set.include?(element['source']['elementId'])
-  master_id_set << element['id']
+loop do
+  before = master_id_set.size
+  workbook_elements.each do |element|
+    next unless element['kind'] == 'table' && element['visibleAsSource'] == false
+    next unless element['source'] && master_id_set.include?(element['source']['elementId'])
+    master_id_set << element['id']
+  end
+  break if master_id_set.size == before
 end
 sigma_charts = scoped_elements.each_with_object([]) do |element, out|
   next if master_id_set.include?(element['id'])

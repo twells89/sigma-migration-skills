@@ -144,10 +144,15 @@ Dir.mktmpdir('tableau-source-census') do |dir|
   parity = write_json(dir, 'parity-final.json',
                       'status' => 'PASS', 'charts_total' => 2, 'charts_pass' => 2,
                       'pass_names' => %w[Revenue Gauge], 'fail_names' => [])
+  write_json(dir, 'chart-provenance.json',
+             'version' => 1,
+             'elements' => {
+               'revenue' => { 'worksheet' => 'Revenue', 'dashboard' => 'Sales Dashboard' }
+             })
   readback = write_json(dir, 'wb-readback.json',
                         'pages' => [{ 'id' => 'page-sales', 'name' => 'Sales Dashboard' }],
                         'elements' => [
-                          { 'id' => 'revenue', 'kind' => 'bar-chart', 'name' => 'Revenue',
+                          { 'id' => 'revenue', 'kind' => 'bar-chart', 'name' => 'Net Revenue by Region',
                             'columns' => [{ 'id' => 'profit-ratio', 'name' => 'Profit Ratio' }] },
                           { 'id' => 'gauge', 'kind' => 'kpi-chart', 'name' => 'Gauge',
                             'columns' => [{ 'id' => 'approx', 'name' => 'Approx Calc' }] },
@@ -194,6 +199,10 @@ Dir.mktmpdir('tableau-source-census') do |dir|
         'out-of-scope dashboard is not-applicable')
   check(by_name[['worksheet', 'Orphan Sheet']]['status'] == 'not-applicable',
         'orphan/out-of-scope worksheet is not-applicable')
+  check(by_name[['worksheet', 'Revenue']]['status'] == 'migrated',
+        'chart provenance accounts for a source worksheet whose Sigma display title differs')
+  check(by_name[['dashboard-zone', 'Revenue']]['status'] == 'migrated',
+        'chart provenance accounts for the corresponding dashboard zone')
   check(by_name[['worksheet', 'Gauge']]['status'] == 'approximated',
         'coverage approximation overrides built/parity evidence')
   check(by_name[['worksheet', 'Missing Sheet']]['status'] == 'skipped',

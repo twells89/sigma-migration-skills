@@ -43,7 +43,12 @@ NESTED_WB_SPEC = {
     'pages' => [{ 'id' => 'p1', 'name' => 'Overview' }],
     'elements' => [
       { 'id' => 'c1', 'kind' => 'bar-chart', 'name' => 'Revenue by Region',
-        'columns' => [{ 'id' => 'col-region', 'name' => 'Region' }] }
+        'columns' => [
+          { 'id' => 'col-region', 'name' => 'Region' },
+          { 'id' => 'col-profit', 'name' => 'Profit',
+            'format' => { 'kind' => 'number', 'formatString' => '$,.0f',
+                          'currencySymbol' => '$', 'digitGroupingSymbol' => '.' } }
+        ] }
     ],
     'layout' => '<Page id="p1"><Element elementId="c1"/></Page>'
   }
@@ -51,7 +56,7 @@ NESTED_WB_SPEC = {
 
 PLAN = { 'charts' => [
   { 'chart' => 'Revenue by Region', 'sigma_element_id' => 'c1', 'sigma_kind' => 'bar-chart',
-    'sigma_columns' => ['col-region'] }
+    'sigma_columns' => %w[col-region col-profit] }
 ] }.freeze
 
 SIGMA_STUB = <<~RUBY
@@ -66,7 +71,7 @@ SIGMA_STUB = <<~RUBY
       when method == :post && path == '/v2/workbooks/wb-test/export'
         { 'queryId' => 'q1' }
       when method == :get && path == '/v2/query/q1/download'
-        "Region\\nWest\\n"
+        "Region,Profit\\nWest,$106.801\\n"
       else
         raise Error, "stub: unexpected \#{method} \#{path}"
       end
@@ -119,8 +124,8 @@ Dir.mktmpdir do |dir|
   check(File.exist?(out_path), 'parity-actuals.json written', fails)
   if File.exist?(out_path)
     actuals = JSON.parse(File.read(out_path))
-    check(actuals['Revenue by Region'] == [['West']],
-          "actuals carry the exported row (got #{actuals.inspect})", fails)
+    check(actuals['Revenue by Region'] == [['West', 106_801.0]],
+          "actuals strip the column's custom dot grouping separator (got #{actuals.inspect})", fails)
   end
 
   reqs = File.exist?(log) ? File.readlines(log).map { |l| JSON.parse(l) } : []

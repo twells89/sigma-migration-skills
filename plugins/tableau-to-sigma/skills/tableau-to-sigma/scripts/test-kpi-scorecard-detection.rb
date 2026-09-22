@@ -83,12 +83,27 @@ TWB = <<~XML
           <pane><mark class='Shape' /></pane>
         </table>
       </worksheet>
+      <worksheet name='Automatic KPI'>
+        <table>
+          <view><datasource-dependencies datasource='federated.x'>
+            <column caption='Job Losses' name='[JL]' datatype='real' role='measure' type='quantitative' />
+            <column-instance column='[JL]' derivation='Sum' name='[sum:JL:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies></view>
+          <pane>
+            <mark class='Automatic' />
+            <style><style-rule element='mark'>
+              <format attr='font-size' value='32' />
+            </style-rule></style>
+          </pane>
+        </table>
+      </worksheet>
     </worksheets>
     <dashboards>
       <dashboard name='D'>
         <zones><zone id='1' type-v2='layout-basic' x='0' y='0' w='100000' h='100000'>
           <zone id='2' name='Region BAN'  x='0'     y='0' w='50000' h='100000' />
           <zone id='3' name='Scatter Plot' x='50000' y='0' w='50000' h='100000' />
+          <zone id='4' name='Automatic KPI' x='0' y='0' w='25000' h='25000' />
         </zone></zones>
       </dashboard>
     </dashboards>
@@ -107,6 +122,7 @@ zones = (layout || []).find { |x| x['dashboard'] == 'D' }&.dig('zones') || []
 
 ban = zones.find { |z| z['caption'] == 'Region BAN' }
 scat = zones.find { |z| z['caption'] == 'Scatter Plot' }
+automatic = zones.find { |z| z['caption'] == 'Automatic KPI' }
 
 # ---- 1. Shape + BAN → kpi --------------------------------------------------
 check(ban && ban['chart_kind'] == 'kpi',
@@ -132,6 +148,8 @@ check(scat && !scat['is_kpi'],
       "the scatter is NOT a false-positive KPI (is_kpi=#{scat && scat['is_kpi'].inspect})", fails)
 check(scat && scat['kpi_label'].nil?,
       'the scatter carries no kpi_label', fails)
+check(automatic && automatic['is_kpi'] && automatic['kpi_value_font_size'] == 32,
+      "Automatic-mark KPI carries the source mark font size (got #{automatic && automatic['kpi_value_font_size'].inspect})", fails)
 
 puts
 if fails.empty?

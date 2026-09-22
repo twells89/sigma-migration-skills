@@ -113,9 +113,26 @@ module GroundTruthSql
         objects << {
           'id' => obj.attributes['id'].to_s,
           'caption' => (obj.attributes['caption'] || tname).to_s,
+          'table_name' => tname,
           'fqn' => JoinPlan.vc_physical_fqn(tname, db, schema) || JoinPlan.twb_table_fqn(doc, rel),
           'columns' => cols
         }
+      end
+      field_owners = {}
+      ds.elements.each('.//cols/map') do |map|
+        key = map.attributes['key'].to_s.sub(/\A\[/, '').sub(/\]\z/, '')
+        value = map.attributes['value'].to_s
+        match = value.match(/\A\[([^\]]+)\]\.\[([^\]]+)\]\z/)
+        next unless match
+        owner = objects.find do |object|
+          object['table_name'] == match[1] || object['caption'] == match[1]
+        end
+        field_owners[key] = owner['caption'] if owner
+      end
+      transformed_fields = []
+      ds.elements.each(".//object-graph/objects/object//relation/columns/column") do |column|
+        next if column.attributes['date-parse-format'].to_s.empty?
+        transformed_fields << column.attributes['name'].to_s
       end
       relationships = []
       ds.elements.each('.//object-graph/relationships/relationship') do |r|
@@ -163,6 +180,8 @@ module GroundTruthSql
       out['datasources'][name] = { 'name' => name, 'caption' => caption,
                                    'tables' => tables, 'joins' => joins,
                                    'objects' => objects, 'relationships' => relationships,
+                                   'field_owners' => field_owners,
+                                   'transformed_fields' => transformed_fields,
                                    'custom_sql' => custom_sql }
     end
     doc.elements.each('//worksheet') do |ws|
@@ -452,14 +471,21 @@ module GroundTruthSql
       aliases[o['caption']] ||= a
     end
     cbg = meta.is_a?(Hash) ? (meta['columns_by_guid'] || {}) : {}
-    key_sql = lambda do |expr, al|
+    key_sql = lambda do |expr, al, object_caption|
       s = expr.to_s
       resolved = true
       sql = s.gsub(/\[([^\]]+)\]/) do
         ref = Regexp.last_match(1).sub(/\s+\([^\]]*\)\z/, '') # '<guid> (DUP TABLE)' → guid
         info = cbg[ref]
         if info && info['caption']
-          "#{al}.#{JoinPlan.physical_name(info['caption'])}"
+          caption = info['caption'].to_s
+          # parse-twb-layout disambiguates duplicate relationship fields by
+          # appending " (<logical table caption>)". That suffix is display-only,
+          # not part of the warehouse identifier (Product Key, not
+          # PRODUCT_KEY_(PRODUCT_DIM_(WAREHOUSE.PRODUCT_DIM))).
+          suffix = " (#{object_caption})"
+          caption = caption[0...-suffix.length] if caption.end_with?(suffix)
+          "#{al}.#{JoinPlan.physical_name(caption)}"
         elsif ref =~ /\A[0-9A-Fa-f-]{20,}\z/
           resolved = false
           ref
@@ -481,8 +507,8 @@ module GroundTruthSql
       end
       o = by_id[r['second']]
       return { 'error' => 'relationship references an unknown object' } if o.nil?
-      l = key_sql.call(r['lexpr'], aliases[r['first']])
-      rr = key_sql.call(r['rexpr'], aliases[r['second']])
+      l = key_sql.call(r['lexpr'], aliases[r['first']], by_id[r['first']]['caption'])
+      rr = key_sql.call(r['rexpr'], aliases[r['second']], by_id[r['second']]['caption'])
       if l.nil? || rr.nil?
         return { 'error' => "relationship key column unresolvable (no caption for the field GUID in the .twb)",
                  'anchor_only' => true }
@@ -495,16 +521,33 @@ module GroundTruthSql
 
   # Column resolver for one datasource: physical name (or renamed
   # 'COL (TABLE)' cross-table form) → alias-qualified SQL identifier.
-  def column_resolver(ds, aliases)
+  def column_resolver(ds, aliases, meta = {})
     named = (ds['tables'] || []).map { |t| { 'key' => t['name'], 'columns' => t['columns'] } } +
             Array(ds['objects']).map { |o| { 'key' => o['caption'], 'columns' => o['columns'] } }
     owners = {}
     named.each do |t|
       (t['columns'] || []).each { |c| (owners[c] ||= []) << t['key'] }
     end
-    lambda do |name|
+    field_owners = ds['field_owners'] || {}
+    columns_by_guid = meta.is_a?(Hash) ? (meta['columns_by_guid'] || {}) : {}
+    columns_by_guid.each do |guid, info|
+      next unless info.is_a?(Hash) && field_owners[guid]
+      caption = info['caption'].to_s.strip
+      next if caption.empty?
+      owner = field_owners[guid]
+      caption_owners = (owners[caption] ||= [])
+      caption_owners << owner unless caption_owners.include?(owner)
+      physical = JoinPlan.physical_name(caption)
+      physical_owners = (owners[physical] ||= [])
+      physical_owners << owner unless physical_owners.include?(owner)
+    end
+    transformed_fields = Array(ds['transformed_fields'])
+    lambda do |name, guid = nil|
       n = name.to_s.strip
+      field_guid = guid.to_s.sub(/\A\[/, '').sub(/\]\z/, '')
+      return nil if !field_guid.empty? && transformed_fields.include?(field_guid)
       table_hint = nil
+      table_hint = field_owners[field_guid] unless field_guid.empty?
       if (m = n.match(/\A(.+?)\s+\(([^()]+)\)\z/))
         # Tableau's cross-table rename: 'REGION (REGION_DIM)'.
         cand_t = named.find { |t| t['key'] == m[2] || t['key'].start_with?("#{m[2]} (") }
@@ -628,6 +671,31 @@ module GroundTruthSql
     (info && info['caption']) || guid
   end
 
+  # Tableau relationship culling evaluates a chart that uses only one related
+  # dimension table at that table's own grain (for example Avg(Customer
+  # Lifetime Revenue) over CUSTOMER_DIM rows, not fact-weighted joined rows).
+  # The v1 warehouse oracle cannot reproduce that culling/null-bucket contract
+  # from the object graph alone, so route such tiles to valued anchors instead
+  # of emitting a confidently wrong fact-rooted query.
+  def related_object_grain(ds, fields)
+    objects = Array(ds['objects'])
+    relationships = Array(ds['relationships'])
+    return nil if objects.empty? || relationships.empty?
+    root = objects.find { |object| object['id'] == relationships.first['first'] }
+    return nil unless root
+    owners_by_guid = ds['field_owners'] || {}
+    relevant = Array(fields).reject { |field| field['role'] == 'measure-names' }
+    return nil if relevant.empty?
+    owners = relevant.map do |field|
+      guid = field['guid'] || shelf_guid(field['raw'])
+      owners_by_guid[guid]
+    end
+    return nil if owners.any? { |owner| owner.to_s.empty? }
+    unique = owners.uniq
+    return nil unless unique.size == 1 && unique.first != root['caption']
+    unique.first
+  end
+
   # ---------------------------------------------------------------------------
   # Per-tile derivation. Returns the ledger entry.
   # ---------------------------------------------------------------------------
@@ -662,7 +730,7 @@ module GroundTruthSql
     # underivable datasource is still `vds` (Tableau computes it), not
     # anchor-only/unverifiable.
     from = build_from(ds, meta)
-    resolve_col = column_resolver(ds, from['aliases'] || {})
+    resolve_col = column_resolver(ds, from['aliases'] || {}, meta)
     ctx = { 'calcs' => calcs, 'params' => params, 'resolve_col' => resolve_col }
     from_fail = lambda do
       classify.call(from['anchor_only'] ? 'anchor-only' : 'unverifiable', from['error'])
@@ -674,6 +742,19 @@ module GroundTruthSql
     end
 
     fields = shelf_fields(zone)
+    ownership_fields = fields.dup
+    Array(zone['measures']).each do |measure|
+      raw = measure.is_a?(Hash) ? measure['column'] : measure
+      guid = shelf_guid(raw.to_s)
+      ownership_fields << { 'role' => 'measure', 'guid' => guid, 'raw' => raw } if guid
+    end
+    if (grain_owner = related_object_grain(ds, ownership_fields))
+      return classify.call(
+        'anchor-only',
+        "tile aggregates only #{grain_owner} fields; per-viz relationship culling/null semantics " \
+        'require rendered-source anchors'
+      )
+    end
     dims = []
     measures = []
     calc_deps = []
@@ -706,11 +787,11 @@ module GroundTruthSql
           params_used.merge!(t['params_used'])
           dims << { 'raw' => fld['raw'], 'sql' => "(#{t['sql']})", 'alias' => cap }
         elsif deriv.empty? || deriv == 'none'
-          col = resolve_col.call(cap)
+          col = resolve_col.call(cap, fld['guid'])
           return classify.call('anchor-only', "dimension #{cap.inspect} does not resolve to a warehouse column") if col.nil?
           dims << { 'raw' => fld['raw'], 'sql' => col, 'alias' => cap }
         elsif TRUNC_PARTS[deriv]
-          col = resolve_col.call(cap)
+          col = resolve_col.call(cap, fld['guid'])
           return classify.call('anchor-only', "date dimension #{cap.inspect} does not resolve to a warehouse column") if col.nil?
           if deriv.start_with?('t')
             dims << { 'raw' => fld['raw'], 'sql' => "DATE_TRUNC('#{TRUNC_PARTS[deriv]}', #{col})",
@@ -746,7 +827,7 @@ module GroundTruthSql
             params_used.merge!(t['params_used'])
             inner = "(#{t['sql']})"
           else
-            inner = resolve_col.call(cap)
+            inner = resolve_col.call(cap, fld['guid'])
             return classify.call('anchor-only', "measure #{cap.inspect} does not resolve to a warehouse column") if inner.nil?
           end
           agg = AGG_BY_DERIV[deriv]
@@ -778,7 +859,8 @@ module GroundTruthSql
           params_used.merge!(t['params_used'])
           measures << { 'raw' => mz['column'], 'agg' => 'usr', 'sql' => sql, 'alias' => cap }
         elsif AGG_BY_DERIVATION_ATTR[d]
-          inner = resolve_col.call(cap)
+          measure_guid = mz['column'].to_s.sub(/\A\[/, '').sub(/\]\z/, '')
+          inner = resolve_col.call(cap, measure_guid)
           return classify.call('anchor-only', "measure #{cap.inspect} does not resolve to a warehouse column") if inner.nil?
           agg = AGG_BY_DERIVATION_ATTR[d]
           sql = agg.end_with?('(DISTINCT') ? "#{agg} #{inner})" : "#{agg}(#{inner})"

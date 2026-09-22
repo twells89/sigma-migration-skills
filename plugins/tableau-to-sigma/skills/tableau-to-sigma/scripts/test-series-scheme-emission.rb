@@ -48,6 +48,7 @@ TWB = <<~XML
         <column caption='Net Bookings' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' default-format='$#,##0.00' />
         <column caption='Order Date' name='[c2ec6b07-897e-39ab-9422-aa895d35a627]' datatype='date' role='dimension' type='ordinal' />
         <column caption='Value Tier' name='[a1b2c3d4-1111-2222-3333-444455556666]' datatype='string' role='dimension' type='nominal' />
+        <column caption='Customer Tier' name='[c3d4e5f6-3333-4444-5555-666677778888]' datatype='string' role='dimension' type='nominal' />
         <column caption='Region' name='[d73055c0-9ed1-347d-8f8e-05a48ce2c8a8]' datatype='string' role='dimension' type='nominal' />
         <column caption='Weird Metric' name='[Weird Metric]' datatype='real' role='measure' type='quantitative' />
       </datasource>
@@ -83,6 +84,26 @@ TWB = <<~XML
           </pane>
         </table>
       </worksheet>
+      <worksheet name='Tier Bars'>
+        <table>
+          <view>
+            <datasource-dependencies datasource='federated.fact'>
+              <column caption='Net Bookings' name='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' datatype='real' role='measure' type='quantitative' />
+              <column caption='Customer Tier' name='[c3d4e5f6-3333-4444-5555-666677778888]' datatype='string' role='dimension' type='nominal' />
+              <column-instance column='[c3d4e5f6-3333-4444-5555-666677778888]' derivation='None' name='[none:c3d4e5f6-3333-4444-5555-666677778888:nk]' pivot='key' type='nominal' />
+              <column-instance column='[33b6c718-9b55-3dc0-9698-d1d57fac0f90]' derivation='Sum' name='[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]' pivot='key' type='quantitative' />
+            </datasource-dependencies>
+          </view>
+          <rows>[federated.fact].[sum:33b6c718-9b55-3dc0-9698-d1d57fac0f90:qk]</rows>
+          <cols>[federated.fact].[none:c3d4e5f6-3333-4444-5555-666677778888:nk]</cols>
+          <pane>
+            <mark class='Bar' />
+            <encodings>
+              <color column='[federated.fact].[none:Customer Tier:nk]' />
+            </encodings>
+          </pane>
+        </table>
+      </worksheet>
       <worksheet name='Weird Metric by Region'>
         <table>
           <view>
@@ -110,6 +131,7 @@ TWB = <<~XML
           <zone id='1' type-v2='layout-basic' x='0' y='0' w='100000' h='100000'>
             <zone id='2' name='Bookings by Tier' x='0' y='0' w='50000' h='100000' />
             <zone id='3' name='Weird Metric by Region' x='50000' y='0' w='50000' h='100000' />
+            <zone id='4' name='Tier Bars' x='0' y='0' w='50000' h='50000' />
           </zone>
         </zones>
       </dashboard>
@@ -121,6 +143,7 @@ MASTER_MAP = {
   '(?i)^Net Bookings$' => { 'id' => 'm-nb',   'name' => 'Net Bookings' },
   '(?i)^Order Date$'   => { 'id' => 'm-od',   'name' => 'Order Date' },
   '(?i)^Value Tier$'   => { 'id' => 'm-vt',   'name' => 'Value Tier' },
+  '(?i)^Customer Tier$'=> { 'id' => 'm-ct',   'name' => 'Customer Tier' },
   '(?i)^Region$'       => { 'id' => 'm-reg',  'name' => 'Region' },
   '(?i)^Weird Metric$' => { 'id' => 'm-wm',   'name' => 'Weird Metric' }
 }
@@ -139,6 +162,14 @@ WEIRD_CSV = <<~CSV
   West,9.1
 CSV
 
+TIER_BARS_CSV = <<~CSV
+  Customer Tier,Net Bookings
+  Platinum,1200.50
+  Silver,800.25
+  Gold,500.00
+  Bronze,200.10
+CSV
+
 build_out = nil
 build_log = ''
 formats_emitted = nil
@@ -151,17 +182,23 @@ Dir.mktmpdir do |d|
   File.write(File.join(d, 'get-workbook.json'),
              JSON.dump('views' => { 'view' => [
                { 'id' => 'v1', 'name' => 'Bookings by Tier' },
-               { 'id' => 'v2', 'name' => 'Weird Metric by Region' }
+               { 'id' => 'v2', 'name' => 'Weird Metric by Region' },
+               { 'id' => 'v3', 'name' => 'Tier Bars' }
              ] }))
   Dir.mkdir(File.join(d, 'views'))
   File.write(File.join(d, 'views', 'v1.csv'), TIER_CSV)
   File.write(File.join(d, 'views', 'v2.csv'), WEIRD_CSV)
+  File.write(File.join(d, 'views', 'v3.csv'), TIER_BARS_CSV)
   File.write(File.join(d, 'png-read.json'),
              JSON.dump('source_png' => 'views/v1.png',
                        'tiles' => [{ 'title' => 'Bookings by Tier', 'kind' => 'bar-chart', 'orientation' => 'vertical' },
-                                   { 'title' => 'Weird Metric by Region', 'kind' => 'bar-chart', 'orientation' => 'vertical' }],
+                                   { 'title' => 'Weird Metric by Region', 'kind' => 'bar-chart', 'orientation' => 'vertical' },
+                                   { 'title' => 'Tier Bars', 'kind' => 'bar-chart', 'orientation' => 'vertical' }],
                        'text_elements' => [], 'filter_shelf' => []))
   abort 'parse-twb-layout failed' unless system('ruby', PARSER, twb, lay, out: File::NULL, err: File::NULL)
+  parsed_layout = JSON.parse(File.read(lay))
+  parsed_layout.first['brand_palette'] = %w[#4e79a7 #f28e2b #e15759 #76b7b2 #59a14f]
+  File.write(lay, JSON.dump(parsed_layout))
   out = File.join(d, 'specs.json')
   build_log = IO.popen(['ruby', BUILD, '--tableau-dir', d, '--layout', lay, '--meta', lay.sub(/\.json$/, '-meta.json'), '--master-map', mm, '--master-element-id', 'master', '--out', out], err: %i[child out], &:read)
   build_out = JSON.parse(File.read(out)) if File.exist?(out)
@@ -172,6 +209,7 @@ end
 els = build_out ? (build_out.is_a?(Array) ? build_out : (build_out['elements'] || (build_out['pages'] || []).flat_map { |p| p['elements'] || [] })) : []
 tier  = els.find { |e| e['name'].to_s.casecmp?('Bookings by Tier') }
 weird = els.find { |e| e['name'].to_s.casecmp?('Weird Metric by Region') }
+same_axis_color = els.find { |e| e['name'].to_s.casecmp?('Tier Bars') }
 
 # ---- 1. ORDERED series scheme ----------------------------------------------
 color = tier && tier['color']
@@ -182,6 +220,16 @@ check(color && color['scheme'] == %w[#c9d1d3 #f2c037],
       "(the inversion kill; got #{color && color['scheme'].inspect})", fails)
 check(build_log.include?('series colors PINNED'),
       'builder logged the pinned member→color ordering', fails)
+check(same_axis_color && same_axis_color.dig('color', 'by') == 'category',
+      "axis+Color-shelf chart emits a category color channel (got #{same_axis_color && same_axis_color['color'].inspect})", fails)
+check(same_axis_color && same_axis_color.dig('color', 'column') != same_axis_color.dig('xAxis', 'columnId'),
+      'axis+Color-shelf chart uses a duplicate column to satisfy channel exclusivity', fails)
+check(same_axis_color && same_axis_color.dig('color', 'scheme') ==
+        %w[#76b7b2 #e15759 #4e79a7 #f28e2b],
+      "source member order is rebound to Sigma's alphabetical color slots " \
+      "(got #{same_axis_color && same_axis_color.dig('color', 'scheme').inspect})", fails)
+check(same_axis_color && same_axis_color['legend'] == { 'visibility' => 'hidden' },
+      'color channel hides Sigma default legend when Tableau has no legend zone', fails)
 
 # ---- 2. number format from the column default-format ------------------------
 ycol = tier && (tier['columns'] || []).find { |c| tier.dig('yAxis', 'columnIds')&.include?(c['id']) }

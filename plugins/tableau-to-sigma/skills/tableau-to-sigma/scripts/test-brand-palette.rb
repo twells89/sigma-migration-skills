@@ -57,6 +57,18 @@ check(!pal.include?('#ffffff') && !pal.include?('#ececec'),
 check((pal & %w[#023858 #045a8d #0570b0]).empty?,
       "ordered-sequential ramp members excluded (type='regular' only)", fails)
 
+# Tableau-10 swatches must keep Tableau's semantic sequence rather than hex
+# sorting; Sigma applies categorical schemes positionally.
+tableau10_xml = <<~XML
+  <x>
+    <map to='#59a14f'/><map to='#e15759'/><map to='#4e79a7'/>
+    <map to='#76b7b2'/><map to='#f28e2b'/>
+  </x>
+XML
+check(extract_brand_palette(tableau10_xml) ==
+        %w[#4e79a7 #f28e2b #e15759 #76b7b2 #59a14f],
+      'Tableau-10 palette preserves blue→orange→red→teal→green order', fails)
+
 # Source with no non-neutral colours → empty palette (theme then omitted).
 mono = extract_brand_palette("<x><map to='#ffffff'></map><map to='#eeeeee'></map></x>")
 check(mono == [], "all-neutral source → empty palette (got #{mono.inspect})", fails)

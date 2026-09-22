@@ -200,6 +200,12 @@ def sigma_rows_for(sigma, chart)
   [v, nil]
 end
 
+def exported_decimal_precision(value)
+  return nil unless value.is_a?(Numeric) && value.to_f.finite?
+  scale = [value.to_f.abs, 1.0].max
+  (0..9).find { |places| (value.to_f - value.to_f.round(places)).abs <= scale * 1e-9 } || 9
+end
+
 # Compare one warehouse-sql tile. Returns the stamp fields + printable detail.
 def compare_tile(entry, gt_res, sigma_rows, tol)
   cols = Array(entry['columns'])
@@ -240,6 +246,7 @@ def compare_tile(entry, gt_res, sigma_rows, tol)
   shared = gt_h.keys & sg_h.keys
   max_rel = 0.0
   worst = nil
+  display_precision_used = false
   meas_aliases = cols.select { |c| c['role'] == 'measure' }.map { |c| c['alias'] }
   shared.each do |k|
     gvec = gt_h[k]
@@ -248,7 +255,12 @@ def compare_tile(entry, gt_res, sigma_rows, tol)
       g = gvec[j]
       s = svec[j]
       next unless g.is_a?(Numeric) && s.is_a?(Numeric)
-      rel = (g - s).abs / [g.abs, s.abs, 1.0].max
+      places = exported_decimal_precision(s)
+      ground_value = places ? g.to_f.round(places) : g
+      sigma_value = places ? s.to_f.round(places) : s
+      display_precision_used ||= ground_value != g
+      rel = (ground_value.to_f - sigma_value.to_f).abs /
+            [ground_value.to_f.abs, sigma_value.to_f.abs, 1.0].max
       if rel > max_rel
         max_rel = rel
         worst = { 'key' => k, 'measure' => meas_aliases[j] || "measure ##{j + 1}",
@@ -266,7 +278,8 @@ def compare_tile(entry, gt_res, sigma_rows, tol)
     return { 'verdict' => 'diverge', 'max_rel_diff' => max_rel.round(6), 'rows_compared' => shared.size,
              'reason' => "measure #{worst['measure'].inspect} differs beyond tol #{tol}", 'worst' => worst }
   end
-  { 'verdict' => 'match', 'max_rel_diff' => max_rel.round(6), 'rows_compared' => shared.size }
+  { 'verdict' => 'match', 'max_rel_diff' => max_rel.round(6), 'rows_compared' => shared.size,
+    'display_precision' => display_precision_used }
 end
 
 tiles = {}

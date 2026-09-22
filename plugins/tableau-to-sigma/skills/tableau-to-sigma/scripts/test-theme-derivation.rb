@@ -58,6 +58,16 @@ plain = derive_theme([{ 'dashboard' => 'X', 'zone_tree' => [
 ] }])
 check(plain == {}, "unstyled dashboard → empty theme (got #{plain.inspect})", fails)
 
+# Tableau's default fixed dashboard canvas is white even when no explicit
+# background style is serialized; Sigma otherwise renders gray gutters.
+fixed_plain = derive_theme([{
+  'dashboard' => 'Fixed',
+  'canvas_px' => { 'w' => 1600, 'h' => 1000, 'sizing_mode' => 'fixed' },
+  'zone_tree' => [{ 'id' => 'root', 'kind' => 'container' }]
+}])
+check(fixed_plain['backgroundCanvas'] == '#ffffff',
+      "unstyled fixed dashboard defaults to white canvas (got #{fixed_plain['backgroundCanvas'].inspect})", fails)
+
 # Single tinted card → no categoricalScheme (needs the multi-member pattern).
 one = derive_theme([{ 'dashboard' => 'X', 'zone_tree' => [
   { 'id' => '1', 'kind' => 'container', 'fill_color' => '#07b4a24e' }

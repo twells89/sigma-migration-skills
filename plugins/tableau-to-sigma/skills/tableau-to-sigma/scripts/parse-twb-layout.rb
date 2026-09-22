@@ -143,7 +143,17 @@ def extract_brand_palette(twb_text)
     body.to_s.scan(/#[0-9a-fA-F]{6}/) { |hex| freq[hex.downcase] += 1 }
   end
   freq.reject! { |hex, _| color_neutral?(hex) }
-  freq.sort_by { |hex, n| [-n, hex] }.map(&:first)
+  ranked = freq.sort_by { |hex, n| [-n, hex] }.map(&:first)
+  # Tableau's default categorical order is semantic, not hex/frequency order.
+  # When the workbook carries the Tableau-10 swatches, keep their canonical
+  # sequence so positional Sigma schemes reproduce default per-member colors
+  # (blue → orange → red → teal → green) on bars and pies.
+  tableau10 = %w[#4e79a7 #f28e2b #e15759 #76b7b2 #59a14f]
+  if (tableau10 - ranked).empty?
+    tableau10 + (ranked - tableau10)
+  else
+    ranked
+  end
 end
 
 BRAND_PALETTE = extract_brand_palette(TWB_TEXT)
@@ -1098,6 +1108,15 @@ xml.elements.each('//worksheet') do |ws|
   total_measure_count = rows_shelf['measure_count'] + cols_shelf['measure_count'] + measures.size
   is_kpi = kpi_capable_mark && !is_crosstab &&
            total_dim_count == 0 && total_measure_count >= 1
+  source_kpi_font_size = nil
+  if is_kpi
+    sizes = []
+    ws.elements.each('.//style-rule[@element="mark"]/format[@attr="font-size"]') do |format|
+      value = format.attributes['value'].to_s
+      sizes << value.to_i if value.match?(/\A\d+\z/) && value.to_i.positive?
+    end
+    source_kpi_font_size = sizes.max
+  end
 
   # Hidden calc filters: worksheet-level filters whose target column is a
   # calculated field. These are invisible in Tableau CSV exports — they silently
@@ -1241,7 +1260,7 @@ xml.elements.each('//worksheet') do |ws|
     display_title:        worksheet_display_title(ws),
     # Phase-1 B3: KPI composite signals (nil unless a BAN scorecard label exists)
     kpi_label:            kpi_ban && kpi_ban['label'],
-    kpi_value_font_size:  kpi_ban && kpi_ban['value_font_size'],
+    kpi_value_font_size:  (kpi_ban && kpi_ban['value_font_size']) || source_kpi_font_size,
     kpi_annotation_runs:  kpi_ban && kpi_ban['annotation_runs']
   }
 end

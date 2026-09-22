@@ -24,6 +24,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require 'rbconfig'
+require_relative 'lib/ground_truth_sql'
 
 SCRIPTS = __dir__
 FIXTURE = File.join(SCRIPTS, 'test-fixtures', 'ground-truth.twb')
@@ -186,6 +187,77 @@ Dir.mktmpdir do |dir|
        "#{f} requires nothing from the builder (independence contract)")
   end
 end
+
+puts '-- object-graph duplicate-caption relationship keys stay physical --'
+relationship_ds = {
+  'objects' => [
+    { 'id' => 'fact-id', 'caption' => 'FACT', 'fqn' => 'DB.SC.FACT' },
+    { 'id' => 'product-id', 'caption' => 'PRODUCT_DIM', 'fqn' => 'DB.SC.PRODUCT_DIM' }
+  ],
+  'relationships' => [
+    { 'first' => 'fact-id', 'second' => 'product-id', 'second_unique' => true,
+      'lexpr' => '[fact-guid]', 'rexpr' => '[product-guid]' }
+  ]
+}
+relationship_meta = {
+  'columns_by_guid' => {
+    'fact-guid' => { 'caption' => 'Product Key' },
+    'product-guid' => { 'caption' => 'Product Key (PRODUCT_DIM)' }
+  }
+}
+relationship_from = GroundTruthSql.build_from_relationships(relationship_ds, relationship_meta)
+ok(relationship_from['sql'].include?('T1.PRODUCT_KEY = T2.PRODUCT_KEY'),
+   'display-only logical-table suffix is stripped from the target warehouse key')
+ok(!relationship_from['sql'].include?('PRODUCT_KEY_('),
+   'duplicate-caption disambiguation never leaks into the SQL identifier')
+
+puts '-- object-graph shelf fields retain GUID ownership --'
+resolver_ds = {
+  'objects' => [
+    { 'id' => 'fact-id', 'caption' => 'FACT', 'columns' => [] },
+    { 'id' => 'customer-id', 'caption' => 'CUSTOMER_DIM', 'columns' => [] },
+    { 'id' => 'store-id', 'caption' => 'STORE_DIM', 'columns' => [] }
+  ],
+  'relationships' => [
+    { 'first' => 'fact-id', 'second' => 'customer-id' },
+    { 'first' => 'fact-id', 'second' => 'store-id' }
+  ],
+  'field_owners' => {
+    'customer-region-guid' => 'CUSTOMER_DIM',
+    'store-region-guid' => 'STORE_DIM',
+    'parsed-date-guid' => 'CUSTOMER_DIM'
+  },
+  'transformed_fields' => ['parsed-date-guid']
+}
+resolver_meta = {
+  'columns_by_guid' => {
+    'customer-region-guid' => { 'caption' => 'Region' },
+    'store-region-guid' => { 'caption' => 'Region' },
+    'parsed-date-guid' => { 'caption' => 'Order Date' }
+  }
+}
+resolver = GroundTruthSql.column_resolver(
+  resolver_ds,
+  { 'CUSTOMER_DIM' => 'T1', 'STORE_DIM' => 'T2' },
+  resolver_meta
+)
+ok(resolver.call('Region', 'customer-region-guid') == 'T1.REGION',
+   'ambiguous display caption resolves through the source field GUID owner')
+ok(resolver.call('Region', 'store-region-guid') == 'T2.REGION',
+   'same-named field on another logical table resolves to its own alias')
+ok(resolver.call('Order Date', 'parsed-date-guid').nil?,
+   'date-parse aliases without a physical warehouse identity route to anchor-only')
+ok(GroundTruthSql.related_object_grain(
+     resolver_ds,
+     [{ 'role' => 'dim', 'guid' => 'customer-region-guid' }]
+   ) == 'CUSTOMER_DIM',
+   'single-related-object tile is identified as dimension-grain/anchor-only')
+ok(GroundTruthSql.related_object_grain(
+     resolver_ds,
+     [{ 'role' => 'dim', 'guid' => 'customer-region-guid' },
+      { 'role' => 'dim', 'guid' => 'store-region-guid' }]
+   ).nil?,
+   'mixed-object tile remains eligible for explicit warehouse SQL derivation')
 
 puts '-- corpus smoke: orders-overview derives a complete ledger --'
 if File.exist?(CORPUS_TWB)

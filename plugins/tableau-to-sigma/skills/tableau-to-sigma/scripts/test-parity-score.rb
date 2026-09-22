@@ -51,6 +51,38 @@ Dir.mktmpdir do |d|
   ok('drift measure col reflects the 9% drift (~0.95)', (dr[1]['score'] - 0.9545).abs < 0.01)
 end
 
+# Strict same-warehouse parity compares at the precision the Sigma element CSV
+# actually exports. Hidden decimals from Tableau must not false-fail a chart
+# formatted to whole dollars / one decimal, while a change that survives
+# display rounding remains a real divergence.
+Dir.mktmpdir do |d|
+  plan = File.join(d, 'display-precision-plan.json')
+  score = File.join(d, 'display-precision-score.json')
+  File.write(plan, JSON.generate(
+    'extract' => false,
+    'charts' => [
+      { 'chart' => 'Whole Dollars', 'expected' => [[170_641.9]],
+        'actual' => { 'rows' => [[170_642.0]] } },
+      { 'chart' => 'One Decimal', 'expected' => [[3.451699]],
+        'actual' => { 'rows' => [[3.5]] } },
+      { 'chart' => 'Material Difference', 'expected' => [[170_641.4]],
+        'actual' => { 'rows' => [[170_642.0]] } }
+    ]
+  ))
+  output = IO.popen([RUBY, VP, '--plan', plan, '--score-out', score],
+                    err: %i[child out], &:read)
+  doc = JSON.parse(File.read(score))
+  tiles = doc['tiles'].each_with_object({}) { |tile, index| index[tile['chart']] = tile }
+  ok('whole-dollar export compares at displayed precision',
+     tiles['Whole Dollars']['status'] == 'PASS' && tiles['Whole Dollars']['score'] == 1.0)
+  ok('one-decimal export compares at displayed precision',
+     tiles['One Decimal']['status'] == 'PASS' && tiles['One Decimal']['score'] == 1.0)
+  ok('display precision normalization is stated in verifier output',
+     output.include?('compared at Sigma export display precision'))
+  ok('material difference still diverges after display rounding',
+     tiles['Material Difference']['status'] == 'DIVERGE')
+end
+
 # An embedded-only dashboard has no source-CSV chart scores. That is
 # unavailable evidence, never a vacuous 100%.
 Dir.mktmpdir do |d|

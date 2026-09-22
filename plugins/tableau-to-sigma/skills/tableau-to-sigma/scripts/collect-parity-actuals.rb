@@ -203,10 +203,18 @@ CACHE = build_export_cache(spec, opts[:plan], opts[:wb], opts[:spec])
 
 # Tableau-CSV-compatible cell parse — same rules as auto-parity-plan's
 # parse_cell so expected/actual compare on identical representations.
-def parse_cell(v)
+def parse_cell(v, format = nil)
   return nil if v.nil? || v.to_s.strip.empty?
   s = v.to_s.strip
   pct = s.end_with?('%')
+  if format.is_a?(Hash)
+    grouping = format['digitGroupingSymbol'].to_s
+    decimal = format['decimalSymbol'].to_s
+    s = s.delete(grouping) unless grouping.empty? || grouping == decimal
+    s = s.tr(decimal, '.') unless decimal.empty? || decimal == '.'
+    currency = format['currencySymbol'].to_s
+    s = s.delete(currency) unless currency.empty?
+  end
   f = (Float(s.gsub(/[,$%]/, '')) rescue nil)
   return v if f.nil?
   pct ? f / 100.0 : f
@@ -223,7 +231,7 @@ RENDER_VERIFY_REASON = 'pivot CSV export 500/empty (known Sigma limitation)'
 # indices so duplicate names (x + color both "Region") bind in order. Shared by
 # the CSV and JSON paths so both produce identical actuals tuples.
 # Returns [:ok, rows] or [:fail, reason].
-def map_columns(headers, body_rows, want_names)
+def map_columns(headers, body_rows, want_names, formats = nil)
   used = []
   idxs = want_names.map do |n|
     i = headers.each_index.find { |j| !used.include?(j) && headers[j].casecmp?(n) }
@@ -231,7 +239,7 @@ def map_columns(headers, body_rows, want_names)
     i
   end
   return [:fail, "export headers #{headers.inspect[0, 120]} missing column(s) #{want_names.zip(idxs).select { |_, i| i.nil? }.map(&:first).join(', ')}"] if idxs.any?(&:nil?)
-  [:ok, body_rows.map { |r| idxs.map { |i| parse_cell(r[i]) } }]
+  [:ok, body_rows.map { |r| idxs.each_with_index.map { |i, j| parse_cell(r[i], formats && formats[j]) } }]
 end
 
 # Pivot JSON-export fallback (issue #422). Reads the element's JSON export (long-
@@ -239,7 +247,7 @@ end
 # reshapes to the same actuals tuples the CSV path produces. Same return
 # contract as collect_chart. NEVER retries — a JSON 5xx degrades straight to the
 # render-verify marker (the CSV path already exhausted / skipped its retries).
-def collect_chart_json(element_id, want_names, wb, deadline)
+def collect_chart_json(element_id, want_names, formats, wb, deadline)
   return [:timeout, "total --timeout (#{deadline.budget.round}s) deadline reached before JSON export"] if deadline.expired?
   # Version-keyed raw-cache hit (#7a): reuse the recorded wire body; the
   # reshape/mapping below is recomputed either way (never a recorded verdict).
@@ -262,7 +270,7 @@ def collect_chart_json(element_id, want_names, wb, deadline)
   # Objects are uniform (one shape per export); align each row's values to the
   # first object's key order so map_columns' by-name index matching applies.
   body_rows = objs.map { |o| headers.map { |h| o[o.keys.find { |k| k.to_s.strip == h }] } }
-  map_columns(headers, body_rows, want_names)
+  map_columns(headers, body_rows, want_names, formats)
 rescue Sigma::Error, Timeout::Error, Errno::ETIMEDOUT => e
   msg = e.message.lines.first.to_s
   return [:manual, RENDER_VERIFY_REASON] if msg =~ SERVER_ERR
@@ -280,7 +288,9 @@ def collect_chart(c, el_by_id, wb, deadline)
   el = el_by_id[c['sigma_element_id']]
   return [:fail, 'element not in workbook spec'] unless el
   name_for = (el['columns'] || []).each_with_object({}) { |col, h| h[col['id']] = col['name'].to_s.strip }
+  format_for = (el['columns'] || []).each_with_object({}) { |col, h| h[col['id']] = col['format'] }
   want_names = (c['sigma_columns'] || []).map { |id| name_for[id] }
+  want_formats = (c['sigma_columns'] || []).map { |id| format_for[id] }
   return [:fail, "plan column id(s) missing from element: #{(c['sigma_columns'] || []).zip(want_names).select { |_, n| n.nil? }.map(&:first).join(', ')}"] if want_names.any?(&:nil?)
 
   # PROACTIVE pivot-totals fallback (SPEED — issue #422): a `totals` key 500s
@@ -288,7 +298,7 @@ def collect_chart(c, el_by_id, wb, deadline)
   # and read the JSON export straight away.
   if el.is_a?(Hash) && el.key?('totals') && !el['totals'].nil? &&
      !(el['totals'].respond_to?(:empty?) && el['totals'].empty?)
-    return collect_chart_json(c['sigma_element_id'], want_names, wb, deadline)
+    return collect_chart_json(c['sigma_element_id'], want_names, want_formats, wb, deadline)
   end
 
   attempts = 0
@@ -324,7 +334,7 @@ def collect_chart(c, el_by_id, wb, deadline)
     return [:manual, RENDER_VERIFY_REASON] if rows.empty?
     # Map each plan column to a CSV index by display name (shared with the JSON
     # path so both emit identical actuals tuples).
-    map_columns(headers, rows, want_names)
+    map_columns(headers, rows, want_names, want_formats)
   rescue Sigma::Error, Timeout::Error, Errno::ETIMEDOUT, CSV::MalformedCSVError => e
     msg = e.message.lines.first.to_s
     if attempts < 4 && msg =~ RETRYABLE && !deadline.expired?
@@ -336,7 +346,7 @@ def collect_chart(c, el_by_id, wb, deadline)
     # A persistent 5xx (500 immediately; 502/503/504 after retries) is the known
     # pivot-export platform bug — try the JSON export (issue #422) before giving
     # up; only if THAT also fails does the render-verify marker apply.
-    return collect_chart_json(c['sigma_element_id'], want_names, wb, deadline) if msg =~ SERVER_ERR
+    return collect_chart_json(c['sigma_element_id'], want_names, want_formats, wb, deadline) if msg =~ SERVER_ERR
     [:fail, msg[0, 160]]
   end
 end

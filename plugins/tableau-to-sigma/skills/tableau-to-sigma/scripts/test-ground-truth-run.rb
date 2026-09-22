@@ -195,6 +195,16 @@ Dir.mktmpdir do |dir|
   ok(reg.index(created) < reg.index(cleaned), 'created line precedes cleaned line (register-at-creation)')
 end
 
+# Current live workbook POST contract: the serial fallback must canonicalize
+# the throwaway probe exactly like the pooled and join-key probe seams.
+script_source = File.read(SCRIPT)
+canonicalize_at = script_source.index('WorkbookCode.canonicalize(spec)')
+post_at = script_source.index("Sigma.request(:post, '/v2/workbooks/spec'")
+ok(script_source.include?("require_relative 'lib/workbook_code'"),
+   'serial live seam loads the workbook code-representation adapter')
+ok(canonicalize_at && post_at && canonicalize_at < post_at,
+   'serial live seam canonicalizes the probe workbook before POST')
+
 puts
 if $fails.empty?
   puts 'ALL PASS — run-ground-truth fixture-mode execution'

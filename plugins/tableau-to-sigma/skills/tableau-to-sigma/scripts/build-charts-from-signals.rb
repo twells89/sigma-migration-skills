@@ -4340,6 +4340,7 @@ def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
     element['name'] = z['kpi_label'] if z['kpi_label'] && !z['kpi_label'].to_s.strip.empty? &&
                                         z['display_title'].to_s.strip.empty?
     element['value']['fontSize'] = z['kpi_value_font_size']
+    element['layout'] = { 'anchor' => 'middle' }
     # The BAN's side annotation (e.g. "40% of U.S. total") is driven by a dynamic
     # Tableau calc token that can't be reproduced as static text; emitting the
     # literal remainder ("of U.S. total") alone would mislead. Surface the gap.
@@ -4825,6 +4826,20 @@ layout.each do |dash|
           color_dim = { 'id' => "m-#{color_hdr.downcase.gsub(/\W+/,'-')}", 'name' => color_hdr }
         end
       end
+    elsif (cc = z.dig('channels', 'color', 'column'))
+      # Tableau can place the SAME category on the axis and Color shelf. Its
+      # CSV then has only [dim, measure], so the 3-channel detector above never
+      # sets color_hdr. Emit a duplicate column for Sigma's exclusive color
+      # channel (one column cannot be referenced by both xAxis and color).
+      guid = name_or_guid_from_text(cc.to_s)
+      info = guid ? (meta['columns_by_guid'] || {})[guid] : nil
+      color_caption = ((info && info['caption']) || guid).to_s.strip
+      if !color_caption.empty? &&
+         [dim['name'].to_s.strip, dim_hdr.to_s.strip].any? { |name| name.casecmp?(color_caption) }
+        color_dim = dim.dup
+        warnings << "'#{cap}' uses '#{color_caption}' on both the axis and Color shelf — " \
+                    'emitted a duplicate category column for Sigma color-channel exclusivity'
+      end
     end
 
     # Decide the Sigma aggregator. Priority:
@@ -5094,12 +5109,33 @@ layout.each do |dash|
     dim_col_obj = { 'id' => "x-#{el_id}", 'name' => dim['name'], 'formula' => dim_formula }
     if dim_trunc
       dim_col_obj['format'] = { 'kind' => 'datetime',
-                                'formatString' => dim_trunc == 'week' ? '%b %d, %Y' : '%b %Y' }
+                                'formatString' =>
+                                  if dim_trunc == 'week'
+                                    '%b %d, %Y'
+                                  elsif dim_trunc == 'month'
+                                    '%B %Y'
+                                  else
+                                    '%b %Y'
+                                  end }
     end
     color_col_obj = nil
+    source_default_color_scheme = nil
     if color_dim
       color_col_obj = { 'id' => "c-#{el_id}", 'name' => color_dim['name'],
                         'formula' => color_dim['formula'] || "[Master/#{color_dim['name']}]" }
+      if z.dig('channels', 'color', 'column')
+        palette = Array(dash['brand_palette'])
+        category_index = color_csv_idx || dim_csv_idx
+        members = rows.map { |row| row[category_index].to_s.strip }
+                      .reject(&:empty?).uniq
+        if members.any? && palette.size >= members.size
+          assignments = members.each_with_index.map do |member, index|
+            { 'member' => member, 'color' => palette[index] }
+          end
+          source_default_color_scheme = assignments.sort_by { |pair| pair['member'].downcase }
+                                                     .map { |pair| pair['color'] }
+        end
+      end
     end
 
     # By-MEASURE (continuous) color: a measure on Tableau's Color shelf is a
@@ -5622,6 +5658,10 @@ layout.each do |dash|
         warnings << "'#{cap}' category colors pinned from a SIBLING chart's explicit .twb map for " \
                     "'#{color_col_obj['name']}' (per-category consistency: same category, same color " \
                     'on every chart of the dashboard)'
+      elsif source_default_color_scheme
+        element['color']['scheme'] = source_default_color_scheme
+        warnings << "'#{cap}' category colors derived from Tableau member order + source palette " \
+                    "(reordered by member for Sigma's positional category binding)"
       end
     elsif color_scale && %w[bar-chart line-chart area-chart combo-chart].include?(kind)
       # By-measure color ramp: add a DUPLICATE measure column (Sigma forbids a
@@ -5640,6 +5680,11 @@ layout.each do |dash|
     if (legend = legend_config_for(z, dash))
       element['legend'] = legend
       warnings << "'#{cap}' explicit Tableau legend zone mapped to Sigma legend.position=#{legend['position']}"
+    elsif element['color']
+      # Sigma shows a legend by default whenever a color channel exists.
+      # Tableau only shows one when the dashboard carries a legend zone; axis
+      # labels / pie labels already identify categories otherwise.
+      element['legend'] = { 'visibility' => 'hidden' }
     end
 
     # Null-dim exclusion (Tableau↔Sigma join-semantics parity): Sigma DM
@@ -5997,6 +6042,16 @@ layout.each do |dash|
         end
       end
       element['yAxis'] = { 'columnIds' => y_column_ids }
+      element['xAxis']['format'] ||= {}
+      element['xAxis']['format']['labels'] = {
+        'labelAngle' => 0,
+        'fontSize' => 11,
+        'allowLongerLabels' => true
+      }
+      element['xAxis']['format']['title'] = {
+        'text' => dim['name'],
+        'fontSize' => 10
+      }
 
       # Bar orientation (bead: bar-orientation). Tableau puts the DIMENSION on
       # the Rows shelf and the MEASURE on Columns for a HORIZONTAL bar (bars grow
@@ -6024,6 +6079,10 @@ layout.each do |dash|
             element['orientation'] = 'horizontal'
           end
         end
+        # On a horizontal bar Sigma renders xAxis.title as a vertical left-side
+        # title, where it consumes the chart-title gutter and clips the element
+        # heading. Keep the category labels horizontal, but omit this title.
+        element.dig('xAxis', 'format')&.delete('title') if element['orientation'] == 'horizontal'
       end
 
       # Axis format (log scale, fixed min/max). parse-twb-layout extracts these
