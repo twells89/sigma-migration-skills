@@ -187,10 +187,21 @@ def normalize_bm(sql, klass = nil)
 end
 
 NEEDS_REVIEW = %w[window lod].freeze
+AGGREGATE_SQL_RE = /\b(?:SUM|COUNT|AVG|MIN|MAX|MEDIAN|STDDEV(?:_POP|_SAMP)?|
+  VARIANCE|VAR_POP|VAR_SAMP|APPROXIMATE_COUNT_DISTINCT)\s*\(/ix
 PROVENANCE_KEYS = %w[
   dataSourceId _dataSourceId cardId dataType persistedOnDataSource saveToDataSet
   sourceFormulaScope definitionConflict extractionError nameConflictIds
 ].freeze
+
+def effective_formula_class(sql, recorded = nil)
+  source = sql.to_s
+  return 'lod' if source.match?(/\bFIXED\s*\(/i)
+  return 'window' if source.match?(/\bOVER\s*\(|\b(?:RANK|DENSE_RANK|ROW_NUMBER|LAG|LEAD|NTILE|PERCENT_RANK|CUME_DIST)\s*\(/i)
+  return 'aggregate' if source.match?(AGGREGATE_SQL_RE)
+  return recorded if source.strip.empty? && !recorded.to_s.empty?
+  'projection'
+end
 
 def formula_source_fingerprint(path)
   Digest::SHA256.file(path).hexdigest
@@ -671,17 +682,18 @@ else
   beast = JSON.parse(File.read(path))
   pending = beast.map do |b|
     sql = b['sql'] || b['formula'] || b['expression']
-    norm, warns = normalize_bm(sql, b['class'])
+    klass = effective_formula_class(sql, b['class'])
+    norm, warns = normalize_bm(sql, klass)
     provenance = b.select { |key, _| PROVENANCE_KEYS.include?(key) }
     {
       'id'           => b['id'],
       'name'         => b['name'],
       'scope'        => b['scope'],
-      'class'        => b['class'],
+      'class'        => klass,
       'originalSql'  => sql,
       'normalizedSql'=> norm,
       'preWarnings'  => warns,
-      'needsReview'  => NEEDS_REVIEW.include?(b['class']) || warns.any? { |w| w.include?('AGGREGATE') },
+      'needsReview'  => NEEDS_REVIEW.include?(klass) || warns.any? { |w| w.include?('AGGREGATE') },
       'sigmaFormula' => nil,   # ← filled by convert_sql_to_sigma_formula in Phase 2
     }.merge(provenance)
   end

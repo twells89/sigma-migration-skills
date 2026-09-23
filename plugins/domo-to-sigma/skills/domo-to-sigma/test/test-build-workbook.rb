@@ -186,6 +186,44 @@ tbl2 = build_element({ 'id' => 'c5', 'title' => 'T', 'chartType' => 'badge_table
                        'conditionalFormats' => [{ 'format' => { 'dataBar' => true } }] }, {})
 eq(tbl2['conditionalFormats'].first['type'], 'dataBars', 'dataBars kept when the Domo table declared them')
 
+puts "== detail table VALUE mappings remain row-level passthrough columns =="
+detail = build_table({
+  'id' => 'detail-table', 'title' => 'AI Call Detail',
+  'chartType' => 'badge_basic_table', 'groupBy' => [],
+  'columns' => [
+    { 'column' => 'ContactId', 'mapping' => 'VALUE' },
+    { 'column' => 'During Business Hours', 'mapping' => 'VALUE' },
+    { 'column' => 'Call Start Time', 'mapping' => 'VALUE' },
+  ],
+})
+eq(detail['columns'].map { |column| column['formula'] },
+   ['[Master/Contact Id]', '[Master/During Business Hours]', '[Master/Call Start Time]'],
+   'ungrouped table text/timestamp columns are not wrapped in Sum()')
+ok(!detail.key?('groupings'), 'detail table remains ungrouped so every source row survives')
+
+puts "== badge_textbox with a date column becomes a latest-value KPI =="
+$dataset_schema_by_id = {
+  'ds-textbox' => {
+    'schema' => { 'columns' => [{ 'name' => 'Call Date', 'type' => 'DATE' }] },
+  },
+}
+textbox_card = {
+  'id' => 'last-refresh', 'title' => 'Last Refresh:',
+  'datasetId' => 'ds-textbox', 'chartType' => 'badge_textbox',
+  'columns' => [{ 'column' => 'Call Date', 'mapping' => 'ITEM' }],
+}
+textbox = build_textbox(textbox_card)
+eq(textbox['kind'], 'kpi-chart', 'data-backed textbox maps to KPI, not a skipped bar')
+eq(textbox['columns'].first['formula'], 'Max([Master/Call Date])',
+   'textbox displays the latest source date')
+eq(textbox['columns'].first['format'],
+   { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d' },
+   'latest date uses the source-visible ISO format')
+routed_textbox = build_element(textbox_card, {})
+eq(routed_textbox['kind'], 'kpi-chart',
+   'stale discovery without sigmaKindHint still routes badge_textbox to its KPI builder')
+$dataset_schema_by_id = nil
+
 puts "== Rule 0: single-value summary card → KPI even if chartType is table =="
 $warnings = []
 r0 = build_element({ 'id' => 'c6', 'title' => 'One Number', 'chartType' => 'badge_table',
@@ -236,6 +274,34 @@ eq(quick_control && quick_control.dig('filters', 0, 'columnId'), 'f-category_nam
    'the control targets the helper column resolved from the Domo slicer')
 eq($control_scope_entries.last && $control_scope_entries.last['scope'], [quick_table['id']],
    'the control-scope ledger records the intentionally card-local reach')
+
+puts "== chart Quick Filter uses a hidden table source and remains card-scoped =="
+$card_controls = []
+$control_scope_entries = []
+$chart_helpers = []
+quick_chart = build_element({
+  'id' => 'chart-quick', 'title' => 'AI Calls by Day',
+  'chartType' => 'badge_two_trendline', 'sigmaKindHint' => 'line-chart',
+  'datasetId' => 'ds-quick',
+  'columns' => [
+    { 'column' => 'Date', 'mapping' => 'ITEM' },
+    { 'column' => 'Calls', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+  'quickFilters' => [{
+    'type' => 'string', 'displayType' => 'multiple_select',
+    'name' => 'During Business Hours', 'column' => 'During Business Hours',
+    'operator' => 'NOT_IN', 'values' => [],
+  }],
+}, {})
+quick_chart_helper = $chart_helpers.find { |helper| helper['id'] == 'src-el-chart-quick-filters' }
+quick_chart_control = $card_controls.last
+eq(quick_chart.dig('source', 'elementId'), quick_chart_helper && quick_chart_helper['id'],
+   'visible chart is rebound to its Quick Filter table source')
+eq(quick_chart_control && quick_chart_control.dig('source', 'source', 'elementId'),
+   quick_chart_helper && quick_chart_helper['id'],
+   'chart picker values come from the hidden table helper')
+eq($control_scope_entries.last && $control_scope_entries.last['scope'], [quick_chart['id']],
+   'chart Quick Filter reaches only its source chart')
 
 puts "== card control IDs remain unique and within Sigma's 64-character limit =="
 $card_controls = []
