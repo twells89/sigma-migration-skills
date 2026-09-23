@@ -247,6 +247,14 @@ if canon_src
   eq(readable_days, [['2026-07-23', 0.4]],
      'readable day labels retain full day precision for parity')
   eq(readable_count, 1, 'the readable day rewrite is counted')
+
+  datetimes, datetime_count = canonicalise_dim([
+    ['2025-01-01 17:00:00', 4],
+    ['2025-01-02T17:00:00', 4],
+  ])
+  eq(datetimes, [['2025-01-01T17:00:00', 4], ['2025-01-02T17:00:00', 4]],
+     'space- and T-separated datetimes compare at one canonical representation')
+  eq(datetime_count, 2, 'datetime rewrites are counted')
 end
 
 source_grain_src = oracle_src[/^def canonicalise_source_grain\(rows, source_card\)\n.*?\nend\n/m]
@@ -278,6 +286,9 @@ if display_src
   eq(canonicalise_numeric_display([['2026-09-17', '40%']], [['2026-09-17', 0.375]]),
      [['2026-09-17', 0.4]],
      'a materially different displayed percent is not laundered into a match')
+  eq(canonicalise_numeric_display([['2026-09-17', '40.0%']], [['2026-09-17', 40.0]]),
+     [['2026-09-17', 40.0]],
+     'a Domo formula that already returns percentage points is not divided by 100 again')
   eq(canonicalise_numeric_display([['38%']], [[0.375]]),
      [[0.375]],
      'a one-cell KPI percent also recovers its exact source value at printed precision')

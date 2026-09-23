@@ -79,7 +79,8 @@ eq(classify_beast_mode("CASE WHEN `c` = 'x' THEN 'y' ELSE 'z' END"),   'projecti
 
 puts "== classify_beast_mode (API flags win) =="
 eq(classify_beast_mode('anything', { 'analytic' => true }),   'window',     'analytic flag → window')
-eq(classify_beast_mode('anything', { 'aggregated' => true }), 'aggregate',  'aggregated flag → aggregate')
+eq(classify_beast_mode('anything', { 'aggregated' => true }), 'projection',
+   'isAggregatable/aggregated means the result can be grouped, not that SQL already aggregates')
 eq(classify_beast_mode('CONCAT(a,b)', { 'aggregated' => false, 'analytic' => false }), 'projection', 'no flags → projection')
 
 puts "== normalize_card: Shape A =="

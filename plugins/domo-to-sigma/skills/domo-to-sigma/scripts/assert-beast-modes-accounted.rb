@@ -107,6 +107,13 @@ entries = source_formulas.map do |formula|
     end
   elsif outcome.nil?
     entry.merge('status' => 'blocked', 'reason' => 'translated but has no data-model disposition')
+  elsif outcome['status'] == 'deferred' && usage_by_id[formula['id'].to_s]&.any?
+    entry.merge(
+      'status' => 'emitted',
+      'target' => 'workbook-formula',
+      'workbookUsages' => usage_by_id[formula['id'].to_s],
+      'dataModelDisposition' => outcome,
+    )
   elsif outcome['status'] == 'emitted'
     collection = outcome['target'] == 'data-model-metric' ? local_metrics : local_columns
     local_match = collection.any? do |item|

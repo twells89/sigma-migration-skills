@@ -74,6 +74,38 @@ Dir.mktmpdir('bm-accounting') do |dir|
      'columns, metrics, workbook use, named deferrals, and unused locals are distinguished')
 end
 
+puts '== deferred dataset LOD becomes emitted when the workbook records its placement =='
+Dir.mktmpdir('bm-accounting') do |dir|
+  formula = {
+    'id' => 'lod1', 'name' => 'Retention Likelihood Rates', 'scope' => 'dataset',
+    'class' => 'lod', 'dataSourceId' => 'ds-1',
+  }
+  write_json(dir, 'beast-modes.json', [formula])
+  write_json(dir, 'formulas.json', [formula.merge(
+    'sigmaFormula' => '100 * PercentOfTotal(Count([Employee Code]), "grand_total")',
+  )])
+  write_json(dir, 'dm-spec.json', { 'pages' => [{ 'elements' => [] }] })
+  write_json(dir, 'beast-mode-dm-outcomes.json', {
+    'outcomes' => [{
+      'id' => 'lod1', 'status' => 'deferred',
+      'reason' => 'lod Beast Modes require an explicit Sigma placement/override',
+    }],
+  })
+  write_json(dir, 'beast-mode-workbook-usage.json', {
+    'usages' => [{
+      'id' => 'lod1', 'name' => 'Retention Likelihood Rates',
+      'scope' => 'dataset', 'cardId' => 'card-retention',
+      'target' => 'workbook-lod-formula',
+    }],
+  })
+  out, status = Open3.capture2e('ruby', SCRIPT, '--discovery', dir)
+  ok(status.success?, "workbook-placed LOD exits 0\n#{out unless status.success?}")
+  report = JSON.parse(File.read(File.join(dir, 'beast-mode-accounting.json')))
+  entry = report['entries'].first
+  ok(entry['status'] == 'emitted' && entry['target'] == 'workbook-formula',
+     'accounting upgrades the named DM deferral to its proven workbook placement')
+end
+
 puts '== translated but unplaced dataset Beast Mode is blocked =='
 Dir.mktmpdir('bm-accounting') do |dir|
   formula = {

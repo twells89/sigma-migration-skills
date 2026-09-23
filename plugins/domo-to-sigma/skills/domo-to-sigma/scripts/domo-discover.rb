@@ -70,7 +70,7 @@ end
 # has the paren right there (optionally with whitespace: "SUM (x)" is valid
 # SQL). Case-insensitive — Domo's SQL is not case-normalized.
 AGGREGATE_FN_RE = /\b(SUM|COUNT|AVG|MIN|MAX|MEDIAN|STDDEV|STDDEV_POP|STDDEV_SAMP|VARIANCE|
-                      VAR_POP|VAR_SAMP|CEILING|FLOOR|APPROXIMATE_COUNT_DISTINCT)\s*\(/ix
+                      VAR_POP|VAR_SAMP|APPROXIMATE_COUNT_DISTINCT)\s*\(/ix
 WINDOW_FN_RE     = /\bOVER\s*\(|\b(RANK|DENSE_RANK|ROW_NUMBER|LAG|LEAD|NTILE|PERCENT_RANK|CUME_DIST)\s*\(/i
 
 def sql_has_aggregate_call?(sql)
@@ -102,10 +102,14 @@ end
 # downstream (a calc column instead of a metric/aggregate expression).
 #
 # Fix: ALWAYS scan the SQL for a function-call-shaped aggregate/window
-# construct, and let a positive SQL match override a `false` flag. A flag that
-# says "yes" but the SQL scan can't corroborate is still honored (Domo may
-# recognize constructs — e.g. a bucketed histogram — this regex heuristic
-# can't see). Most-specific class wins: lod > window > aggregate > projection.
+# construct, and let a positive SQL match override a `false` flag.
+#
+# Live matrix 2026-09-23 found the inverse flag trap too: row-level CASE/LIKE,
+# date, and string formulas report `isAggregatable:true`. That field means the
+# result CAN be aggregated by a card, not that the formula ALREADY contains an
+# aggregate. Honor a positive hint only when SQL is absent; with source SQL
+# present, its structure is authoritative. Most-specific class wins:
+# lod > window > aggregate > projection.
 def classify_beast_mode(sql, template = nil)
   return 'lod' if sql.to_s =~ /\bFIXED\s*\(/i          # Domo LOD → Sigma LOD
 
@@ -113,7 +117,8 @@ def classify_beast_mode(sql, template = nil)
   aggregate_hint = template.is_a?(Hash) && (template['isAggregatable'] || template['aggregated'])
 
   return 'window'    if sql_has_window_construct?(sql) || window_hint
-  return 'aggregate' if sql_has_aggregate_call?(sql) || aggregate_hint
+  return 'aggregate' if sql_has_aggregate_call?(sql)
+  return 'aggregate' if sql.to_s.strip.empty? && aggregate_hint
   'projection'
 end
 

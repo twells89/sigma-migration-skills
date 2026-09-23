@@ -26,6 +26,7 @@ require 'base64'
 require 'digest'
 require 'date'
 require_relative 'lib/domo_sigma_util'
+require_relative 'lib/beast_mode_lod'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -393,8 +394,12 @@ def aggregate_beast_mode_column?(column)
   return false unless column['_isCalc']
   bm = translated_beast_modes[column['beastModeId'].to_s] ||
        translated_beast_modes[column['column'].to_s]
-  bm.is_a?(Hash) && %w[aggregate window].include?(bm['class'].to_s) &&
-    !bm['sigmaFormula'].to_s.strip.empty?
+  return false unless bm.is_a?(Hash) && !bm['sigmaFormula'].to_s.strip.empty?
+  return true if %w[aggregate window].include?(bm['class'].to_s)
+  return false unless bm['class'].to_s == 'lod'
+
+  bm['_source'] == 'formula-override' || bm['lodPlacement'].is_a?(Hash) ||
+    !DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']).nil?
 end
 
 def split_cols(card)
@@ -505,6 +510,7 @@ def calendar_dimension_format(card, unit = nil)
     case unit
     when 'day', 'week' then '%b %-d, %Y'
     when 'year'        then '%Y'
+    when 'month'       then '%b %y'
     when 'hour', 'minute' then '%b %-d, %Y %H:%M'
     else '%b %y'
     end
@@ -548,9 +554,18 @@ def inline_beast_mode_dimension(card, c)
     end
   return nil unless formula
   record_beast_mode_usage(card, bm, 'workbook-dimension-formula')
-  { 'id' => "d-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
+  result = {
+    'id' => "d-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
-    'formula' => formula }.compact
+    'formula' => formula,
+  }
+  result['format'] =
+    case bm['dataType'].to_s.upcase
+    when 'DATE' then { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d' }
+    when 'DATETIME', 'TIMESTAMP'
+      { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d %H:%M:%S' }
+    end
+  result.compact
 end
 
 def dim_col(c, card = nil)
@@ -849,6 +864,230 @@ def build_scatter_chart(card, dims, meas)
   }.compact
 end
 
+def sum_distinct_measure_plan(card, measures)
+  return nil unless measures.length == 1 && Array(card['filters']).empty?
+  measure = measures.first
+  bm = translated_beast_modes[measure['beastModeId'].to_s] ||
+       translated_beast_modes[measure['column'].to_s]
+  placement = bm && bm['semanticPlacement']
+  return nil unless placement.is_a?(Hash) && placement['kind'] == 'sum-distinct'
+  [measure, bm, placement]
+end
+
+def fixed_grouped_helper_plan(card, measures)
+  return nil unless measures.length == 1
+  measure = measures.first
+  bm = translated_beast_modes[measure['beastModeId'].to_s] ||
+       translated_beast_modes[measure['column'].to_s]
+  plan = bm && bm['lodPlacement']
+  return nil unless plan.is_a?(Hash) && plan['kind'] == 'fixed-aggregate'
+  return nil unless %w[by add].include?(plan['mode'])
+  [measure, bm, plan]
+end
+
+def unique_dimension_columns(card, dimensions)
+  seen = {}
+  Array(dimensions).filter_map do |dimension|
+    name = dimension.is_a?(Hash) ? dimension['column'] : dimension
+    key = DomoSigma::BeastModeLod.normalized_name(name)
+    next if key.empty? || seen[key]
+    seen[key] = true
+    source = dimension.is_a?(Hash) ? dimension : { 'column' => name }
+    dim_col(source, card)
+  end
+end
+
+def build_fixed_grouped_axis_chart(card, kind, dims, measure, bm, plan)
+  helper_id = "src-#{eid(card)}-fixed"
+  helper_name = "Fixed grain for #{card['title']}"
+  fixed_sources = Array(plan['dimensions']).map { |name| { 'column' => name } }
+  helper_dims = unique_dimension_columns(card, fixed_sources + dims)
+  helper_by_name = helper_dims.to_h do |column|
+    [DomoSigma::BeastModeLod.normalized_name(column['name']), column]
+  end
+  current_helper_dims = dims.filter_map do |dimension|
+    helper_by_name[DomoSigma::BeastModeLod.normalized_name(col_label(dimension))]
+  end
+  fixed_helper_dims = fixed_sources.filter_map do |dimension|
+    helper_by_name[DomoSigma::BeastModeLod.normalized_name(display_name(dimension['column']))]
+  end
+  inner = "#{plan['innerAggregate']}(#{mref(display_name(plan['field']))})"
+  lod_column = {
+    'id' => "m-fixed-value-#{card['id']}",
+    'name' => 'Fixed Value',
+    'formula' => plan['mode'] == 'by' ?
+      "Subtotal(#{inner}, \"parent_grouping\", 1)" : inner,
+  }
+  groupings =
+    if plan['mode'] == 'by'
+      current_only = current_helper_dims - fixed_helper_dims
+      return nil if fixed_helper_dims.empty? || current_only.empty?
+      [
+        {
+          'id' => "g-fixed-parent-#{card['id']}",
+          'groupBy' => fixed_helper_dims.map { |column| column['id'] },
+        },
+        {
+          'id' => "g-fixed-current-#{card['id']}",
+          'groupBy' => current_only.map { |column| column['id'] },
+          'calculations' => [lod_column['id']],
+        },
+      ]
+    else
+      add_helper_dims = fixed_helper_dims - current_helper_dims
+      return nil if add_helper_dims.empty?
+      [{
+        'id' => "g-fixed-add-#{card['id']}",
+        'groupBy' => (current_helper_dims + add_helper_dims).map { |column| column['id'] },
+        'calculations' => [lod_column['id']],
+      }]
+    end
+  grouping_id = groupings.last['id']
+  helper = {
+    'id' => helper_id,
+    'kind' => 'table',
+    'name' => helper_name,
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => helper_dims + [lod_column],
+    'order' => (helper_dims + [lod_column]).map { |column| column['id'] },
+    'groupings' => groupings,
+    'visibleAsSource' => false,
+  }
+  card_filters = Array(card['filters'])
+  policy_fields = Array(plan['filterDimensions']).map {
+    |name| DomoSigma::BeastModeLod.normalized_name(name)
+  }
+  helper_filters, visible_filters =
+    case plan['filterMode']
+    when 'none'
+      [[], []]
+    when 'allow'
+      card_filters.partition {
+        |filter| policy_fields.include?(DomoSigma::BeastModeLod.normalized_name(filter['column']))
+      }
+    when 'deny'
+      denied, allowed = card_filters.partition {
+        |filter| policy_fields.include?(DomoSigma::BeastModeLod.normalized_name(filter['column']))
+      }
+      [allowed, denied]
+    else
+      [card_filters, []]
+    end
+  helper = apply_card_filters!(card.merge('filters' => helper_filters), helper)
+  $chart_helpers << helper
+
+  visible_dims = current_helper_dims.map do |column|
+    {
+      'id' => column['id'],
+      'name' => column['name'],
+      'formula' => "[#{helper_name}/#{column['name']}]",
+      'format' => column['format'],
+    }.compact
+  end
+  visible_measure = {
+    'id' => "m-#{measure['column'].to_s.downcase.gsub(/\W+/, '-')}",
+    'name' => col_label(measure),
+    'formula' => "#{plan['outerAggregate']}([#{helper_name}/#{lod_column['name']}])",
+    'format' => beast_mode_value_format(measure, bm),
+  }.compact
+  record_beast_mode_usage(card, bm, 'workbook-grouped-helper-formula')
+
+  xidx = dims.index do |dimension|
+    %w[ITEM CATEGORY XTIME DATE].include?(dimension['mapping'].to_s.upcase)
+  end || 0
+  element = {
+    'id' => eid(card),
+    'kind' => kind,
+    'name' => card['title'],
+    'source' => { 'kind' => 'table', 'elementId' => helper_id, 'groupingId' => grouping_id },
+    'columns' => visible_dims + [visible_measure],
+    'xAxis' => { 'columnId' => visible_dims[xidx]['id'], 'format' => AXIS_OFF },
+    'yAxis' => {
+      'columnIds' => [visible_measure['id']],
+      'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } },
+    },
+    '_fixedVisibleFilters' => visible_filters,
+  }
+  split = dims.each_with_index.find do |dimension, index|
+    index != xidx && dimension['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  if split
+    element['color'] = { 'by' => 'category', 'column' => visible_dims[split[1]]['id'] }
+    element['legend'] = { 'position' => 'right', 'fontSize' => 12 }
+  elsif kind == 'bar-chart'
+    element['color'] = { 'by' => 'single', 'value' => '#8CBFDD' }
+  end
+  element
+end
+
+def build_sum_distinct_axis_chart(card, kind, dims, measure, bm, placement)
+  helper_id = "src-#{eid(card)}-sum-distinct"
+  helper_name = "Distinct values for #{card['title']}"
+  grouping_id = "g-#{card['id']}-sum-distinct"
+  helper_dims = dims.map { |dimension| dim_col(dimension, card) }
+  distinct_column = {
+    'id' => "d-distinct-#{card['id']}",
+    'name' => "Distinct #{display_name(placement['field'])}",
+    'formula' => mref(display_name(placement['field'])),
+  }
+  helper = {
+    'id' => helper_id,
+    'kind' => 'table',
+    'name' => helper_name,
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => helper_dims + [distinct_column],
+    'order' => (helper_dims + [distinct_column]).map { |column| column['id'] },
+    'groupings' => [{
+      'id' => grouping_id,
+      'groupBy' => (helper_dims + [distinct_column]).map { |column| column['id'] },
+    }],
+    'visibleAsSource' => false,
+  }
+  $chart_helpers << helper
+
+  visible_dims = helper_dims.map do |column|
+    {
+      'id' => column['id'],
+      'name' => column['name'],
+      'formula' => "[#{helper_name}/#{column['name']}]",
+      'format' => column['format'],
+    }.compact
+  end
+  visible_measure = {
+    'id' => "m-#{measure['column'].to_s.downcase.gsub(/\W+/, '-')}",
+    'name' => col_label(measure),
+    'formula' => "Sum([#{helper_name}/#{distinct_column['name']}])",
+    'format' => beast_mode_value_format(measure, bm),
+  }.compact
+  record_beast_mode_usage(card, bm, 'workbook-grouped-helper-formula')
+
+  xidx = dims.index do |dimension|
+    %w[ITEM CATEGORY XTIME DATE].include?(dimension['mapping'].to_s.upcase)
+  end || 0
+  element = {
+    'id' => eid(card),
+    'kind' => kind,
+    'name' => card['title'],
+    'source' => { 'kind' => 'table', 'elementId' => helper_id, 'groupingId' => grouping_id },
+    'columns' => visible_dims + [visible_measure],
+    'xAxis' => { 'columnId' => visible_dims[xidx]['id'], 'format' => AXIS_OFF },
+    'yAxis' => {
+      'columnIds' => [visible_measure['id']],
+      'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } },
+    },
+  }
+  split = dims.each_with_index.find do |dimension, index|
+    index != xidx && dimension['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  if split
+    element['color'] = { 'by' => 'category', 'column' => visible_dims[split[1]]['id'] }
+    element['legend'] = { 'position' => 'right', 'fontSize' => 12 }
+  elsif kind == 'bar-chart'
+    element['color'] = { 'by' => 'single', 'value' => '#8CBFDD' }
+  end
+  element
+end
+
 def build_axis_chart(card, kind)
   dims, meas = split_cols(card)
   if dims.empty? || meas.empty?
@@ -867,6 +1106,12 @@ def build_axis_chart(card, kind)
     return nil
   end
   return build_scatter_chart(card, dims, meas) if kind == 'scatter-chart'
+  if (fixed_plan = fixed_grouped_helper_plan(card, meas))
+    return build_fixed_grouped_axis_chart(card, kind, dims, *fixed_plan)
+  end
+  if (distinct_plan = sum_distinct_measure_plan(card, meas))
+    return build_sum_distinct_axis_chart(card, kind, dims, *distinct_plan)
+  end
 
   ct = card['chartType'].to_s.downcase
   xcol = dims.find { |d| %w[ITEM CATEGORY XTIME DATE].include?(d['mapping'].to_s.upcase) } ||
@@ -895,8 +1140,8 @@ def build_axis_chart(card, kind)
     if time_axis && !HORIZONTAL_CHART_TYPES.include?(ct)
       xa['format'] = {
         'marks' => 'none',
-        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
-                      'allowLongerLabels' => false }
+        'labels' => { 'fontSize' => 12, 'labelAngle' => 0,
+                      'allowLongerLabels' => true }
       }
     elsif kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
       xa['format'] = {
@@ -928,12 +1173,16 @@ def build_axis_chart(card, kind)
     el['xAxis'] = xa
   end
   unless mcols.empty?
-    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } }
+    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } }
     el['yAxis'] = { 'columnIds' => mcols.map { |m| m['id'] }, 'format' => y_format }
   end
   split = dims.each_with_index.find { |d, i| i != xidx && d['mapping'].to_s.upcase == SERIES_MAPPING }
-  el['color'] = { 'by' => 'category', 'column' => dcols[split[1]]['id'] } if split
+  if split
+    el['color'] = { 'by' => 'category', 'column' => dcols[split[1]]['id'] }
+    el['legend'] = { 'position' => 'right', 'fontSize' => 12 }
+  end
   if kind == 'bar-chart'
+    el['color'] ||= { 'by' => 'single', 'value' => '#8CBFDD' }
     # #2/#3: orientation/stacking keyed on the EXACT chartType token, not a
     # `.include?('horiz')` substring check (the same class of bug this whole
     # map fix addresses — see refs/card-to-element.md Problem 2).
@@ -1641,9 +1890,11 @@ def plugin_sql_source(card, mode)
     when 'IN', 'EQUALS', 'LEGACY' then predicates << "#{col} IN (#{list})"
     when 'NOT_IN', 'NOT_EQUALS'   then predicates << "#{col} NOT IN (#{list})"
     when 'GREATER_THAN'           then predicates << "#{col} > #{sf_literal(vals.first)}"
-    when 'GREATER_THAN_OR_EQUAL'  then predicates << "#{col} >= #{sf_literal(vals.first)}"
+    when 'GREATER_THAN_OR_EQUAL', 'GREATER_THAN_EQUAL_TO', 'GREATER_THAN_EQUALS_TO'
+      predicates << "#{col} >= #{sf_literal(vals.first)}"
     when 'LESS_THAN'              then predicates << "#{col} < #{sf_literal(vals.first)}"
-    when 'LESS_THAN_OR_EQUAL'     then predicates << "#{col} <= #{sf_literal(vals.first)}"
+    when 'LESS_THAN_OR_EQUAL', 'LESS_THAN_EQUAL_TO', 'LESS_THAN_EQUALS_TO'
+      predicates << "#{col} <= #{sf_literal(vals.first)}"
     end
   end
   drf = card['dateRangeFilter'] || {}
@@ -1899,6 +2150,116 @@ def masterize_formula(formula)
   formula.to_s.gsub(/\[([^\[\]\/]+)\]/) { "[Master/#{display_name(Regexp.last_match(1))}]" }
 end
 
+def lod_fixed_percent_mode(card, plan)
+  fixed = Array(plan['fixedBy']).first
+  return 'grand_total' if fixed.to_s.empty?
+
+  same_field = lambda do |value|
+    DomoSigma::BeastModeLod.normalized_name(value) ==
+      DomoSigma::BeastModeLod.normalized_name(fixed)
+  end
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  date_grain_is_fixed = same_field.call(card.dig('dateGrain', 'column'))
+  fixed_is_x = (xcol && same_field.call(xcol['column'])) || date_grain_is_fixed
+  fixed_is_series = series && same_field.call(series['column'])
+
+  return 'x_axis' if fixed_is_x && series
+  return 'color' if fixed_is_series && xcol
+  return 'fixed-only' if fixed_is_x || fixed_is_series
+
+  # The FIXED key is not a visible chart dimension (commonly a card/page date
+  # filter). Once that predicate is applied, the denominator is the grand total
+  # across the displayed subgroup dimension(s).
+  'grand_total'
+end
+
+def lod_workbook_formula(card, bm)
+  return nil unless bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+  if bm['_source'] == 'formula-override'
+    return masterize_formula(bm['sigmaFormula'])
+  end
+
+  plan = bm['lodPlacement']
+  plan = DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']) unless plan.is_a?(Hash)
+  return nil unless plan
+  return lod_fixed_aggregate_formula(card, plan) if plan['kind'] == 'fixed-aggregate'
+
+  mode = lod_fixed_percent_mode(card, plan)
+  if mode == 'fixed-only'
+    scale = plan['scale'].to_f
+    return scale == scale.to_i ? scale.to_i.to_s : scale.to_s
+  end
+  DomoSigma::BeastModeLod.fixed_percent_formula(
+    plan,
+    mode: mode,
+    qualify: ->(field) { "Master/#{display_name(field)}" },
+  )
+end
+
+def lod_fixed_aggregate_formula(card, plan)
+  return nil if plan['filterMode'] || plan['mode'] == 'add'
+
+  inner = "#{plan['innerAggregate']}(#{mref(display_name(plan['field']))})"
+  return "GrandTotal(#{inner})" if plan['mode'] == 'all'
+
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  role_for = lambda do |name|
+    normalized = DomoSigma::BeastModeLod.normalized_name(name)
+    date_matches =
+      DomoSigma::BeastModeLod.normalized_name(card.dig('dateGrain', 'column')) == normalized
+    next 'x_axis' if (xcol &&
+      DomoSigma::BeastModeLod.normalized_name(xcol['column']) == normalized) || date_matches
+    next 'color' if series &&
+      DomoSigma::BeastModeLod.normalized_name(series['column']) == normalized
+    nil
+  end
+
+  current_roles = [xcol && 'x_axis', series && 'color'].compact
+  fixed_roles =
+    case plan['mode']
+    when 'by'
+      roles = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }
+      return nil if roles.any?(&:nil?)
+      roles.uniq
+    when 'remove'
+      removed = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }.compact
+      current_roles - removed
+    else
+      return nil
+    end
+
+  return "GrandTotal(#{inner})" if fixed_roles.empty?
+  return inner if fixed_roles.sort == current_roles.sort
+  return "Subtotal(#{inner}, \"#{fixed_roles.first}\")" if fixed_roles.length == 1
+  nil
+end
+
+def beast_mode_value_format(column, bm)
+  format = sigma_format(column['format'], col_label(column))
+  source_formula = bm['originalSql'].to_s.empty? ? bm['sigmaFormula'] : bm['originalSql']
+  return format unless format.is_a?(Hash) &&
+                       format['formatString'].to_s.end_with?('%') &&
+                       source_formula.to_s.match?(/\A\s*\(?\s*100(?:\.0+)?\s*\*/i)
+
+  source_format = column['format'].is_a?(Hash) ? column['format'] : {}
+  raw_pattern = source_format['format'].to_s
+  explicit_precision = source_format['precision'] || source_format['decimals']
+  decimals = (explicit_precision || raw_pattern[/\.(0+)/, 1]&.length || 1).to_i
+  {
+    'kind' => 'number',
+    'formatString' => ",.#{decimals}f",
+    'suffix' => '%',
+  }
+end
+
 # An AGGREGATE (or window) Beast Mode cannot be a data-model column — build-dm
 # only promotes PROJECTION (row-level) Beast Modes to DM calc columns, because an
 # aggregate expression has no row-level value. So for an aggregate Beast Mode the
@@ -1920,23 +2281,35 @@ def inline_beast_mode_measure(card, c, record: true)
        translated_beast_modes[c['column'].to_s]
   return nil unless bm.is_a?(Hash)
   formula =
-    if %w[aggregate window].include?(bm['class'].to_s)
+    if bm['class'].to_s == 'lod'
+      lod_workbook_formula(card, bm)
+    elsif %w[aggregate window].include?(bm['class'].to_s)
       masterize_formula(bm['sigmaFormula'])
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card'
       row_formula = masterize_formula(bm['sigmaFormula'])
-      c['aggregation'].to_s.empty? ? row_formula :
-        "#{sigma_agg(c['aggregation'], c['distinct'])}(#{row_formula})"
+      if c['aggregation'].to_s.empty? &&
+         bm['originalSql'].to_s.match?(/\A\s*(?:CEILING|FLOOR)\s*\(/i)
+        # Live Domo card-data groups unaggregated CEILING/FLOOR VALUE bindings
+        # by taking the minimum rounded row result for each series.
+        "Min(#{row_formula})"
+      else
+        c['aggregation'].to_s.empty? ? row_formula :
+          "#{sigma_agg(c['aggregation'], c['distinct'])}(#{row_formula})"
+      end
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
       ref = mref(bm['sigmaName'] || bm['name'] || c['column'])
       c['aggregation'].to_s.empty? ? ref :
         "#{sigma_agg(c['aggregation'], c['distinct'])}(#{ref})"
     end
   return nil unless formula
-  record_beast_mode_usage(card, bm, 'workbook-measure-formula') if record
+  if record
+    target = bm['class'].to_s == 'lod' ? 'workbook-lod-formula' : 'workbook-measure-formula'
+    record_beast_mode_usage(card, bm, target)
+  end
   { 'id' => "m-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
     'formula' => formula,
-    'format' => sigma_format(c['format'], col_label(c)) }.compact
+    'format' => beast_mode_value_format(c, bm) }.compact
 end
 
 # Drop columns that CANNOT resolve to a real DM column, loudly.
@@ -1979,6 +2352,23 @@ def prune_unresolvable_columns!(card)
       ok << c
       next
     end
+    if c['_isCalc']
+      bm = translated_beast_modes[c['beastModeId'].to_s] ||
+           translated_beast_modes[c['column'].to_s]
+      if bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+        plan = bm['lodPlacement']
+        if plan.is_a?(Hash) && plan['kind'] == 'fixed-aggregate' &&
+           %w[by add].include?(plan['mode'])
+          ok << c
+          next
+        end
+        warn_card(card, "dropped column #{c['column'].inspect}: its FIXED/LOD Beast Mode has no " \
+                        'supported automatic placement. Add a Sigma workbook formula in ' \
+                        'discovery/formula-overrides.json and re-run; generated chart specs ' \
+                        'must not be hand-edited.')
+        next
+      end
+    end
     if c['_isCalc'] && c['beastModeId'] && !translated_beast_modes[c['beastModeId'].to_s] &&
        !translated_beast_modes[c['column'].to_s]
       warn_card(card, "dropped column #{c['column'].inspect}: its Beast Mode did not " \
@@ -2017,7 +2407,9 @@ DOMO_FILTER_LIST_MODE = {
 }.freeze
 DOMO_FILTER_COMPARISON = {
   'GREATER_THAN' => '>', 'GREATER_THAN_OR_EQUAL' => '>=',
+  'GREATER_THAN_EQUAL_TO' => '>=', 'GREATER_THAN_EQUALS_TO' => '>=',
   'LESS_THAN' => '<', 'LESS_THAN_OR_EQUAL' => '<=',
+  'LESS_THAN_EQUAL_TO' => '<=', 'LESS_THAN_EQUALS_TO' => '<=',
 }.freeze
 
 NUMERIC_DOMO_TYPES = %w[LONG DECIMAL DOUBLE INTEGER NUMBER].freeze
@@ -2435,7 +2827,8 @@ def apply_card_filters!(card, el)
     unless mode
       warn_card(card, "card filter on '#{col}' dropped: operator '#{f['operator']}' has no faithful Sigma " \
                       'element-filter translation here (handled: LEGACY/IN/EQUALS/NOT_IN/NOT_EQUALS/' \
-                      'GREATER_THAN/GREATER_THAN_OR_EQUAL/LESS_THAN/LESS_THAN_OR_EQUAL) — ' \
+                      'GREATER_THAN/GREATER_THAN_OR_EQUAL/GREATER_THAN_EQUALS_TO/' \
+                      'LESS_THAN/LESS_THAN_OR_EQUAL/LESS_THAN_EQUALS_TO) — ' \
                       'hand-author the equivalent element filter and re-run.')
       next
     end
@@ -3055,7 +3448,11 @@ def build_element_body(card, overrides)
   # Their predicates must filter that source BEFORE grouping; attaching them to
   # the visible scatter would evaluate against already-grouped raw refs and can
   # leave one point per warehouse row.
-  if el && el['_scatterHelper']
+  if el && el.key?('_fixedVisibleFilters')
+    visible_filters = el.delete('_fixedVisibleFilters')
+    el = apply_card_filters!(card.merge('filters' => visible_filters), el)
+    el = apply_card_date_window!(card, el)
+  elsif el && el['_scatterHelper']
     helper = apply_card_filters!(card, el['_scatterHelper'])
     helper = apply_card_date_window!(card, helper)
     el['_scatterHelper'] = helper

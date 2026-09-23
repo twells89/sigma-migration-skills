@@ -415,14 +415,12 @@ inconsistent handling of the two filter levels — port **both**, every time:
    a viz can silently no-op — bind the control to a **table** element or the
    underlying source, not directly to a KPI/bar (see
    `feedback_sigma_control_filter_target_must_be_table`).
-2. **Card-level filters** (the filter clauses inside each card definition) →
-   element/source filters on that element. Translate the Domo filter object
-   (`{column, operator, values}`; currently automated operators are
-   `LEGACY/IN/EQUALS/NOT_IN/NOT_EQUALS/GREATER_THAN/GREATER_THAN_OR_EQUAL/
-   LESS_THAN/LESS_THAN_OR_EQUAL`) to a Sigma element filter. List predicates use
-   Sigma's native `kind: list`; numeric comparisons use a hidden boolean helper
-   column plus a list filter. Unsupported operators are warned and dropped,
-   never guessed.
+2. **Card-level filters** → element/source filters. Map `{column, operator,
+   values}` for `LEGACY/IN/EQUALS/NOT_IN/NOT_EQUALS` and the
+   `GREATER_THAN`/`LESS_THAN` comparison families. Domo's `*_EQUALS_TO` and
+   `*_OR_EQUAL` spellings both mean inclusive comparison. Lists use Sigma
+   `kind: list`; numeric comparisons use a hidden boolean column plus list
+   filter. Warn and drop unknown operators; never guess.
 3. **Analyzer Quick Filters** (`definition.slicers[]`; public `quickFilters[]`)
    → card-scoped Sigma controls. They are not permanent `main.filters`.
    Tables/pivots need a hidden table source so the picker populates and filters
