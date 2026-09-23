@@ -1,0 +1,78 @@
+[
+  {
+    "id": "ds-bm-matrix",
+    "schema": {
+      "columns": [
+        {
+          "type": "DATE",
+          "name": "Date"
+        },
+        {
+          "type": "STRING",
+          "name": "Date_Text"
+        },
+        {
+          "type": "STRING",
+          "name": "Region"
+        },
+        {
+          "type": "STRING",
+          "name": "State"
+        },
+        {
+          "type": "STRING",
+          "name": "City"
+        },
+        {
+          "type": "STRING",
+          "name": "Category"
+        },
+        {
+          "type": "STRING",
+          "name": "Employee_ID"
+        },
+        {
+          "type": "DOUBLE",
+          "name": "Value"
+        },
+        {
+          "type": "DOUBLE",
+          "name": "Sales"
+        },
+        {
+          "type": "DOUBLE",
+          "name": "Cost"
+        },
+        {
+          "type": "LONG",
+          "name": "Quantity"
+        },
+        {
+          "type": "DOUBLE",
+          "name": "Unit_Price"
+        },
+        {
+          "type": "STRING",
+          "name": "Text_Value"
+        },
+        {
+          "type": "LONG",
+          "name": "Nullable_Value"
+        },
+        {
+          "type": "DOUBLE",
+          "name": "Denominator"
+        },
+        {
+          "type": "DATE",
+          "name": "Start_Date"
+        },
+        {
+          "type": "DATE",
+          "name": "End_Date"
+        }
+      ]
+    },
+    "name": "Synthetic Beast Mode Matrix"
+  }
+]

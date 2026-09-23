@@ -1,0 +1,3052 @@
+[
+  {
+    "id": "bm-card-01",
+    "title": "_TEMP BM 26 Logic Mixed Case",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Logic Mixed Case",
+        "alias": "Logic Mixed Case",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_01",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 191,
+        "id": "calculation_matrix_01",
+        "name": "Logic Mixed Case",
+        "formula": "CASE WHEN `Value` > 0 THEN 1 ELSE 'none' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Value`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Logic Mixed Case": "Logic Mixed Case",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_01",
+        "name": "Logic Mixed Case",
+        "sql": "CASE WHEN `Value` > 0 THEN 1 ELSE 'none' END",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-01",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 0
+  },
+  {
+    "id": "bm-card-02",
+    "title": "_TEMP BM 21 Logic Like Contains",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Logic Like Contains",
+        "alias": "Logic Like Contains",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_02",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 212,
+        "id": "calculation_matrix_02",
+        "name": "Logic Like Contains",
+        "formula": "CASE WHEN `Text_Value` LIKE '%alpha%' THEN 'Match' ELSE 'Other' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Text_Value`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Logic Like Contains": "Logic Like Contains",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_02",
+        "name": "Logic Like Contains",
+        "sql": "CASE WHEN `Text_Value` LIKE '%alpha%' THEN 'Match' ELSE 'Other' END",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-02",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 21
+  },
+  {
+    "id": "bm-card-03",
+    "title": "_TEMP BM 36 Unsupported Convert Tz",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Unsupported Convert Tz",
+        "alias": "Unsupported Convert Tz",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_03",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 208,
+        "id": "calculation_matrix_03",
+        "name": "Unsupported Convert Tz",
+        "formula": "CONVERT_TZ(`Date`, 'UTC', 'America/Denver')",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 11
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DATETIME",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Employee_ID": "Employee_ID",
+        "Unsupported Convert Tz": "Unsupported Convert Tz"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_03",
+        "name": "Unsupported Convert Tz",
+        "sql": "CONVERT_TZ(`Date`, 'UTC', 'America/Denver')",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-03",
+        "dataType": "DATETIME",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 17
+  },
+  {
+    "id": "bm-card-04",
+    "title": "_TEMP BM 6 Fixed Filter None",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "State",
+        "alias": "State",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Filter None",
+        "alias": "Fixed Filter None",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_04",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "State"
+    ],
+    "orderBy": [],
+    "filters": [
+      {
+        "column": "Category",
+        "operator": "EQUALS",
+        "values": [
+          "Hardware"
+        ]
+      }
+    ],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 223,
+        "id": "calculation_matrix_04",
+        "name": "Fixed Filter None",
+        "formula": "SUM(SUM(`Sales`) FIXED (BY `Region` FILTER NONE))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Region`",
+            "columnPosition": 27
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "State": "State",
+        "Fixed Filter None": "Fixed Filter None"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_04",
+        "name": "Fixed Filter None",
+        "sql": "SUM(SUM(`Sales`) FIXED (BY `Region` FILTER NONE))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-04",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 32
+  },
+  {
+    "id": "bm-card-05",
+    "title": "_TEMP BM 35 Unsupported Sqrt",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Unsupported Sqrt",
+        "alias": "Unsupported Sqrt",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_05",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 192,
+        "id": "calculation_matrix_05",
+        "name": "Unsupported Sqrt",
+        "formula": "SQRT(`Value`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Value`",
+            "columnPosition": 5
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Unsupported Sqrt": "Unsupported Sqrt",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_05",
+        "name": "Unsupported Sqrt",
+        "sql": "SQRT(`Value`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-05",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 1
+  },
+  {
+    "id": "bm-card-06",
+    "title": "_TEMP BM 32 Date Add",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Add",
+        "alias": "Date Add",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_06",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 204,
+        "id": "calculation_matrix_06",
+        "name": "Date Add",
+        "formula": "DATE_ADD(`Date`, INTERVAL 1 MONTH)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 9
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DATE",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Date Add": "Date Add",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_06",
+        "name": "Date Add",
+        "sql": "DATE_ADD(`Date`, INTERVAL 1 MONTH)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-06",
+        "dataType": "DATE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 13
+  },
+  {
+    "id": "bm-card-07",
+    "title": "_TEMP BM 10 Window Running Sum",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date",
+        "alias": "Date",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Window Running Sum",
+        "alias": "Window Running Sum",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_07",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Date"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 200,
+        "id": "calculation_matrix_07",
+        "name": "Window Running Sum",
+        "formula": "SUM(SUM(`Sales`)) OVER (ORDER BY `Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 33
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "nonAggregatedColumns": [
+          "Date"
+        ],
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Window Running Sum": "Window Running Sum",
+        "Date": "Date"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_07",
+        "name": "Window Running Sum",
+        "sql": "SUM(SUM(`Sales`)) OVER (ORDER BY `Date`)",
+        "scope": "card",
+        "class": "window",
+        "cardId": "bm-card-07",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 9
+  },
+  {
+    "id": "bm-card-08",
+    "title": "_TEMP BM 23 Logic Like Suffix",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Logic Like Suffix",
+        "alias": "Logic Like Suffix",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_08",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 196,
+        "id": "calculation_matrix_08",
+        "name": "Logic Like Suffix",
+        "formula": "CASE WHEN `Text_Value` LIKE '%CA' THEN 'Match' ELSE 'Other' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Text_Value`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Logic Like Suffix": "Logic Like Suffix",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_08",
+        "name": "Logic Like Suffix",
+        "sql": "CASE WHEN `Text_Value` LIKE '%CA' THEN 'Match' ELSE 'Other' END",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-08",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 5
+  },
+  {
+    "id": "bm-card-09",
+    "title": "_TEMP BM 29 Date Str To Date",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Str To Date",
+        "alias": "Date Str To Date",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_09",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 201,
+        "id": "calculation_matrix_09",
+        "name": "Date Str To Date",
+        "formula": "STR_TO_DATE(`Date_Text`, '%m/%d/%Y')",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date_Text`",
+            "columnPosition": 12
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DATE",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Employee_ID": "Employee_ID",
+        "Date Str To Date": "Date Str To Date"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_09",
+        "name": "Date Str To Date",
+        "sql": "STR_TO_DATE(`Date_Text`, '%m/%d/%Y')",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-09",
+        "dataType": "DATE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 10
+  },
+  {
+    "id": "bm-card-10",
+    "title": "_TEMP BM 9 Fixed Percent Total",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date",
+        "alias": "Date",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Percent Total",
+        "alias": "Fixed Percent Total",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_10",
+        "_isCalc": true
+      },
+      {
+        "column": "Category",
+        "alias": "Category",
+        "mapping": "SERIES"
+      }
+    ],
+    "groupBy": [
+      "Date",
+      "Category"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 214,
+        "id": "calculation_matrix_10",
+        "name": "Fixed Percent Total",
+        "formula": "100*(SUM(`Sales`)/SUM(SUM(`Sales`) FIXED (BY `Date`)))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 9
+          },
+          {
+            "columnName": "`Date`",
+            "columnPosition": 45
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 26
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Category": "Category",
+        "Fixed Percent Total": "Fixed Percent Total",
+        "Date": "Date"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_10",
+        "name": "Fixed Percent Total",
+        "sql": "100*(SUM(`Sales`)/SUM(SUM(`Sales`) FIXED (BY `Date`)))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-10",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 23
+  },
+  {
+    "id": "bm-card-11",
+    "title": "_TEMP BM 7 Fixed Filter Allow",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "State",
+        "alias": "State",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Filter Allow",
+        "alias": "Fixed Filter Allow",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_11",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "State"
+    ],
+    "orderBy": [],
+    "filters": [
+      {
+        "column": "Category",
+        "operator": "EQUALS",
+        "values": [
+          "Hardware"
+        ]
+      },
+      {
+        "column": "State",
+        "operator": "NOT_EQUALS",
+        "values": [
+          "CA"
+        ]
+      }
+    ],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 224,
+        "id": "calculation_matrix_11",
+        "name": "Fixed Filter Allow",
+        "formula": "SUM(SUM(`Sales`) FIXED (BY `Region` FILTER ALLOW `Category`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Region`",
+            "columnPosition": 27
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          },
+          {
+            "columnName": "`Category`",
+            "columnPosition": 49
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "State": "State",
+        "Fixed Filter Allow": "Fixed Filter Allow"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_11",
+        "name": "Fixed Filter Allow",
+        "sql": "SUM(SUM(`Sales`) FIXED (BY `Region` FILTER ALLOW `Category`))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-11",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 33
+  },
+  {
+    "id": "bm-card-12",
+    "title": "_TEMP BM 8 Fixed Filter Deny",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "State",
+        "alias": "State",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Filter Deny",
+        "alias": "Fixed Filter Deny",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_12",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "State"
+    ],
+    "orderBy": [],
+    "filters": [
+      {
+        "column": "Category",
+        "operator": "EQUALS",
+        "values": [
+          "Hardware"
+        ]
+      },
+      {
+        "column": "State",
+        "operator": "NOT_EQUALS",
+        "values": [
+          "CA"
+        ]
+      }
+    ],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 225,
+        "id": "calculation_matrix_12",
+        "name": "Fixed Filter Deny",
+        "formula": "SUM(SUM(`Sales`) FIXED (BY `Region` FILTER DENY `State`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Region`",
+            "columnPosition": 27
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          },
+          {
+            "columnName": "`State`",
+            "columnPosition": 48
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "State": "State",
+        "Fixed Filter Deny": "Fixed Filter Deny"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_12",
+        "name": "Fixed Filter Deny",
+        "sql": "SUM(SUM(`Sales`) FIXED (BY `Region` FILTER DENY `State`))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-12",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 34
+  },
+  {
+    "id": "bm-card-13",
+    "title": "_TEMP BM 33 Date Dayofweek",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Dayofweek",
+        "alias": "Date Dayofweek",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_13",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 209,
+        "id": "calculation_matrix_13",
+        "name": "Date Dayofweek",
+        "formula": "DAYOFWEEK(`Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Date Dayofweek": "Date Dayofweek",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_13",
+        "name": "Date Dayofweek",
+        "sql": "DAYOFWEEK(`Date`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-13",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 18
+  },
+  {
+    "id": "bm-card-14",
+    "title": "_TEMP BM 25 Logic Between",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Logic Between",
+        "alias": "Logic Between",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_14",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 213,
+        "id": "calculation_matrix_14",
+        "name": "Logic Between",
+        "formula": "CASE WHEN `Value` BETWEEN 10 AND 20 THEN 'Mid' ELSE 'Other' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Value`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Employee_ID": "Employee_ID",
+        "Logic Between": "Logic Between"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_14",
+        "name": "Logic Between",
+        "sql": "CASE WHEN `Value` BETWEEN 10 AND 20 THEN 'Mid' ELSE 'Other' END",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-14",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 22
+  },
+  {
+    "id": "bm-card-15",
+    "title": "_TEMP BM 5 Fixed Remove Category",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Category",
+        "alias": "Category",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Remove Category",
+        "alias": "Fixed Remove Category",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_15",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Category"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 218,
+        "id": "calculation_matrix_15",
+        "name": "Fixed Remove Category",
+        "formula": "AVG(AVG(`Unit_Price`) FIXED (REMOVE `Category`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Category`",
+            "columnPosition": 36
+          },
+          {
+            "columnName": "`Unit_Price`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Fixed Remove Category": "Fixed Remove Category",
+        "Category": "Category"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_15",
+        "name": "Fixed Remove Category",
+        "sql": "AVG(AVG(`Unit_Price`) FIXED (REMOVE `Category`))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-15",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 27
+  },
+  {
+    "id": "bm-card-16",
+    "title": "_TEMP BM 34 Date Weekday Legacy",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Weekday Legacy",
+        "alias": "Date Weekday Legacy",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_16",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 205,
+        "id": "calculation_matrix_16",
+        "name": "Date Weekday Legacy",
+        "formula": "WEEKDAY(`Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Employee_ID": "Employee_ID",
+        "Date Weekday Legacy": "Date Weekday Legacy"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_16",
+        "name": "Date Weekday Legacy",
+        "sql": "WEEKDAY(`Date`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-16",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 14
+  },
+  {
+    "id": "bm-card-17",
+    "title": "_TEMP BM 17 Aggregate Floor",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Aggregate Floor",
+        "alias": "Aggregate Floor",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_17",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 215,
+        "id": "calculation_matrix_17",
+        "name": "Aggregate Floor",
+        "formula": "FLOOR(`Value`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Value`",
+            "columnPosition": 6
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Region": "Region",
+        "Aggregate Floor": "Aggregate Floor"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_17",
+        "name": "Aggregate Floor",
+        "sql": "FLOOR(`Value`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-17",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 24
+  },
+  {
+    "id": "bm-card-18",
+    "title": "_TEMP BM 16 Aggregate Ceiling",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Aggregate Ceiling",
+        "alias": "Aggregate Ceiling",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_18",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 198,
+        "id": "calculation_matrix_18",
+        "name": "Aggregate Ceiling",
+        "formula": "CEILING(`Value`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Value`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Region": "Region",
+        "Aggregate Ceiling": "Aggregate Ceiling"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_18",
+        "name": "Aggregate Ceiling",
+        "sql": "CEILING(`Value`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-18",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 7
+  },
+  {
+    "id": "bm-card-19",
+    "title": "_TEMP BM 12 Window Lag",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date",
+        "alias": "Date",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Window Lag",
+        "alias": "Window Lag",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_19",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Date"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 206,
+        "id": "calculation_matrix_19",
+        "name": "Window Lag",
+        "formula": "LAG(SUM(`Sales`), 1) OVER (ORDER BY `Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 36
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "nonAggregatedColumns": [
+          "Date"
+        ],
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Date": "Date",
+        "Window Lag": "Window Lag"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_19",
+        "name": "Window Lag",
+        "sql": "LAG(SUM(`Sales`), 1) OVER (ORDER BY `Date`)",
+        "scope": "card",
+        "class": "window",
+        "cardId": "bm-card-19",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 15
+  },
+  {
+    "id": "bm-card-20",
+    "title": "_TEMP BM 13 Window Lead",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date",
+        "alias": "Date",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Window Lead",
+        "alias": "Window Lead",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_20",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Date"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 207,
+        "id": "calculation_matrix_20",
+        "name": "Window Lead",
+        "formula": "LEAD(SUM(`Sales`), 1) OVER (ORDER BY `Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 37
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 9
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "nonAggregatedColumns": [
+          "Date"
+        ],
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Window Lead": "Window Lead",
+        "Date": "Date"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_20",
+        "name": "Window Lead",
+        "sql": "LEAD(SUM(`Sales`), 1) OVER (ORDER BY `Date`)",
+        "scope": "card",
+        "class": "window",
+        "cardId": "bm-card-20",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 16
+  },
+  {
+    "id": "bm-card-21",
+    "title": "_TEMP BM 14 Window Ntile",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Window Ntile",
+        "alias": "Window Ntile",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_21",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 202,
+        "id": "calculation_matrix_21",
+        "name": "Window Ntile",
+        "formula": "NTILE(4) OVER (ORDER BY SUM(`Sales`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 28
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Window Ntile": "Window Ntile",
+        "Region": "Region"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_21",
+        "name": "Window Ntile",
+        "sql": "NTILE(4) OVER (ORDER BY SUM(`Sales`))",
+        "scope": "card",
+        "class": "window",
+        "cardId": "bm-card-21",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 11
+  },
+  {
+    "id": "bm-card-22",
+    "title": "_TEMP BM 30 Date Last Day",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Last Day",
+        "alias": "Date Last Day",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_22",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 193,
+        "id": "calculation_matrix_22",
+        "name": "Date Last Day",
+        "formula": "LAST_DAY(`Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 9
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DATE",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Employee_ID": "Employee_ID",
+        "Date Last Day": "Date Last Day"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_22",
+        "name": "Date Last Day",
+        "sql": "LAST_DAY(`Date`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-22",
+        "dataType": "DATE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 2
+  },
+  {
+    "id": "bm-card-23",
+    "title": "_TEMP BM 4 Fixed Add City",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "State",
+        "alias": "State",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Add City",
+        "alias": "Fixed Add City",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_23",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "State"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 222,
+        "id": "calculation_matrix_23",
+        "name": "Fixed Add City",
+        "formula": "MAX(SUM(`Sales`) FIXED (ADD `City`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`City`",
+            "columnPosition": 28
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Fixed Add City": "Fixed Add City",
+        "State": "State"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_23",
+        "name": "Fixed Add City",
+        "sql": "MAX(SUM(`Sales`) FIXED (ADD `City`))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-23",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 31
+  },
+  {
+    "id": "bm-card-24",
+    "title": "_TEMP BM 28 Date Format",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Format",
+        "alias": "Date Format",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_24",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 211,
+        "id": "calculation_matrix_24",
+        "name": "Date Format",
+        "formula": "DATE_FORMAT(`Date`, '%Y-%m')",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 12
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Date Format": "Date Format",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_24",
+        "name": "Date Format",
+        "sql": "DATE_FORMAT(`Date`, '%Y-%m')",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-24",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 20
+  },
+  {
+    "id": "bm-card-25",
+    "title": "_TEMP BM 19 Aggregate Sum Distinct",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Aggregate Sum Distinct",
+        "alias": "Aggregate Sum Distinct",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_25",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 219,
+        "id": "calculation_matrix_25",
+        "name": "Aggregate Sum Distinct",
+        "formula": "SUM(DISTINCT `Value`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Value`",
+            "columnPosition": 13
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Aggregate Sum Distinct": "Aggregate Sum Distinct",
+        "Region": "Region"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_25",
+        "name": "Aggregate Sum Distinct",
+        "sql": "SUM(DISTINCT `Value`)",
+        "scope": "card",
+        "class": "aggregate",
+        "cardId": "bm-card-25",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 28
+  },
+  {
+    "id": "bm-card-26",
+    "title": "_TEMP BM 27 Date Datediff",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Datediff",
+        "alias": "Date Datediff",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_26",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 210,
+        "id": "calculation_matrix_26",
+        "name": "Date Datediff",
+        "formula": "DATEDIFF(`End_Date`, `Start_Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`End_Date`",
+            "columnPosition": 9
+          },
+          {
+            "columnName": "`Start_Date`",
+            "columnPosition": 21
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Date Datediff": "Date Datediff",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_26",
+        "name": "Date Datediff",
+        "sql": "DATEDIFF(`End_Date`, `Start_Date`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-26",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 19
+  },
+  {
+    "id": "bm-card-27",
+    "title": "_TEMP BM 22 Logic Like Prefix",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Logic Like Prefix",
+        "alias": "Logic Like Prefix",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_27",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 203,
+        "id": "calculation_matrix_27",
+        "name": "Logic Like Prefix",
+        "formula": "CASE WHEN `Text_Value` LIKE 'alpha%' THEN 'Match' ELSE 'Other' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Text_Value`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Employee_ID": "Employee_ID",
+        "Logic Like Prefix": "Logic Like Prefix"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_27",
+        "name": "Logic Like Prefix",
+        "sql": "CASE WHEN `Text_Value` LIKE 'alpha%' THEN 'Match' ELSE 'Other' END",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-27",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 12
+  },
+  {
+    "id": "bm-card-28",
+    "title": "_TEMP BM 1 Fixed Total",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Total",
+        "alias": "Fixed Total",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_28",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 217,
+        "id": "calculation_matrix_28",
+        "name": "Fixed Total",
+        "formula": "SUM(SUM(`Sales`) FIXED ())",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Fixed Total": "Fixed Total",
+        "Region": "Region"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_28",
+        "name": "Fixed Total",
+        "sql": "SUM(SUM(`Sales`) FIXED ())",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-28",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 26
+  },
+  {
+    "id": "bm-card-29",
+    "title": "_TEMP BM 3 Fixed Multi By",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "State",
+        "alias": "State",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed Multi By",
+        "alias": "Fixed Multi By",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_29",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "State"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 221,
+        "id": "calculation_matrix_29",
+        "name": "Fixed Multi By",
+        "formula": "SUM(SUM(`Sales`) FIXED (BY `Region`, `Category`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Region`",
+            "columnPosition": 27
+          },
+          {
+            "columnName": "`Category`",
+            "columnPosition": 37
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "State": "State",
+        "Fixed Multi By": "Fixed Multi By"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_29",
+        "name": "Fixed Multi By",
+        "sql": "SUM(SUM(`Sales`) FIXED (BY `Region`, `Category`))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-29",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 30
+  },
+  {
+    "id": "bm-card-30",
+    "title": "_TEMP BM 24 Logic Like Single",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Logic Like Single",
+        "alias": "Logic Like Single",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_30",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 199,
+        "id": "calculation_matrix_30",
+        "name": "Logic Like Single",
+        "formula": "CASE WHEN `Text_Value` LIKE '_eta%' THEN 'Match' ELSE 'Other' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Text_Value`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Logic Like Single": "Logic Like Single",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_30",
+        "name": "Logic Like Single",
+        "sql": "CASE WHEN `Text_Value` LIKE '_eta%' THEN 'Match' ELSE 'Other' END",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-30",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 8
+  },
+  {
+    "id": "bm-card-31",
+    "title": "_TEMP BM 20 Aggregate Zero Denominator",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Aggregate Zero Denominator",
+        "alias": "Aggregate Zero Denominator",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_31",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 197,
+        "id": "calculation_matrix_31",
+        "name": "Aggregate Zero Denominator",
+        "formula": "CASE WHEN SUM(`Denominator`) = 0 THEN 0 ELSE 100*SUM(`Sales`)/SUM(`Denominator`) END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Denominator`",
+            "columnPosition": 14
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 53
+          },
+          {
+            "columnName": "`Denominator`",
+            "columnPosition": 66
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Aggregate Zero Denominator": "Aggregate Zero Denominator",
+        "Region": "Region"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_31",
+        "name": "Aggregate Zero Denominator",
+        "sql": "CASE WHEN SUM(`Denominator`) = 0 THEN 0 ELSE 100*SUM(`Sales`)/SUM(`Denominator`) END",
+        "scope": "card",
+        "class": "aggregate",
+        "cardId": "bm-card-31",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 6
+  },
+  {
+    "id": "bm-card-32",
+    "title": "_TEMP BM 2 Fixed By Region",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "State",
+        "alias": "State",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Fixed By Region",
+        "alias": "Fixed By Region",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_32",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "State"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 220,
+        "id": "calculation_matrix_32",
+        "name": "Fixed By Region",
+        "formula": "SUM(SUM(`Sales`) FIXED (BY `Region`))",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Region`",
+            "columnPosition": 27
+          },
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 8
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "DOUBLE",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Fixed By Region": "Fixed By Region",
+        "State": "State"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_32",
+        "name": "Fixed By Region",
+        "sql": "SUM(SUM(`Sales`) FIXED (BY `Region`))",
+        "scope": "card",
+        "class": "lod",
+        "cardId": "bm-card-32",
+        "dataType": "DOUBLE",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 29
+  },
+  {
+    "id": "bm-card-33",
+    "title": "_TEMP BM 31 Date Monthname",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Monthname",
+        "alias": "Date Monthname",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_33",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 194,
+        "id": "calculation_matrix_33",
+        "name": "Date Monthname",
+        "formula": "MONTHNAME(`Date`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Date`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Date Monthname": "Date Monthname",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_33",
+        "name": "Date Monthname",
+        "sql": "MONTHNAME(`Date`)",
+        "scope": "card",
+        "class": "projection",
+        "cardId": "bm-card-33",
+        "dataType": "STRING",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 3
+  },
+  {
+    "id": "bm-card-34",
+    "title": "_TEMP BM 11 Window Rank",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Window Rank",
+        "alias": "Window Rank",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_34",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 195,
+        "id": "calculation_matrix_34",
+        "name": "Window Rank",
+        "formula": "RANK() OVER (ORDER BY SUM(`Sales`) DESC)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Sales`",
+            "columnPosition": 26
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": true,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Region": "Region",
+        "Window Rank": "Window Rank"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_34",
+        "name": "Window Rank",
+        "sql": "RANK() OVER (ORDER BY SUM(`Sales`) DESC)",
+        "scope": "card",
+        "class": "window",
+        "cardId": "bm-card-34",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 4
+  },
+  {
+    "id": "bm-card-35",
+    "title": "_TEMP BM 18 Aggregate Approx Count Distinct",
+    "chartType": "badge_two_trendline",
+    "sigmaKindHint": "line-chart",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Region",
+        "alias": "Region",
+        "mapping": "ITEM"
+      },
+      {
+        "column": "Aggregate Approx Count Distinct",
+        "alias": "Aggregate Approx Count Distinct",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_matrix_35",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [
+      "Region"
+    ],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 216,
+        "id": "calculation_matrix_35",
+        "name": "Aggregate Approx Count Distinct",
+        "formula": "APPROXIMATE_COUNT_DISTINCT(`Employee_ID`)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": false,
+        "columnPositions": [
+          {
+            "columnName": "`Employee_ID`",
+            "columnPosition": 27
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": false,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_two_trendline",
+      "columnAliases": {
+        "Aggregate Approx Count Distinct": "Aggregate Approx Count Distinct",
+        "Region": "Region"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_35",
+        "name": "Aggregate Approx Count Distinct",
+        "sql": "APPROXIMATE_COUNT_DISTINCT(`Employee_ID`)",
+        "scope": "card",
+        "class": "aggregate",
+        "cardId": "bm-card-35",
+        "dataType": "LONG",
+        "sourceFormulaScope": "card-definition",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 25
+  }
+]

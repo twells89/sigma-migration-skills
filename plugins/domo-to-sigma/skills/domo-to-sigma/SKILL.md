@@ -400,10 +400,11 @@ metrics before committing to reuse.
 
 `ruby scripts/build-dm.rb` → one DM element per DataSet (flat table), projection
 Beast Modes as calculated columns, and aggregate Beast Modes as first-class
-Sigma metrics. The common `aggregate / SUM(aggregate FIXED (BY dimension))`
-LOD ratio is synthesized as a workbook `PercentOfTotal` measure; other LODs can
-be placed explicitly with `formula-overrides.json`. Window/unknown LOD and
-unreliable formulas receive explicit blocked or deferred dispositions.
+Sigma metrics. FIXED BY/ADD/REMOVE/filter policies use native totals or grouped
+workbook helpers; percent-of-fixed-total uses `PercentOfTotal`. Common Domo
+windows map to native cumulative/rank/lag/lead/ntile formulas. Unknown LOD/window
+and unreliable formulas receive explicit blocked dispositions, with
+`formula-overrides.json` as the supported operator placement path.
 `assert-beast-modes-accounted.rb` runs before POST and
 again after workbook build, so an extracted formula represented nowhere cannot
 silently pass. Unreferenced card-local helpers are recorded as `not-used` rather
