@@ -99,6 +99,7 @@ puts '== live Beast Mode semantic rewrites =='
 semantic_cases = [
   ['APPROXIMATE_COUNT_DISTINCT(`Employee_ID`)', 'Approximate_count_distinct([Employee_ID])',
    'CountDistinct([Employee_ID])'],
+  ['SUM(DISTINCT `Value`)', 'Sum(DISTINCT [Value])', 'Sum([Value])'],
   ['SUM(SUM(`Sales`)) OVER (ORDER BY `Date`)', 'Sum(Sum([Sales])) OVER ([Order] BY [Date])',
    'CumulativeSum(Sum([Sales]))'],
   ['RANK() OVER (ORDER BY SUM(`Sales`) DESC)', 'Rank() OVER ([Order] BY Sum([Sales]) [Desc])',
@@ -132,6 +133,12 @@ semantic_cases.each do |source, generic, expected|
   ok(result && result['status'] == 'translated' && result['formula'] == expected,
      "#{source.split('(').first} receives its Domo-specific Sigma semantics")
 end
+sum_distinct = DomoSigma::BeastModeSemantics.translate(
+  { 'originalSql' => 'SUM(DISTINCT `Value`)' },
+  'Sum(DISTINCT [Value])',
+)
+ok(sum_distinct.dig('placement', 'kind') == 'sum-distinct',
+   'SUM DISTINCT carries a grouped-helper placement plan')
 ok(DomoSigma::BeastModeSemantics.translate(
      { 'originalSql' => 'CEILING(`Value`)' }, 'Ceiling([Value])'
    ).nil?,
@@ -143,7 +150,6 @@ ok(DomoSigma::BeastModeSemantics.translate(
 [
   'MICROSECOND(`Date`)',
   'PERCENT_RANK() OVER (ORDER BY SUM(`Sales`))',
-  'SUM(DISTINCT `Value`)',
   'SUM(SUM(`Sales`) FIXED (BY `Region`))',
 ].each do |source|
   result = DomoSigma::BeastModeSemantics.translate({ 'originalSql' => source }, source)

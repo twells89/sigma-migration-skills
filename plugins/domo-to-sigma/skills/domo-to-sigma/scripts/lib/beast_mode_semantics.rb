@@ -24,8 +24,13 @@ module DomoSigma
         end
       when /\A\s*MICROSECOND\s*\(/i
         return blocked('Domo marks MICROSECOND as illegal and card-data/render fails')
-      when /\A\s*SUM\s*\(\s*DISTINCT\b/i
-        return blocked('SUM(DISTINCT ...) requires a pre-distinct grouped helper; no scalar Sigma equivalent')
+      when /\A\s*SUM\s*\(\s*DISTINCT\s+`?([^`)]+)`?\s*\)\s*\z/i
+        field = Regexp.last_match(1).strip
+        return translated(
+          "Sum([#{field}])",
+          'kind' => 'sum-distinct',
+          'field' => field,
+        )
       when /\A\s*PERCENT_RANK\s*\(/i
         return blocked('Domo rejected PERCENT_RANK as an invalid analytic function in the live acceptance matrix')
       end
@@ -121,8 +126,10 @@ module DomoSigma
       identifier.to_s.strip.sub(/\A`/, '').sub(/`\z/, '')
     end
 
-    def translated(formula)
-      { 'status' => 'translated', 'formula' => formula }
+    def translated(formula, placement = nil)
+      result = { 'status' => 'translated', 'formula' => formula }
+      result['placement'] = placement if placement
+      result
     end
 
     def blocked(reason)

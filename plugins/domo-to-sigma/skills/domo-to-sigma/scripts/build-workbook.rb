@@ -864,6 +864,84 @@ def build_scatter_chart(card, dims, meas)
   }.compact
 end
 
+def sum_distinct_measure_plan(card, measures)
+  return nil unless measures.length == 1 && Array(card['filters']).empty?
+  measure = measures.first
+  bm = translated_beast_modes[measure['beastModeId'].to_s] ||
+       translated_beast_modes[measure['column'].to_s]
+  placement = bm && bm['semanticPlacement']
+  return nil unless placement.is_a?(Hash) && placement['kind'] == 'sum-distinct'
+  [measure, bm, placement]
+end
+
+def build_sum_distinct_axis_chart(card, kind, dims, measure, bm, placement)
+  helper_id = "src-#{eid(card)}-sum-distinct"
+  helper_name = "Distinct values for #{card['title']}"
+  grouping_id = "g-#{card['id']}-sum-distinct"
+  helper_dims = dims.map { |dimension| dim_col(dimension, card) }
+  distinct_column = {
+    'id' => "d-distinct-#{card['id']}",
+    'name' => "Distinct #{display_name(placement['field'])}",
+    'formula' => mref(display_name(placement['field'])),
+  }
+  helper = {
+    'id' => helper_id,
+    'kind' => 'table',
+    'name' => helper_name,
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => helper_dims + [distinct_column],
+    'order' => (helper_dims + [distinct_column]).map { |column| column['id'] },
+    'groupings' => [{
+      'id' => grouping_id,
+      'groupBy' => (helper_dims + [distinct_column]).map { |column| column['id'] },
+    }],
+    'visibleAsSource' => false,
+  }
+  $chart_helpers << helper
+
+  visible_dims = helper_dims.map do |column|
+    {
+      'id' => column['id'],
+      'name' => column['name'],
+      'formula' => "[#{helper_name}/#{column['name']}]",
+      'format' => column['format'],
+    }.compact
+  end
+  visible_measure = {
+    'id' => "m-#{measure['column'].to_s.downcase.gsub(/\W+/, '-')}",
+    'name' => col_label(measure),
+    'formula' => "Sum([#{helper_name}/#{distinct_column['name']}])",
+    'format' => beast_mode_value_format(measure, bm),
+  }.compact
+  record_beast_mode_usage(card, bm, 'workbook-grouped-helper-formula')
+
+  xidx = dims.index do |dimension|
+    %w[ITEM CATEGORY XTIME DATE].include?(dimension['mapping'].to_s.upcase)
+  end || 0
+  element = {
+    'id' => eid(card),
+    'kind' => kind,
+    'name' => card['title'],
+    'source' => { 'kind' => 'table', 'elementId' => helper_id, 'groupingId' => grouping_id },
+    'columns' => visible_dims + [visible_measure],
+    'xAxis' => { 'columnId' => visible_dims[xidx]['id'], 'format' => AXIS_OFF },
+    'yAxis' => {
+      'columnIds' => [visible_measure['id']],
+      'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } },
+    },
+  }
+  split = dims.each_with_index.find do |dimension, index|
+    index != xidx && dimension['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  if split
+    element['color'] = { 'by' => 'category', 'column' => visible_dims[split[1]]['id'] }
+    element['legend'] = { 'position' => 'right', 'fontSize' => 12 }
+  elsif kind == 'bar-chart'
+    element['color'] = { 'by' => 'single', 'value' => '#8CBFDD' }
+  end
+  element
+end
+
 def build_axis_chart(card, kind)
   dims, meas = split_cols(card)
   if dims.empty? || meas.empty?
@@ -882,6 +960,9 @@ def build_axis_chart(card, kind)
     return nil
   end
   return build_scatter_chart(card, dims, meas) if kind == 'scatter-chart'
+  if (distinct_plan = sum_distinct_measure_plan(card, meas))
+    return build_sum_distinct_axis_chart(card, kind, dims, *distinct_plan)
+  end
 
   ct = card['chartType'].to_s.downcase
   xcol = dims.find { |d| %w[ITEM CATEGORY XTIME DATE].include?(d['mapping'].to_s.upcase) } ||

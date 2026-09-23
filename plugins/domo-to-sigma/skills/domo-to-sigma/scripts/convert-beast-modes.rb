@@ -381,6 +381,7 @@ def resolve_entry(entry, overrides)
   semantic = DomoSigma::BeastModeSemantics.translate(entry, sigma)
   used_semantic_synthesis = false
   semantic_block_reason = nil
+  semantic_placement = nil
 
   if override && !override['sigmaFormula'].to_s.strip.empty?
     if already_resolved && entry['class'].to_s != 'lod'
@@ -401,6 +402,7 @@ def resolve_entry(entry, overrides)
     used_lod_synthesis = true
   elsif semantic && semantic['status'] == 'translated'
     sigma = semantic['formula']
+    semantic_placement = semantic['placement']
     used_semantic_synthesis = true
   elsif semantic && semantic['status'] == 'blocked'
     semantic_block_reason = semantic['reason']
@@ -440,6 +442,7 @@ def resolve_entry(entry, overrides)
                 'the workbook builder will select color/x-axis/grand-total scope from the card bindings.'
   elsif used_semantic_synthesis
     resolved['_source'] = 'domo-semantic-synthesis'
+    resolved['semanticPlacement'] = semantic_placement if semantic_placement
     resolved['converted'] = true
     resolved.delete('note')
     resolved['note'] = 'Domo-specific semantic rewrite applied after generic SQL conversion.'

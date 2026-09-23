@@ -1140,6 +1140,37 @@ eq(ceiling_measure['formula'], 'Min(Ceiling([Master/Value]))',
    'Domo VALUE binding takes the minimum row-wise ceiling within each series')
 $translated_bms = nil
 
+puts "== SUM DISTINCT uses a grouped helper instead of unsupported scalar syntax =="
+$chart_helpers = []
+$translated_bms = {
+  'calc-sum-distinct' => {
+    'id' => 'calc-sum-distinct', 'name' => 'Distinct Value Sum',
+    'class' => 'aggregate', 'scope' => 'card',
+    'originalSql' => 'SUM(DISTINCT `Value`)',
+    'sigmaFormula' => 'Sum([Value])',
+    'semanticPlacement' => { 'kind' => 'sum-distinct', 'field' => 'Value' },
+  },
+}
+distinct_chart = build_element({
+  'id' => 'sum-distinct-card', 'title' => 'Distinct Value Sum',
+  'chartType' => 'badge_vert_bar', 'sigmaKindHint' => 'bar-chart',
+  'columns' => [
+    { 'column' => 'Region', 'mapping' => 'ITEM' },
+    {
+      'column' => 'Distinct Value Sum', 'mapping' => 'VALUE',
+      'beastModeId' => 'calc-sum-distinct', '_isCalc' => true,
+    },
+  ],
+}, {})
+distinct_helper = $chart_helpers.find { |helper| helper['id'].include?('sum-distinct') }
+ok(distinct_helper, 'SUM DISTINCT emits a hidden grouped helper')
+eq(distinct_helper.dig('groupings', 0, 'groupBy').length, 2,
+   'helper groups by visible category and distinct value')
+eq(distinct_chart['columns'].last['formula'],
+   'Sum([Distinct values for Distinct Value Sum/Distinct Value])',
+   'visible chart sums one row per distinct value')
+$translated_bms = nil
+
 puts "== B4 (real-data shape): a card-level filter on a column the card does NOT already " \
      'plot becomes an ELEMENT filter with its real values, on a new HIDDEN column =='
 # Mirrors the real "Projected Sales" card (1eb93e0f dataset, chartType
