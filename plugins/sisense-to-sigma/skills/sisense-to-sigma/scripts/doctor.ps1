@@ -105,10 +105,16 @@ if (-not $script:RuntimeProfilePass -and ((Test-Path $capabilities) -or $Runtime
 }
 $rubyRequired = -not (($RuntimeProfile -eq "python") -or ($script:RuntimeProfileSelected -eq "python"))
 $ruby = Get-Command ruby -ErrorAction SilentlyContinue
-if ($ruby) { Ok "ruby - $((& ruby -e 'print RUBY_VERSION' 2>$null))" }
-elseif (-not $rubyRequired) {
-  Warn "ruby not found - accepted by the selected Python runtime profile" `
-       "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
+if (-not $rubyRequired) {
+  if ($ruby) {
+    Warn "ruby is present but not selected by the Python runtime profile" `
+         "No Ruby probe is run on this profile; Python hard gates remain mandatory."
+  } else {
+    Warn "ruby not found - accepted by the selected Python runtime profile" `
+         "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
+  }
+} elseif ($ruby) {
+  Ok "ruby - $((& ruby -e 'print RUBY_VERSION' 2>$null))"
 } else {
   Bad "ruby not found" "Run the bootstrap: 'powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1' (user-scoped winget/scoop install, never admin; it re-runs this doctor when done)."
 }
@@ -155,10 +161,14 @@ if ($node) { Ok "node - $((& node --version 2>$null))" }
 else { Bad "node not found (required - the vendored converters/*.mjs run via node)" `
            "Run the bootstrap: 'powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1' - activates a version-manager Node when one exists (fnm/scoop dirs), else installs Node 22 LTS pinned via the winget-scoop fnm route (no admin, nothing unpinned). Details: refs/environment.md #5." }
 
-# --- bash (REQUIRED for get-token.sh / *-auth.sh token minting) ------------
+# --- bash (required only when the selected profile declares it) -------------
+$bashRequired = @($script:RuntimeProfileRequired) -contains "bash"
 $bash = Get-Command bash -ErrorAction SilentlyContinue
 if ($bash) {
   Ok "bash - $($bash.Source) (run the *.sh helpers like get-token.sh from Git Bash, or 'bash scripts/get-token.sh')"
+} elseif (-not $bashRequired) {
+  Warn "bash not found - accepted by the selected runtime profile" `
+       "Use the shipped Python token/setup helpers; Bash is optional on this profile."
 } else {
   $wsl = Get-Command wsl -ErrorAction SilentlyContinue
   if ($wsl) { Warn "no native bash, but WSL is present" "Run the *.sh helpers via WSL, or run the bootstrap: 'powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1' (installs Git for Windows user-scoped - it ships Git Bash)." }
@@ -188,14 +198,22 @@ $envFile = Join-Path $env:USERPROFILE ".sigma-migration\env"
 $sigmaCreds = ((Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'SIGMA_(API_TOKEN|CLIENT_ID)')) -or $env:SIGMA_API_TOKEN -or $env:SIGMA_CLIENT_ID
 $sigmaLib = Join-Path $PSScriptRoot "lib\sigma_rest.rb"
 $sigmaTokenPy = Join-Path $PSScriptRoot "get_token.py"
+if (-not (Test-Path $sigmaTokenPy)) {
+  $sigmaTokenPy = Join-Path $PSScriptRoot "vendor\get_token.py"
+}
 if (-not $sigmaCreds) {
-  $sigmaFix = if ($rubyRequired) {
-    "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+  if ($env:SIGMA_OFFLINE_DRY_RUN -eq '1') {
+    Warn "Sigma credentials absent - accepted for SIGMA_OFFLINE_DRY_RUN=1" `
+         "Only --dry-run/offline fixture conversion is allowed; unset this flag and configure credentials before any live build."
   } else {
-    "Set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+    $sigmaFix = if ($rubyRequired) {
+      "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+    } else {
+      "Set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+    }
+    Bad "no Sigma credentials found (REQUIRED - the run would die at its first Sigma API call)" `
+        $sigmaFix
   }
-  Bad "no Sigma credentials found (REQUIRED - the run would die at its first Sigma API call)" `
-      $sigmaFix
 } elseif ($env:SIGMA_SKIP_CRED_SMOKE) {
   Ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
 } elseif (($script:RuntimeProfileSelected -eq "python") -and (Test-Path $sigmaTokenPy) -and $script:PyExe) {
@@ -352,7 +370,13 @@ $modelHint = if ($env:SIGMA_MODEL_HINT) { $env:SIGMA_MODEL_HINT } else { "" }
 # failures. Human output above is unchanged. Always ~/.sigma-migration/doctor.json;
 # also -WorkDir if given.
 $rubyOk = [bool](Get-Command ruby -ErrorAction SilentlyContinue)
-$rubyV  = if ($rubyOk) { (& ruby -e 'print RUBY_VERSION' 2>$null) } else { "" }
+$rubyV  = if (-not $rubyOk) {
+  ""
+} elseif ($rubyRequired) {
+  (& ruby -e 'print RUBY_VERSION' 2>$null)
+} else {
+  "present (not probed)"
+}
 $nodeOk = [bool](Get-Command node -ErrorAction SilentlyContinue)
 $nodeV  = if ($nodeOk) { (& node --version 2>$null) } else { "" }
 $pyDesc = Test-RealPython 'py' '-3'

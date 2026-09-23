@@ -105,7 +105,15 @@ if [ "$RUNTIME_PROFILE_REQUESTED" = python ] || [ "$RUNTIME_PROFILE_SELECTED" = 
 fi
 
 # --- ruby ------------------------------------------------------------------
-if command -v ruby >/dev/null 2>&1; then
+if [ "$RUBY_REQUIRED" != true ]; then
+  if command -v ruby >/dev/null 2>&1; then
+    warn "ruby is present but not selected by the Python runtime profile" \
+         "No Ruby probe is run on this profile; Python hard gates remain mandatory."
+  else
+    warn "ruby not found — accepted by the selected Python runtime profile" \
+         "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
+  fi
+elif command -v ruby >/dev/null 2>&1; then
   RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null)"
   RUBY_MAJMIN="$(printf '%s' "$RUBY_V" | cut -d. -f1,2)"
   # Assert the FLOOR, do not just print the version. This was a bare
@@ -146,10 +154,7 @@ if command -v ruby >/dev/null 2>&1; then
     ok "ruby — $RUBY_V"
   fi
 else
-  if [ "$RUBY_REQUIRED" != true ]; then
-    warn "ruby not found — accepted by the selected Python runtime profile" \
-         "No action needed. This skill must still pass every Python hard gate; missing Ruby does not waive migration checks."
-  elif [ "$OS" = "windows-bash" ]; then
+  if [ "$OS" = "windows-bash" ]; then
     bad "ruby not found" "Run the bootstrap: bash scripts/bootstrap.sh   — no-admin install/activation; it re-runs this doctor when done."
   else
     bad "ruby not found" "Run the bootstrap: bash scripts/bootstrap.sh   — installs only what's missing (macOS: brew; Linux: apt-get only when already root — never sudo; otherwise it names the exact admin ask)."
@@ -318,12 +323,16 @@ if grep -Eq 'SIGMA_(API_TOKEN|CLIENT_ID)' "$HOME/.sigma-migration/env" 2>/dev/nu
   _SIGMA_CREDS=true
 fi
 if [ "$_SIGMA_CREDS" != true ]; then
-  if [ "$RUBY_REQUIRED" = true ]; then
+  if [ "${SIGMA_OFFLINE_DRY_RUN:-}" = "1" ]; then
+    warn "Sigma credentials absent — accepted for SIGMA_OFFLINE_DRY_RUN=1" \
+         "Only --dry-run/offline fixture conversion is allowed; unset this flag and configure credentials before any live build."
+  elif [ "$RUBY_REQUIRED" = true ]; then
     _SIGMA_SETUP_FIX="Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
+    bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
   else
     _SIGMA_SETUP_FIX="Export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
+    bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
   fi
-  bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
 elif [ -n "${SIGMA_SKIP_CRED_SMOKE:-}" ]; then
   ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
 elif [ "$RUNTIME_PROFILE_SELECTED" = python ] && [ -f "$HERE/lib/sigma_rest.py" ] && [ -n "$PY_ARGV" ]; then
@@ -550,7 +559,14 @@ json_csv() {
 }
 
 RUBY_OK=false; RUBY_V=""
-if command -v ruby >/dev/null 2>&1; then RUBY_OK=true; RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"; fi
+if command -v ruby >/dev/null 2>&1; then
+  RUBY_OK=true
+  if [ "$RUBY_REQUIRED" = true ]; then
+    RUBY_V="$(ruby -e 'print RUBY_VERSION' 2>/dev/null || true)"
+  else
+    RUBY_V="present (not probed)"
+  fi
+fi
 NODE_OK=false; NODE_V=""
 if command -v node >/dev/null 2>&1; then NODE_OK=true; NODE_V="$(node --version 2>/dev/null || true)"; fi
 PY_OK=false; PY_VER="${PY_VER:-}"

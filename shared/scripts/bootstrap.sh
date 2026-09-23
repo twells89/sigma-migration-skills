@@ -783,6 +783,28 @@ fi
 DOCTOR_EXIT=$?
 DOCTOR_PASS=false
 [ "$DOCTOR_EXIT" -eq 0 ] && DOCTOR_PASS=true
+# Runtime installation can change the selected profile (for example, an
+# explicit Python profile on a fresh host had no resolver before Python was
+# installed). Bind the sentinel to the doctor's post-install resolution, never
+# to the stale pre-install probe above.
+_DOCTOR_JSON="$STATE_DIR/doctor.json"
+[ -n "$WORKDIR" ] && [ -f "$WORKDIR/doctor.json" ] && _DOCTOR_JSON="$WORKDIR/doctor.json"
+if [ -f "$_DOCTOR_JSON" ] && [ -n "$PY_RUN" ]; then
+  _DOCTOR_PROFILE="$($PY_RUN - "$_DOCTOR_JSON" <<'PY' 2>/dev/null
+import json, shlex, sys
+with open(sys.argv[1], encoding="utf-8-sig") as handle:
+    document = json.load(handle)
+profile = document.get("runtime_profile") or document.get("runtimeProfile") or {}
+values = {
+    "RUNTIME_PROFILE_SELECTED": profile.get("selected") or profile.get("selectedProfile") or "",
+    "RUNTIME_PROFILE_REQUIRED": ",".join(profile.get("required_runtimes") or profile.get("requiredRuntimes") or []),
+    "RUNTIME_PROFILE_FALLBACK_REASON": profile.get("fallback_reason") or profile.get("fallbackReason") or "",
+}
+print("\n".join(f"{key}={shlex.quote(str(value))}" for key, value in values.items()))
+PY
+)"
+  [ -n "$_DOCTOR_PROFILE" ] && eval "$_DOCTOR_PROFILE"
+fi
 
 # ── sentinel ─────────────────────────────────────────────────────────────────
 jstr() { _js="${1:-}"; _js="$(printf '%s' "$_js" | sed 's/\\/\\\\/g; s/"/\\"/g')"; printf '%s' "$_js"; }
