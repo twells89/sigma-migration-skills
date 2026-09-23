@@ -135,8 +135,10 @@ bar = build_element({ 'id' => 'c3', 'title' => 'Sales by Region', 'chartType' =>
 eq(bar['kind'], 'bar-chart', '#7 bar card → bar-chart element (NOT table+dataBars)')
 ok(bar['columns'].none? { |c| c['id'].to_s.start_with?('cf') }, 'no conditionalFormats/dataBars on a bar chart')
 eq(bar.dig('xAxis', 'format', 'marks'), 'none', '#8 x-axis gridlines off')
-eq(bar['yAxis']['format'], { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } },
+eq(bar['yAxis']['format'], { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } },
    '#8 y-axis gridlines stay off while labels remain legible')
+eq(bar['color'], { 'by' => 'single', 'value' => '#8CBFDD' },
+   'single-series bar uses Domo default light-blue fill')
 eq(bar['columns'][0]['formula'], '[Master/Store Region]', 'dimension references master')
 eq(bar['columns'][1]['formula'], 'Sum([Master/Sales Amount])', 'measure aggregated + master-ref')
 eq(bar['columns'][1]['name'], 'Sales', 'measure label uses Domo alias (fixes raw names #4)')
@@ -1013,6 +1015,230 @@ override_kpi = build_kpi({ 'id' => 'c34', 'title' => 'Margin % by Channel',
                                                 '_isCalc' => true } },
                          { 'c34' => { 'column' => 'net_revenue', 'aggregation' => 'SUM' } })
 eq(override_kpi['columns'][0]['formula'], 'Sum([Master/Net Revenue])', 'override still wins over the calc inlining')
+
+puts "== Domo FIXED percent-of-total Beast Mode receives a real workbook placement =="
+$beast_mode_usage = []
+$translated_bms = {
+  'calculation_retention' => {
+    'id' => 'calculation_retention',
+    'name' => 'Retention Likelihood Rates',
+    'class' => 'lod',
+    'scope' => 'dataset',
+    'sigmaFormula' => '100 * PercentOfTotal(Count([Employee_Code]), "grand_total")',
+    'converted' => true,
+    '_source' => 'domo-lod-synthesis',
+    'lodPlacement' => {
+      'kind' => 'fixed-percent-of-total',
+      'aggregate' => 'Count',
+      'field' => 'Employee_Code',
+      'fixedBy' => ['AsofDate'],
+      'scale' => 100.0,
+    },
+  },
+}
+retention = build_element({
+  'id' => 'retention-rates', 'title' => 'Retention Likelihood Rates',
+  'chartType' => 'badge_line', 'sigmaKindHint' => 'line-chart',
+  'columns' => [
+    { 'column' => 'AsofDate', 'mapping' => 'ITEM' },
+    { 'column' => 'Retention Likelihood', 'mapping' => 'SERIES' },
+    {
+      'column' => 'Retention Likelihood Rates',
+      'beastModeId' => 'calculation_retention',
+      '_isCalc' => true,
+      'mapping' => 'VALUE',
+    },
+  ],
+}, {})
+retention_measure = retention['columns'].find { |column| column['id'] == 'm-retention-likelihood-rates' }
+eq(
+  retention_measure['formula'],
+  '100 * PercentOfTotal(Count([Master/Employee Code]), "x_axis")',
+  'FIXED BY x-axis date totals across the color categories instead of flattening the LOD',
+)
+eq(
+  retention_measure['format'],
+  { 'kind' => 'number', 'formatString' => ',.1f', 'suffix' => '%' },
+  'a Beast Mode that already multiplies by 100 uses a literal percent suffix, not a second percent multiplier',
+)
+eq($beast_mode_usage.first['target'], 'workbook-lod-formula',
+   'LOD placement is recorded for the Beast Mode accounting gate')
+
+fixed_total_formula = lod_workbook_formula(
+  { 'columns' => [{ 'column' => 'Region', 'mapping' => 'ITEM' }] },
+  {
+    'class' => 'lod',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales', 'mode' => 'all',
+    },
+  },
+)
+eq(fixed_total_formula, 'GrandTotal(Sum([Master/Sales]))',
+   'plain FIXED total maps to Sigma GrandTotal')
+fixed_remove_formula = lod_workbook_formula(
+  { 'columns' => [{ 'column' => 'Category', 'mapping' => 'ITEM' }] },
+  {
+    'class' => 'lod',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Avg',
+      'innerAggregate' => 'Avg', 'field' => 'Unit_Price',
+      'mode' => 'remove', 'dimensions' => ['Category'],
+    },
+  },
+)
+eq(fixed_remove_formula, 'GrandTotal(Avg([Master/Unit Price]))',
+   'FIXED REMOVE of the only visible dimension maps to GrandTotal')
+unplaced_fixed_by = lod_workbook_formula(
+  { 'columns' => [{ 'column' => 'State', 'mapping' => 'ITEM' }] },
+  {
+    'class' => 'lod',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales',
+      'mode' => 'by', 'dimensions' => ['Region'],
+    },
+  },
+)
+eq(unplaced_fixed_by, nil,
+   'FIXED BY a non-visible dimension fails closed until a grouped helper is available')
+
+$chart_helpers = []
+$translated_bms = {
+  'calc-fixed-by' => {
+    'id' => 'calc-fixed-by', 'name' => 'Region Sales', 'class' => 'lod',
+    'scope' => 'card', 'sigmaFormula' => 'Sum(Sum([Sales]))',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales',
+      'mode' => 'by', 'dimensions' => ['Region'],
+    },
+  },
+}
+fixed_by_chart = build_element({
+  'id' => 'fixed-by-card', 'title' => 'Region Sales by State',
+  'chartType' => 'badge_two_trendline', 'sigmaKindHint' => 'line-chart',
+  'columns' => [
+    { 'column' => 'State', 'mapping' => 'ITEM' },
+    {
+      'column' => 'Region Sales', 'mapping' => 'VALUE',
+      'beastModeId' => 'calc-fixed-by', '_isCalc' => true,
+    },
+  ],
+}, {})
+fixed_by_helper = $chart_helpers.find { |helper| helper['id'].include?('fixed') }
+eq(fixed_by_helper['groupings'].length, 2,
+   'FIXED BY helper creates parent fixed grain and child visible grain')
+eq(fixed_by_helper.dig('columns', -1, 'formula'),
+   'Subtotal(Sum([Master/Sales]), "parent_grouping", 1)',
+   'child rows inherit the parent FIXED subtotal')
+eq(fixed_by_chart['columns'].last['formula'],
+   'Sum([Fixed grain for Region Sales by State/Fixed Value])',
+   'visible chart reapplies the Domo outer aggregate over fixed groups')
+$translated_bms = nil
+
+$chart_helpers = []
+$translated_bms = {
+  'calc-fixed-filter' => {
+    'id' => 'calc-fixed-filter', 'name' => 'Filtered Region Sales', 'class' => 'lod',
+    'scope' => 'card', 'sigmaFormula' => 'Sum(Sum([Sales]))',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales',
+      'mode' => 'by', 'dimensions' => ['Region'],
+      'filterMode' => 'allow', 'filterDimensions' => ['Category'],
+    },
+  },
+}
+fixed_filter_chart = build_element({
+  'id' => 'fixed-filter-card', 'title' => 'Filtered Region Sales',
+  'chartType' => 'badge_two_trendline', 'sigmaKindHint' => 'line-chart',
+  'columns' => [
+    { 'column' => 'State', 'mapping' => 'ITEM' },
+    {
+      'column' => 'Filtered Region Sales', 'mapping' => 'VALUE',
+      'beastModeId' => 'calc-fixed-filter', '_isCalc' => true,
+    },
+  ],
+  'filters' => [
+    { 'column' => 'Category', 'operator' => 'EQUALS', 'values' => ['Hardware'] },
+    { 'column' => 'State', 'operator' => 'NOT_EQUALS', 'values' => ['CA'] },
+  ],
+}, {})
+fixed_filter_helper = $chart_helpers.find { |helper| helper['id'].include?('fixed') }
+ok(Array(fixed_filter_helper['filters']).any? { |filter| filter['values'] == ['Hardware'] },
+   'FILTER ALLOW predicate is applied before the fixed-grain grouping')
+ok(Array(fixed_filter_chart['filters']).any? { |filter| filter['values'] == ['CA'] },
+   'non-allowed visual predicate remains on the visible fixed chart')
+$translated_bms = nil
+
+$translated_bms = {
+  'calculation_manual_lod' => {
+    'id' => 'calculation_manual_lod', 'name' => 'Custom LOD', 'class' => 'lod',
+    'scope' => 'dataset', '_source' => 'formula-override', 'converted' => true,
+    'sigmaFormula' => 'PercentOfTotal(Sum([Amount]), "grand_total")',
+  },
+}
+manual_lod = inline_beast_mode_measure(
+  { 'id' => 'manual-lod-card' },
+  {
+    'column' => 'Custom LOD', 'beastModeId' => 'calculation_manual_lod',
+    '_isCalc' => true, 'mapping' => 'VALUE',
+  },
+)
+eq(
+  manual_lod['formula'],
+  'PercentOfTotal(Sum([Master/Amount]), "grand_total")',
+  'formula-overrides.json is a supported explicit workbook placement for nonstandard LODs',
+)
+$translated_bms = nil
+
+puts "== unaggregated Domo CEILING/FLOOR value bindings preserve series semantics =="
+$translated_bms = {
+  'calc-ceiling' => {
+    'id' => 'calc-ceiling', 'name' => 'Ceiling Value', 'class' => 'projection',
+    'scope' => 'card', 'originalSql' => 'CEILING(`Value`)',
+    'sigmaFormula' => 'Ceiling([Value])',
+  },
+}
+ceiling_measure = inline_beast_mode_measure(
+  { 'id' => 'ceiling-card' },
+  { 'column' => 'Ceiling Value', 'beastModeId' => 'calc-ceiling', '_isCalc' => true },
+)
+eq(ceiling_measure['formula'], 'Min(Ceiling([Master/Value]))',
+   'Domo VALUE binding takes the minimum row-wise ceiling within each series')
+$translated_bms = nil
+
+puts "== SUM DISTINCT uses a grouped helper instead of unsupported scalar syntax =="
+$chart_helpers = []
+$translated_bms = {
+  'calc-sum-distinct' => {
+    'id' => 'calc-sum-distinct', 'name' => 'Distinct Value Sum',
+    'class' => 'aggregate', 'scope' => 'card',
+    'originalSql' => 'SUM(DISTINCT `Value`)',
+    'sigmaFormula' => 'Sum([Value])',
+    'semanticPlacement' => { 'kind' => 'sum-distinct', 'field' => 'Value' },
+  },
+}
+distinct_chart = build_element({
+  'id' => 'sum-distinct-card', 'title' => 'Distinct Value Sum',
+  'chartType' => 'badge_vert_bar', 'sigmaKindHint' => 'bar-chart',
+  'columns' => [
+    { 'column' => 'Region', 'mapping' => 'ITEM' },
+    {
+      'column' => 'Distinct Value Sum', 'mapping' => 'VALUE',
+      'beastModeId' => 'calc-sum-distinct', '_isCalc' => true,
+    },
+  ],
+}, {})
+distinct_helper = $chart_helpers.find { |helper| helper['id'].include?('sum-distinct') }
+ok(distinct_helper, 'SUM DISTINCT emits a hidden grouped helper')
+eq(distinct_helper.dig('groupings', 0, 'groupBy').length, 2,
+   'helper groups by visible category and distinct value')
+eq(distinct_chart['columns'].last['formula'],
+   'Sum([Distinct values for Distinct Value Sum/Distinct Value])',
+   'visible chart sums one row per distinct value')
+$translated_bms = nil
 
 puts "== B4 (real-data shape): a card-level filter on a column the card does NOT already " \
      'plot becomes an ELEMENT filter with its real values, on a new HIDDEN column =='
@@ -1903,6 +2129,22 @@ ok(cmp_filter, 'GREATER_THAN emits an element-local list filter')
 cmp_col = compared['columns'].find { |c| c['id'] == cmp_filter['columnId'] }
 eq(cmp_col['formula'], 'If([Master/Delivered] > 0.0, "in", "out")',
    'comparison helper preserves strict greater-than semantics')
+
+less_or_equal = build_element({
+  'id' => 'c48b', 'title' => 'First Year Turnover Rate', 'chartType' => 'badge_vert_bar',
+  'columns' => [
+    { 'column' => 'Department', 'mapping' => 'ITEM' },
+    { 'column' => 'Employee Count', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+  'filters' => [{
+    'column' => 'Tenure', 'operator' => 'LESS_THAN_EQUALS_TO', 'values' => ['1'],
+  }],
+}, {})
+lte_filter = Array(less_or_equal['filters']).find { |filter| filter['columnId'].to_s.start_with?('f-cmp-') }
+ok(lte_filter, 'LESS_THAN_EQUALS_TO emits an element-local comparison filter')
+lte_col = less_or_equal['columns'].find { |column| column['id'] == lte_filter['columnId'] }
+eq(lte_col['formula'], 'If([Master/Tenure] <= 1.0, "in", "out")',
+   'Domo LESS_THAN_EQUALS_TO alias preserves inclusive less-than semantics')
 
 puts "== live parity: treemap degradation preserves Domo's 500 visible leaves =="
 treemap = build_element({
