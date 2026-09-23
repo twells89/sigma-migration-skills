@@ -26,6 +26,7 @@ require 'base64'
 require 'digest'
 require 'date'
 require_relative 'lib/domo_sigma_util'
+require_relative 'lib/beast_mode_lod'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -393,8 +394,12 @@ def aggregate_beast_mode_column?(column)
   return false unless column['_isCalc']
   bm = translated_beast_modes[column['beastModeId'].to_s] ||
        translated_beast_modes[column['column'].to_s]
-  bm.is_a?(Hash) && %w[aggregate window].include?(bm['class'].to_s) &&
-    !bm['sigmaFormula'].to_s.strip.empty?
+  return false unless bm.is_a?(Hash) && !bm['sigmaFormula'].to_s.strip.empty?
+  return true if %w[aggregate window].include?(bm['class'].to_s)
+  return false unless bm['class'].to_s == 'lod'
+
+  bm['_source'] == 'formula-override' || bm['lodPlacement'].is_a?(Hash) ||
+    !DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']).nil?
 end
 
 def split_cols(card)
@@ -1641,9 +1646,11 @@ def plugin_sql_source(card, mode)
     when 'IN', 'EQUALS', 'LEGACY' then predicates << "#{col} IN (#{list})"
     when 'NOT_IN', 'NOT_EQUALS'   then predicates << "#{col} NOT IN (#{list})"
     when 'GREATER_THAN'           then predicates << "#{col} > #{sf_literal(vals.first)}"
-    when 'GREATER_THAN_OR_EQUAL'  then predicates << "#{col} >= #{sf_literal(vals.first)}"
+    when 'GREATER_THAN_OR_EQUAL', 'GREATER_THAN_EQUAL_TO', 'GREATER_THAN_EQUALS_TO'
+      predicates << "#{col} >= #{sf_literal(vals.first)}"
     when 'LESS_THAN'              then predicates << "#{col} < #{sf_literal(vals.first)}"
-    when 'LESS_THAN_OR_EQUAL'     then predicates << "#{col} <= #{sf_literal(vals.first)}"
+    when 'LESS_THAN_OR_EQUAL', 'LESS_THAN_EQUAL_TO', 'LESS_THAN_EQUALS_TO'
+      predicates << "#{col} <= #{sf_literal(vals.first)}"
     end
   end
   drf = card['dateRangeFilter'] || {}
@@ -1899,6 +1906,55 @@ def masterize_formula(formula)
   formula.to_s.gsub(/\[([^\[\]\/]+)\]/) { "[Master/#{display_name(Regexp.last_match(1))}]" }
 end
 
+def lod_fixed_percent_mode(card, plan)
+  fixed = Array(plan['fixedBy']).first
+  return 'grand_total' if fixed.to_s.empty?
+
+  same_field = lambda do |value|
+    DomoSigma::BeastModeLod.normalized_name(value) ==
+      DomoSigma::BeastModeLod.normalized_name(fixed)
+  end
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  date_grain_is_fixed = same_field.call(card.dig('dateGrain', 'column'))
+  fixed_is_x = (xcol && same_field.call(xcol['column'])) || date_grain_is_fixed
+  fixed_is_series = series && same_field.call(series['column'])
+
+  return 'color' if fixed_is_x && series
+  return 'x_axis' if fixed_is_series && xcol
+  return 'fixed-only' if fixed_is_x || fixed_is_series
+
+  # The FIXED key is not a visible chart dimension (commonly a card/page date
+  # filter). Once that predicate is applied, the denominator is the grand total
+  # across the displayed subgroup dimension(s).
+  'grand_total'
+end
+
+def lod_workbook_formula(card, bm)
+  return nil unless bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+  if bm['_source'] == 'formula-override'
+    return masterize_formula(bm['sigmaFormula'])
+  end
+
+  plan = bm['lodPlacement']
+  plan = DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']) unless plan.is_a?(Hash)
+  return nil unless plan
+
+  mode = lod_fixed_percent_mode(card, plan)
+  if mode == 'fixed-only'
+    scale = plan['scale'].to_f
+    return scale == scale.to_i ? scale.to_i.to_s : scale.to_s
+  end
+  DomoSigma::BeastModeLod.fixed_percent_formula(
+    plan,
+    mode: mode,
+    qualify: ->(field) { "Master/#{display_name(field)}" },
+  )
+end
+
 # An AGGREGATE (or window) Beast Mode cannot be a data-model column — build-dm
 # only promotes PROJECTION (row-level) Beast Modes to DM calc columns, because an
 # aggregate expression has no row-level value. So for an aggregate Beast Mode the
@@ -1920,7 +1976,9 @@ def inline_beast_mode_measure(card, c, record: true)
        translated_beast_modes[c['column'].to_s]
   return nil unless bm.is_a?(Hash)
   formula =
-    if %w[aggregate window].include?(bm['class'].to_s)
+    if bm['class'].to_s == 'lod'
+      lod_workbook_formula(card, bm)
+    elsif %w[aggregate window].include?(bm['class'].to_s)
       masterize_formula(bm['sigmaFormula'])
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card'
       row_formula = masterize_formula(bm['sigmaFormula'])
@@ -1932,7 +1990,10 @@ def inline_beast_mode_measure(card, c, record: true)
         "#{sigma_agg(c['aggregation'], c['distinct'])}(#{ref})"
     end
   return nil unless formula
-  record_beast_mode_usage(card, bm, 'workbook-measure-formula') if record
+  if record
+    target = bm['class'].to_s == 'lod' ? 'workbook-lod-formula' : 'workbook-measure-formula'
+    record_beast_mode_usage(card, bm, target)
+  end
   { 'id' => "m-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
     'formula' => formula,
@@ -1979,6 +2040,17 @@ def prune_unresolvable_columns!(card)
       ok << c
       next
     end
+    if c['_isCalc']
+      bm = translated_beast_modes[c['beastModeId'].to_s] ||
+           translated_beast_modes[c['column'].to_s]
+      if bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+        warn_card(card, "dropped column #{c['column'].inspect}: its FIXED/LOD Beast Mode has no " \
+                        'supported automatic placement. Add a Sigma workbook formula in ' \
+                        'discovery/formula-overrides.json and re-run; generated chart specs ' \
+                        'must not be hand-edited.')
+        next
+      end
+    end
     if c['_isCalc'] && c['beastModeId'] && !translated_beast_modes[c['beastModeId'].to_s] &&
        !translated_beast_modes[c['column'].to_s]
       warn_card(card, "dropped column #{c['column'].inspect}: its Beast Mode did not " \
@@ -2017,7 +2089,9 @@ DOMO_FILTER_LIST_MODE = {
 }.freeze
 DOMO_FILTER_COMPARISON = {
   'GREATER_THAN' => '>', 'GREATER_THAN_OR_EQUAL' => '>=',
+  'GREATER_THAN_EQUAL_TO' => '>=', 'GREATER_THAN_EQUALS_TO' => '>=',
   'LESS_THAN' => '<', 'LESS_THAN_OR_EQUAL' => '<=',
+  'LESS_THAN_EQUAL_TO' => '<=', 'LESS_THAN_EQUALS_TO' => '<=',
 }.freeze
 
 NUMERIC_DOMO_TYPES = %w[LONG DECIMAL DOUBLE INTEGER NUMBER].freeze
@@ -2435,7 +2509,8 @@ def apply_card_filters!(card, el)
     unless mode
       warn_card(card, "card filter on '#{col}' dropped: operator '#{f['operator']}' has no faithful Sigma " \
                       'element-filter translation here (handled: LEGACY/IN/EQUALS/NOT_IN/NOT_EQUALS/' \
-                      'GREATER_THAN/GREATER_THAN_OR_EQUAL/LESS_THAN/LESS_THAN_OR_EQUAL) — ' \
+                      'GREATER_THAN/GREATER_THAN_OR_EQUAL/GREATER_THAN_EQUALS_TO/' \
+                      'LESS_THAN/LESS_THAN_OR_EQUAL/LESS_THAN_EQUALS_TO) — ' \
                       'hand-author the equivalent element filter and re-run.')
       next
     end

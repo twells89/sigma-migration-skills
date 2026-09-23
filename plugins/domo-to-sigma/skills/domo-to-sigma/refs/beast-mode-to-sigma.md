@@ -42,7 +42,7 @@ Beast Mode by *where it lives*, which decides where it goes in Sigma:
 | **Projection** (row-level, non-aggregated) | lands in the query's `projection` list | dataset scope → Sigma **data-model calc column**; card scope → inline workbook formula |
 | **Aggregate** (top-level `SUM`/`COUNT`/`AVG`/…) | wraps the whole expression | dataset scope → Sigma **data-model metric**; referenced cards keep an inline aggregate for parity |
 | **Window / analytic** (`… OVER (…)`) | ranks / running totals | named deferral unless an explicit supported Sigma placement is supplied |
-| **FIXED / LOD** (`FIXED (BY …)`) | level-of-detail | named deferral — do NOT flatten |
+| **FIXED / LOD** (`FIXED (BY …)`) | level-of-detail | recognized percent-of-fixed-total ratios → workbook `PercentOfTotal`; other shapes → `formula-overrides.json` workbook placement or named deferral |
 
 The discovery step classifies each Beast Mode via the standalone Beast Mode
 template's API flags — **no SQL parsing** (see `refs/connection.md`):
@@ -74,6 +74,29 @@ may see them referenced but erroring in the source. Map them to Sigma
 workbook-master and DM calc columns** (see `feedback_sigma_window_functions`).
 Place them deliberately (in a context where the `*Over` family works) and
 **warn** — never silently drop them.
+
+### FIXED percent-of-total Beast Modes
+
+The common Domo shape below is deterministic and converts automatically:
+
+```sql
+100 * (
+  COUNT(`Employee_Code`) /
+  SUM(COUNT(`Employee_Code`) FIXED (BY `AsofDate`))
+)
+```
+
+It becomes a workbook measure using Sigma `PercentOfTotal`. The card bindings
+select the scope: a FIXED x-axis plus a color series uses `"color"`; a FIXED
+color series plus an x-axis uses `"x_axis"`; a FIXED key that is only filtered
+uses `"grand_total"`. This preserves “subgroup ÷ total within the FIXED key”
+without emitting the unsupported `*Over` family or flattening the denominator.
+
+Other LOD shapes remain explicit. Put the intended workbook formula in
+`discovery/formula-overrides.json`; for an LOD entry, that sidecar is a supported
+workbook placement even when the generic SQL converter returned a string marked
+clean. The workbook builder inlines it, and Beast Mode accounting records the
+element usage. Never edit generated `chart-specs.json`.
 
 ---
 

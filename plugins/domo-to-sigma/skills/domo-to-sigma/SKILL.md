@@ -400,8 +400,11 @@ metrics before committing to reuse.
 
 `ruby scripts/build-dm.rb` → one DM element per DataSet (flat table), projection
 Beast Modes as calculated columns, and aggregate Beast Modes as first-class
-Sigma metrics. Window/LOD and unreliable formulas receive explicit blocked or
-deferred dispositions. `assert-beast-modes-accounted.rb` runs before POST and
+Sigma metrics. The common `aggregate / SUM(aggregate FIXED (BY dimension))`
+LOD ratio is synthesized as a workbook `PercentOfTotal` measure; other LODs can
+be placed explicitly with `formula-overrides.json`. Window/unknown LOD and
+unreliable formulas receive explicit blocked or deferred dispositions.
+`assert-beast-modes-accounted.rb` runs before POST and
 again after workbook build, so an extracted formula represented nowhere cannot
 silently pass. Unreferenced card-local helpers are recorded as `not-used` rather
 than counted as migrated. No star schema unless a DataFlow join is in scope (out of

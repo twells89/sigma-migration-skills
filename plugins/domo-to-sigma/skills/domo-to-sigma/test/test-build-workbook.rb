@@ -1014,6 +1014,70 @@ override_kpi = build_kpi({ 'id' => 'c34', 'title' => 'Margin % by Channel',
                          { 'c34' => { 'column' => 'net_revenue', 'aggregation' => 'SUM' } })
 eq(override_kpi['columns'][0]['formula'], 'Sum([Master/Net Revenue])', 'override still wins over the calc inlining')
 
+puts "== Domo FIXED percent-of-total Beast Mode receives a real workbook placement =="
+$beast_mode_usage = []
+$translated_bms = {
+  'calculation_retention' => {
+    'id' => 'calculation_retention',
+    'name' => 'Retention Likelihood Rates',
+    'class' => 'lod',
+    'scope' => 'dataset',
+    'sigmaFormula' => '100 * PercentOfTotal(Count([Employee_Code]), "grand_total")',
+    'converted' => true,
+    '_source' => 'domo-lod-synthesis',
+    'lodPlacement' => {
+      'kind' => 'fixed-percent-of-total',
+      'aggregate' => 'Count',
+      'field' => 'Employee_Code',
+      'fixedBy' => ['AsofDate'],
+      'scale' => 100.0,
+    },
+  },
+}
+retention = build_element({
+  'id' => 'retention-rates', 'title' => 'Retention Likelihood Rates',
+  'chartType' => 'badge_line', 'sigmaKindHint' => 'line-chart',
+  'columns' => [
+    { 'column' => 'AsofDate', 'mapping' => 'ITEM' },
+    { 'column' => 'Retention Likelihood', 'mapping' => 'SERIES' },
+    {
+      'column' => 'Retention Likelihood Rates',
+      'beastModeId' => 'calculation_retention',
+      '_isCalc' => true,
+      'mapping' => 'VALUE',
+    },
+  ],
+}, {})
+retention_measure = retention['columns'].find { |column| column['id'] == 'm-retention-likelihood-rates' }
+eq(
+  retention_measure['formula'],
+  '100 * PercentOfTotal(Count([Master/Employee Code]), "color")',
+  'FIXED BY x-axis date totals across the color categories instead of flattening the LOD',
+)
+eq($beast_mode_usage.first['target'], 'workbook-lod-formula',
+   'LOD placement is recorded for the Beast Mode accounting gate')
+
+$translated_bms = {
+  'calculation_manual_lod' => {
+    'id' => 'calculation_manual_lod', 'name' => 'Custom LOD', 'class' => 'lod',
+    'scope' => 'dataset', '_source' => 'formula-override', 'converted' => true,
+    'sigmaFormula' => 'PercentOfTotal(Sum([Amount]), "grand_total")',
+  },
+}
+manual_lod = inline_beast_mode_measure(
+  { 'id' => 'manual-lod-card' },
+  {
+    'column' => 'Custom LOD', 'beastModeId' => 'calculation_manual_lod',
+    '_isCalc' => true, 'mapping' => 'VALUE',
+  },
+)
+eq(
+  manual_lod['formula'],
+  'PercentOfTotal(Sum([Master/Amount]), "grand_total")',
+  'formula-overrides.json is a supported explicit workbook placement for nonstandard LODs',
+)
+$translated_bms = nil
+
 puts "== B4 (real-data shape): a card-level filter on a column the card does NOT already " \
      'plot becomes an ELEMENT filter with its real values, on a new HIDDEN column =='
 # Mirrors the real "Projected Sales" card (1eb93e0f dataset, chartType
@@ -1903,6 +1967,22 @@ ok(cmp_filter, 'GREATER_THAN emits an element-local list filter')
 cmp_col = compared['columns'].find { |c| c['id'] == cmp_filter['columnId'] }
 eq(cmp_col['formula'], 'If([Master/Delivered] > 0.0, "in", "out")',
    'comparison helper preserves strict greater-than semantics')
+
+less_or_equal = build_element({
+  'id' => 'c48b', 'title' => 'First Year Turnover Rate', 'chartType' => 'badge_vert_bar',
+  'columns' => [
+    { 'column' => 'Department', 'mapping' => 'ITEM' },
+    { 'column' => 'Employee Count', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+  'filters' => [{
+    'column' => 'Tenure', 'operator' => 'LESS_THAN_EQUALS_TO', 'values' => ['1'],
+  }],
+}, {})
+lte_filter = Array(less_or_equal['filters']).find { |filter| filter['columnId'].to_s.start_with?('f-cmp-') }
+ok(lte_filter, 'LESS_THAN_EQUALS_TO emits an element-local comparison filter')
+lte_col = less_or_equal['columns'].find { |column| column['id'] == lte_filter['columnId'] }
+eq(lte_col['formula'], 'If([Master/Tenure] <= 1.0, "in", "out")',
+   'Domo LESS_THAN_EQUALS_TO alias preserves inclusive less-than semantics')
 
 puts "== live parity: treemap degradation preserves Domo's 500 visible leaves =="
 treemap = build_element({

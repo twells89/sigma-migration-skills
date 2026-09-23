@@ -116,6 +116,7 @@ require 'open3'
 require 'tmpdir'
 require 'digest'
 require 'time'
+require_relative 'lib/beast_mode_lod'
 
 OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
 
@@ -402,9 +403,12 @@ def resolve_entry(entry, overrides)
   already_resolved = !(sigma.nil? || sigma.to_s.strip.empty?) && entry['converted'] != false
   override = find_override(entry, overrides)
   used_override = false
+  lod_plan = entry['class'].to_s == 'lod' ?
+    DomoSigma::BeastModeLod.fixed_percent_of_total_plan(entry['originalSql']) : nil
+  used_lod_synthesis = false
 
   if override && !override['sigmaFormula'].to_s.strip.empty?
-    if already_resolved
+    if already_resolved && entry['class'].to_s != 'lod'
       warnings << "formula-overrides.json has an entry for " \
         "#{entry['name'] || entry['id']} but it already has a sigmaFormula that " \
         "converted cleanly (converted:true) — override NOT applied (an override " \
@@ -413,6 +417,9 @@ def resolve_entry(entry, overrides)
       sigma = override['sigmaFormula']
       used_override = true
     end
+  elsif lod_plan
+    sigma = DomoSigma::BeastModeLod.fixed_percent_formula(lod_plan)
+    used_lod_synthesis = true
   end
 
   return [nil, warnings] if sigma.nil? || sigma.to_s.strip.empty?
@@ -421,6 +428,7 @@ def resolve_entry(entry, overrides)
   resolved = entry.merge('sigmaFormula' => sigma, 'lintErrors' => errs, 'lintWarnings' => lint_warns)
   if used_override
     resolved['_source'] = 'formula-override'
+    resolved['lodPlacement'] = { 'kind' => 'operator-workbook-formula' } if entry['class'].to_s == 'lod'
     # Human-authored, trusted — clear any stale automated converted:false +
     # its "could not fully translate" note (which would otherwise describe
     # formula content no longer even present in sigmaFormula) before applying
@@ -438,6 +446,14 @@ def resolve_entry(entry, overrides)
       "(WEEKDAY day-numbering mismatch [override: Mod(Weekday([col])+5,7)], " \
       "CEILING/FLOOR aggregates, untranslatable infix LIKE) for what actually " \
       "still needs a hand-authored formula."
+  elsif used_lod_synthesis
+    resolved['_source'] = 'domo-lod-synthesis'
+    resolved['lodPlacement'] = lod_plan
+    resolved['converted'] = true
+    resolved.delete('note')
+    resolved['note'] = 'Domo COUNT-or-SUM / FIXED-percent denominator synthesized as a workbook PercentOfTotal formula; final scope is selected from the card visual roles.'
+    warnings << "#{entry['name'] || entry['id']}: recognized Domo fixed-percent-of-total LOD; " \
+                'the workbook builder will select color/x-axis/grand-total scope from the card bindings.'
   elsif entry['converted'] == false
     # Track E: --convert already computed a REAL converted flag (via the
     # vendored hasResidualCaseKeyword/hasResidualInfixOperator) — surface it

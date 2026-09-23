@@ -419,7 +419,9 @@ inconsistent handling of the two filter levels — port **both**, every time:
    element/source filters on that element. Translate the Domo filter object
    (`{column, operator, values}`; currently automated operators are
    `LEGACY/IN/EQUALS/NOT_IN/NOT_EQUALS/GREATER_THAN/GREATER_THAN_OR_EQUAL/
-   LESS_THAN/LESS_THAN_OR_EQUAL`) to a Sigma element filter. List predicates use
+   GREATER_THAN_EQUALS_TO/LESS_THAN/LESS_THAN_OR_EQUAL/LESS_THAN_EQUALS_TO`)
+   to a Sigma element filter. Domo's `*_EQUALS_TO` spelling is an alias for the
+   corresponding inclusive comparison, not an unsupported operator. List predicates use
    Sigma's native `kind: list`; numeric comparisons use a hidden boolean helper
    column plus a list filter. Unsupported operators are warned and dropped,
    never guessed.

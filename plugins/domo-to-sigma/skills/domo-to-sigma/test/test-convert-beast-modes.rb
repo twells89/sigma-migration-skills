@@ -49,6 +49,35 @@ ok(w.any? { |x| x.include?('WINDOW') && x.include?('feedback_sigma_window_functi
 _, w = normalize_bm('SUM(SUM(`Total Sales`) FIXED (BY `Region`))', 'lod')
 ok(w.any? { |x| x.include?('FIXED/LOD') }, 'lod class flagged do-not-flatten')
 
+puts '== Domo FIXED percent-of-total synthesis =='
+fixed_sql = '100*(COUNT(`Employee_Code`)/SUM(COUNT(`Employee_Code`) FIXED (BY `AsofDate`)))'
+fixed_plan = DomoSigma::BeastModeLod.fixed_percent_of_total_plan(fixed_sql)
+ok(fixed_plan['aggregate'] == 'Count', 'COUNT numerator is preserved')
+ok(fixed_plan['field'] == 'Employee_Code', 'numerator field is preserved')
+ok(fixed_plan['fixedBy'] == ['AsofDate'], 'FIXED dimension is preserved')
+ok(DomoSigma::BeastModeLod.fixed_percent_formula(fixed_plan) ==
+   '100 * PercentOfTotal(Count([Employee_Code]), "grand_total")',
+   'deterministic FIXED denominator becomes a valid Sigma PercentOfTotal formula')
+ok(DomoSigma::BeastModeLod.fixed_percent_of_total_plan(
+     'COUNT(`Employee_Code`) FIXED (BY `AsofDate`)',
+   ).nil?,
+   'a non-ratio LOD remains deferred instead of being guessed')
+fixed_entry, fixed_warnings = resolve_entry(
+  {
+    'id' => 'calculation_retention', 'name' => 'Retention Likelihood Rates',
+    'class' => 'lod', 'originalSql' => fixed_sql,
+    'sigmaFormula' => '100 * Count([Employee Code]) / Sum(Count([Employee Code]))',
+    'converted' => true,
+  },
+  {},
+)
+ok(fixed_entry['_source'] == 'domo-lod-synthesis',
+   'the deterministic LOD synthesis supersedes a context-free generic conversion')
+ok(fixed_entry.dig('lodPlacement', 'kind') == 'fixed-percent-of-total',
+   'the placement plan survives into formulas.json')
+ok(fixed_warnings.any? { |warning| warning.include?('fixed-percent-of-total') },
+   'automatic LOD placement is reported')
+
 puts "== lint_formula: leftover IN( is an ERROR =="
 errs, _ = lint_formula('If([col] IN ("A","B"), 1, 0)')
 ok(errs.any? { |e| e.include?('IsIn') }, 'raw IN(...) → error (no IsIn)')
