@@ -1085,6 +1085,22 @@ eq(
 )
 $translated_bms = nil
 
+puts "== unaggregated Domo CEILING/FLOOR value bindings preserve series semantics =="
+$translated_bms = {
+  'calc-ceiling' => {
+    'id' => 'calc-ceiling', 'name' => 'Ceiling Value', 'class' => 'projection',
+    'scope' => 'card', 'originalSql' => 'CEILING(`Value`)',
+    'sigmaFormula' => 'Ceiling([Value])',
+  },
+}
+ceiling_measure = inline_beast_mode_measure(
+  { 'id' => 'ceiling-card' },
+  { 'column' => 'Ceiling Value', 'beastModeId' => 'calc-ceiling', '_isCalc' => true },
+)
+eq(ceiling_measure['formula'], 'Min(Ceiling([Master/Value]))',
+   'Domo VALUE binding takes the minimum row-wise ceiling within each series')
+$translated_bms = nil
+
 puts "== B4 (real-data shape): a card-level filter on a column the card does NOT already " \
      'plot becomes an ELEMENT filter with its real values, on a new HIDDEN column =='
 # Mirrors the real "Projected Sales" card (1eb93e0f dataset, chartType

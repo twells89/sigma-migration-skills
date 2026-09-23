@@ -2014,8 +2014,15 @@ def inline_beast_mode_measure(card, c, record: true)
       masterize_formula(bm['sigmaFormula'])
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card'
       row_formula = masterize_formula(bm['sigmaFormula'])
-      c['aggregation'].to_s.empty? ? row_formula :
-        "#{sigma_agg(c['aggregation'], c['distinct'])}(#{row_formula})"
+      if c['aggregation'].to_s.empty? &&
+         bm['originalSql'].to_s.match?(/\A\s*(?:CEILING|FLOOR)\s*\(/i)
+        # Live Domo card-data groups unaggregated CEILING/FLOOR VALUE bindings
+        # by taking the minimum rounded row result for each series.
+        "Min(#{row_formula})"
+      else
+        c['aggregation'].to_s.empty? ? row_formula :
+          "#{sigma_agg(c['aggregation'], c['distinct'])}(#{row_formula})"
+      end
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
       ref = mref(bm['sigmaName'] || bm['name'] || c['column'])
       c['aggregation'].to_s.empty? ? ref :

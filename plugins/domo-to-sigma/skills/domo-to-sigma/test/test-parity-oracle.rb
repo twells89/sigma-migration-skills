@@ -247,6 +247,14 @@ if canon_src
   eq(readable_days, [['2026-07-23', 0.4]],
      'readable day labels retain full day precision for parity')
   eq(readable_count, 1, 'the readable day rewrite is counted')
+
+  datetimes, datetime_count = canonicalise_dim([
+    ['2025-01-01 17:00:00', 4],
+    ['2025-01-02T17:00:00', 4],
+  ])
+  eq(datetimes, [['2025-01-01T17:00:00', 4], ['2025-01-02T17:00:00', 4]],
+     'space- and T-separated datetimes compare at one canonical representation')
+  eq(datetime_count, 2, 'datetime rewrites are counted')
 end
 
 source_grain_src = oracle_src[/^def canonicalise_source_grain\(rows, source_card\)\n.*?\nend\n/m]
