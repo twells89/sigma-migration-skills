@@ -33,6 +33,7 @@ CASES=(
   "powerbi|plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/migrate-powerbi.rb|ruby|PBI_MCP_DIR|powerbi.js|powerbi.mjs"
   "quicksight|plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/migrate-quicksight.rb|ruby|QS_MCP_DIR|quicksight.js|quicksight.mjs"
   "qlik|plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/migrate-qlik.rb|ruby|QLIK_MCP_DIR|qlik.js|qlik.mjs"
+  "qlik-python|plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/migrate-qlik.py|python3|QLIK_MCP_DIR|qlik.js|qlik.mjs"
   "looker|plugins/looker-to-sigma/skills/looker-to-sigma/scripts/migrate-looker.py|python3|CONVERTER_PATH|lookml.js|lookml.mjs"
 )
 

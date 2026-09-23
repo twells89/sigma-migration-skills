@@ -171,6 +171,76 @@ jobs:
           python
           plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/tableau-runtime-parity.py
 
+  qlik-ruby-free-runtime:
+    name: Qlik Python runtime (Ruby absent)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      image: node:22-bookworm
+    steps:
+      - name: Install Python-only runtime prerequisites
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            python3 python3-pil python3-numpy git ca-certificates
+          if command -v ruby >/dev/null 2>&1; then
+            echo "::error::Ruby must be absent from the qlik-ruby-free-runtime job"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Certify profile, doctor gate, and production fixture paths
+        run: |
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/test_python_operational_helpers.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/test_migrate_qlik_python.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_python_runtime_helpers.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_completion_contract.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_corectl_unbuild.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_qlikview_prj.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_trellis.py
+          python3 tools/test-qlik-python-runtime.py
+
+  qlik-python-cold:
+    name: Qlik Python cold / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run Python-only smoke with Ruby quarantined
+        # The fixture harness creates a minimal PATH, asserts Ruby cannot
+        # resolve, then uses the production --from-discovery --dry-run path.
+        # Keep this command portable; Windows uses PowerShell by default.
+        run: python tools/test-qlik-python-runtime.py
+
+  qlik-runtime-parity:
+    name: Qlik Ruby/Python normalized fixture parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compare normalized Ruby and Python Qlik artifacts
+        run: >-
+          python
+          plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/qlik-runtime-parity.py
+
   windows-smoke:
     name: windows PowerShell path (doctor.ps1 + offline corpus)
     # Proves the Windows/PowerShell path works BEFORE an event does (P0.4):

@@ -174,7 +174,7 @@ def main():
     # A 'validated' row MUST carry live-probe evidence (issue #458): the real Sigma
     # workbook id this POST created + a SHA-256 of the live columns-readback + the
     # probe timestamp. scout_gate signs the row (per-conversion .scout-ledger.key)
-    # so the Ruby gate (migrate-qlik.rb -> scout_gate.rb#classify) honors ONLY a
+    # so both migration gates (Python or Ruby -> scout_gate.classify) honor ONLY a
     # signed, evidenced 'validated'; a hand-written line cannot forge this probe.
     evidence = None
     if status == "validated":

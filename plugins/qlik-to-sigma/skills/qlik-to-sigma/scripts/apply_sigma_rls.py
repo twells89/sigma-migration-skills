@@ -53,15 +53,32 @@ name. --provision creates missing attributes/teams (assign per-user values separ
 Works for tableau/quicksight/powerbi/thoughtspot/qlik/lookml converter output alike.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 BASE = os.environ.get("SIGMA_BASE_URL")
 TOK = os.environ.get("SIGMA_API_TOKEN")
+
+
+def configure_auth(workdir=None):
+    global BASE, TOK
+    if workdir:
+        auth_path = Path(workdir).expanduser().resolve() / "auth.json"
+        if auth_path.is_file():
+            auth = json.loads(auth_path.read_text(encoding="utf-8-sig"))
+            BASE = BASE or auth.get("SIGMA_BASE_URL")
+            TOK = TOK or auth.get("SIGMA_API_TOKEN")
+    if not BASE or not TOK:
+        from lib import sigma_rest
+
+        BASE = sigma_rest.base_url()
+        TOK = sigma_rest.auth_token()
 
 
 def api(method, path, body=None):
@@ -241,7 +258,17 @@ def _resolve_col_ids(element, names):
         else: print(f"  WARN: CLS column '{nm}' not found on element — skipped.")
     return out
 
-def apply_from_security(dm_id, security, do_apply, do_provision):
+def apply_from_security(
+    dm_id,
+    security,
+    do_apply,
+    do_provision,
+    decision_out=None,
+    run_id=None,
+    decision="port",
+    required_element_id=None,
+    membership_evidence=None,
+):
     """Provision attrs/teams + apply RLS calc/filter and CLS for each result.security entry."""
     spec = api("GET", f"/v2/dataModels/{dm_id}/spec")
     if not isinstance(spec, dict):
@@ -249,12 +276,23 @@ def apply_from_security(dm_id, security, do_apply, do_provision):
     applied = 0
     def _elname(e): return e.get('name') or ((e.get('source') or {}).get('path') or ['?'])[-1]
     for rule in security:
-        el = _resolve_element(spec, rule.get("elementId"), rule.get("elementName"))
+        el = _resolve_element(
+            spec,
+            required_element_id or rule.get("elementId"),
+            None if required_element_id else rule.get("elementName"),
+        )
         if not el:
             print(f"⚠ {rule.get('kind')} on element '{rule.get('elementName')}' — not found in DM {dm_id}; skipped."); continue
         if rule.get("kind") == "rls" and rule.get("rls"):
             r = rule["rls"]
             print(f"RLS → element '{_elname(el)}': {r['formula'][:80]}")
+            if re.search(r"CurrentUserInTeam\s*\(\s*\[", r.get("formula") or ""):
+                print(
+                    "  FATAL: dynamic CurrentUserInTeam([field]) cannot be "
+                    "provisioned safely; customize the rule to explicit team names.",
+                    file=sys.stderr,
+                )
+                continue
             for attr in (r.get("userAttributes") or []):
                 ex = find_attribute(attr)
                 if ex: print(f"  REUSE attribute '{attr}'.")
@@ -271,15 +309,175 @@ def apply_from_security(dm_id, security, do_apply, do_provision):
                 el.setdefault("filters", []).append(filt); applied += 1
         elif rule.get("kind") == "cls" and rule.get("cls"):
             c = rule["cls"]
+            if c.get("verifiedEquivalent") is not True:
+                print(
+                    "  FATAL: Qlik OMIT is identity-dependent; customize CLS "
+                    "criteria and set verifiedEquivalent:true only after "
+                    "effective-user validation.",
+                    file=sys.stderr,
+                )
+                continue
             ids = _resolve_col_ids(el, c.get("restrictedColumnNames"))
             print(f"CLS → element '{_elname(el)}': hide {c.get('restrictedColumnNames')}")
             if do_apply and ids:
                 el.setdefault("columnSecurities", []).append({"id": _short_id("cls"), "criteria": c.get("criteria") or {"kind": "no-one-can-view"}, "restrictedColumns": ids}); applied += 1
+    expected_rules = sum(
+        bool(rule.get("rls") or rule.get("cls"))
+        for rule in security
+        if isinstance(rule, dict)
+    )
+    if expected_rules != len(security):
+        print(
+            "FATAL: security input contains unsupported or malformed rule rows",
+            file=sys.stderr,
+        )
+        return 1
+    required_principals = set()
+    for rule in security:
+        rls = rule.get("rls") if isinstance(rule, dict) else None
+        if not isinstance(rls, dict):
+            continue
+        required_principals.update(
+            str(value)
+            for value in (
+                (rls.get("userAttributes") or [])
+                + (rls.get("teams") or [])
+            )
+            if str(value)
+        )
+        required_principals.update(
+            re.findall(
+                r'CurrentUserInTeam\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                str(rls.get("formula") or ""),
+            )
+        )
+        required_principals.update(
+            re.findall(
+                r'CurrentUserAttribute\w*\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                str(rls.get("formula") or ""),
+            )
+        )
+    required_principals = sorted(required_principals)
+    evidenced_principals = {
+        str(assignment.get("principal") or assignment.get("name") or "")
+        for evidence in membership_evidence or []
+        for assignment in evidence.get("assignments") or []
+        if isinstance(assignment, dict)
+        and assignment.get("readback_verified") is True
+        and (
+            assignment.get("members")
+            or assignment.get("values")
+        )
+    }
+    membership_verified = set(required_principals).issubset(
+        evidenced_principals
+    )
     if do_apply and applied:
         res = api("PUT", f"/v2/dataModels/{dm_id}/spec", spec)
         print(f"PUT spec -> applied {applied} rule(s):", (json.dumps(res)[:200] if isinstance(res, dict) else str(res)[:200]))
+        readback = api("GET", f"/v2/dataModels/{dm_id}/spec")
+        secured = (
+            _resolve_element(readback, required_element_id, None)
+            if isinstance(readback, dict) and required_element_id
+            else None
+        )
+        columns = [
+            row for row in (secured or {}).get("columns") or []
+            if isinstance(row, dict)
+        ]
+        filters = [
+            row for row in (secured or {}).get("filters") or []
+            if isinstance(row, dict)
+        ]
+        securities = [
+            row for row in (secured or {}).get("columnSecurities") or []
+            if isinstance(row, dict)
+        ]
+        verified_rules = 0
+        for rule in security:
+            if rule.get("kind") == "rls" and isinstance(rule.get("rls"), dict):
+                formula = str(rule["rls"].get("formula") or "")
+                column = next(
+                    (row for row in columns if row.get("formula") == formula),
+                    None,
+                )
+                if column and any(
+                    row.get("columnId") == column.get("id")
+                    and row.get("values") == [True]
+                    and row.get("kind") == "list"
+                    and row.get("mode") == "include"
+                    for row in filters
+                ):
+                    verified_rules += 1
+            elif rule.get("kind") == "cls" and isinstance(rule.get("cls"), dict):
+                expected_ids = set(
+                    _resolve_col_ids(
+                        secured,
+                        rule["cls"].get("restrictedColumnNames"),
+                    )
+                )
+                expected_criteria = rule["cls"].get("criteria") or {
+                    "kind": "no-one-can-view"
+                }
+                if expected_ids and any(
+                    expected_ids.issubset(
+                        set(row.get("restrictedColumns") or [])
+                    )
+                    and row.get("criteria") == expected_criteria
+                    for row in securities
+                ):
+                    verified_rules += 1
+        verified = (
+            isinstance(readback, dict)
+            and applied == expected_rules
+            and verified_rules == expected_rules
+        )
+        if decision_out:
+            decision_path = Path(decision_out).expanduser().resolve()
+            decision_path.parent.mkdir(parents=True, exist_ok=True)
+            readback_path = decision_path.parent / "datamodel-readback.json"
+            readback_path.write_text(
+                json.dumps(readback, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            decision_path.write_text(
+                json.dumps(
+                    {
+                        "decision": decision,
+                        "status": "applied" if verified else "failed",
+                        "readback_verified": verified,
+                        "rules_detected": len(security),
+                        "rules_applied": applied,
+                        "dataModelId": dm_id,
+                        "securedElementId": required_element_id,
+                        "run_id": run_id,
+                        "requiredPrincipals": required_principals,
+                        "membership_verified": (
+                            not required_principals
+                            or membership_verified
+                        ),
+                        "membership_evidence": membership_evidence or [],
+                        "readback_sha256": hashlib.sha256(
+                            readback_path.read_bytes()
+                        ).hexdigest(),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            print(f"security decision evidence -> {decision_path}")
+        if not verified:
+            print(
+                f"FATAL: applied/readback evidence covers {applied}/{expected_rules} rule(s)",
+                file=sys.stderr,
+            )
+            return 1
     elif not do_apply:
         print("\n(plan only — pass --apply --dm-id <id> to PATCH these into the DM spec; --provision to create attributes/teams.)")
+    elif expected_rules:
+        print("FATAL: no security rules were applied", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -297,7 +495,16 @@ def main():
     ap.add_argument("--apply", action="store_true", help="PATCH the RLS calc col + filter into the DM element spec")
     ap.add_argument("--from-security", help="path to a converter result.security[] JSON (batch RLS+CLS apply)")
     ap.add_argument("--provision", action="store_true", help="create missing user attributes / teams (with --from-security)")
+    ap.add_argument("--workdir", help="migration workdir for bound security-decision/readback evidence")
+    ap.add_argument("--decision", choices=("port", "customize"), default="port")
+    ap.add_argument(
+        "--membership-evidence",
+        action="append",
+        default=[],
+        help="path to membership/attribute assignment evidence (repeatable)",
+    )
     a = ap.parse_args()
+    configure_auth(a.workdir or (Path(a.from_security).parent if a.from_security else None))
 
     # Batch mode: ingest a converter's result.security[] and provision + apply all rules.
     if a.from_security:
@@ -305,7 +512,49 @@ def main():
             sys.exit("--from-security requires --dm-id (the posted data model).")
         raw = json.load(open(a.from_security))
         security = raw.get("security", raw) if isinstance(raw, dict) else raw
-        return apply_from_security(a.dm_id, security, a.apply, a.provision)
+        workdir = Path(a.workdir).expanduser().resolve() if a.workdir else Path(a.from_security).expanduser().resolve().parent
+        run_state_path = workdir / "run-state.json"
+        run_state = json.loads(run_state_path.read_text(encoding="utf-8-sig")) if run_state_path.is_file() else {}
+        dm_result_path = workdir / "dm-result.json"
+        dm_result = json.loads(dm_result_path.read_text(encoding="utf-8-sig")) if dm_result_path.is_file() else {}
+        denorm_element_id = dm_result.get("denormElementId")
+        if a.apply and not denorm_element_id:
+            sys.exit(
+                "Qlik security apply requires <workdir>/dm-result.json with "
+                "denormElementId so RLS/CLS protects the workbook source."
+            )
+        membership_evidence = []
+        for value in a.membership_evidence:
+            path = Path(value).expanduser().resolve()
+            if not path.is_file():
+                sys.exit(f"membership evidence not found: {path}")
+            document = json.loads(path.read_text(encoding="utf-8-sig"))
+            if (
+                not isinstance(document, dict)
+                or document.get("dataModelId") != a.dm_id
+                or document.get("run_id") != run_state.get("run_id")
+                or not isinstance(document.get("assignments"), list)
+            ):
+                sys.exit(
+                    "membership evidence must be bound to the current "
+                    "dataModelId/run_id and contain assignments[]"
+                )
+            membership_evidence.append({
+                "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "assignments": document["assignments"],
+            })
+        return apply_from_security(
+            a.dm_id,
+            security,
+            a.apply,
+            a.provision,
+            decision_out=workdir / "security-decision.json" if a.apply else None,
+            run_id=run_state.get("run_id"),
+            decision=a.decision,
+            required_element_id=denorm_element_id,
+            membership_evidence=membership_evidence,
+        )
 
     if not a.attr:
         sys.exit("Provide --attr (single-rule mode) or --from-security <json> (batch mode).")
