@@ -76,6 +76,25 @@ ok(fixed_entry.dig('lodPlacement', 'kind') == 'fixed-percent-of-total',
 ok(fixed_warnings.any? { |warning| warning.include?('fixed-percent-of-total') },
    'automatic LOD placement is reported')
 
+fixed_total_plan = DomoSigma::BeastModeLod.fixed_aggregate_plan(
+  'SUM(SUM(`Sales`) FIXED ())',
+)
+ok(fixed_total_plan && fixed_total_plan['mode'] == 'all' &&
+   fixed_total_plan['innerAggregate'] == 'Sum',
+   'plain FIXED total receives a structured placement plan')
+fixed_remove_plan = DomoSigma::BeastModeLod.fixed_aggregate_plan(
+  'AVG(AVG(`Unit_Price`) FIXED (REMOVE `Category`))',
+)
+ok(fixed_remove_plan && fixed_remove_plan['mode'] == 'remove' &&
+   fixed_remove_plan['dimensions'] == ['Category'],
+   'FIXED REMOVE dimensions survive parsing')
+fixed_filter_plan = DomoSigma::BeastModeLod.fixed_aggregate_plan(
+  'SUM(SUM(`Sales`) FIXED (BY `Region` FILTER ALLOW `Category`))',
+)
+ok(fixed_filter_plan && fixed_filter_plan['filterMode'] == 'allow' &&
+   fixed_filter_plan['filterDimensions'] == ['Category'],
+   'FIXED filter policy is retained for fail-closed placement')
+
 puts '== live Beast Mode semantic rewrites =='
 semantic_cases = [
   ['APPROXIMATE_COUNT_DISTINCT(`Employee_ID`)', 'Approximate_count_distinct([Employee_ID])',

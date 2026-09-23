@@ -375,6 +375,8 @@ def resolve_entry(entry, overrides)
   used_override = false
   lod_plan = entry['class'].to_s == 'lod' ?
     DomoSigma::BeastModeLod.fixed_percent_of_total_plan(entry['originalSql']) : nil
+  fixed_aggregate_plan = entry['class'].to_s == 'lod' ?
+    DomoSigma::BeastModeLod.fixed_aggregate_plan(entry['originalSql']) : nil
   used_lod_synthesis = false
   semantic = DomoSigma::BeastModeSemantics.translate(entry, sigma)
   used_semantic_synthesis = false
@@ -392,6 +394,10 @@ def resolve_entry(entry, overrides)
     end
   elsif lod_plan
     sigma = DomoSigma::BeastModeLod.fixed_percent_formula(lod_plan)
+    used_lod_synthesis = true
+  elsif fixed_aggregate_plan
+    sigma = DomoSigma::BeastModeLod.fixed_aggregate_placeholder(fixed_aggregate_plan)
+    lod_plan = fixed_aggregate_plan
     used_lod_synthesis = true
   elsif semantic && semantic['status'] == 'translated'
     sigma = semantic['formula']

@@ -1064,6 +1064,45 @@ eq(
 eq($beast_mode_usage.first['target'], 'workbook-lod-formula',
    'LOD placement is recorded for the Beast Mode accounting gate')
 
+fixed_total_formula = lod_workbook_formula(
+  { 'columns' => [{ 'column' => 'Region', 'mapping' => 'ITEM' }] },
+  {
+    'class' => 'lod',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales', 'mode' => 'all',
+    },
+  },
+)
+eq(fixed_total_formula, 'GrandTotal(Sum([Master/Sales]))',
+   'plain FIXED total maps to Sigma GrandTotal')
+fixed_remove_formula = lod_workbook_formula(
+  { 'columns' => [{ 'column' => 'Category', 'mapping' => 'ITEM' }] },
+  {
+    'class' => 'lod',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Avg',
+      'innerAggregate' => 'Avg', 'field' => 'Unit_Price',
+      'mode' => 'remove', 'dimensions' => ['Category'],
+    },
+  },
+)
+eq(fixed_remove_formula, 'GrandTotal(Avg([Master/Unit Price]))',
+   'FIXED REMOVE of the only visible dimension maps to GrandTotal')
+unplaced_fixed_by = lod_workbook_formula(
+  { 'columns' => [{ 'column' => 'State', 'mapping' => 'ITEM' }] },
+  {
+    'class' => 'lod',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales',
+      'mode' => 'by', 'dimensions' => ['Region'],
+    },
+  },
+)
+eq(unplaced_fixed_by, nil,
+   'FIXED BY a non-visible dimension fails closed until a grouped helper is available')
+
 $translated_bms = {
   'calculation_manual_lod' => {
     'id' => 'calculation_manual_lod', 'name' => 'Custom LOD', 'class' => 'lod',

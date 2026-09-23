@@ -1956,6 +1956,7 @@ def lod_workbook_formula(card, bm)
   plan = bm['lodPlacement']
   plan = DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']) unless plan.is_a?(Hash)
   return nil unless plan
+  return lod_fixed_aggregate_formula(card, plan) if plan['kind'] == 'fixed-aggregate'
 
   mode = lod_fixed_percent_mode(card, plan)
   if mode == 'fixed-only'
@@ -1967,6 +1968,48 @@ def lod_workbook_formula(card, bm)
     mode: mode,
     qualify: ->(field) { "Master/#{display_name(field)}" },
   )
+end
+
+def lod_fixed_aggregate_formula(card, plan)
+  return nil if plan['filterMode'] || plan['mode'] == 'add'
+
+  inner = "#{plan['innerAggregate']}(#{mref(display_name(plan['field']))})"
+  return "GrandTotal(#{inner})" if plan['mode'] == 'all'
+
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  role_for = lambda do |name|
+    normalized = DomoSigma::BeastModeLod.normalized_name(name)
+    date_matches =
+      DomoSigma::BeastModeLod.normalized_name(card.dig('dateGrain', 'column')) == normalized
+    next 'x_axis' if (xcol &&
+      DomoSigma::BeastModeLod.normalized_name(xcol['column']) == normalized) || date_matches
+    next 'color' if series &&
+      DomoSigma::BeastModeLod.normalized_name(series['column']) == normalized
+    nil
+  end
+
+  current_roles = [xcol && 'x_axis', series && 'color'].compact
+  fixed_roles =
+    case plan['mode']
+    when 'by'
+      roles = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }
+      return nil if roles.any?(&:nil?)
+      roles.uniq
+    when 'remove'
+      removed = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }.compact
+      current_roles - removed
+    else
+      return nil
+    end
+
+  return "GrandTotal(#{inner})" if fixed_roles.empty?
+  return inner if fixed_roles.sort == current_roles.sort
+  return "Subtotal(#{inner}, \"#{fixed_roles.first}\")" if fixed_roles.length == 1
+  nil
 end
 
 def beast_mode_value_format(column, bm)
