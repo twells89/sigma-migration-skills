@@ -41,6 +41,7 @@ corpus/
 | domo/orders-smoke | synthetic Domo DataSets + cards + Beast Modes | DM (2 elements) |
 | domo/orders-presentation | synthetic Domo cards + card-data snapshot | presentation-override derivation pin (checks.sh, no golden DM) |
 | domo/beast-mode-matrix | 35 live-shaped synthetic Beast Mode cards + 2 source-invalid formulas | converter/workbook placement matrix + fail-closed checks |
+| domo/detail-table-textbox-controls | field-shaped detail table, dynamic textbox, chart slicer | row-level bindings + latest KPI + hidden control source checks |
 | sisense/ecommerce-smoke | existing Sample ECommerce model + dashboard fixtures | DM + workbook + structured gap report (checks.sh also verifies layout) |
 | streamlit/simple-retail | synthetic Streamlit-in-Workspaces Python project | static IR conversion → DM + wrapped workbook, byte-stable reconversion |
 | streamlit/retail-fulfillment-control-tower | synthetic four-page Streamlit-in-Workspaces project | deferred filters/actions, navigation, KPI/chart/table semantics, and byte-stable DM/workbook |

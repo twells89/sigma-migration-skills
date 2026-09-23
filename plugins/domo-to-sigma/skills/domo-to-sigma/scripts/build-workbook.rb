@@ -260,8 +260,10 @@ CHART_TYPE_MAP = {
   'badge_pie'                 => 'pie-chart',
   'badge_donut'               => 'donut-chart',
   'badge_singlevalue'         => 'kpi-chart',
+  'badge_textbox'             => 'kpi-chart',
   'badge_filledgauge'         => 'progress',    # native only with grounded CURRENT + TARGET range
   'badge_table'               => 'table',
+  'badge_basic_table'         => 'table',
   'badge_word_cloud'          => 'table',       # NO_NATIVE_EQUIVALENT — term + frequency table
   'badge_calendar'            => 'table',       # NO_NATIVE_EQUIVALENT — flat date + value table
   'badge_map'                 => 'region-map',  # default; build_map falls back to a table when the
@@ -591,6 +593,36 @@ AXIS_OFF = { 'marks' => 'none' }.freeze # gridlines off (bug #8); labels left to
 def eid(card, suffix = '') "el-#{(card['id'] || rand_id).to_s.gsub(/\W+/, '-')}#{suffix}" end
 
 # ---- per-kind builders -----------------------------------------------------
+
+def build_textbox(card)
+  source = Array(card['columns']).first
+  unless source
+    return {
+      'id' => eid(card), 'kind' => 'text', 'name' => card['title'],
+      'body' => card['title'].to_s,
+    }
+  end
+  inlined = source['_isCalc'] ? inline_beast_mode_dimension(card, source) : nil
+  base_formula = inlined && inlined['formula'] || mref(display_name(source['column']))
+  value = {
+    'id' => "v-textbox-#{card['id']}",
+    'name' => col_label(source),
+    'formula' => "Max(#{base_formula})",
+  }
+  source_type = domo_filter_column_type(card, source['column'], source['beastModeId'])
+  value['format'] =
+    case source_type
+    when 'DATE' then { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d' }
+    when 'DATETIME', 'TIMESTAMP'
+      { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d %H:%M:%S' }
+    end
+  {
+    'id' => eid(card), 'kind' => 'kpi-chart', 'name' => card['title'],
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => [value.compact],
+    'value' => { 'columnId' => value['id'], 'fontSize' => 48 },
+  }
+end
 
 def build_kpi(card, overrides)
   sn = card['summaryNumber'] || {}
@@ -1658,9 +1690,23 @@ def build_map(card)
 end
 
 def build_table(card)
-  dims, meas = split_cols(card)
-  mcols = meas.map { |m| measure_col(m, card) }
-  cols = dims.map { |d| dim_col(d, card).merge('style' => { 'textWrap' => 'wrap' }) } + mcols
+  source_columns = Array(card['columns'])
+  detail_mode = Array(card['groupBy']).empty? &&
+    source_columns.all? { |column| column['aggregation'].to_s.empty? }
+  if detail_mode
+    # Domo basic/detail tables frequently label every visible field as VALUE
+    # even though there is no grouping or aggregation. Mapping role alone must
+    # not turn text/timestamps into Sum(...): these are row-level passthrough
+    # columns, exactly as shown in the source table.
+    dims = source_columns
+    meas = []
+    mcols = []
+    cols = dims.map { |column| dim_col(column, card).merge('style' => { 'textWrap' => 'wrap' }) }
+  else
+    dims, meas = split_cols(card)
+    mcols = meas.map { |m| measure_col(m, card) }
+    cols = dims.map { |d| dim_col(d, card).merge('style' => { 'textWrap' => 'wrap' }) } + mcols
+  end
   cols = (card['columns'] || []).map { |c| dim_col(c, card).merge('style' => { 'textWrap' => 'wrap' }) } if cols.empty?
   el = {
     'id' => eid(card), 'kind' => 'table', 'name' => card['title'],
@@ -3356,7 +3402,9 @@ def build_element_body(card, overrides)
   is_kpi = kind == 'kpi-chart' ||
            (card['summaryNumber'] && Array(card['groupBy']).empty? && (card['columns'] || []).size <= 1)
   if is_kpi
-    kpi = apply_card_filters!(card, build_kpi(card, overrides))
+    base_kpi = card['chartType'].to_s.downcase == 'badge_textbox' ?
+      build_textbox(card) : build_kpi(card, overrides)
+    kpi = apply_card_filters!(card, base_kpi)
     kpi = apply_kpi_display_override!(card, apply_card_date_window!(card, kpi))
     header_rule = optional_card_rule(card, 'kpi-card-header-overrides.json')
     if kpi && header_rule && !header_rule['body'].to_s.empty?
@@ -3430,13 +3478,17 @@ def build_element_body(card, overrides)
          when 'progress'
            build_progress(card) || build_kpi(card, overrides) || build_table(card)
          when 'kpi-chart'
+           if card['chartType'].to_s.downcase == 'badge_textbox'
+             build_textbox(card)
+           else
            # badge_filledgauge (and any other kpi-mapped chartType) may reach
            # here without a summaryNumber — never silently drop the card;
            # degrade to a table + warn rather than emit nil.
-           build_kpi(card, overrides) || begin
-             warn_card(card, "kpi-chart: chartType '#{card['chartType']}' has no summaryNumber to build a " \
-                             'value from — emitted a table instead so the card is not silently dropped.')
-             build_table(card)
+             build_kpi(card, overrides) || begin
+               warn_card(card, "kpi-chart: chartType '#{card['chartType']}' has no summaryNumber to build a " \
+                               'value from — emitted a table instead so the card is not silently dropped.')
+               build_table(card)
+             end
            end
          else
            warn_card(card, "unknown chartType '#{card['chartType']}' → emitted bar-chart; verify against the PNG.")
@@ -3461,9 +3513,10 @@ def build_element_body(card, overrides)
     # Card predicates still apply to every helper before the union; applying
     # the ordinary one-window filter would discard the comparison periods.
     el['_dataHelpers'] = Array(el['_dataHelpers']).map { |helper| apply_card_filters!(card, helper) }
-  elsif el && %w[table pivot-table].include?(el['kind']) &&
-        (Array(card['quickFilters']).any? || card['dateRangeFilter'].is_a?(Hash) ||
-         el['kind'] == 'pivot-table') && !plugin_enabled_for_card?(card)
+  elsif el && el['kind'] != 'image' && !plugin_enabled_for_card?(card) &&
+        (Array(card['quickFilters']).any? ||
+         (%w[table pivot-table].include?(el['kind']) &&
+          (card['dateRangeFilter'].is_a?(Hash) || el['kind'] == 'pivot-table')))
     helper = card_filter_source(card, el, extra_elements: [companion].compact)
     if helper
       el = rebind_to_filter_source!(el, helper)
