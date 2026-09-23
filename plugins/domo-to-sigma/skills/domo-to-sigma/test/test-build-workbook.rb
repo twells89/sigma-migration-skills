@@ -158,7 +158,7 @@ eq(symbol_line.dig('lineAreaStyle', 'points'),
    { 'visibility' => 'shown', 'shape' => 'circle', 'size' => 9 },
    'badge_symbolline emits released lineAreaStyle point markers')
 eq(symbol_line['columns'].first['format'],
-   { 'kind' => 'datetime', 'formatString' => '%b' },
+   { 'kind' => 'datetime', 'formatString' => '%b %y' },
    'calendar axes use compact source-like month labels')
 
 puts "== visual roles: aggregated XTIME is a measure, plain XTIME is a dimension =="

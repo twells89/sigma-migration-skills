@@ -510,7 +510,7 @@ def calendar_dimension_format(card, unit = nil)
     case unit
     when 'day', 'week' then '%b %-d, %Y'
     when 'year'        then '%Y'
-    when 'month'       then '%b'
+    when 'month'       then '%b %y'
     when 'hour', 'minute' then '%b %-d, %Y %H:%M'
     else '%b %y'
     end
