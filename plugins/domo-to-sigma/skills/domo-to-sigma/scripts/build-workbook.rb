@@ -901,7 +901,7 @@ def build_axis_chart(card, kind)
     if time_axis && !HORIZONTAL_CHART_TYPES.include?(ct)
       xa['format'] = {
         'marks' => 'none',
-        'labels' => { 'fontSize' => 14, 'labelAngle' => 0,
+        'labels' => { 'fontSize' => 12, 'labelAngle' => 0,
                       'allowLongerLabels' => true }
       }
     elsif kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
@@ -934,16 +934,13 @@ def build_axis_chart(card, kind)
     el['xAxis'] = xa
   end
   unless mcols.empty?
-    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 14 } }
+    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } }
     el['yAxis'] = { 'columnIds' => mcols.map { |m| m['id'] }, 'format' => y_format }
   end
   split = dims.each_with_index.find { |d, i| i != xidx && d['mapping'].to_s.upcase == SERIES_MAPPING }
   if split
     el['color'] = { 'by' => 'category', 'column' => dcols[split[1]]['id'] }
-    observed = optional_card_rule(card, 'layout-observed.json')
-    tall = observed && observed['w'].to_f.positive? &&
-      observed['h'].to_f > observed['w'].to_f
-    el['legend'] = { 'position' => (tall ? 'bottom' : 'right'), 'fontSize' => 14 }
+    el['legend'] = { 'position' => 'right', 'fontSize' => 12 }
   end
   if kind == 'bar-chart'
     el['color'] ||= { 'by' => 'single', 'value' => '#8CBFDD' }
