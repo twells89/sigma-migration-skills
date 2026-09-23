@@ -875,14 +875,13 @@ def sum_distinct_measure_plan(card, measures)
 end
 
 def fixed_grouped_helper_plan(card, measures)
-  return nil unless measures.length == 1 && Array(card['filters']).empty?
+  return nil unless measures.length == 1
   measure = measures.first
   bm = translated_beast_modes[measure['beastModeId'].to_s] ||
        translated_beast_modes[measure['column'].to_s]
   plan = bm && bm['lodPlacement']
   return nil unless plan.is_a?(Hash) && plan['kind'] == 'fixed-aggregate'
   return nil unless %w[by add].include?(plan['mode'])
-  return nil if plan['filterMode']
   [measure, bm, plan]
 end
 
@@ -954,6 +953,27 @@ def build_fixed_grouped_axis_chart(card, kind, dims, measure, bm, plan)
     'groupings' => groupings,
     'visibleAsSource' => false,
   }
+  card_filters = Array(card['filters'])
+  policy_fields = Array(plan['filterDimensions']).map {
+    |name| DomoSigma::BeastModeLod.normalized_name(name)
+  }
+  helper_filters, visible_filters =
+    case plan['filterMode']
+    when 'none'
+      [[], []]
+    when 'allow'
+      card_filters.partition {
+        |filter| policy_fields.include?(DomoSigma::BeastModeLod.normalized_name(filter['column']))
+      }
+    when 'deny'
+      denied, allowed = card_filters.partition {
+        |filter| policy_fields.include?(DomoSigma::BeastModeLod.normalized_name(filter['column']))
+      }
+      [allowed, denied]
+    else
+      [card_filters, []]
+    end
+  helper = apply_card_filters!(card.merge('filters' => helper_filters), helper)
   $chart_helpers << helper
 
   visible_dims = current_helper_dims.map do |column|
@@ -986,6 +1006,7 @@ def build_fixed_grouped_axis_chart(card, kind, dims, measure, bm, plan)
       'columnIds' => [visible_measure['id']],
       'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } },
     },
+    '_fixedVisibleFilters' => visible_filters,
   }
   split = dims.each_with_index.find do |dimension, index|
     index != xidx && dimension['mapping'].to_s.upcase == SERIES_MAPPING
@@ -2337,7 +2358,7 @@ def prune_unresolvable_columns!(card)
       if bm.is_a?(Hash) && bm['class'].to_s == 'lod'
         plan = bm['lodPlacement']
         if plan.is_a?(Hash) && plan['kind'] == 'fixed-aggregate' &&
-           %w[by add].include?(plan['mode']) && !plan['filterMode']
+           %w[by add].include?(plan['mode'])
           ok << c
           next
         end
@@ -3427,7 +3448,11 @@ def build_element_body(card, overrides)
   # Their predicates must filter that source BEFORE grouping; attaching them to
   # the visible scatter would evaluate against already-grouped raw refs and can
   # leave one point per warehouse row.
-  if el && el['_scatterHelper']
+  if el && el.key?('_fixedVisibleFilters')
+    visible_filters = el.delete('_fixedVisibleFilters')
+    el = apply_card_filters!(card.merge('filters' => visible_filters), el)
+    el = apply_card_date_window!(card, el)
+  elsif el && el['_scatterHelper']
     helper = apply_card_filters!(card, el['_scatterHelper'])
     helper = apply_card_date_window!(card, helper)
     el['_scatterHelper'] = helper

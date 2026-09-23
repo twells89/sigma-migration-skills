@@ -1137,6 +1137,41 @@ eq(fixed_by_chart['columns'].last['formula'],
    'visible chart reapplies the Domo outer aggregate over fixed groups')
 $translated_bms = nil
 
+$chart_helpers = []
+$translated_bms = {
+  'calc-fixed-filter' => {
+    'id' => 'calc-fixed-filter', 'name' => 'Filtered Region Sales', 'class' => 'lod',
+    'scope' => 'card', 'sigmaFormula' => 'Sum(Sum([Sales]))',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales',
+      'mode' => 'by', 'dimensions' => ['Region'],
+      'filterMode' => 'allow', 'filterDimensions' => ['Category'],
+    },
+  },
+}
+fixed_filter_chart = build_element({
+  'id' => 'fixed-filter-card', 'title' => 'Filtered Region Sales',
+  'chartType' => 'badge_two_trendline', 'sigmaKindHint' => 'line-chart',
+  'columns' => [
+    { 'column' => 'State', 'mapping' => 'ITEM' },
+    {
+      'column' => 'Filtered Region Sales', 'mapping' => 'VALUE',
+      'beastModeId' => 'calc-fixed-filter', '_isCalc' => true,
+    },
+  ],
+  'filters' => [
+    { 'column' => 'Category', 'operator' => 'EQUALS', 'values' => ['Hardware'] },
+    { 'column' => 'State', 'operator' => 'NOT_EQUALS', 'values' => ['CA'] },
+  ],
+}, {})
+fixed_filter_helper = $chart_helpers.find { |helper| helper['id'].include?('fixed') }
+ok(Array(fixed_filter_helper['filters']).any? { |filter| filter['values'] == ['Hardware'] },
+   'FILTER ALLOW predicate is applied before the fixed-grain grouping')
+ok(Array(fixed_filter_chart['filters']).any? { |filter| filter['values'] == ['CA'] },
+   'non-allowed visual predicate remains on the visible fixed chart')
+$translated_bms = nil
+
 $translated_bms = {
   'calculation_manual_lod' => {
     'id' => 'calculation_manual_lod', 'name' => 'Custom LOD', 'class' => 'lod',
