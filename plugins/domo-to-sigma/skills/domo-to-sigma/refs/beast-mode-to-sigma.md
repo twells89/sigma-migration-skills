@@ -92,6 +92,9 @@ color series plus an x-axis uses `"color"`; a FIXED key that is only filtered
 uses `"grand_total"`. These scopes were value-verified live (each date totals
 100%). This preserves “subgroup ÷ total within the FIXED key”
 without emitting the unsupported `*Over` family or flattening the denominator.
+Because this source formula already multiplies by 100, Sigma uses a numeric
+format plus a literal `%` suffix; applying a d3 `%` format would multiply the
+result again and render 30 as 3,000%.
 
 Other LOD shapes remain explicit. Put the intended workbook formula in
 `discovery/formula-overrides.json`; for an LOD entry, that sidecar is a supported

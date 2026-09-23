@@ -1963,6 +1963,24 @@ def lod_workbook_formula(card, bm)
   )
 end
 
+def beast_mode_value_format(column, bm)
+  format = sigma_format(column['format'], col_label(column))
+  source_formula = bm['originalSql'].to_s.empty? ? bm['sigmaFormula'] : bm['originalSql']
+  return format unless format.is_a?(Hash) &&
+                       format['formatString'].to_s.end_with?('%') &&
+                       source_formula.to_s.match?(/\A\s*\(?\s*100(?:\.0+)?\s*\*/i)
+
+  source_format = column['format'].is_a?(Hash) ? column['format'] : {}
+  raw_pattern = source_format['format'].to_s
+  explicit_precision = source_format['precision'] || source_format['decimals']
+  decimals = (explicit_precision || raw_pattern[/\.(0+)/, 1]&.length || 1).to_i
+  {
+    'kind' => 'number',
+    'formatString' => ",.#{decimals}f",
+    'suffix' => '%',
+  }
+end
+
 # An AGGREGATE (or window) Beast Mode cannot be a data-model column — build-dm
 # only promotes PROJECTION (row-level) Beast Modes to DM calc columns, because an
 # aggregate expression has no row-level value. So for an aggregate Beast Mode the
@@ -2005,7 +2023,7 @@ def inline_beast_mode_measure(card, c, record: true)
   { 'id' => "m-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
     'formula' => formula,
-    'format' => sigma_format(c['format'], col_label(c)) }.compact
+    'format' => beast_mode_value_format(c, bm) }.compact
 end
 
 # Drop columns that CANNOT resolve to a real DM column, loudly.

@@ -1056,6 +1056,11 @@ eq(
   '100 * PercentOfTotal(Count([Master/Employee Code]), "x_axis")',
   'FIXED BY x-axis date totals across the color categories instead of flattening the LOD',
 )
+eq(
+  retention_measure['format'],
+  { 'kind' => 'number', 'formatString' => ',.1f', 'suffix' => '%' },
+  'a Beast Mode that already multiplies by 100 uses a literal percent suffix, not a second percent multiplier',
+)
 eq($beast_mode_usage.first['target'], 'workbook-lod-formula',
    'LOD placement is recorded for the Beast Mode accounting gate')
 
