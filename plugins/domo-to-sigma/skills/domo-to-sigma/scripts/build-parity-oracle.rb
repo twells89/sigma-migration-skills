@@ -173,6 +173,9 @@ def canonicalise_dim(rows)
     elsif (m = /\A([A-Z][a-z]{2})\s+(\d{1,2}),\s*(\d{4})\z/.match(s)) && MONTH_ABBR[m[1]]
       a[0] = format('%s-%02d-%02d', m[3], MONTH_ABBR[m[1]], m[2].to_i)
       n += 1
+    elsif (m = /\A(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})\z/.match(s))
+      a[0] = "#{m[1]}T#{m[2]}"
+      n += 1
     elsif (m = /\A(\d{4})-Q([1-4])\z/.match(s))
       a[0] = format('%s-%02d', m[1], ((m[2].to_i - 1) * 3) + 1)
       n += 1
@@ -271,7 +274,11 @@ def canonicalise_numeric_display(rows, expected_rows = nil)
       decimals = body.include?('.') ? body.split('.', 2).last.length : 0
       number *= multiplier
       tolerance = (10.0**-decimals) * multiplier / 2.0
-      if percent
+      percent_points = percent && expected.any? do |row|
+        candidate = row[index]
+        candidate.is_a?(Numeric) && candidate.abs > 1.0
+      end
+      if percent && !percent_points
         number /= 100.0
         tolerance /= 100.0
       end

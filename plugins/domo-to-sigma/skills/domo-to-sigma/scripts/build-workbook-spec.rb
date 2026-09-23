@@ -383,15 +383,15 @@ if opts[:layout]
 else
   # Domo's default card palette, observed across the live gold page. Without a
   # parsed layout palette Sigma falls back to saturated blue/orange, changing
-  # almost every multi-series card. Preserve Domo's blue/green/orange/red order
+  # almost every multi-series card. Preserve Domo's observed blue/green/orange/purple order
   # and its light-gray dashboard canvas.
   Sigma::CodeRep.set_theme(
     document,
     name: 'Light',
     overrides: {
       'colorOverrides' => sigma_color_overrides('#F6F6F6'),
-      'categoricalScheme' => %w[#B3D9EF #315A7D #8BC34A #F3A24F #D95C59 #8E6BBE #5BB7A8 #D7B95E],
-      'titleFont' => { 'fontSize' => 12, 'fontWeight' => 'bold' }
+      'categoricalScheme' => %w[#4E8FBD #4A9B36 #E75524 #8A68B9 #F3A24F #D95C59 #5BB7A8 #D7B95E],
+      'titleFont' => { 'fontSize' => 16, 'fontWeight' => 'bold' }
     }
   )
   warn '  theme: Domo default canvas + 8-color categorical scheme'

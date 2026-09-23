@@ -1,0 +1,20 @@
+[
+  {
+    "id": "calculation_matrix_invalid_percent_rank",
+    "name": "Window Percent Rank",
+    "sql": "PERCENT_RANK() OVER (ORDER BY SUM(`Sales`))",
+    "scope": "card",
+    "class": "window",
+    "cardId": "blocked-1",
+    "dataType": "DECIMAL"
+  },
+  {
+    "id": "calculation_matrix_invalid_microsecond",
+    "name": "Unsupported Microsecond",
+    "sql": "MICROSECOND(`Date`)",
+    "scope": "card",
+    "class": "projection",
+    "cardId": "blocked-2",
+    "dataType": "LONG"
+  }
+]

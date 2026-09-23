@@ -853,7 +853,13 @@ def phase_render_visual!(opts, workbook_id, wb_ids)
     skip_phase!('render-visual', 'wb-ids.json has no non-Data page to render (only the hidden master page exists)')
     return
   end
-  ok, code, _out = run_py_script!('sigma-export-png.py', '--workbook', workbook_id, '--page', page['id'], '--out', render_path)
+  ok, code, _out = run_py_script!(
+    'sigma-export-png.py',
+    '--workbook', workbook_id,
+    '--page', page['id'],
+    '--out', render_path,
+    '--w', '1600',
+  )
   if code.nil?
     skip_phase!('render-visual', 'python3 not found on PATH — cannot run sigma-export-png.py; render by ' \
                                   "hand per refs/layout-visual-qa.md (--out #{render_path}), then re-run")

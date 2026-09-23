@@ -24,10 +24,10 @@ re-implement those. This ref is the **Domo-specific PRE-normalization +
 POST-lint** layer that `scripts/convert-beast-modes.rb` implements around that
 call.
 
-⚠️ The **`CEILING`/`FLOOR`-are-aggregates** trap (below) must be applied as a
-**POST override** — the generic converter treats `CEILING`/`FLOOR` as math
-rounding, so you have to rewrite its output to `Round(Max(...))` / `Round(Min(...))`
-after the fact.
+The generic converter is followed by a Domo semantic pass. It handles function
+aliases and placements that SQL text alone cannot encode: FIXED grain,
+card-level windows, SUM DISTINCT helpers, LIKE/BETWEEN, mixed CASE types, and
+date/time compatibility.
 
 ---
 
@@ -41,8 +41,8 @@ Beast Mode by *where it lives*, which decides where it goes in Sigma:
 |---|---|---|
 | **Projection** (row-level, non-aggregated) | lands in the query's `projection` list | dataset scope → Sigma **data-model calc column**; card scope → inline workbook formula |
 | **Aggregate** (top-level `SUM`/`COUNT`/`AVG`/…) | wraps the whole expression | dataset scope → Sigma **data-model metric**; referenced cards keep an inline aggregate for parity |
-| **Window / analytic** (`… OVER (…)`) | ranks / running totals | named deferral unless an explicit supported Sigma placement is supplied |
-| **FIXED / LOD** (`FIXED (BY …)`) | level-of-detail | named deferral — do NOT flatten |
+| **Window / analytic** (`… OVER (…)`) | ranks / running totals | supported running sum, rank, lag, lead, and ntile → native workbook formulas; unknown forms fail closed |
+| **FIXED / LOD** (`FIXED (BY/ADD/REMOVE …)`) | level-of-detail | direct `GrandTotal`/`Subtotal` or hidden grouped helper; filter NONE/ALLOW/DENY is split across pre-group and visible predicates |
 
 The discovery step classifies each Beast Mode via the standalone Beast Mode
 template's API flags — **no SQL parsing** (see `refs/connection.md`):
@@ -66,14 +66,38 @@ addressable by id but are removed from the name-only lookup; an ambiguous
 name-only reference blocks the accounting gate.
 
 ### Window / analytic Beast Modes
-Domo window functions — `RANK() OVER`, `SUM() OVER (PARTITION BY …)`, running
-totals — are **OFF by default in Beast Mode (CSM / support-gated)**. That's a
-real reason "projection window" Beast Modes often don't carry over, and why you
-may see them referenced but erroring in the source. Map them to Sigma
-`Rank` / `SumOver` / `CountOver` — **but** those **silently error in
-workbook-master and DM calc columns** (see `feedback_sigma_window_functions`).
-Place them deliberately (in a context where the `*Over` family works) and
-**warn** — never silently drop them.
+Domo windows can be support-gated. Live-proven mappings are:
+`SUM(SUM(x)) OVER(ORDER BY d)` → `CumulativeSum(Sum(x))`,
+`RANK()` → `Rank`, `LAG`/`LEAD` → Sigma `Lag`/`Lead`, and `NTILE` → `Ntile`.
+They are emitted only as workbook visualization formulas, never DM/master
+columns. Unknown `OVER(...)` forms fail closed. The `*Over` family is not used.
+
+### FIXED percent-of-total Beast Modes
+
+The common Domo shape below is deterministic and converts automatically:
+
+```sql
+100 * (
+  COUNT(`Employee_Code`) /
+  SUM(COUNT(`Employee_Code`) FIXED (BY `AsofDate`))
+)
+```
+
+It becomes a workbook measure using Sigma `PercentOfTotal`. The card bindings
+select the scope: a FIXED x-axis plus a color series uses `"x_axis"`; a FIXED
+color series plus an x-axis uses `"color"`; a FIXED key that is only filtered
+uses `"grand_total"`. These scopes were value-verified live (each date totals
+100%). This preserves “subgroup ÷ total within the FIXED key”
+without emitting the unsupported `*Over` family or flattening the denominator.
+Because this source formula already multiplies by 100, Sigma uses a numeric
+format plus a literal `%` suffix; applying a d3 `%` format would multiply the
+result again and render 30 as 3,000%.
+
+Unknown or expression-valued LOD shapes remain explicit. Put the intended workbook formula in
+`discovery/formula-overrides.json`; for an LOD entry, that sidecar is a supported
+workbook placement even when the generic SQL converter returned a string marked
+clean. The workbook builder inlines it, and Beast Mode accounting records the
+element usage. Never edit generated `chart-specs.json`.
 
 ---
 
@@ -83,21 +107,12 @@ Apply these to the raw Beast Mode string first:
 
 1. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
    `` `Sales` `` and `` `Operating Budget` `` → `[Sales]`, `[Operating Budget]`.
-2. **`WEEKDAY` day-numbering mismatch.** Do NOT rewrite the SQL — `WEEKDAY(...)`
-   converts cleanly on its own to Sigma's `Weekday(...)` by name. But MySQL
-   `WEEKDAY()` (0=Monday..6=Sunday) and Sigma `Weekday()` (1=Sunday..7=Saturday)
-   use genuinely different numbering, so a name-clean translation can still be
-   a silent VALUE mismatch. Flag with a warning naming the override:
-   `Mod(Weekday([col])+5,7)` reproduces MySQL's exact numbering from Sigma's
-   `Weekday()` output.
-3. **Reject / flag unsupported functions** (no longer supported in Beast Mode, so
-   they shouldn't appear, but guard anyway): `SQRT`, `CONVERT_TZ`, `MICROSECOND`.
-   If present, warn — likely a legacy formula. (`WEEKDAY` is excluded from this
-   generic loop — it gets its own targeted day-numbering warning above instead,
-   since it DOES have a real Sigma equivalent and isn't actually unsupported.)
-4. **Flag the aggregate `CEILING` / `FLOOR` trap** — see below. These are NOT math
-   rounding in Beast Mode.
-5. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
+2. **Legacy `WEEKDAY`.** Domo replaces it with `DAYOFWEEK`; live card-data proved
+   both return 1=Sunday..7=Saturday. Normalize both to Sigma `Weekday`.
+3. **Legacy functions.** Live Domo accepted `SQRT` and `CONVERT_TZ`; they map to
+   `Power(x,0.5)` and reordered `ConvertTimezone(date,to,from)`. `MICROSECOND`
+   was `ILLEGAL_FUNCTION` and fails closed.
+4. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
    `COUNT`, …) wraps the expression, the result is a workbook/element aggregate;
    otherwise it's a row-level DM calc column. Domo decides this implicitly by the
    card's grouping — we must make it explicit.
@@ -108,11 +123,11 @@ Apply these to the raw Beast Mode string first:
 
 | Beast Mode | Looks like | Actually is | Sigma |
 |---|---|---|---|
-| `CEILING(Budget)` | math ceiling | **aggregate**: rounded `MAX` | `Round(Max([Budget]))` |
-| `FLOOR(Budget)` | math floor | **aggregate**: rounded `MIN` | `Round(Min([Budget]))` |
+| `CEILING(Budget)` | row rounding used as VALUE | Domo takes the minimum rounded row per series | `Min(Ceiling([Budget]))` |
+| `FLOOR(Budget)` | row rounding used as VALUE | Domo takes the minimum rounded row per series | `Min(Floor([Budget]))` |
 | `POWER(Values,2)` | per-row power | per-row power, but **sums per series** if multi-series | `Power([Values],2)` (handle series via grouping) |
-| `WEEKDAY(d)` | MySQL WEEKDAY (0=Mon..6=Sun) | converts by NAME to `Weekday([d])`, but Sigma's numbering is DIFFERENT (1=Sun..7=Sat) — a silent VALUE mismatch, not just an off-by-one | `Weekday([d])`; override to `Mod(Weekday([d])+5,7)` to preserve MySQL's exact day numbers |
-| `SQRT(x)` | square root | **unsupported** in Beast Mode | use `Power([x], 0.5)` if it appears |
+| `WEEKDAY(d)` | legacy alias | Domo substitutes `DAYOFWEEK` (1=Sun..7=Sat) | `Weekday([d])` |
+| `SQRT(x)` | legacy but live-accepted | square root | `Power([x], 0.5)` |
 | Summary Number Beast Mode | a column | must be aggregated to be a summary | maps to a Sigma **KPI** element — see `refs/card-to-element.md` Rule 0 (KPI, never a table) |
 | `SUM(SUM([x]) FIXED (BY [Region]))` | a nested aggregate | **level-of-detail** (LOD) | Sigma **level-of-detail** — do NOT flatten to a plain aggregate; flag for review (see `lod_conditional_inner`) |
 
@@ -130,8 +145,8 @@ Apply these to the raw Beast Mode string first:
 | `APPROXIMATE_COUNT_DISTINCT(x)` | `CountDistinct([x])` | Sigma has no approx-distinct; exact is fine for parity |
 | `MIN(x)` | `Min([x])` | unrounded |
 | `MAX(x)` | `Max([x])` | unrounded |
-| `CEILING(x)` | `Round(Max([x]))` | **aggregate = rounded MAX** |
-| `FLOOR(x)` | `Round(Min([x]))` | **aggregate = rounded MIN** |
+| `CEILING(x)` | `Ceiling([x])` | workbook VALUE binding applies source-observed `Min(...)` |
+| `FLOOR(x)` | `Floor([x])` | workbook VALUE binding applies source-observed `Min(...)` |
 | `STDDEV_POP(x)` | `StdDevPop([x])` | |
 | `VAR_POP(x)` | `VarPop([x])` | |
 | `HLL_SKETCH_INIT/EXTRACT/MERGE/MERGE_PARTIAL` | `CountDistinct([x])` (collapse) | HLL++ approx-distinct sketches; Sigma has no sketch type — collapse the whole sketch pipeline to an exact distinct count, warn |
@@ -229,9 +244,9 @@ string** (`"day"`, `"month"`, `"year"`, …) and use **format tokens** (`YYYY`,
 | `PERIOD_ADD(YYYYMM, n)` | add months then reformat `YYYYMM` |
 | `PERIOD_DIFF(YYYYMM1, YYYYMM2)` | `DateDiff("month", ...)` after parsing the YYYYMM ints to dates |
 | `LAST_DAY(d)` | `DateAdd("day", -1, DateAdd("month", 1, DateTrunc("month", [d])))` |
-| `DATE_FORMAT(d, fmt)` | `DateFormat([d], <translated tokens>)` — see specifier table |
+| `DATE_FORMAT(d, fmt)` | `DateFormat([d], fmt)` — both use strftime tokens |
 | `TIME_FORMAT(d, fmt)` | `DateFormat([d], <translated tokens>)` (hours/min/sec only) |
-| `STR_TO_DATE(s, fmt)` | `DateParse([s], <translated tokens>)` |
+| `STR_TO_DATE(s, fmt)` | `DateParse([s], fmt)` |
 | `UNIX_TIMESTAMP(d)` | `DateDiff("second", MakeDate(1970,1,1), [d])` |
 | `FROM_UNIXTIME(n, fmt)` | `DateFormat(DateAdd("second", [n], MakeDate(1970,1,1)), <tokens>)` |
 | `TO_DAYS(d)` / `FROM_DAYS(n)` | `DateDiff("day", MakeDate(0,1,1), [d])` / inverse — rarely needed; warn |

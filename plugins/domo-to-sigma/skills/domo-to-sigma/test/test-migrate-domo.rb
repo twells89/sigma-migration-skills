@@ -384,22 +384,19 @@ Dir.mktmpdir('migrate-domo-e2e') do |out_dir|
     ok(margin && margin['converted'] == true && margin['sigmaFormula'].to_s.start_with?('If('),
        "Gross Margin Pct (CASE WHEN) converts cleanly to an If(...) (converted:true) — got #{margin.inspect}")
 
-    # Deliberately LIKE-shaped (design's known residual-operator case, same as
-    # test-convert-beast-modes-fixtures.rb's D-R1) — exercises converted:false.
+    # Deliberately LIKE-shaped: the generic converter still leaves an infix,
+    # then the Domo semantic pass deterministically rewrites exact LIKE to `=`.
     us_customers = by_name['US Customers']
-    ok(us_customers && us_customers['converted'] == false,
-       "US Customers (LIKE) is honestly flagged converted:false, not silently marked clean — got #{us_customers.inspect}")
-    ok(us_customers && !us_customers['sigmaFormula'].to_s.strip.empty?,
-       'US Customers still carries a present (if unreliable) sigmaFormula — never silently dropped')
+    ok(us_customers && us_customers['converted'] == true &&
+       us_customers['sigmaFormula'] == 'Lower([Country]) = "usa"',
+       "US Customers (LIKE) receives the Domo semantic rewrite — got #{us_customers.inspect}")
+    ok(us_customers && us_customers['_source'] == 'domo-semantic-synthesis',
+       'US Customers rewrite is attributed to the deterministic Domo semantic layer')
 
     ok(formulas.all? { |f| Array(f['lintErrors']).empty? },
        'none of the 3 fixture Beast Modes trip a lint ERROR')
-    # Blocker 1 (2026-08-05 batch-verify): a residual infix LIKE is downgraded
-    # from lintError to lintWarning (see convert-beast-modes.rb's lint_formula)
-    # so migrate-domo.rb's --offline run above completes instead of aborting
-    # at convert-beast-modes — but the finding must still surface, not vanish.
-    ok(us_customers && Array(us_customers['lintWarnings']).any? { |w| w.include?('LIKE') },
-       'US Customers still carries a visible lintWarning naming the residual LIKE — downgraded, not silenced')
+    ok(us_customers && Array(us_customers['lintWarnings']).empty?,
+       'no residual LIKE warning survives after the formula is actually repaired')
   end
 
   # ---- (a) layout-2d.flag == 'grid' (NOT 'stack') ------------------------
