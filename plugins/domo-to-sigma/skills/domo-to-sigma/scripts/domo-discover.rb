@@ -70,7 +70,7 @@ end
 # has the paren right there (optionally with whitespace: "SUM (x)" is valid
 # SQL). Case-insensitive — Domo's SQL is not case-normalized.
 AGGREGATE_FN_RE = /\b(SUM|COUNT|AVG|MIN|MAX|MEDIAN|STDDEV|STDDEV_POP|STDDEV_SAMP|VARIANCE|
-                      VAR_POP|VAR_SAMP|CEILING|FLOOR|APPROXIMATE_COUNT_DISTINCT)\s*\(/ix
+                      VAR_POP|VAR_SAMP|APPROXIMATE_COUNT_DISTINCT)\s*\(/ix
 WINDOW_FN_RE     = /\bOVER\s*\(|\b(RANK|DENSE_RANK|ROW_NUMBER|LAG|LEAD|NTILE|PERCENT_RANK|CUME_DIST)\s*\(/i
 
 def sql_has_aggregate_call?(sql)

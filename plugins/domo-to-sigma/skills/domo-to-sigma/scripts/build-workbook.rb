@@ -554,9 +554,18 @@ def inline_beast_mode_dimension(card, c)
     end
   return nil unless formula
   record_beast_mode_usage(card, bm, 'workbook-dimension-formula')
-  { 'id' => "d-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
+  result = {
+    'id' => "d-#{c['column'].to_s.downcase.gsub(/\W+/, '-')}",
     'name' => col_label(c),
-    'formula' => formula }.compact
+    'formula' => formula,
+  }
+  result['format'] =
+    case bm['dataType'].to_s.upcase
+    when 'DATE' then { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d' }
+    when 'DATETIME', 'TIMESTAMP'
+      { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d %H:%M:%S' }
+    end
+  result.compact
 end
 
 def dim_col(c, card = nil)

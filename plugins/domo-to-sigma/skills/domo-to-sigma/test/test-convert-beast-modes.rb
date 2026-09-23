@@ -35,11 +35,11 @@ puts "== normalize_bm: unsupported functions flagged =="
 _, w = normalize_bm('SQRT(`x`)')
 ok(w.any? { |x| x.include?('SQRT') }, 'SQRT flagged unsupported')
 
-puts "== normalize_bm: CEILING/FLOOR aggregate trap =="
-_, w = normalize_bm('CEILING(`Budget`)')
-ok(w.any? { |x| x.include?('AGGREGATE') && x.include?('Max') }, 'CEILING flagged as aggregate (Round(Max))')
-_, w = normalize_bm('FLOOR(`Budget`)')
-ok(w.any? { |x| x.include?('AGGREGATE') && x.include?('Min') }, 'FLOOR flagged as aggregate (Round(Min))')
+puts "== normalize_bm: CEILING/FLOOR preserve live-proven row semantics =="
+n, w = normalize_bm('CEILING(`Budget`)')
+ok(n == 'CEILING([Budget])' && w.empty?, 'CEILING passes through as row-wise ceiling')
+n, w = normalize_bm('FLOOR(`Budget`)')
+ok(n == 'FLOOR([Budget])' && w.empty?, 'FLOOR passes through as row-wise floor')
 
 puts "== normalize_bm: class-driven flags =="
 _, w = normalize_bm('RANK() OVER(ORDER BY SUM(`Sales`) DESC)', 'window')
@@ -78,8 +78,6 @@ ok(fixed_warnings.any? { |warning| warning.include?('fixed-percent-of-total') },
 
 puts '== live Beast Mode semantic rewrites =='
 semantic_cases = [
-  ['CEILING(`Value`)', 'Ceiling([Value])', 'Round(Max([Value]))'],
-  ['FLOOR(`Value`)', 'Floor([Value])', 'Round(Min([Value]))'],
   ['APPROXIMATE_COUNT_DISTINCT(`Employee_ID`)', 'Approximate_count_distinct([Employee_ID])',
    'CountDistinct([Employee_ID])'],
   ['SUM(SUM(`Sales`)) OVER (ORDER BY `Date`)', 'Sum(Sum([Sales])) OVER ([Order] BY [Date])',
@@ -99,9 +97,9 @@ semantic_cases = [
    'If([Value] BETWEEN 10 AND 20, "Mid", "Other")',
    'If(([Value] >= 10 and [Value] <= 20), "Mid", "Other")'],
   ["DATE_FORMAT(`Date`, '%Y-%m')", 'Date_format([Date], "%Y-%m")',
-   'DateFormat([Date], "YYYY-MM")'],
+   'DateFormat([Date], "%Y-%m")'],
   ["STR_TO_DATE(`Date_Text`, '%m/%d/%Y')", 'Str_to_date([Date_Text], "%m/%d/%Y")',
-   'DateParse([Date_Text], "MM/DD/YYYY")'],
+   'DateParse([Date_Text], "%m/%d/%Y")'],
   ['LAST_DAY(`Date`)', 'Last_day([Date])', 'LastDay([Date], "month")'],
   ['MONTHNAME(`Date`)', 'Monthname([Date])', 'MonthName([Date])'],
   ['DAYOFWEEK(`Date`)', 'Dayofweek([Date])', 'Weekday([Date])'],
@@ -115,6 +113,14 @@ semantic_cases.each do |source, generic, expected|
   ok(result && result['status'] == 'translated' && result['formula'] == expected,
      "#{source.split('(').first} receives its Domo-specific Sigma semantics")
 end
+ok(DomoSigma::BeastModeSemantics.translate(
+     { 'originalSql' => 'CEILING(`Value`)' }, 'Ceiling([Value])'
+   ).nil?,
+   'CEILING keeps the live-proven row-wise generic translation')
+ok(DomoSigma::BeastModeSemantics.translate(
+     { 'originalSql' => 'FLOOR(`Value`)' }, 'Floor([Value])'
+   ).nil?,
+   'FLOOR keeps the live-proven row-wise generic translation')
 [
   'MICROSECOND(`Date`)',
   'PERCENT_RANK() OVER (ORDER BY SUM(`Sales`))',

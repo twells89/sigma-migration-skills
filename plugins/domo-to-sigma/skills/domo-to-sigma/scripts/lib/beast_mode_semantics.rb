@@ -7,19 +7,10 @@ module DomoSigma
   module BeastModeSemantics
     module_function
 
-    FORMAT_TOKENS = {
-      '%Y' => 'YYYY', '%y' => 'YY', '%m' => 'MM', '%c' => 'M',
-      '%b' => 'MMM', '%M' => 'MMMM', '%d' => 'DD', '%e' => 'D',
-      '%a' => 'ddd', '%W' => 'dddd', '%H' => 'HH', '%h' => 'hh',
-      '%I' => 'hh', '%i' => 'mm', '%s' => 'ss', '%p' => 'A',
-      '%T' => 'HH:mm:ss',
-    }.freeze
-
     def translate(entry, sigma_formula)
       original = entry['originalSql'].to_s.strip
       sigma = sigma_formula.to_s
 
-      return translated(rewrite_fixed_trap(original)) if rewrite_fixed_trap(original)
       return translated(rewrite_window(original)) if rewrite_window(original)
 
       case original
@@ -50,13 +41,6 @@ module DomoSigma
       return blocked('residual LIKE/BETWEEN SQL remains after conversion') if rewritten.match?(/\b(?:LIKE|BETWEEN)\b/i)
 
       nil
-    end
-
-    def rewrite_fixed_trap(original)
-      match = original.match(/\A\s*(CEILING|FLOOR)\s*\(\s*`?([^`)]+)`?\s*\)\s*\z/i)
-      return nil unless match
-      aggregate = match[1].casecmp?('CEILING') ? 'Max' : 'Min'
-      "Round(#{aggregate}([#{match[2].strip}]))"
     end
 
     def rewrite_window(original)
@@ -130,7 +114,7 @@ module DomoSigma
     end
 
     def translate_date_format(source)
-      FORMAT_TOKENS.reduce(source.dup) { |result, (from, to)| result.gsub(from, to) }
+      source.to_s
     end
 
     def unquote(identifier)

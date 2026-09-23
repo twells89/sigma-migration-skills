@@ -278,6 +278,9 @@ if display_src
   eq(canonicalise_numeric_display([['2026-09-17', '40%']], [['2026-09-17', 0.375]]),
      [['2026-09-17', 0.4]],
      'a materially different displayed percent is not laundered into a match')
+  eq(canonicalise_numeric_display([['2026-09-17', '40.0%']], [['2026-09-17', 40.0]]),
+     [['2026-09-17', 40.0]],
+     'a Domo formula that already returns percentage points is not divided by 100 again')
   eq(canonicalise_numeric_display([['38%']], [[0.375]]),
      [[0.375]],
      'a one-cell KPI percent also recovers its exact source value at printed precision')

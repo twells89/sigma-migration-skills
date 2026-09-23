@@ -175,16 +175,7 @@ def normalize_bm(sql, klass = nil)
     warnings << "Unsupported function #{fn}() present — legacy formula; review (SQRT → Power([x],0.5))." if s =~ /\b#{fn}\s*\(/i
   end
 
-  # 4. CEILING/FLOOR are AGGREGATES in Beast Mode (rounded MAX/MIN), NOT math
-  #    rounding — the generic SQL converter gets this WRONG. Flag for override.
-  if s =~ /\bCEILING\s*\(/i
-    warnings << 'CEILING() is an AGGREGATE in Beast Mode (rounded MAX) — override to Round(Max([...])).'
-  end
-  if s =~ /\bFLOOR\s*\(/i
-    warnings << 'FLOOR() is an AGGREGATE in Beast Mode (rounded MIN) — override to Round(Min([...])).'
-  end
-
-  # 5. Class-driven flags.
+  # 4. Class-driven flags.
   case klass
   when 'window'
     warnings << 'WINDOW/analytic Beast Mode → Sigma Rank/SumOver/CountOver; these SILENTLY error in workbook-master/DM calc cols (feedback_sigma_window_functions). Place carefully + verify.'

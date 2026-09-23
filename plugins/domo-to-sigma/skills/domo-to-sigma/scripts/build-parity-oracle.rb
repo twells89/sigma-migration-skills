@@ -271,7 +271,11 @@ def canonicalise_numeric_display(rows, expected_rows = nil)
       decimals = body.include?('.') ? body.split('.', 2).last.length : 0
       number *= multiplier
       tolerance = (10.0**-decimals) * multiplier / 2.0
-      if percent
+      percent_points = percent && expected.any? do |row|
+        candidate = row[index]
+        candidate.is_a?(Numeric) && candidate.abs > 1.0
+      end
+      if percent && !percent_points
         number /= 100.0
         tolerance /= 100.0
       end
