@@ -117,6 +117,7 @@ require 'tmpdir'
 require 'digest'
 require 'time'
 require_relative 'lib/beast_mode_lod'
+require_relative 'lib/beast_mode_semantics'
 
 OUT = ENV['DOMO_DISCOVERY_DIR'] || File.expand_path('../discovery', __dir__)
 
@@ -158,36 +159,14 @@ def normalize_bm(sql, klass = nil)
   # 1. Backtick / bracket MySQL identifier quoting → Sigma [Column Name].
   s = s.gsub(/`([^`]+)`/) { "[#{$1}]" }
 
-  # 2. WEEKDAY name-matches Sigma's Weekday() but the two use DIFFERENT day
-  #    numbering — not just an off-by-one. Do NOT rewrite the SQL text.
-  #
-  # HISTORY (bead beads-sigma-nrml): a prior version of this step rewrote
-  # `WEEKDAY(...)` to `DAYOFWEEK(...)` "for parity" with a substitution Beast
-  # Mode was believed to do itself. That rewrite was itself the bug:
-  # `WEEKDAY(...)` handed to the shared converter comes back clean
-  # (`Weekday(...)` — Sigma has it by that exact name), but the old rewrite
-  # renamed it to `DAYOFWEEK(...)` FIRST, and `Dayofweek(...)` is NOT a real
-  # Sigma function — the converter then warned on it (lookUnknownFunctions)
-  # where the untouched WEEKDAY form would not have warned at all. Fixed:
-  # let `WEEKDAY(...)` pass through unchanged; it converts to `Weekday(...)`
-  # by name with no help needed here.
-  #
-  # But name-matching isn't the whole story. VERIFIED 2026-08-03 against both
-  # vendors' official docs — these are genuinely DIFFERENT numbering
-  # conventions, not just an off-by-one:
-  #   MySQL  WEEKDAY(date):  0=Monday .. 6=Sunday
-  #   Sigma  Weekday(date):  1=Sunday .. 7=Saturday
-  # So a Beast Mode formula that compares the raw WEEKDAY() result to a
-  # literal (e.g. `WEEKDAY(x) = 0` meaning "is Monday") translates to a NAME
-  # match with SILENTLY WRONG values (Sigma's Weekday(x) returns 2 for
-  # Monday, not 0). Same class of trap as the CEILING/FLOOR aggregate trap
-  # below (generic converter succeeds syntactically but gets the SEMANTICS
-  # wrong) — flag for a hand override rather than auto-rewriting the formula.
-  # `Mod(Weekday([col])+5,7)` reproduces MySQL's exact WEEKDAY() numbering
-  # from Sigma's Weekday() output (verified for all 7 days in
-  # test/test-convert-beast-modes.rb).
+  # 2. Domo's legacy WEEKDAY is NOT MySQL WEEKDAY semantics. Official Domo
+  # docs say it is replaced by DAYOFWEEK, and the 2026-09-23 live acceptance
+  # matrix proved both functions return the identical 1=Sunday..7=Saturday
+  # values. Normalize to DAYOFWEEK, then the post-converter semantic pass maps
+  # it to Sigma Weekday() (the same numbering).
   if s =~ /\bWEEKDAY\s*\(/i
-    warnings << 'WEEKDAY() converts to Sigma Weekday() by NAME, but the two use DIFFERENT day numbering (MySQL WEEKDAY: 0=Monday..6=Sunday; Sigma Weekday: 1=Sunday..7=Saturday) — override to Mod(Weekday([col])+5,7) to preserve the original MySQL day numbers, or verify downstream logic does not depend on the raw numeric value.'
+    s.gsub!(/\bWEEKDAY\s*\(/i, 'DAYOFWEEK(')
+    warnings << 'Domo legacy WEEKDAY() is normalized to DAYOFWEEK() (live-proven identical 1=Sunday..7=Saturday semantics).'
   end
 
   # 3. Unsupported functions.
@@ -406,6 +385,9 @@ def resolve_entry(entry, overrides)
   lod_plan = entry['class'].to_s == 'lod' ?
     DomoSigma::BeastModeLod.fixed_percent_of_total_plan(entry['originalSql']) : nil
   used_lod_synthesis = false
+  semantic = DomoSigma::BeastModeSemantics.translate(entry, sigma)
+  used_semantic_synthesis = false
+  semantic_block_reason = nil
 
   if override && !override['sigmaFormula'].to_s.strip.empty?
     if already_resolved && entry['class'].to_s != 'lod'
@@ -420,6 +402,11 @@ def resolve_entry(entry, overrides)
   elsif lod_plan
     sigma = DomoSigma::BeastModeLod.fixed_percent_formula(lod_plan)
     used_lod_synthesis = true
+  elsif semantic && semantic['status'] == 'translated'
+    sigma = semantic['formula']
+    used_semantic_synthesis = true
+  elsif semantic && semantic['status'] == 'blocked'
+    semantic_block_reason = semantic['reason']
   end
 
   return [nil, warnings] if sigma.nil? || sigma.to_s.strip.empty?
@@ -454,6 +441,17 @@ def resolve_entry(entry, overrides)
     resolved['note'] = 'Domo COUNT-or-SUM / FIXED-percent denominator synthesized as a workbook PercentOfTotal formula; final scope is selected from the card visual roles.'
     warnings << "#{entry['name'] || entry['id']}: recognized Domo fixed-percent-of-total LOD; " \
                 'the workbook builder will select color/x-axis/grand-total scope from the card bindings.'
+  elsif used_semantic_synthesis
+    resolved['_source'] = 'domo-semantic-synthesis'
+    resolved['converted'] = true
+    resolved.delete('note')
+    resolved['note'] = 'Domo-specific semantic rewrite applied after generic SQL conversion.'
+    warnings << "#{entry['name'] || entry['id']}: applied a Domo-specific semantic rewrite."
+  elsif semantic_block_reason
+    resolved['_source'] = 'domo-semantic-block'
+    resolved['converted'] = false
+    resolved['note'] = semantic_block_reason
+    warnings << "#{entry['name'] || entry['id']}: blocked from automatic placement — #{semantic_block_reason}."
   elsif entry['converted'] == false
     # Track E: --convert already computed a REAL converted flag (via the
     # vendored hasResidualCaseKeyword/hasResidualInfixOperator) — surface it

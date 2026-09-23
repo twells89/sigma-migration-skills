@@ -25,13 +25,11 @@ ok(n == "CONCAT([StringColumnCity], ', ', [StringColumnState])", 'backticks → 
 n, _ = normalize_bm("SUM(`Operating Budget`)")
 ok(n == 'SUM([Operating Budget])', 'spaced identifier preserved in brackets')
 
-puts "== normalize_bm: WEEKDAY passes through unchanged, flagged for override =="
+puts "== normalize_bm: Domo legacy WEEKDAY normalizes to live-equivalent DAYOFWEEK =="
 n, w = normalize_bm('WEEKDAY(`d`)')
-ok(n == 'WEEKDAY([d])', 'WEEKDAY left untouched (no DAYOFWEEK rewrite)')
-ok(!n.include?('DAYOFWEEK'), 'DAYOFWEEK never appears in normalized output')
-ok(w.any? { |x| x.include?('WEEKDAY') && x.include?('Weekday') }, 'WEEKDAY warning emitted, names Sigma Weekday()')
-ok(w.any? { |x| x.include?('Mod(Weekday([col])+5,7)') }, 'WEEKDAY warning names the exact override formula')
-ok(w.any? { |x| x.include?('0=Monday') && x.include?('1=Sunday') }, 'WEEKDAY warning documents both numbering conventions')
+ok(n == 'DAYOFWEEK([d])', 'WEEKDAY rewrites to Domo DAYOFWEEK before generic conversion')
+ok(w.any? { |x| x.include?('1=Sunday') && x.include?('live-proven') },
+   'normalization records the source-grounded numbering contract')
 
 puts "== normalize_bm: unsupported functions flagged =="
 _, w = normalize_bm('SQRT(`x`)')
@@ -77,6 +75,55 @@ ok(fixed_entry.dig('lodPlacement', 'kind') == 'fixed-percent-of-total',
    'the placement plan survives into formulas.json')
 ok(fixed_warnings.any? { |warning| warning.include?('fixed-percent-of-total') },
    'automatic LOD placement is reported')
+
+puts '== live Beast Mode semantic rewrites =='
+semantic_cases = [
+  ['CEILING(`Value`)', 'Ceiling([Value])', 'Round(Max([Value]))'],
+  ['FLOOR(`Value`)', 'Floor([Value])', 'Round(Min([Value]))'],
+  ['APPROXIMATE_COUNT_DISTINCT(`Employee_ID`)', 'Approximate_count_distinct([Employee_ID])',
+   'CountDistinct([Employee_ID])'],
+  ['SUM(SUM(`Sales`)) OVER (ORDER BY `Date`)', 'Sum(Sum([Sales])) OVER ([Order] BY [Date])',
+   'CumulativeSum(Sum([Sales]))'],
+  ['RANK() OVER (ORDER BY SUM(`Sales`) DESC)', 'Rank() OVER ([Order] BY Sum([Sales]) [Desc])',
+   'Rank(Sum([Sales]), "desc")'],
+  ['LAG(SUM(`Sales`), 1) OVER (ORDER BY `Date`)', 'Lag(Sum([Sales]), 1) OVER ([Order] BY [Date])',
+   'Lag(Sum([Sales]), 1)'],
+  ['LEAD(SUM(`Sales`), 1) OVER (ORDER BY `Date`)', 'Lead(Sum([Sales]), 1) OVER ([Order] BY [Date])',
+   'Lead(Sum([Sales]), 1)'],
+  ['NTILE(4) OVER (ORDER BY SUM(`Sales`))', 'Ntile(4) OVER ([Order] BY Sum([Sales]))',
+   'Ntile(4, Sum([Sales]), "asc")'],
+  ["CASE WHEN `Text_Value` LIKE '%alpha%' THEN 'Match' ELSE 'Other' END",
+   'If([Text_Value] LIKE "%alpha%", "Match", "Other")',
+   'If(Contains([Text_Value], "alpha"), "Match", "Other")'],
+  ["CASE WHEN `Value` BETWEEN 10 AND 20 THEN 'Mid' ELSE 'Other' END",
+   'If([Value] BETWEEN 10 AND 20, "Mid", "Other")',
+   'If(([Value] >= 10 and [Value] <= 20), "Mid", "Other")'],
+  ["DATE_FORMAT(`Date`, '%Y-%m')", 'Date_format([Date], "%Y-%m")',
+   'DateFormat([Date], "YYYY-MM")'],
+  ["STR_TO_DATE(`Date_Text`, '%m/%d/%Y')", 'Str_to_date([Date_Text], "%m/%d/%Y")',
+   'DateParse([Date_Text], "MM/DD/YYYY")'],
+  ['LAST_DAY(`Date`)', 'Last_day([Date])', 'LastDay([Date], "month")'],
+  ['MONTHNAME(`Date`)', 'Monthname([Date])', 'MonthName([Date])'],
+  ['DAYOFWEEK(`Date`)', 'Dayofweek([Date])', 'Weekday([Date])'],
+  ['SQRT(`Value`)', 'Sqrt([Value])', 'Power([Value], 0.5)'],
+  ["CONVERT_TZ(`Date`, 'UTC', 'America/Denver')",
+   'Convert_tz([Date], "UTC", "America/Denver")',
+   'ConvertTimezone([Date], "America/Denver", "UTC")'],
+]
+semantic_cases.each do |source, generic, expected|
+  result = DomoSigma::BeastModeSemantics.translate({ 'originalSql' => source }, generic)
+  ok(result && result['status'] == 'translated' && result['formula'] == expected,
+     "#{source.split('(').first} receives its Domo-specific Sigma semantics")
+end
+[
+  'MICROSECOND(`Date`)',
+  'PERCENT_RANK() OVER (ORDER BY SUM(`Sales`))',
+  'SUM(DISTINCT `Value`)',
+  'SUM(SUM(`Sales`) FIXED (BY `Region`))',
+].each do |source|
+  result = DomoSigma::BeastModeSemantics.translate({ 'originalSql' => source }, source)
+  ok(result && result['status'] == 'blocked', "#{source} fails closed")
+end
 
 puts "== lint_formula: leftover IN( is an ERROR =="
 errs, _ = lint_formula('If([col] IN ("A","B"), 1, 0)')
@@ -253,11 +300,11 @@ puts "== lint_formula: valid multi-condition If passes =="
 errs, w = lint_formula('If([Status]="Active","Active",[Status]="Pending","Pending","Other")')
 ok(errs.empty?, 'native multi-condition If is clean (no nesting needed)')
 
-puts '== normalize_bm: unsupported + WEEKDAY override warning =='
+puts '== normalize_bm: unsupported + Domo WEEKDAY compatibility =='
 n, w = normalize_bm('WEEKDAY(order_date)')
-ok(n.include?('WEEKDAY'), 'WEEKDAY name preserved unchanged')
-ok(!n.include?('DAYOFWEEK'), 'no DAYOFWEEK rewrite (bare identifier, no backticks)')
-ok(!w.empty?, 'WEEKDAY override warning present')
+ok(n.include?('DAYOFWEEK'), 'legacy WEEKDAY normalizes to Domo-equivalent DAYOFWEEK')
+ok(!n.include?('WEEKDAY'), 'legacy name is removed before generic conversion')
+ok(!w.empty?, 'WEEKDAY compatibility note present')
 ok(!w.any? { |x| x.include?('Unsupported function WEEKDAY') }, 'WEEKDAY not double-flagged via the generic UNSUPPORTED loop')
 _, w2 = normalize_bm('SQRT(x)')
 ok(w2.join.match?(/SQRT/i), 'SQRT flagged unsupported')
@@ -364,14 +411,18 @@ ok(resolved_unreliable['note'] == 'hand-authored: LIKE has no Sigma equivalent f
 ok(resolved_unreliable['_source'] == 'formula-override', 'attributed with _source: formula-override')
 ok(warns_unreliable.any? { |w| w.include?('Unreliable Auto') }, 'using the override on a converted:false entry still warns, naming the Beast Mode')
 
-puts '== resolve_entry: a converted:false entry with NO matching override still keeps its (unreliable) formula, unchanged =='
+puts '== resolve_entry: deterministic LIKE residual auto-recovers even without an override =='
 pending_unreliable_no_ov = { 'id' => 'calculation_unreliable-2', 'name' => 'Unreliable No Override', 'class' => nil,
                              'sigmaFormula' => 'Lower([Country]) LIKE "usa"', 'converted' => false }
 resolved_no_ov, warns_no_ov = resolve_entry(pending_unreliable_no_ov, {})
-ok(!resolved_no_ov.nil?, 'no override available → converted:false entry is still emitted (never silently dropped)')
-ok(resolved_no_ov['sigmaFormula'] == 'Lower([Country]) LIKE "usa"', 'the unreliable automated formula is left untouched when no override matches')
-ok(resolved_no_ov['converted'] == false, 'converted stays false — nothing forces it to true without an applied override')
-ok(warns_no_ov.any? { |w| w.include?('converted:false') }, 'still warns that this formula was flagged converted:false and an override would supersede it')
+ok(!resolved_no_ov.nil?, 'deterministic semantic rewrite keeps the entry')
+ok(resolved_no_ov['sigmaFormula'] == 'Lower([Country]) = "usa"',
+   'exact LIKE becomes equality without operator input')
+ok(resolved_no_ov['converted'] == true, 'successful semantic rewrite clears converted:false')
+ok(resolved_no_ov['_source'] == 'domo-semantic-synthesis',
+   'automatic recovery is attributed separately from a human override')
+ok(warns_no_ov.any? { |w| w.include?('semantic rewrite') },
+   'automatic recovery remains visible in conversion output')
 
 puts '== resolve_entry: no override + no sigmaFormula → still dropped (unchanged honest-drop behaviour) =='
 pending_none = { 'id' => 'calculation_none-1', 'name' => 'Untranslatable', 'class' => nil, 'sigmaFormula' => nil }

@@ -13,6 +13,7 @@ module DomoPluginIntegrity
     'skills/domo-to-sigma/scripts/derive-presentation-overrides.rb',
     'skills/domo-to-sigma/scripts/check-plugin-integrity.rb',
     'skills/domo-to-sigma/scripts/lib/beast_mode_lod.rb',
+    'skills/domo-to-sigma/scripts/lib/beast_mode_semantics.rb',
     'skills/domo-to-sigma/scripts/lib/plugin_integrity.rb',
   ].freeze
 
