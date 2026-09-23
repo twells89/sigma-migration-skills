@@ -1399,7 +1399,7 @@ def main():
     # change exists to kill).
     QUERYABLE = {"table", "pivot-table", "bar-chart", "line-chart", "pie-chart",
                  "donut-chart", "area-chart", "scatter-chart", "combo-chart",
-                 "kpi-chart", "region-map", "point-map"}
+                 "kpi-chart", "progress", "region-map", "point-map"}
     must = [e["id"] for pid, page_els in page_elements.items() if pid != "page-data"
             for e in page_els if e.get("kind") in QUERYABLE]
     for sc in scope:

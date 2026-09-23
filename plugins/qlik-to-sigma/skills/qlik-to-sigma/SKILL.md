@@ -10,29 +10,53 @@ description: >-
   creation via the Sigma REST API, and parity verification against
   the source warehouse. Requires Qlik access or a corectl export, plus Sigma
   API credentials and a Sigma warehouse connection; MCP and direct warehouse
-  credentials are not required.
+  credentials are not required. Supports Ruby and no-Ruby Python runtime
+  profiles; both require Python and Node.
 user-invocable: true
 ---
 
 # Qlik → Sigma Conversion
 
-> **Windows / first run — run the environment doctor before anything else:**
-> `bash scripts/doctor.sh` (macOS/Linux/Git Bash) or `powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1` (Windows).
-> It checks Ruby/Python/Node/bash and flags the Python "Store stub" + CRLF with exact fixes. Details: `refs/environment.md`.
+> **First run — bootstrap before anything else.** Use one workdir throughout:
+> `bash scripts/bootstrap.sh --workdir <WORK>` (macOS/Linux/Git Bash) or
+> `powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -WorkDir <WORK>`
+> (Windows). To require the supported no-Ruby path, add
+> `--runtime-profile python` / `-RuntimeProfile python`; recheck with
+> `bash scripts/doctor.sh --runtime-profile python --workdir <WORK>` or
+> `scripts\doctor.ps1 -RuntimeProfile python -WorkDir <WORK>`.
+> The Python profile requires **Python + Node, not Ruby**. `auto` prefers Ruby
+> and falls back to Python when Ruby is unavailable. Full commands:
+> **`PYTHON_RUNTIME.md`**. General environment details: `refs/environment.md`.
 
 ## Preflight the workbook spec before POST (mandatory)
 
-Before POSTing any workbook spec, run `ruby scripts/lib/preflight_lint.rb <spec.json>` — it exits 1 with a precise message on the two migration-killer bugs: a `table` with aggregate columns + dimensions but **no `groupings`** (renders raw detail rows), and a malformed `control` (missing `id`/`controlId`/`controlType` or nesting value fields under a `value` object instead of flat, a non-double-nested `source`, or a list control wired to neither `source` nor `filters` — a filters-only list control is valid). Fix every violation first — never POST past it, and **never conclude a feature is "unsupported" from an `Invalid kind` error** (it means the inner fields are wrong). Verified shapes: `sigma-workbooks` `controls.md` / `tables.md`.
+The selected orchestrator runs the workbook preflight before POST. On the Ruby
+profile its manual equivalent is `ruby scripts/lib/preflight_lint.rb
+<spec.json>`; the Python profile runs its equivalent in process and does not
+shell out to Ruby. It rejects the two migration-killer bugs: a `table` with
+aggregate columns + dimensions but **no `groupings`** (renders raw detail rows),
+and a malformed `control` (missing `id`/`controlId`/`controlType`, wrongly
+nested value fields, malformed `source`, or a list control wired to neither
+`source` nor `filters`). Fix every violation first — never POST past it, and
+**never conclude a feature is "unsupported" from an `Invalid kind` error** (it
+means the inner fields are wrong). Verified shapes: `sigma-workbooks`
+`controls.md` / `tables.md`.
 
 ## Phase 0 — Choose where to build (ask first when no destination given)
 
 Don't silently land the migrated data model + workbook in an auto-picked folder.
 If the user didn't supply a destination (no `--folder <id>`), ASK before building:
 
-1. `ruby scripts/pick-destination.rb list` → `{ workspaces, folders (editable, with parentName), myDocuments }`
+1. List destinations with the selected profile:
+   `ruby scripts/pick-destination.rb list` or
+   `python3 scripts/pick_destination.py list` → `{ workspaces, folders
+   (editable, with parentName), myDocuments }`
 2. Let the user pick ONE: a **workspace** (its `id` lands content in the workspace root),
    an existing **folder**, **My Documents** (when non-null — null for service tokens), or
-   **create a new folder**: `ruby scripts/pick-destination.rb create --name "<name>" [--parent <workspace-or-folder-id>]`
+   **create a new folder** with the matching command:
+   `ruby scripts/pick-destination.rb create ...` or
+   `python3 scripts/pick_destination.py create --name "<name>"
+   [--parent <workspace-or-folder-id>]`
 3. Pass the chosen id as `--folder <id>`. `folderId` accepts a workspace id or a folder id.
 
 If a destination is already supplied, honor it silently — don't ask.
@@ -44,13 +68,15 @@ If a destination is already supplied, honor it silently — don't ask.
 > (one Sigma page per Qlik sheet, layout straight from the sheet cell grids) from ONE
 > command with zero hand-edits in under 2 minutes.
 
-## Step 0 — Front door: resolve the connection once (`scripts/intake.rb`)
+## Step 0 — Front door: resolve the connection once
 
-Resolve the Sigma warehouse connection a SINGLE time up front so no phase free-searches
-`/v2/connections` (the token sink):
+Resolve the Sigma warehouse connection a SINGLE time up front so no phase
+free-searches `/v2/connections` (the token sink). Use the matching runtime:
 
 ```bash
 ruby scripts/intake.rb --workdir <WORK> --tool qlik-to-sigma --mode live \
+  [--connection <id>] [--name <connection-name-substring>]
+python3 scripts/intake.py --workdir <WORK> --tool qlik-to-sigma --mode live \
   [--connection <id>] [--name <connection-name-substring>]
 ```
 
@@ -59,12 +85,19 @@ point `--out` at the same `<WORK>`) and writes `intake.json` (run-start + mode f
 run-duration / audit). Multiple connections + no id/name → it lists them and asks you to pick;
 never guesses.
 
-## The one command
+Point the selected orchestrator at the same `<WORK>`; it consumes
+`connection.json` when `--connection` is omitted. Both intake implementations
+write candidates and stop when multiple connections remain, so neither path
+guesses. Use the matching destination picker before the build when `--folder`
+was not supplied.
+
+## The one command (use the entrypoint selected by doctor)
 
 > ## ⛔ THE ONE PATH (do not improvise a workbook)
-> `migrate-qlik.rb` is the single entry point — it discovers the Qlik app, builds
-> the DM + workbook, and **only exits 0 when parity/layout/control pass with real
-> elements built**. Rules:
+> `migrate-qlik.rb` and `migrate-qlik.py` are the supported profile
+> entrypoints. Run exactly the one recorded in `doctor.json`; each discovers
+> the Qlik app, builds the DM + workbook, and in live mode **only exits 0 when
+> parity/layout/control pass with real elements built**. Rules:
 > - **NEVER hand-drive the per-phase scripts, hand-author a DM/workbook JSON, or
 >   `curl`-POST to `/v2/workbooks` / lay out empty "placeholder" pages.** That
 >   bypasses parity + the element guard and ships an EMPTY workbook — the #1 way a
@@ -73,10 +106,11 @@ never guesses.
 >   do not build a shell.
 > - **"Done" is evidenced accounting, not "pages exist."** The orchestrator's
 >   `phase6-success.json` is only a supporting sentinel; it is never sufficient
->   by itself. Complete only after the shared `assert-phase6-ran.rb` exits 0,
+>   by itself. Complete only after the selected profile's
+>   `assert-phase6-ran.rb|.py` exits 0,
 >   the complete app census has one terminal disposition per source object, and
->   `build-migration-report.rb` writes a non-RED `MIGRATION_REPORT.md` whose
->   `--check` mode passes. `verify-complete.rb` remains an additional empty-build
+>   `build-migration-report.rb|.py` writes a non-RED `MIGRATION_REPORT.md` whose
+>   `--check` mode passes. `verify-complete.rb|.py` remains an additional empty-build
 >   guard. An empty or incompletely accounted workbook is never done.
 > - **MCP and direct Snowflake credentials are optional.** Given `--connection`,
 >   the live path browses `GET /v2/connections/paths`, resolves each source with
@@ -84,21 +118,30 @@ never guesses.
 >   `GET /v2/connections/tables/<inode>/columns` before the first write.
 
 ```bash
-eval "$(scripts/vendor/get-token.sh)"          # SIGMA_BASE_URL + SIGMA_API_TOKEN
+# Ruby profile:
+eval "$(scripts/vendor/get-token.sh)"
 ruby scripts/migrate-qlik.rb \
   --app <qlikAppId> --connection <SIGMA_CONNECTION_ID> \
   --database <DB> --schema <SCHEMA> --context <qlik-cli ctx> \
   [--folder <SIGMA_FOLDER_ID>] [--name '<prefix>'] [--yes]
+
+# Python profile (no Ruby; Node is still required):
+python3 scripts/migrate-qlik.py \
+  --app <qlikAppId> --connection <SIGMA_CONNECTION_ID> \
+  --database <DB> --schema <SCHEMA> --context <qlik-cli ctx> \
+  --folder <SIGMA_FOLDER_ID> --out <WORK> [--name '<prefix>'] [--yes]
 ```
 
 **Offline corectl export:** when a customer cannot grant live Qlik access, accept
 the standard output of `corectl unbuild` and run the same pipeline:
 
 ```bash
-ruby scripts/migrate-qlik.rb \
+python3 scripts/migrate-qlik.py \
   --unbuild <app-unbuild-dir> --connection <SIGMA_CONNECTION_ID> \
   --database <DB> --schema <SCHEMA> [--folder <SIGMA_FOLDER_ID>] [--yes]
 ```
+
+The Ruby profile uses `ruby scripts/migrate-qlik.rb` with the same flags.
 
 `qlik-unbuild-discover.py` recursively flattens sheet `qChildren` and normalizes
 raw `measures.json` / `dimensions.json`; empty master-item arrays do not imply an
@@ -110,9 +153,14 @@ decisions printed as an OPEN QUESTIONS block (re-run with `--yes` or `--answers`
 exit 0 = PARITY GREEN; exit 3 = built but parity RED. Each phase below is also an
 independently runnable script if you need to intervene mid-pipeline.
 
-**Offline smoke (no tenant/org/network):** `ruby scripts/migrate-qlik.rb
---from-discovery fixtures/retail-orders --connection 0000… --dry-run --yes --out /tmp/smoke`
-— see `fixtures/README.md`.
+**Offline smoke (no tenant/org/network/credentials):**
+`SIGMA_OFFLINE_DRY_RUN=1 bash scripts/bootstrap.sh --runtime-profile python
+--workdir /tmp/smoke`, then
+`SIGMA_OFFLINE_DRY_RUN=1 python3 scripts/migrate-qlik.py --from-discovery fixtures/retail-orders
+--connection 00000000-0000-0000-0000-000000000000 --database DEMO_DB
+--schema DEMO --dry-run --yes --out /tmp/smoke` — see `fixtures/README.md`.
+The Ruby profile remains supported with the same flags. The Python path never
+invokes Ruby; it still requires Node for the vendored converter.
 
 **Read ALL of the following before replying or taking any action:**
 - `refs/operating-contract.md` — **READ FIRST**: the fidelity guardrails (render + value-check EVERY page against the source; never ship empty or silently drop a tile; don't spin — surface blockers).
@@ -160,7 +208,10 @@ For live access: `qlik context use <ctx>`.
 
 ### Sigma access
 ```bash
-bash -c 'eval "$(scripts/vendor/get-token.sh)"; <cmd>'   # sets SIGMA_BASE_URL + SIGMA_API_TOKEN
+# Ruby/bash profile:
+bash -c 'eval "$(scripts/vendor/get-token.sh)"; <cmd>'
+# Python profile (shell-neutral token file; the orchestrator can also self-mint):
+python3 scripts/vendor/get_token.py --workdir <WORK>
 ```
 Need a Sigma connection pointing at the same warehouse as the Qlik app (for parity).
 The scripts discover tables and columns through that connection's Sigma REST
@@ -211,7 +262,7 @@ Discovery is **fully parallel and strictly read-only** (re-engineered 2026-06-11
   new-mode runs leave it untouched). Discovery never reloads, never writes.
 - **Engine-snapshot lane**: the KPI/max-date/bucket evals (`snapshot.json`) are
   consumed only at the Phase-6 freshness banner, and in-memory totals can't
-  change without a reload — so `migrate-qlik.rb` runs discovery with
+  change without a reload — so the selected orchestrator runs discovery with
   `--defer-snapshot` and computes the snapshot via `--snapshot-only` as a
   background lane under Phases 2-5.
 - **Throttle handling (never silent)**: Qlik Cloud throttles new engine
@@ -239,9 +290,10 @@ staleness) blocks GREEN.
 > the customer enable "Create project folder" in QlikView Desktop and send the whole
 > `<name>-prj/` folder, then run the SAME command as any migration:
 > ```bash
-> ruby scripts/migrate-qlik.rb --prj <path/to/Name-prj> --connection <SIGMA_CONNECTION_ID> \
+> python3 scripts/migrate-qlik.py --prj <path/to/Name-prj> --connection <SIGMA_CONNECTION_ID> \
 >   [--database DB --schema SCHEMA --folder <SIGMA_FOLDER_ID> --name '<prefix>']
 > ```
+> The Ruby profile uses `ruby scripts/migrate-qlik.rb` with the same flags.
 > A `--prj` folder is auto-detected: `scripts/qlik-prj-discover.py` parses it into the SAME
 > discovery artifacts the Qlik Sense pipeline consumes, so **the full pipeline runs unchanged —
 > data model AND workbook**. It reads:
@@ -252,7 +304,11 @@ staleness) blocks GREEN.
 >   (measures, same Set Analysis / Range / Dual / Class translation) → the workbook charts.
 >
 > **Scope / caveats (be honest with customers):** a `-prj` folder has **no live engine**, so
-> parity is **warehouse-only** (Sigma vs. the source warehouse — no Qlik-side value snapshot), and
+> without a live engine the default check is **warehouse executability only**
+> (nonempty/error-free exports, explicitly non-strict and RED for completion).
+> Supply `--warehouse-expected <json>` from independently queried warehouse
+> results (object keyed by source object id, each value an ordered row array) to
+> arm strict value parity, and
 > chart-kind/layout fidelity is best-effort (there is no QlikView renderer to diff against). Because
 > QlikView has **no capture API**, the `--prj` discovery step (`qlik-prj-discover.py`) prints an
 > `[ASSIST]` telling you to **`AskUserQuestion` for a screenshot of each sheet** and drop them in
@@ -266,13 +322,13 @@ staleness) blocks GREEN.
 > bar chart with a loud warning — never a silent wrong default.
 
 ## Phase 2 — Convert (convert_qlik_to_sigma)
-**Local by default, zero-config, no MCP.** `migrate-qlik.rb` runs
+**Local by default, zero-config, no MCP.** The selected orchestrator runs
 `convertQlikToSigma` in-process via a `node` shim against the self-contained bundle
 VENDORED in the skill (`converter/qlik.mjs`) — no clone, no npm, no network, **no
 MCP, no data egress**. A dev's own build wins via `QLIK_MCP_DIR` (or a local
 `sigma-data-model-mcp` checkout); refresh the bundle with `tools/vendor-converters.sh`.
 Only if the vendored bundle is **also** missing (and `QLIK_MCP_DIR` unset) does
-`migrate-qlik.rb` abort, at which point run the `mcp__sigma-data-model__convert_qlik_to_sigma`
+the orchestrator abort, at which point run the `mcp__sigma-data-model__convert_qlik_to_sigma`
 MCP tool **manually** (same `model_json → Sigma DM spec` contract) and feed its output
 back in as `converter-out.json`. The hosted MCP is a fallback, not the default path.
 Output = Sigma DM spec (warehouse-table elements + relationships on shared keys +
@@ -321,6 +377,9 @@ eval "$(scripts/vendor/get-token.sh)"       # SIGMA_BASE_URL + SIGMA_API_TOKEN
 ruby scripts/vendor/find-or-pick-dm.rb --workbook-signature $WORK/dm-signature.json \
   --out $WORK/dm-match.json --auto-pick     # exit 0 = candidate ≥ min-score
 ```
+Those are Ruby-profile/manual recovery commands. The Python orchestrator runs
+the same strict reuse decision in process; do not install Ruby to hand-drive
+this phase on the Python profile.
 `qlik-dm-signature.py` derives `{warehouse_tables, referenced_columns, measures}` from the
 Phase-1 converter input (pass the same `--database`/`--schema` you hand the converter —
 Qlik table names are bare). Decision:
@@ -386,7 +445,7 @@ element the master sources. Match is by FORMULA equivalence — strip the master
 `Sum([Master/Net Revenue])` equals a metric's `Sum([Net Revenue])` — so it's naming-independent
 and SAFE: ratios with no exact-metric match, measures in a different representation (e.g. the
 inline `CountDistinct(...)` vs a Qlik-form `Count(DISTINCT ...)` metric), and any non-match all
-fall back to inline. `migrate-qlik.rb` hands the freshly-built DM spec to the builder via
+fall back to inline. The selected orchestrator hands the freshly-built DM spec to the builder via
 `--dm-spec`; the shared binder (`scripts/lib/metric_binding.py`, resolving own + inherited
 metrics through the `source.elementId` chain) does the matching. No `--dm-spec` / the DM-reuse
 path → inline, byte-identical to before. Verified: `tests/test_metric_reference.py`.
@@ -477,7 +536,7 @@ A workbook that POSTs 200 and passes numeric/bucket parity can still be visually
    customer screenshot); record unavailable source images and the reason in the
    census. Per-visual PNGs are useful drill-down evidence but do not prove the
    whole-sheet composition.
-2. `migrate-qlik.rb` now **auto-renders** every content page to a full-page PNG (Phase 5b → `<workdir>/visual-qa/<pageId>.png`) so the gate runs by default. To re-render a page manually (token first: `eval "$(scripts/vendor/get-token.sh)"`):
+2. The selected orchestrator **auto-renders** every content page to a full-page PNG (Phase 5b → `<workdir>/visual-qa/<pageId>.png`) so the gate runs by default. To re-render a page manually after minting a token with the selected profile:
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
 3. Mechanically reject blank/effectively blank source and Sigma PNGs with
    `python3 scripts/png_health.py <image.png> --json-out <WORK>/render-health/<name>.json`.
@@ -487,20 +546,32 @@ A workbook that POSTs 200 and passes numeric/bucket parity can still be visually
    the right chart family, and visually checked; full-page health cannot hide a
    blank or wrong tile. When normalized percentage tile bounds are available,
    also run `visual-similarity.py --tiles <bounds.json>` and retain its per-tile
-   evidence. Record the source-vs-target verdict with
-   `record-visual-check.rb`; a missing source image is a named waiver, not PASS.
+   evidence. Record the source-vs-target verdict with the selected profile's
+   `record-visual-check.rb` or `record_visual_check.py`; a missing source image
+   is a named waiver, not PASS.
 5. Fix any failure in the spec — for multi-page workbooks use the companion **sigma-workbooks** skill's `scripts/wb-rep.rb` (full-clone: `plugins/sigma-authoring/skills/sigma-workbooks/scripts/wb-rep.rb`; pull → edit element files → push) — then **re-render and re-read**.
 6. Declare the migration done on a **clean render**, not on HTTP 200.
 
 ### Completion accounting (mandatory)
 
-After parity and visual QA, run the shared completion gate and final accounting:
+After parity and visual QA, the selected orchestrator must run the shared
+completion contract and final accounting. These are the Ruby profile's manual
+recovery commands:
 
 ```bash
 python3 scripts/finalize-qlik-report.py --workdir <WORK> [--source-png <sheet.png>]
 ruby scripts/assert-phase6-ran.rb --workdir <WORK> --workbook-id <workbookId>
 ruby scripts/build-migration-report.rb --workdir <WORK> --check
 ruby scripts/verify-complete.rb --workdir <WORK> --workbook-id <workbookId>
+```
+
+Python profile recovery commands:
+
+```bash
+python3 scripts/finalize-qlik-report.py --workdir <WORK> [--source-png <sheet.png>]
+python3 scripts/assert-phase6-ran.py --workdir <WORK> --workbook-id <workbookId>
+python3 scripts/build-migration-report.py --workdir <WORK> --check
+python3 scripts/verify-complete.py --workdir <WORK> --workbook-id <workbookId>
 ```
 
 All four commands must exit 0. The finalizer refreshes PNG health, visual
@@ -511,6 +582,10 @@ render, visual, tile, and waiver evidence. The inline
 `phase6-success.json` marker does not replace either the shared gate or the
 complete census/report.
 
+On the no-Ruby Python profile, rerun `python3 scripts/migrate-qlik.py` with the
+same workdir; it executes the equivalent Python completion checks. A Python
+run must never install or invoke Ruby to manufacture completion evidence.
+
 ---
 
 ## Scripts
@@ -518,13 +593,14 @@ complete census/report.
 |---|---|---|
 | `scripts/qlik-discover.py` | 1 | Extract data model (load script), master measures/dimensions (read-only `measure/dimension ls` + properties), and sheets/charts from any app → `converter-input.json`. Pooled (`--pool 8`), strictly read-only, `--defer-snapshot`/`--snapshot-only` lanes, `timings.json` evidence. **Validated (57.3s → 12.5s on the 46-object fixture app).** |
 | `scripts/qlik-unbuild-discover.py` | 1 | Normalize a corectl `unbuild` folder into the live discovery contract; recursively flattens sheet `qChildren`, including inline charts when master measure/dimension arrays are empty. Offline and creds-free. |
-| `scripts/qlik-dm-signature.py` | 2.5 | Converter-input JSON → DM-reuse signature (`{warehouse_tables, referenced_columns, measures}`) for `find-or-pick-dm.rb`. **Validated live.** |
+| `scripts/qlik-dm-signature.py` | 2.5 | Converter-input JSON → DM-reuse signature (`{warehouse_tables, referenced_columns, measures}`) for the selected profile's DM picker. **Validated live.** |
 | `scripts/vendor/find-or-pick-dm.rb` | 2.5 | Scan existing Sigma DMs and recommend reuse (score = 0.7·column + 0.2·table + 0.1·metric overlap; `--auto-pick` with tie-window safety). Shared vendor-neutral copy (canonical: tableau-to-sigma). Non-destructive. |
 | `scripts/migrate-qlik.rb` | ALL | **The one command** — chains every phase below for any app/sheet; OPEN-QUESTIONS checkpoint, freshness preflight, bucket parity; `--from-discovery` + `--dry-run` = offline smoke. Discovery runs as a background lane with Sigma-side prep (token, folder, DM-spec prefetch for Phase 2.5) interleaved in the foreground; the engine snapshot runs as its own lane under Phases 2-5; `PHASE TIMINGS` printed at exit. **Validated live 2026-06-11 (68s wall, zero hand-edits, GREEN incl. layout lint).** |
+| `scripts/migrate-qlik.py` | ALL | Supported Python + Node entrypoint for the same artifact-driven, fail-closed pipeline. Requires no Ruby; `SIGMA_OFFLINE_DRY_RUN=1` plus `--from-discovery ... --dry-run --yes` is the credentials-free certification path. |
 | `scripts/reconcile-columns.py` | 3 | Auto-derive the Qlik-field → real-warehouse-column map from the load script's `AS` aliases + `FROM` tables (so the DM points at real columns). **Validated.** |
 | `scripts/preflight-warehouse.rb` | 3 | Resolve tables and exhaustively list columns through the supplied Sigma connection's REST catalog; no MCP or direct warehouse credentials. Blocks missing/ambiguous sources before POST. |
 | `scripts/gen-denorm-sql.py` | 3 | Turn reconcile.json into the denormalized SQL element (`real AS qlik` + inferred fact↔dim joins) — feeds `build-sigma-dm.py`. Display names match Sigma's own derivation rule. **Validated.** |
-| `scripts/batch-migrate.py` | 3–6 | Migrate many apps in one pass (one Sigma workbook each, reusing a SHARED DM) — for tenant-scale demos. For distinct apps, run `migrate-qlik.rb` per app. **Validated on 5 apps.** |
+| `scripts/batch-migrate.py` | 3–6 | Migrate many apps in one pass (one Sigma workbook each, reusing a SHARED DM) — for tenant-scale demos. For distinct apps, run the selected `migrate-qlik` entrypoint per app. **Validated on 5 apps.** |
 | `scripts/gap-scout.md` | 2 | Sub-agent guide: for each unhandled Qlik expression (`Aggr`/`Dual`/selection-state/`Range*`/`Class`), spawn a scout to find + validate a Sigma translation and persist it. |
 | `scripts/scout-validate.py` | 2 | Gap-scout primitive: validate a candidate formula via a throwaway test workbook (column-type check) + persist to `~/.qlik-to-sigma/learned-rules.yaml`. **Validated.** |
 | `scripts/learned-rules.py` | 2 | Loader: the build step applies customer-accumulated rules before falling back to a WARN. |
@@ -533,11 +609,11 @@ complete census/report.
 | `scripts/sigma-export-png.py` | 5.5 | Render a workbook page/element to PNG via the export API for visual inspection against `refs/layout-visual-qa.md` (the Visual QA gate). |
 | `scripts/png_health.py` | 5.5 | Deterministic PNG decode/ink health check; rejects solid, all-white, or effectively blank exports and can write run-local render-health JSON. It does not judge source fidelity. |
 | `scripts/visual-similarity.py` | 5.5 | Deterministic source-vs-Sigma structural floor; optional normalized tile bounds add per-tile blank detection. Exit 2 is an error, never PASS. |
-| `scripts/record-visual-check.rb` | 5.5 | Record the image-capable source-vs-target verdict and checklist in `parity-final.json` for the shared hard gate; missing source imagery requires a named waiver. |
+| `scripts/record-visual-check.rb` / `scripts/record_visual_check.py` | 5.5 | Record the image-capable source-vs-target verdict and checklist in `parity-final.json` for the hard gate; missing source imagery requires a named waiver. |
 | `scripts/build-sigma-dm.py` | 3 | Author + POST the Sigma data model FROM THE PIPELINE ARTIFACTS (converter-out + reconcile + denorm): repointed star + relationships + denorm SQL element + metrics. `--dry-run` for offline. **Proven (generalized 2026-06-10).** |
 | `scripts/build-sigma-workbook.py` | 4 | Author + POST the workbook FROM DISCOVERY (charts.json + layout.json): one page per Qlik sheet, cell-grid layout, sorts, formats, null-suppression filters. `--dry-run` for offline. **Proven (generalized 2026-06-10).** |
-| `scripts/lib/layout_lint.rb` | 5 | **Shared layout-quality lint (gate 6)** — raw-id display names / orphan controls outside containers / generic header-band title; vendored byte-identical across plugins; run automatically by `migrate-qlik.rb` Phase 6 (`--skip-layout-lint` to bypass). |
-| `scripts/lib/control_lint.rb` | 5 | **Shared control-wiring lint (gate 7)** — dead controls / ghost targets / reach / `control-scope.json` coverage; vendored byte-identical across plugins; run automatically by `migrate-qlik.rb` Phase 6e. |
+| `scripts/lib/layout_lint.rb` | 5 | **Shared layout-quality lint (gate 6)** — raw-id display names / orphan controls outside containers / generic header-band title; run automatically by the selected orchestrator (`--skip-layout-lint` to bypass). |
+| `scripts/lib/control_lint.rb` | 5 | **Shared control-wiring lint (gate 7)** — dead controls / ghost targets / reach / `control-scope.json` coverage; run automatically by the selected orchestrator. |
 | `scripts/probe-controls.rb` | 5 | **Shared flip test** — runtime proof a control filters: export an in-closure element with/without `parameters:{controlId: value}`; cross-page exports prove Qlik's global scope. |
 | `scripts/assert-phase6-ran.rb` | 6 | **Shared hard completion gate** over parity, live readback, layout/control, render/visual/tile evidence, and waivers. Must exit 0 before declaring completion. |
 | `scripts/build-qlik-accounting.py` | 6 | Reconcile the complete Qlik app inventory, formula mapping, DM/workbook outputs, controls, layout, tiles, and parity into `source-object-census.json`, `coverage.json`, and Qlik control/layout evidence; fails closed on unaccounted objects. |
@@ -565,7 +641,7 @@ never reloaded and never written.
 - ✅ Phase-3 reconciliation — `scripts/reconcile-columns.py` auto-derives it from the load-script `AS` aliases.
 - ✅ Before/after PNGs — `scripts/qlik-screenshot.py` (Qlik reporting API).
 - ✅ `scout-validate.py` kpi-chart bug fixed (`value.columnId`, was `value.id` → every kpi validation failed POST).
-- ✅ One-command pipeline (`migrate-qlik.rb`) — discover→convert→DM→workbook→layout→parity, artifact-driven builders, validated live 2026-06-10.
+- ✅ One-command pipeline (`migrate-qlik.rb` / `migrate-qlik.py`) — discover→convert→DM→workbook→layout→parity, artifact-driven builders.
 - ✅ Layout from discovery — per-sheet cell grids → Sigma 24-col grid (row-scale ≥2, KPI ≥5 rows).
 - ✅ Source-freshness preflight + per-chart bucket-count parity.
 - ✅ Display-name rule matched to Sigma's derivation (lowercase particles), verified by live readback.
@@ -579,16 +655,38 @@ Row/column security is **never silently dropped and never silently ported** — 
 
 **What is detected for Qlik:** Section Access (supply the parsed `sectionAccess` object): `REDUCTION` row reduction (to team/attribute RLS; strict-exclusion equals Sigma fail-closed) and `OMIT` column reduction (to CLS).
 
+When Qlik metadata/load-script discovery detects Section Access but cannot
+materialize its rules (for example, connection-backed access tables), provide
+the reviewed rule artifact with `migrate-qlik.py --security <security.json>`.
+The Python path aborts by default when only the boolean/script signal exists;
+it never treats missing rules as an unsecured success.
+
 **Flow (only runs when `result.security` is non-empty — zero overhead otherwise):**
 1. **Convert + post** the data model as usual. Capture the `dataModelId` and the converter's `result.security[]` (write it to `security.json`).
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + username-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   eval "$(scripts/get-token.sh)"
-   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
-   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
+   # Python profile self-mints; optional shell-neutral token handoff:
+   python3 scripts/vendor/get_token.py --workdir <WORK>
+   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK>            # plan only (default)
+   python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK> --provision --apply \
+     [--membership-evidence <assignment-readback.json>]
    ```
-   `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
+   `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element, reads every requested rule back, and writes run/model/hash-bound `security-decision.json`. When rules name teams or user attributes, completion also requires hash-bound `--membership-evidence` from the assignment/readback step.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
+5. **Effective-user proof.** Write `security-effective-user-verdict.json`
+   bound to the run, data model, DM readback hash, source/Sigma roster evidence,
+   and at least one passing allow + deny test. Each test must cover the exact
+   source-policy rule ids and carry distinct, hash-bound Qlik/Sigma result
+   payloads with matching principal/query/rows plus transport provenance.
+   Automatic Qlik `OMIT` output is
+   not equivalent to per-user CLS: customize it and set
+   `verifiedEquivalent:true` only after these tests.
+
+For a detected Section Access app, unattended Python runs default to **abort
+before build**. An explicit proceed may post the model for security work, but
+the Python completion gate remains RED until `security-decision.json` records
+either an applied/readback-verified `port` or `customize` decision, or a named
+`skip` with `acknowledges_all_rows_visible:true` (budget-counted waiver).
 
 **Skip is loud:** opting out leaves the migrated model with NO RLS — all rows visible to everyone. Confirm before skipping.

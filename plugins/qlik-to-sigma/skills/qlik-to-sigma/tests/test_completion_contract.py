@@ -3,6 +3,7 @@
 
 import importlib.util
 import binascii
+import hashlib
 import json
 import struct
 import subprocess
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import unittest
 import zlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -70,8 +72,8 @@ class CompletionContractTest(unittest.TestCase):
         self.temp.cleanup()
 
     def run_script(self, name, *args):
-        command = [sys.executable if name.endswith(".py") else "ruby",
-                   str(SCRIPTS / name), *map(str, args)]
+        self.assertTrue(name.endswith(".py"), "completion fixtures must be Python-only")
+        command = [sys.executable, str(SCRIPTS / name), *map(str, args)]
         return subprocess.run(command, text=True, capture_output=True, check=False)
 
     def make_complete_workdir(self):
@@ -105,11 +107,43 @@ class CompletionContractTest(unittest.TestCase):
                 "columns": [{"id": "country", "name": "Country"}],
             }]}],
         })
-        write_json(wd / "wb-spec.json", {
+        write_json(wd / "dm-ids.json", {"dataModelId": "dm-1"})
+        write_json(wd / "dm-result.json", {
+            "dataModelId": "dm-1",
+            "denormElementId": "dm-orders",
+        })
+        write_json(wd / "datamodel-readback.json", {
+            "dataModelId": "dm-1",
+            "pages": [{"elements": [{
+                "id": "dm-orders", "name": "Orders Country", "kind": "table",
+                "columns": [{"id": "country", "name": "Country"}],
+            }]}],
+        })
+        workbook_spec = {
             "pages": [{"id": "sheet-1", "name": "Overview", "elements": [{
                 "id": "sigma-chart-1", "name": "Sales", "kind": "bar-chart",
                 "columns": [{"id": "country"}, {"id": "sales"}],
             }]}],
+        }
+        layout_xml = (
+            '<Page id="sheet-1" type="grid" '
+            'gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">'
+            '<Element elementId="sigma-chart-1" gridColumn="1 / 25" '
+            'gridRow="1 / 13"/></Page>\n'
+        )
+        write_json(wd / "wb-spec.json", workbook_spec)
+        write_json(wd / "wb-readback.json", {
+            "workbookId": "wb-1",
+            "latestDocumentVersion": 1,
+            "document": {**workbook_spec, "layout": layout_xml},
+        })
+        (wd / "layout.xml").write_text(layout_xml, encoding="utf-8")
+        write_json(wd / "run-state.json", {
+            "run_id": "fixture-run",
+            "runtime_profile": "python",
+        })
+        write_json(wd / "column-scan.json", {
+            "status": "complete-clean", "columns_read": 2, "errors": [],
         })
         write_json(wd / "workbook-coverage.json", {
             "sourceVisuals": 1,
@@ -133,6 +167,20 @@ class CompletionContractTest(unittest.TestCase):
             "verified_against": "qlik-engine", "charts_total": 1,
             "charts_pass": 1, "charts_fail": 0, "charts_stale_explained": 0,
             "fail_names": [], "pending_names": [], "divergent": False,
+            "visual_checked": True, "visual_verdict": "pass",
+            "agent_vision": True,
+            "style_checklist": {
+                "element_titles_hidden": "na",
+                "palette_match": "pass",
+                "composition_match": "pass",
+                "chart_shapes_match": "pass",
+                "labels_legible": "pass",
+                "numbers_formatted": "pass",
+            },
+            "blind_grade_waiver": {
+                "kind": "no-vision-grader",
+                "reason": "fixture visual review is deterministic",
+            },
             "per_chart": [{"chart": "Sales", "status": "MATCH", "pass": True}],
             "tile_census": {
                 "zones_total": 1, "charts_built": 1, "zones_unmatched": 0,
@@ -141,15 +189,38 @@ class CompletionContractTest(unittest.TestCase):
         })
         healthy_png(wd / "source-pages" / "sheet-1.png")
         healthy_png(wd / "visual-qa" / "sheet-1.png")
+        target = wd / "visual-qa" / "sheet-1.png"
+        write_json(wd / "render-evidence.json", {
+            "workbookId": "wb-1",
+            "documentVersion": "1",
+            "run_id": "fixture-run",
+            "images": [{
+                "path": str(target.resolve()),
+                "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            }],
+        })
 
     def finalize(self):
         return self.run_script("finalize-qlik-report.py", "--workdir", self.workdir)
 
-    def stamp_shared_gate_success(self):
-        write_json(self.workdir / "phase6-success.json", {
-            "workbookId": "wb-1", "chartCount": 1, "gates": "all-pass",
-            "waivers": [], "generatedAt": "2026-08-20T00:00:00Z",
-        })
+    def assert_phase6(self):
+        return self.run_script(
+            "assert-phase6-ran.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+            "--control-scope", self.workdir / "control-scope.json",
+            "--require-control-flip",
+            "--sigma-render", self.workdir / "visual-qa" / "sheet-1.png",
+            "--skip-anchors-gate", "fixture has no transcribed source values",
+        )
+
+    def complete_python_gate(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        asserted = self.assert_phase6()
+        self.assertEqual(asserted.returncode, 0, asserted.stdout + asserted.stderr)
+        terminal = self.finalize()
+        self.assertEqual(terminal.returncode, 0, terminal.stdout + terminal.stderr)
 
     def test_unaccounted_source_object_fails_closed(self):
         dm = json.loads((self.workdir / "dm-spec.json").read_text())
@@ -178,6 +249,37 @@ class CompletionContractTest(unittest.TestCase):
         self.assertNotEqual(blank.returncode, 0)
         health = json.loads((self.workdir / "render-health.json").read_text())
         self.assertEqual(health["sources"][0]["status"], "FAIL")
+
+    def test_render_hash_blocks_reused_or_replaced_page_png(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        write_png(
+            target,
+            600,
+            300,
+            lambda x, y: (
+                (15, 70, 130)
+                if y < 50 or (x % 80 < 35 and 60 < y < 250)
+                else (250, 250, 250)
+            ),
+        )
+        result = self.assert_phase6()
+        self.assertEqual(10, result.returncode, result.stdout + result.stderr)
+        self.assertIn("hash", result.stderr)
+
+    def test_visible_page_named_data_is_still_finalized(self):
+        for filename in ("wb-spec.json", "wb-readback.json"):
+            path = self.workdir / filename
+            document = json.loads(path.read_text())
+            root = document.get("document") or document
+            root["pages"][0]["name"] = "Data"
+            write_json(path, document)
+        result = self.finalize()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        health = json.loads((self.workdir / "render-health.json").read_text())
+        self.assertEqual(1, health["expected_sigma_pages"])
+        self.assertEqual(1, health["sigma_pages_checked"])
 
     def test_tile_aware_majority_blank_fails(self):
         source = self.workdir / "source.png"
@@ -254,26 +356,44 @@ class CompletionContractTest(unittest.TestCase):
         self.assertIn("assert_ok = run_terminal.call", text)
         self.assertIn("mechanical_ok && cleanup_ok && pre_finalizer_ok && assert_ok", text)
 
+        python = (SCRIPTS / "migrate-qlik.py").read_text(encoding="utf-8")
+        normalize = python.index('"normalize-qlik-expressions.py"')
+        lint = python.index('"blank-risk-elements.json"', normalize)
+        post = python.index("self.execute(workbook_command)", lint)
+        parity = python.index("    def parity(", post)
+        cleanup = python.index('"cleanup_orphan_workbooks.py"', parity)
+        shared_assert = python.index(
+            "assertion = self.execute(assert_command", cleanup
+        )
+        terminal_report = python.index(
+            "post_finalizer = self.execute(finalizer_command", shared_assert
+        )
+        verify = python.index('"verify-complete.py"', terminal_report)
+        self.assertLess(normalize, lint)
+        self.assertLess(lint, post)
+        self.assertLess(post, parity)
+        self.assertLess(parity, cleanup)
+        self.assertLess(cleanup, shared_assert)
+        self.assertLess(shared_assert, terminal_report)
+        self.assertLess(terminal_report, verify)
+        self.assertNotIn("write_text(phase6-success", python)
+
     def test_report_contradiction_fails_completion(self):
-        final = self.finalize()
-        self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
-        self.stamp_shared_gate_success()
+        self.complete_python_gate()
         report = json.loads((self.workdir / "migration-result.json").read_text())
         report["source_objects"][0]["status"] = "skipped"
         write_json(self.workdir / "migration-result.json", report)
         result = self.run_script(
-            "verify-complete.rb", "--workdir", self.workdir,
+            "verify-complete.py", "--workdir", self.workdir,
             "--workbook-id", "wb-1",
         )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("CONTRADICTION", result.stderr)
+        self.assertEqual(result.returncode, 7)
+        self.assertIn("does not exactly match", result.stderr)
 
     def test_complete_success(self):
-        final = self.finalize()
-        self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
-        self.stamp_shared_gate_success()
+        self.complete_python_gate()
         result = self.run_script(
-            "verify-complete.rb", "--workdir", self.workdir,
+            "verify-complete.py", "--workdir", self.workdir,
             "--workbook-id", "wb-1",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -295,6 +415,565 @@ class CompletionContractTest(unittest.TestCase):
         self.assertEqual(tiles[0]["kind"], "chart")
         similarity = json.loads((self.workdir / "visual-similarity.json").read_text())
         self.assertEqual(similarity["pages"][0]["tiles_measured"], 1)
+
+    def test_failed_assert_clears_stale_success_marker(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        write_json(self.workdir / "phase6-success.json", {
+            "workbookId": "stale", "chartCount": 99, "gates": "all-pass",
+            "waivers": [], "generatedAt": "2026-08-20T00:00:00Z",
+        })
+        parity = json.loads((self.workdir / "parity-final.json").read_text())
+        parity["strict"] = False
+        write_json(self.workdir / "parity-final.json", parity)
+        result = self.assert_phase6()
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_waiver_budget_rejects_more_than_two_quality_waivers(self):
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.run_script(
+            "assert-phase6-ran.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+            "--control-scope", self.workdir / "control-scope.json",
+            "--require-control-flip",
+            "--sigma-render", self.workdir / "visual-qa" / "sheet-1.png",
+            "--skip-anchors-gate", "fixture has no transcribed source values",
+            "--skip-layout-lint", "fixture layout waiver",
+        )
+        self.assertEqual(19, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_warehouse_mode_requires_named_source_parity_disposition(self):
+        parity_path = self.workdir / "parity-final.json"
+        parity = json.loads(parity_path.read_text())
+        parity["mode"] = "warehouse"
+        parity["verified_against"] = "warehouse"
+        parity.pop("waivers", None)
+        parity.pop("waiver_reasons", None)
+        write_json(parity_path, parity)
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(19, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_warehouse_evidence_cannot_hide_behind_missing_mode(self):
+        parity_path = self.workdir / "parity-final.json"
+        parity = json.loads(parity_path.read_text())
+        parity.pop("mode", None)
+        parity["verified_against"] = "warehouse"
+        parity["per_chart"][0]["status"] = "WAREHOUSE-PASS"
+        parity["waivers"] = ["--source-parity-unavailable"]
+        parity["waiver_reasons"] = {
+            "--source-parity-unavailable": "offline source fixture",
+        }
+        write_json(parity_path, parity)
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(19, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_section_access_cannot_complete_without_applied_decision(self):
+        app_meta_path = self.workdir / "app-meta.json"
+        app_meta = json.loads(app_meta_path.read_text())
+        app_meta["hasSectionAccess"] = True
+        write_json(app_meta_path, app_meta)
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(32, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_section_access_load_script_cannot_hide_behind_false_metadata(self):
+        with (self.workdir / "script.qvs").open("a", encoding="utf-8") as handle:
+            handle.write("\nSECTION ACCESS;\nLOAD USERID, REDUCTION INLINE [];\n")
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(32, result.returncode, result.stdout + result.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_stale_security_decision_cannot_approve_new_model(self):
+        app_meta_path = self.workdir / "app-meta.json"
+        app_meta = json.loads(app_meta_path.read_text())
+        app_meta["hasSectionAccess"] = True
+        write_json(app_meta_path, app_meta)
+        write_json(self.workdir / "security-decision.json", {
+            "decision": "port",
+            "status": "applied",
+            "readback_verified": True,
+            "dataModelId": "different-model",
+            "run_id": "stale-run",
+            "readback_sha256": "0" * 64,
+        })
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(32, result.returncode, result.stdout + result.stderr)
+        self.assertIn("stale", result.stderr)
+
+    def test_applied_security_must_persist_on_denormalized_source(self):
+        app_meta_path = self.workdir / "app-meta.json"
+        app_meta = json.loads(app_meta_path.read_text())
+        app_meta["hasSectionAccess"] = True
+        write_json(app_meta_path, app_meta)
+        write_json(self.workdir / "security.json", {
+            "security": [{
+                "kind": "rls",
+                "rls": {
+                    "name": "Region RLS",
+                    "formula": (
+                        'CurrentUserAttributeText("Region") = [Region]'
+                    ),
+                },
+            }],
+        })
+        readback_path = self.workdir / "datamodel-readback.json"
+        readback = json.loads(readback_path.read_text())
+        element = readback["pages"][0]["elements"][0]
+        element["columns"].append({
+            "id": "rls-column",
+            "name": "Region RLS",
+            "formula": 'CurrentUserAttributeText("Region") = [Region]',
+        })
+        element["filters"] = [{
+            "id": "rls-filter",
+            "kind": "list",
+            "mode": "include",
+            "columnId": "rls-column",
+            "values": [True],
+        }]
+        write_json(readback_path, readback)
+        membership_path = self.workdir / "membership-readback.json"
+        write_json(membership_path, {
+            "dataModelId": "dm-1",
+            "run_id": "fixture-run",
+            "subjects": ["member-1", "member-2"],
+            "assignments": [{
+                "principal": "Region",
+                "readback_verified": True,
+                "values": {"member-1": "West"},
+            }],
+        })
+        write_json(self.workdir / "security-decision.json", {
+            "decision": "port",
+            "status": "applied",
+            "readback_verified": True,
+            "rules_detected": 1,
+            "rules_applied": 1,
+            "dataModelId": "dm-1",
+            "securedElementId": "dm-orders",
+            "run_id": "fixture-run",
+            "requiredPrincipals": ["Region"],
+            "membership_verified": True,
+            "membership_evidence": [{
+                "path": str(membership_path),
+                "sha256": hashlib.sha256(
+                    membership_path.read_bytes()
+                ).hexdigest(),
+            }],
+            "readback_sha256": hashlib.sha256(
+                readback_path.read_bytes()
+            ).hexdigest(),
+        })
+        sigma_roster_path = self.workdir / "sigma-membership-readback.json"
+        write_json(sigma_roster_path, {
+            "dataModelId": "dm-1",
+            "subjects": ["member-1", "member-2"],
+            "assignments": [{
+                "principal": "Region",
+                "values": {"member-1": "West"},
+            }],
+        })
+        source_policy_path = self.workdir / "source-security-policy.json"
+        write_json(source_policy_path, {
+            "security": [{
+                "kind": "rls",
+                "rls": {
+                    "name": "Region RLS",
+                    "formula": (
+                        'CurrentUserAttributeText("Region") = [Region]'
+                    ),
+                },
+            }],
+        })
+        policy_sha256 = hashlib.sha256(
+            source_policy_path.read_bytes()
+        ).hexdigest()
+        rule_id = hashlib.sha256(
+            json.dumps(
+                {
+                    "kind": "rls",
+                    "rls": {
+                        "name": "Region RLS",
+                        "formula": (
+                            'CurrentUserAttributeText("Region") = [Region]'
+                        ),
+                    },
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        allow_source = self.workdir / "allow-source.json"
+        allow_sigma = self.workdir / "allow-sigma.json"
+        deny_source = self.workdir / "deny-source.json"
+        deny_sigma = self.workdir / "deny-sigma.json"
+        write_json(allow_source, {
+            "system": "qlik",
+            "principal": "member-1",
+            "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "qlik-engine",
+            "rows": ["West"],
+        })
+        write_json(allow_sigma, {
+            "system": "sigma",
+            "principal": "member-1",
+            "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "sigma-export",
+            "rows": ["West"],
+        })
+        write_json(deny_source, {
+            "system": "qlik",
+            "principal": "member-2",
+            "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "qlik-engine",
+            "rows": [],
+        })
+        write_json(deny_sigma, {
+            "system": "sigma",
+            "principal": "member-2",
+            "query": "restricted-region-check",
+            "policy_sha256": policy_sha256,
+            "rule_ids": [rule_id],
+            "captured_at": "2026-09-22T00:00:00Z",
+            "transport": "sigma-export",
+            "rows": [],
+        })
+        def evidence(path):
+            return {
+                "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        readback_hash = hashlib.sha256(
+            readback_path.read_bytes()
+        ).hexdigest()
+        write_json(self.workdir / "security-effective-user-verdict.json", {
+            "status": "PASS",
+            "dataModelId": "dm-1",
+            "run_id": "fixture-run",
+            "readback_sha256": readback_hash,
+            "source_policy": evidence(source_policy_path),
+            "source_roster": {
+                "path": str(membership_path),
+                "sha256": hashlib.sha256(
+                    membership_path.read_bytes()
+                ).hexdigest(),
+            },
+            "sigma_roster": {
+                "path": str(sigma_roster_path),
+                "sha256": hashlib.sha256(
+                    sigma_roster_path.read_bytes()
+                ).hexdigest(),
+            },
+            "tests": [
+                {
+                    "kind": "allow",
+                    "principal": "member-1",
+                    "status": "PASS",
+                    "match": True,
+                    "query": "restricted-region-check",
+                    "rule_ids": [rule_id],
+                    "source_result": evidence(allow_source),
+                    "sigma_result": evidence(allow_sigma),
+                },
+                {
+                    "kind": "deny",
+                    "principal": "member-2",
+                    "status": "PASS",
+                    "match": True,
+                    "query": "restricted-region-check",
+                    "rule_ids": [rule_id],
+                    "source_result": evidence(deny_source),
+                    "sigma_result": evidence(deny_sigma),
+                },
+            ],
+        })
+        self.complete_python_gate()
+        result = self.run_script(
+            "verify-complete.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        mismatched_allow = json.loads(allow_sigma.read_text())
+        mismatched_allow["rows"] = ["East"]
+        write_json(allow_sigma, mismatched_allow)
+        verdict_path = self.workdir / "security-effective-user-verdict.json"
+        verdict = json.loads(verdict_path.read_text())
+        verdict["tests"][0]["sigma_result"]["sha256"] = hashlib.sha256(
+            allow_sigma.read_bytes()
+        ).hexdigest()
+        write_json(verdict_path, verdict)
+        mismatch = self.assert_phase6()
+        self.assertEqual(32, mismatch.returncode, mismatch.stdout + mismatch.stderr)
+        self.assertIn("results differ", mismatch.stderr)
+
+    def test_missing_app_meta_is_valid_for_unsecured_offline_project(self):
+        (self.workdir / "app-meta.json").unlink()
+        self.complete_python_gate()
+        result = self.run_script(
+            "verify-complete.py",
+            "--workdir", self.workdir,
+            "--workbook-id", "wb-1",
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_all_unprobeable_controls_use_advisory_marker(self):
+        control = {
+            "id": "control-element",
+            "name": "Date Filter",
+            "kind": "control",
+            "controlId": "date-filter",
+            "controlType": "date-range",
+            "source": {
+                "kind": "source",
+                "source": {"kind": "table", "elementId": "sigma-chart-1"},
+                "columnId": "country",
+            },
+            "filters": [{
+                "source": {"kind": "table", "elementId": "sigma-chart-1"},
+                "columnId": "country",
+            }],
+        }
+        for filename in ("wb-spec.json", "wb-readback.json"):
+            path = self.workdir / filename
+            document = json.loads(path.read_text())
+            root = document.get("document") or document
+            root["pages"][0]["elements"].append(control)
+            root["layout"] = str(root.get("layout") or "") + (
+                '<Page id="controls"><Element elementId="control-element" '
+                'gridColumn="1 / 25" gridRow="1 / 4"/></Page>'
+            )
+            write_json(path, document)
+        write_json(self.workdir / "control-scope.json", {
+            "version": 1,
+            "source": "qlik",
+            "sourceFilterSignals": 1,
+            "controls": [{
+                "controlId": "date-filter",
+                "mustReach": ["sigma-chart-1"],
+            }],
+            "unbound": [],
+            "dropped": [],
+        })
+        write_json(self.workdir / "probe-controls" / "probe-results.json", [{
+            "control": "date-filter",
+            "result": "SKIP",
+            "note": "date range has no safe automatic sample",
+        }])
+        write_json(self.workdir / "probe-controls" / "probe-evidence.json", {
+            "workbook_id": "wb-1",
+            "doc_version": "1",
+            "probed_at": datetime.now(timezone.utc).isoformat(),
+            "exports": {},
+        })
+        write_json(self.workdir / "control-flip-unverified.json", {
+            "workbookId": "wb-1",
+            "status": "ADVISORY",
+            "unprobed": [{
+                "control": "date-filter",
+                "reason": "date range has no safe automatic sample",
+            }],
+        })
+        first = self.finalize()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        result = self.assert_phase6()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        (self.workdir / "probe-controls" / "probe-results.json").unlink()
+        stale = self.assert_phase6()
+        self.assertEqual(21, stale.returncode, stale.stdout + stale.stderr)
+        self.assertFalse((self.workdir / "phase6-success.json").exists())
+
+    def test_visual_recorder_rejects_incomplete_blind_grade(self):
+        source = self.workdir / "source-pages" / "sheet-1.png"
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        grade = self.workdir / "blind-grade.json"
+        write_json(grade, {
+            "verdict": "pass",
+            "source_png": str(source),
+            "target_png": str(target),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "target_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "dimensions": {},
+            "per_tile": [{
+                "position": "main",
+                "source_family": "bar",
+                "target_family": "bar",
+            }],
+        })
+        checklist = ",".join(
+            f"{name}=pass"
+            for name in (
+                "element_titles_hidden",
+                "palette_match",
+                "composition_match",
+                "chart_shapes_match",
+                "labels_legible",
+                "numbers_formatted",
+            )
+        )
+        result = self.run_script(
+            "record_visual_check.py",
+            "--workdir", self.workdir,
+            "--verdict", "pass",
+            "--agent-vision", "true",
+            "--checklist", checklist,
+            "--blind-grade", grade,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("dimension", result.stderr)
+
+    def test_visual_recorder_rejects_incomplete_tile_census(self):
+        readback_path = self.workdir / "wb-readback.json"
+        readback = json.loads(readback_path.read_text())
+        readback["document"]["pages"][0]["elements"].append({
+            "id": "sigma-chart-2",
+            "name": "Profit",
+            "kind": "line-chart",
+            "columns": [{"id": "country-2"}, {"id": "profit"}],
+        })
+        write_json(readback_path, readback)
+        source = self.workdir / "source-pages" / "sheet-1.png"
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        dimensions = {
+            name: {"verdict": "pass"}
+            for name in (
+                "element_titles_hidden",
+                "palette_match",
+                "composition_match",
+                "chart_shapes_match",
+                "labels_legible",
+                "numbers_formatted",
+            )
+        }
+        grade = self.workdir / "blind-grade.json"
+        write_json(grade, {
+            "verdict": "pass",
+            "source_png": str(source),
+            "target_png": str(target),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "target_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "dimensions": dimensions,
+            "per_tile": [{
+                "position": "main",
+                "source_family": "bar",
+                "target_family": "bar",
+            }],
+        })
+        checklist = ",".join(f"{name}=pass" for name in dimensions)
+        result = self.run_script(
+            "record_visual_check.py",
+            "--workdir", self.workdir,
+            "--verdict", "pass",
+            "--agent-vision", "true",
+            "--checklist", checklist,
+            "--blind-grade", grade,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("census", result.stderr)
+
+    def test_visual_census_ignores_hidden_data_page_master(self):
+        readback_path = self.workdir / "wb-readback.json"
+        readback = json.loads(readback_path.read_text())
+        readback["document"]["pages"].append({
+            "id": "page-data",
+            "name": "Data",
+            "visibility": "hidden",
+            "elements": [{
+                "id": "m-master",
+                "name": "Master",
+                "kind": "table",
+                "columns": [{"id": "master-country"}],
+            }],
+        })
+        readback["document"]["layout"] += (
+            '<Page id="page-data" type="grid">'
+            '<Element elementId="m-master" gridColumn="1 / 25" '
+            'gridRow="1 / 13"/></Page>'
+        )
+        write_json(readback_path, readback)
+        source = self.workdir / "source-pages" / "sheet-1.png"
+        target = self.workdir / "visual-qa" / "sheet-1.png"
+        dimensions = {
+            name: {"verdict": "pass"}
+            for name in (
+                "element_titles_hidden",
+                "palette_match",
+                "composition_match",
+                "chart_shapes_match",
+                "labels_legible",
+                "numbers_formatted",
+            )
+        }
+        grade = self.workdir / "blind-grade.json"
+        write_json(grade, {
+            "verdict": "pass",
+            "source_png": str(source),
+            "target_png": str(target),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "target_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "dimensions": dimensions,
+            "per_tile": [{
+                "position": "main",
+                "source_family": "bar",
+                "target_family": "bar",
+            }],
+        })
+        result = self.run_script(
+            "record_visual_check.py",
+            "--workdir", self.workdir,
+            "--verdict", "pass",
+            "--agent-vision", "true",
+            "--checklist", ",".join(f"{name}=pass" for name in dimensions),
+            "--blind-grade", grade,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_report_check_is_deterministic_and_read_only(self):
+        final = self.finalize()
+        self.assertEqual(final.returncode, 0, final.stdout + final.stderr)
+        before = (self.workdir / "MIGRATION_REPORT.md").read_bytes()
+        check = self.run_script(
+            "build-migration-report.py", "--workdir", self.workdir, "--check"
+        )
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+        self.assertEqual(before, (self.workdir / "MIGRATION_REPORT.md").read_bytes())
+        (self.workdir / "MIGRATION_REPORT.md").write_text(
+            before.decode("utf-8") + "stale\n", encoding="utf-8"
+        )
+        stale = self.run_script(
+            "build-migration-report.py", "--workdir", self.workdir, "--check"
+        )
+        self.assertEqual(stale.returncode, 1)
+
+    def test_finalizer_has_no_ruby_subprocess(self):
+        text = (SCRIPTS / "finalize-qlik-report.py").read_text(encoding="utf-8")
+        self.assertNotIn('"ruby"', text)
+        self.assertIn("build-migration-report.py", text)
 
 
 if __name__ == "__main__":

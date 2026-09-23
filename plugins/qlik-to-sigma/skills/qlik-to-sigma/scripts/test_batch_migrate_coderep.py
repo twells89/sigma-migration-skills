@@ -51,7 +51,7 @@ def fake_post(path, body):
 
 
 BM.post = fake_post
-# build() shells out to `ruby vendor/put-layout.rb` (a real Sigma PUT) once it
+# build() shells out to the Python layout PUT helper (a real Sigma PUT) once it
 # has a workbookId — stub it out so this test stays fully offline/no-subprocess.
 BM.subprocess.run = lambda *a, **k: None
 
