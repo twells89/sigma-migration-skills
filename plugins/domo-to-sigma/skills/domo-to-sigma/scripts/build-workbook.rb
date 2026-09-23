@@ -900,8 +900,8 @@ def build_axis_chart(card, kind)
     if time_axis && !HORIZONTAL_CHART_TYPES.include?(ct)
       xa['format'] = {
         'marks' => 'none',
-        'labels' => { 'fontSize' => 8, 'labelAngle' => 0,
-                      'allowLongerLabels' => false }
+        'labels' => { 'fontSize' => 10, 'labelAngle' => 0,
+                      'allowLongerLabels' => true }
       }
     elsif kind == 'bar-chart' && !HORIZONTAL_CHART_TYPES.include?(ct)
       xa['format'] = {
@@ -933,12 +933,13 @@ def build_axis_chart(card, kind)
     el['xAxis'] = xa
   end
   unless mcols.empty?
-    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } }
+    y_format = { 'marks' => 'none', 'labels' => { 'fontSize' => 10 } }
     el['yAxis'] = { 'columnIds' => mcols.map { |m| m['id'] }, 'format' => y_format }
   end
   split = dims.each_with_index.find { |d, i| i != xidx && d['mapping'].to_s.upcase == SERIES_MAPPING }
   el['color'] = { 'by' => 'category', 'column' => dcols[split[1]]['id'] } if split
   if kind == 'bar-chart'
+    el['color'] ||= { 'by' => 'single', 'value' => '#8CBFDD' }
     # #2/#3: orientation/stacking keyed on the EXACT chartType token, not a
     # `.include?('horiz')` substring check (the same class of bug this whole
     # map fix addresses — see refs/card-to-element.md Problem 2).

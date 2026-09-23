@@ -391,7 +391,7 @@ else
     overrides: {
       'colorOverrides' => sigma_color_overrides('#F6F6F6'),
       'categoricalScheme' => %w[#4E8FBD #4A9B36 #E75524 #8A68B9 #F3A24F #D95C59 #5BB7A8 #D7B95E],
-      'titleFont' => { 'fontSize' => 12, 'fontWeight' => 'bold' }
+      'titleFont' => { 'fontSize' => 14, 'fontWeight' => 'bold' }
     }
   )
   warn '  theme: Domo default canvas + 8-color categorical scheme'

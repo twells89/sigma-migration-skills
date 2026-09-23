@@ -135,8 +135,10 @@ bar = build_element({ 'id' => 'c3', 'title' => 'Sales by Region', 'chartType' =>
 eq(bar['kind'], 'bar-chart', '#7 bar card → bar-chart element (NOT table+dataBars)')
 ok(bar['columns'].none? { |c| c['id'].to_s.start_with?('cf') }, 'no conditionalFormats/dataBars on a bar chart')
 eq(bar.dig('xAxis', 'format', 'marks'), 'none', '#8 x-axis gridlines off')
-eq(bar['yAxis']['format'], { 'marks' => 'none', 'labels' => { 'fontSize' => 8 } },
+eq(bar['yAxis']['format'], { 'marks' => 'none', 'labels' => { 'fontSize' => 10 } },
    '#8 y-axis gridlines stay off while labels remain legible')
+eq(bar['color'], { 'by' => 'single', 'value' => '#8CBFDD' },
+   'single-series bar uses Domo default light-blue fill')
 eq(bar['columns'][0]['formula'], '[Master/Store Region]', 'dimension references master')
 eq(bar['columns'][1]['formula'], 'Sum([Master/Sales Amount])', 'measure aggregated + master-ref')
 eq(bar['columns'][1]['name'], 'Sales', 'measure label uses Domo alias (fixes raw names #4)')
