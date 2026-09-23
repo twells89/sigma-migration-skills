@@ -874,6 +874,131 @@ def sum_distinct_measure_plan(card, measures)
   [measure, bm, placement]
 end
 
+def fixed_grouped_helper_plan(card, measures)
+  return nil unless measures.length == 1 && Array(card['filters']).empty?
+  measure = measures.first
+  bm = translated_beast_modes[measure['beastModeId'].to_s] ||
+       translated_beast_modes[measure['column'].to_s]
+  plan = bm && bm['lodPlacement']
+  return nil unless plan.is_a?(Hash) && plan['kind'] == 'fixed-aggregate'
+  return nil unless %w[by add].include?(plan['mode'])
+  return nil if plan['filterMode']
+  [measure, bm, plan]
+end
+
+def unique_dimension_columns(card, dimensions)
+  seen = {}
+  Array(dimensions).filter_map do |dimension|
+    name = dimension.is_a?(Hash) ? dimension['column'] : dimension
+    key = DomoSigma::BeastModeLod.normalized_name(name)
+    next if key.empty? || seen[key]
+    seen[key] = true
+    source = dimension.is_a?(Hash) ? dimension : { 'column' => name }
+    dim_col(source, card)
+  end
+end
+
+def build_fixed_grouped_axis_chart(card, kind, dims, measure, bm, plan)
+  helper_id = "src-#{eid(card)}-fixed"
+  helper_name = "Fixed grain for #{card['title']}"
+  fixed_sources = Array(plan['dimensions']).map { |name| { 'column' => name } }
+  helper_dims = unique_dimension_columns(card, fixed_sources + dims)
+  helper_by_name = helper_dims.to_h do |column|
+    [DomoSigma::BeastModeLod.normalized_name(column['name']), column]
+  end
+  current_helper_dims = dims.filter_map do |dimension|
+    helper_by_name[DomoSigma::BeastModeLod.normalized_name(col_label(dimension))]
+  end
+  fixed_helper_dims = fixed_sources.filter_map do |dimension|
+    helper_by_name[DomoSigma::BeastModeLod.normalized_name(display_name(dimension['column']))]
+  end
+  inner = "#{plan['innerAggregate']}(#{mref(display_name(plan['field']))})"
+  lod_column = {
+    'id' => "m-fixed-value-#{card['id']}",
+    'name' => 'Fixed Value',
+    'formula' => plan['mode'] == 'by' ?
+      "Subtotal(#{inner}, \"parent_grouping\", 1)" : inner,
+  }
+  groupings =
+    if plan['mode'] == 'by'
+      current_only = current_helper_dims - fixed_helper_dims
+      return nil if fixed_helper_dims.empty? || current_only.empty?
+      [
+        {
+          'id' => "g-fixed-parent-#{card['id']}",
+          'groupBy' => fixed_helper_dims.map { |column| column['id'] },
+        },
+        {
+          'id' => "g-fixed-current-#{card['id']}",
+          'groupBy' => current_only.map { |column| column['id'] },
+          'calculations' => [lod_column['id']],
+        },
+      ]
+    else
+      add_helper_dims = fixed_helper_dims - current_helper_dims
+      return nil if add_helper_dims.empty?
+      [{
+        'id' => "g-fixed-add-#{card['id']}",
+        'groupBy' => (current_helper_dims + add_helper_dims).map { |column| column['id'] },
+        'calculations' => [lod_column['id']],
+      }]
+    end
+  grouping_id = groupings.last['id']
+  helper = {
+    'id' => helper_id,
+    'kind' => 'table',
+    'name' => helper_name,
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => helper_dims + [lod_column],
+    'order' => (helper_dims + [lod_column]).map { |column| column['id'] },
+    'groupings' => groupings,
+    'visibleAsSource' => false,
+  }
+  $chart_helpers << helper
+
+  visible_dims = current_helper_dims.map do |column|
+    {
+      'id' => column['id'],
+      'name' => column['name'],
+      'formula' => "[#{helper_name}/#{column['name']}]",
+      'format' => column['format'],
+    }.compact
+  end
+  visible_measure = {
+    'id' => "m-#{measure['column'].to_s.downcase.gsub(/\W+/, '-')}",
+    'name' => col_label(measure),
+    'formula' => "#{plan['outerAggregate']}([#{helper_name}/#{lod_column['name']}])",
+    'format' => beast_mode_value_format(measure, bm),
+  }.compact
+  record_beast_mode_usage(card, bm, 'workbook-grouped-helper-formula')
+
+  xidx = dims.index do |dimension|
+    %w[ITEM CATEGORY XTIME DATE].include?(dimension['mapping'].to_s.upcase)
+  end || 0
+  element = {
+    'id' => eid(card),
+    'kind' => kind,
+    'name' => card['title'],
+    'source' => { 'kind' => 'table', 'elementId' => helper_id, 'groupingId' => grouping_id },
+    'columns' => visible_dims + [visible_measure],
+    'xAxis' => { 'columnId' => visible_dims[xidx]['id'], 'format' => AXIS_OFF },
+    'yAxis' => {
+      'columnIds' => [visible_measure['id']],
+      'format' => { 'marks' => 'none', 'labels' => { 'fontSize' => 12 } },
+    },
+  }
+  split = dims.each_with_index.find do |dimension, index|
+    index != xidx && dimension['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  if split
+    element['color'] = { 'by' => 'category', 'column' => visible_dims[split[1]]['id'] }
+    element['legend'] = { 'position' => 'right', 'fontSize' => 12 }
+  elsif kind == 'bar-chart'
+    element['color'] = { 'by' => 'single', 'value' => '#8CBFDD' }
+  end
+  element
+end
+
 def build_sum_distinct_axis_chart(card, kind, dims, measure, bm, placement)
   helper_id = "src-#{eid(card)}-sum-distinct"
   helper_name = "Distinct values for #{card['title']}"
@@ -960,6 +1085,9 @@ def build_axis_chart(card, kind)
     return nil
   end
   return build_scatter_chart(card, dims, meas) if kind == 'scatter-chart'
+  if (fixed_plan = fixed_grouped_helper_plan(card, meas))
+    return build_fixed_grouped_axis_chart(card, kind, dims, *fixed_plan)
+  end
   if (distinct_plan = sum_distinct_measure_plan(card, meas))
     return build_sum_distinct_axis_chart(card, kind, dims, *distinct_plan)
   end
@@ -2207,6 +2335,12 @@ def prune_unresolvable_columns!(card)
       bm = translated_beast_modes[c['beastModeId'].to_s] ||
            translated_beast_modes[c['column'].to_s]
       if bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+        plan = bm['lodPlacement']
+        if plan.is_a?(Hash) && plan['kind'] == 'fixed-aggregate' &&
+           %w[by add].include?(plan['mode']) && !plan['filterMode']
+          ok << c
+          next
+        end
         warn_card(card, "dropped column #{c['column'].inspect}: its FIXED/LOD Beast Mode has no " \
                         'supported automatic placement. Add a Sigma workbook formula in ' \
                         'discovery/formula-overrides.json and re-run; generated chart specs ' \

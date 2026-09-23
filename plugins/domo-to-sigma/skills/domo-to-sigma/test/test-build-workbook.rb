@@ -1103,6 +1103,40 @@ unplaced_fixed_by = lod_workbook_formula(
 eq(unplaced_fixed_by, nil,
    'FIXED BY a non-visible dimension fails closed until a grouped helper is available')
 
+$chart_helpers = []
+$translated_bms = {
+  'calc-fixed-by' => {
+    'id' => 'calc-fixed-by', 'name' => 'Region Sales', 'class' => 'lod',
+    'scope' => 'card', 'sigmaFormula' => 'Sum(Sum([Sales]))',
+    'lodPlacement' => {
+      'kind' => 'fixed-aggregate', 'outerAggregate' => 'Sum',
+      'innerAggregate' => 'Sum', 'field' => 'Sales',
+      'mode' => 'by', 'dimensions' => ['Region'],
+    },
+  },
+}
+fixed_by_chart = build_element({
+  'id' => 'fixed-by-card', 'title' => 'Region Sales by State',
+  'chartType' => 'badge_two_trendline', 'sigmaKindHint' => 'line-chart',
+  'columns' => [
+    { 'column' => 'State', 'mapping' => 'ITEM' },
+    {
+      'column' => 'Region Sales', 'mapping' => 'VALUE',
+      'beastModeId' => 'calc-fixed-by', '_isCalc' => true,
+    },
+  ],
+}, {})
+fixed_by_helper = $chart_helpers.find { |helper| helper['id'].include?('fixed') }
+eq(fixed_by_helper['groupings'].length, 2,
+   'FIXED BY helper creates parent fixed grain and child visible grain')
+eq(fixed_by_helper.dig('columns', -1, 'formula'),
+   'Subtotal(Sum([Master/Sales]), "parent_grouping", 1)',
+   'child rows inherit the parent FIXED subtotal')
+eq(fixed_by_chart['columns'].last['formula'],
+   'Sum([Fixed grain for Region Sales by State/Fixed Value])',
+   'visible chart reapplies the Domo outer aggregate over fixed groups')
+$translated_bms = nil
+
 $translated_bms = {
   'calculation_manual_lod' => {
     'id' => 'calculation_manual_lod', 'name' => 'Custom LOD', 'class' => 'lod',
