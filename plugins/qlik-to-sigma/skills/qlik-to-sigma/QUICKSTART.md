@@ -27,6 +27,12 @@ positive
 positive
 : The Sigma side reads your warehouse **live**, so the migrated workbook stays current with no reload/extract step — a difference you'll see in the parity check when new rows land.
 
+positive
+: Qlik conversion has two supported runtime profiles. `auto` prefers Ruby and
+falls back to Python when Ruby is unavailable. The no-Ruby profile requires
+**Python 3 + Node** (Node runs the vendored converter); select it explicitly
+with `--runtime-profile python`. See `PYTHON_RUNTIME.md`.
+
 ## Who this is for
 Duration: 1
 
@@ -52,14 +58,17 @@ Duration: 2
     in the source repo, `qlik-migration-skills/qlik-to-sigma/` in the published
     quickstart). Don't create a qlik-cli context — follow
     **[On-prem setup](#on-prem-setup-client-managed-qlik-sense)** below in place of
-    Installation steps 4–5. A shim-driven discovery is verified output-identical to a
+    Installation steps 6–7. A shim-driven discovery is verified output-identical to a
     qlik-cli run on the same app — though that verification was against Qlik *Cloud*
     (identical QIX protocol); the on-prem auth/QRS path is unproven live (see the
     note in the On-prem setup section). QlikView ≠ Qlik Sense: `.qvw` apps migrate
-    via the developer-opt-in `-prj` project folder — `ruby scripts/migrate-qlik.rb
-    --prj <Name-prj> --connection <ID>` runs the full pipeline (**data model +
-    workbook**, laid out from the `-prj` sheet geometry). Parity is warehouse-only
-    (no live Qlik engine) — see the QlikView note in SKILL.md.
+    via the developer-opt-in `-prj` project folder — `python3
+    scripts/migrate-qlik.py --prj <Name-prj> --connection <ID>` (or the
+    selected Ruby entrypoint) runs the full pipeline (**data model +
+    workbook**, laid out from the `-prj` sheet geometry). With no live Qlik
+    engine, the default warehouse-executability check stays non-strict/RED;
+    pass independently queried values through `--warehouse-expected` for strict
+    completion — see the QlikView note in SKILL.md.
 - **Qlik Cloud access for live discovery** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible). Not required for `--unbuild`.
 - **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity). The skill discovers its tables and columns through Sigma REST, so no Snowflake credentials, SQL CLI, or MCP are required.
@@ -94,8 +103,40 @@ Duration: 5
      ln -s "$PWD/qlik-migration-skills/qlik-assessment" ~/.claude/skills/qlik-assessment
      ```
    - **Other agents (Cursor, Cortex Code, …)** — no install step; open the repo and point your agent at the skill folder. `AGENTS.md` at the repo root indexes every skill.
-3. **Sigma credentials** — export `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` (or run `ruby scripts/setup.rb` in the tableau-to-sigma skill, which writes a neutral `~/.sigma-migration/env` the scripts auto-source under any agent). The skill's `scripts/vendor/get-token.sh` exchanges them for a `SIGMA_API_TOKEN`.
-4. **Qlik context** — create a qlik-cli context (do this in your own terminal so the secret stays out of any transcript):
+3. **Bootstrap and doctor** — from the Qlik conversion skill directory, select
+   the supported Python profile to run with no Ruby (Node remains required):
+   ```bash
+   bash scripts/bootstrap.sh --runtime-profile python --workdir <WORK>
+   bash scripts/doctor.sh --runtime-profile python --workdir <WORK>
+   ```
+   Windows PowerShell: `scripts\bootstrap.ps1 -RuntimeProfile python -WorkDir
+   <WORK>` and `scripts\doctor.ps1 -RuntimeProfile python -WorkDir <WORK>`.
+   `--runtime-profile auto` uses Ruby when healthy and otherwise falls back to
+   Python.
+4. **Sigma credentials** — export `SIGMA_CLIENT_ID` /
+   `SIGMA_CLIENT_SECRET`, then persist them with the selected profile:
+   ```bash
+   python3 scripts/setup.py --from-env
+   python3 scripts/vendor/get_token.py --workdir <WORK>  # optional token file
+   ```
+   Interactive setup is `python3 scripts/setup.py`; the Ruby profile's
+   `setup.rb` and `vendor/get-token.sh` remain supported. Both profiles write
+   the same neutral `~/.sigma-migration/env`.
+5. **Sigma connection** — resolve it once and cache it in the workdir:
+   ```bash
+   python3 scripts/intake.py --workdir <WORK> --tool qlik-to-sigma \
+     --mode live [--connection <id>] [--name <name-substring>]
+   ```
+   Multiple matches write `connection-candidates.json` and stop; pick one and
+   rerun with `--connection`.
+6. **Destination** — if the user did not supply one, list choices and ask:
+   ```bash
+   python3 scripts/pick_destination.py list
+   python3 scripts/pick_destination.py create --name "<name>" \
+     [--parent <workspace-or-folder-id>]
+   ```
+   Pass the chosen id to `--folder`; never guess.
+7. **Qlik context** — create a qlik-cli context (do this in your own terminal so the secret stays out of any transcript):
    ```bash
    # API key (acts as you):
    qlik context create sigma-migration --server https://<tenant>.<region>.qlikcloud.com --api-key 'KEY'
@@ -105,13 +146,13 @@ Duration: 5
    #   then: qlik context create impersonate --server <tenant> --api-key '<impersonation-token>'
    qlik context use sigma-migration
    ```
-5. **Verify:** `qlik item ls --resourceType app --limit 5` returns your apps.
+8. **Verify:** `qlik item ls --resourceType app --limit 5` returns your apps.
 
 ## On-prem setup (client-managed Qlik Sense)
 Duration: 5
 
 negative
-: **Skip this whole section if you're on Qlik Cloud** — you already did Installation steps 4–5. This section *replaces* steps 4–5 for client-managed Qlik Sense Enterprise on Windows. `qlik-cli` is Cloud-only, so there is **no qlik-cli context and no `qlik context create`** on-prem — the bundled shim provides the same command surface over the on-prem APIs.
+: **Skip this whole section if you're on Qlik Cloud** — you already did Installation steps 7–8. This section *replaces* steps 7–8 for client-managed Qlik Sense Enterprise on Windows. `qlik-cli` is Cloud-only, so there is **no qlik-cli context and no `qlik context create`** on-prem — the bundled shim provides the same command surface over the on-prem APIs.
 
 All paths below are **relative to the skill directory** — the folder that holds this QUICKSTART, `SKILL.md`, `scripts/`, and `refs/`. `cd` into it first so `scripts/...` and `refs/...` resolve and `$PWD` is correct:
 
@@ -137,7 +178,7 @@ ls scripts/qlik-onprem-shim.py refs/connection-onprem.md   # both should exist
    ```bash
    export QLIK_BIN="$PWD/scripts/qlik-onprem-shim.py"
    ```
-4. **Verify** (the shim's equivalent of step 5):
+4. **Verify** (the shim's equivalent of Installation step 7):
    ```bash
    python3 scripts/qlik-onprem-shim.py item ls --resourceType app --limit 5
    ```
@@ -159,9 +200,39 @@ connection points at the same schema.
 ## Run the conversion
 Duration: 10
 
-In Claude Code, point the `qlik-to-sigma` skill at an app. The whole pipeline is ONE
-command (`ruby scripts/migrate-qlik.rb --app <id> --connection <sigma-conn> --yes`) —
-it chains these phases (each also independently runnable from `scripts/*`):
+In your coding agent, point the `qlik-to-sigma` skill at an app. Run the
+front door selected in `<WORK>/doctor.json`; do not hand-drive the phases.
+The supported no-Ruby live command is:
+
+```bash
+python3 scripts/migrate-qlik.py \
+  --app <id> --context <qlik-cli-context> \
+  --connection <sigma-connection-id> \
+  --database <database> --schema <schema> \
+  --folder <sigma-folder-id> --out <WORK> --yes
+```
+
+The Ruby profile remains supported as `ruby scripts/migrate-qlik.rb` with the
+same source, connection, warehouse, destination, and workdir flags. The Python
+entrypoint also reads `<WORK>/connection.json`, so `--connection` may be omitted
+after `intake.py`; neither path guesses among connections.
+
+For a credentials-free, network-free offline conversion, create doctor evidence
+in the explicit offline mode first:
+
+```bash
+export SIGMA_OFFLINE_DRY_RUN=1
+bash scripts/bootstrap.sh --runtime-profile python --workdir <WORK>
+python3 scripts/migrate-qlik.py \
+  --from-discovery fixtures/retail-orders \
+  --connection 00000000-0000-0000-0000-000000000000 \
+  --database DEMO_DB --schema DEMO \
+  --dry-run --yes --out <WORK>
+```
+
+Unset `SIGMA_OFFLINE_DRY_RUN` before any live build.
+
+Both entrypoints chain these phases:
 
 1. **Discover** (`qlik-discover.py`) — pull the load script (data model), master
    measures/dimensions (via an Engine `MeasureList`/`DimensionList`), sheet/chart

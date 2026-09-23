@@ -15,7 +15,7 @@ shared TrellisEmit (supported-kind gate + fallbacks):
   7. NON-trellis bar                   -> no `trellis` key (byte-identical shape)
 Plus: the round-trip sidecar native-trellis-emitted.json lists exactly the
 emitted (supported) elements, and re-verifies GREEN against a faithful readback
-and FAILS against a stripped one (verify-trellis-survived.rb).
+and FAILS against a stripped one (verify_trellis_survived.py).
 
 Run: python3 tests/test_trellis.py   (exit 0 = pass)
 """
@@ -29,10 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 SCRIPTS = os.path.join(SKILL, "scripts")
 BUILDER = os.path.join(SCRIPTS, "build-sigma-workbook.py")
-# verify-trellis-survived.rb is the converter-neutral readback guard (canonical
-# lives in the tableau skill; it reads any tool's native-trellis-emitted.json).
-VERIFY = os.path.join(SKILL, "..", "..", "..", "tableau-to-sigma", "skills",
-                      "tableau-to-sigma", "scripts", "verify-trellis-survived.rb")
+VERIFY = os.path.join(SCRIPTS, "verify_trellis_survived.py")
 
 DENORM = {"element": {"columns": [
     {"name": "Region",   "formula": "[Custom SQL/REGION]"},
@@ -166,7 +163,7 @@ def main():
                                "elements": [dict(els[i], id=i) for i in ids],
                                "layout": '<Page id="p"></Page>'}}
         rp = os.path.join(workdir, "readback-ok.json"); json.dump({"spec": spec_ok}, open(rp, "w"))
-        g = subprocess.run(["ruby", VERIFY, "--emitted", os.path.join(workdir, "native-trellis-emitted.json"),
+        g = subprocess.run([sys.executable, VERIFY, "--emitted", os.path.join(workdir, "native-trellis-emitted.json"),
                             "--spec", rp], capture_output=True, text=True)
         ok("verify-trellis-survived PASSES on a faithful readback", g.returncode == 0)
         # strip every trellis on the readback -> must FAIL
@@ -174,11 +171,11 @@ def main():
                                 "elements": [{"id": i, "kind": els[i]["kind"]} for i in ids],
                                 "layout": '<Page id="p"></Page>'}}
         bp = os.path.join(workdir, "readback-stripped.json"); json.dump({"spec": spec_bad}, open(bp, "w"))
-        b = subprocess.run(["ruby", VERIFY, "--emitted", os.path.join(workdir, "native-trellis-emitted.json"),
+        b = subprocess.run([sys.executable, VERIFY, "--emitted", os.path.join(workdir, "native-trellis-emitted.json"),
                             "--spec", bp], capture_output=True, text=True)
         ok("verify-trellis-survived FAILS when Sigma strips the trellis", b.returncode != 0)
     else:
-        print("  --   verify-trellis-survived.rb not found; skipped readback guard assertions")
+        print("  --   verify_trellis_survived.py not found; skipped readback guard assertions")
 
     # byte-identical: a charts.json with EVERY trellis signal removed emits no
     # trellis and no sidecar.

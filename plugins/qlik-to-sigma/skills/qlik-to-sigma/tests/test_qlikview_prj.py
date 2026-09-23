@@ -96,10 +96,13 @@ def test_viz_map_covers_all_13_qlikview_chart_types():
 
 
 def test_delegation():
-    # migrate-qlik.rb --prj must auto-detect a -prj folder and hand off to discovery.
-    src = open(os.path.join(SCRIPTS, "migrate-qlik.rb")).read()
-    assert "qlik-prj-discover.py" in src and "opts[:from] = disc_dir" in src, \
+    # Both supported entrypoints must hand --prj to the common discovery normalizer.
+    ruby_src = open(os.path.join(SCRIPTS, "migrate-qlik.rb")).read()
+    python_src = open(os.path.join(SCRIPTS, "migrate-qlik.py")).read()
+    assert "qlik-prj-discover.py" in ruby_src and "opts[:from] = disc_dir" in ruby_src, \
         "migrate-qlik.rb --prj does not delegate to qlik-prj-discover.py"
+    assert "qlik-prj-discover.py" in python_src and "--prj" in python_src, \
+        "migrate-qlik.py --prj does not delegate to qlik-prj-discover.py"
 
 
 if __name__ == "__main__":
