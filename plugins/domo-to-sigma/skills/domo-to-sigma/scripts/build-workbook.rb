@@ -1923,8 +1923,8 @@ def lod_fixed_percent_mode(card, plan)
   fixed_is_x = (xcol && same_field.call(xcol['column'])) || date_grain_is_fixed
   fixed_is_series = series && same_field.call(series['column'])
 
-  return 'color' if fixed_is_x && series
-  return 'x_axis' if fixed_is_series && xcol
+  return 'x_axis' if fixed_is_x && series
+  return 'color' if fixed_is_series && xcol
   return 'fixed-only' if fixed_is_x || fixed_is_series
 
   # The FIXED key is not a visible chart dimension (commonly a card/page date

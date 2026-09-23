@@ -1051,7 +1051,7 @@ retention = build_element({
 retention_measure = retention['columns'].find { |column| column['id'] == 'm-retention-likelihood-rates' }
 eq(
   retention_measure['formula'],
-  '100 * PercentOfTotal(Count([Master/Employee Code]), "color")',
+  '100 * PercentOfTotal(Count([Master/Employee Code]), "x_axis")',
   'FIXED BY x-axis date totals across the color categories instead of flattening the LOD',
 )
 eq($beast_mode_usage.first['target'], 'workbook-lod-formula',

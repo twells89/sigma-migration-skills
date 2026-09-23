@@ -87,9 +87,10 @@ The common Domo shape below is deterministic and converts automatically:
 ```
 
 It becomes a workbook measure using Sigma `PercentOfTotal`. The card bindings
-select the scope: a FIXED x-axis plus a color series uses `"color"`; a FIXED
-color series plus an x-axis uses `"x_axis"`; a FIXED key that is only filtered
-uses `"grand_total"`. This preserves “subgroup ÷ total within the FIXED key”
+select the scope: a FIXED x-axis plus a color series uses `"x_axis"`; a FIXED
+color series plus an x-axis uses `"color"`; a FIXED key that is only filtered
+uses `"grand_total"`. These scopes were value-verified live (each date totals
+100%). This preserves “subgroup ÷ total within the FIXED key”
 without emitting the unsupported `*Over` family or flattening the denominator.
 
 Other LOD shapes remain explicit. Put the intended workbook formula in
