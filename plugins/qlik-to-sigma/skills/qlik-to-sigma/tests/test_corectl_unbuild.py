@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Offline regression for corectl unbuild, LOAD expressions, and coverage."""
+import importlib.util
 import json
 import os
 import subprocess
@@ -15,10 +16,76 @@ sys.path.insert(0, SCRIPTS)
 SUBPROCESS_TEXT = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace"}
 
 
+def load_discovery():
+    path = os.path.join(SCRIPTS, "qlik-discover.py")
+    spec = importlib.util.spec_from_file_location("qlik_discovery_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def run(*args):
     result = subprocess.run(args, **SUBPROCESS_TEXT)
     assert result.returncode == 0, result.stdout + result.stderr
     return result
+
+
+def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
+    module = load_discovery()
+    module.qlik = lambda *_args, **_kwargs: {
+        "qDataPages": [{
+            "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
+            "qMatrix": [
+                [
+                    {"qText": "West", "qNum": 0},
+                    {"qText": "$42.00", "qNum": 42.0},
+                ],
+                [
+                    {"qText": "East", "qNum": 0},
+                    {"qText": "$10.50", "qNum": 10.5},
+                ],
+            ]
+        }]
+    }
+    result = module.qlik_chart_rows(
+        "app",
+        ["--context", "fixture"],
+        {"id": "chart-1", "dimensions": ["Region"], "measures": ["Sum(Sales)"]},
+    )
+    assert result["rows"] == [["West", 42.0], ["East", 10.5]]
+    assert result["complete"] is True
+    assert result["expectedRows"] == 2
+
+
+def test_pivot_hypercube_rows_capture_numeric_value_matrix():
+    module = load_discovery()
+    module.qlik = lambda *_args, **_kwargs: {
+        "qPivotDataPages": [{
+            "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
+            "qData": [
+                [
+                    {"qText": "42", "qNum": 42.0, "qType": "V"},
+                    {"qText": "-", "qNum": float("nan"), "qType": "U"},
+                ],
+                [
+                    {"qText": "10.5", "qNum": 10.5, "qType": "V"},
+                    {"qText": "3", "qNum": 3.0, "qType": "V"},
+                ],
+            ],
+        }]
+    }
+    result = module.qlik_chart_rows(
+        "app",
+        ["--context", "fixture"],
+        {
+            "id": "pivot-1",
+            "dimensions": ["Region"],
+            "measures": ["Sum(Sales)"],
+        },
+    )
+    assert result["pivot"] is True
+    assert result["complete"] is True
+    assert result["rows"] == [[42.0, None], [10.5, 3.0]]
 
 
 def test_normalizes_nested_children_with_empty_master_items():
@@ -182,7 +249,23 @@ def test_auto_chart_uses_generated_visualization_and_primary_color():
 
 def test_one_command_dry_run_builds_both_source_visuals():
     with tempfile.TemporaryDirectory() as output:
-        result = run("ruby", os.path.join(SCRIPTS, "migrate-qlik.rb"),
+        runtime_profile = {
+            "selected": "python",
+            "required_runtimes": ["python", "node"],
+        }
+        json.dump(
+            {
+                "pass": True,
+                "runtime_profile": runtime_profile,
+                "runtimes": {"python": True, "node": True, "ruby": False},
+            },
+            open(os.path.join(output, "doctor.json"), "w"),
+        )
+        json.dump(
+            {"doctor_pass": True, "runtime_profile": runtime_profile},
+            open(os.path.join(output, "bootstrap.json"), "w"),
+        )
+        result = run(sys.executable, os.path.join(SCRIPTS, "migrate-qlik.py"),
                      "--unbuild", FIXTURE, "--connection", "00000000-0000-0000-0000-000000000000",
                      "--database", "ANALYTICS", "--schema", "PUBLIC", "--dry-run", "--yes", "--out", output)
         coverage = json.load(open(os.path.join(output, "workbook-coverage.json")))

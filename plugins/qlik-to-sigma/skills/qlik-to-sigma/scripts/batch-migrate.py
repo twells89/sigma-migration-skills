@@ -22,7 +22,7 @@ BASE=os.environ["SIGMA_BASE_URL"]; TOK=os.environ["SIGMA_API_TOKEN"]
 # Reuse an existing Sigma data model: set these to YOUR ids (from the data-model build
 # step or the Sigma UI), or pass --data-model / --denorm-element / --folder. No real ids baked in.
 DM=os.environ.get("SIGMA_DM_ID",""); DENORM=os.environ.get("SIGMA_DENORM_ELEMENT_ID",""); FOLDER=os.environ.get("SIGMA_FOLDER_ID","")
-PUTLAYOUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),"vendor","put-layout.rb")
+PUTLAYOUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),"put_layout.py")
 def post(p,b):
     r=urllib.request.Request(BASE+p,data=json.dumps(b).encode(),method="POST",headers={"Authorization":"Bearer "+TOK,"Content-Type":"application/json"})
     try: return urllib.request.urlopen(r).read().decode()
@@ -93,7 +93,7 @@ def build(app_name):
     wb=wb.group(1) if wb else None
     if wb:
         lf="/tmp/_lay_%s.xml"%wb; open(lf,"w").write(full_xml)
-        subprocess.run(["ruby",PUTLAYOUT,"--workbook",wb,"--layout",lf],capture_output=True)
+        subprocess.run([sys.executable,PUTLAYOUT,"--workbook",wb,"--layout",lf],capture_output=True)
     return wb
 
 def main():
