@@ -37,7 +37,9 @@ ds = { 'id' => 'ds-1', 'name' => 'Orders',
        'schema' => { 'columns' => [
          { 'name' => 'project_id', 'type' => 'STRING' },
          { 'name' => 'sales_amount', 'type' => 'DECIMAL' },
-         { 'name' => 'order_date', 'type' => 'DATE' } ] } }
+         { 'name' => 'order_date', 'type' => 'DATE' },
+         { 'name' => 'City', 'type' => 'STRING' },
+         { 'name' => 'State', 'type' => 'STRING' } ] } }
 map = { 'connectionId' => 'conn-1', 'database' => 'DB', 'schema' => 'SCH', 'table' => 'ORDERS' }
 proj = [{ 'name' => 'full_region', 'sigmaFormula' => 'Concat([City], ", ", [State])', 'class' => 'projection' }]
 el = build_element(ds, map, proj)
