@@ -595,14 +595,14 @@ puts '== resolve_entry: malformed or comment-only formulas fail closed =='
 [
   ['unterminated /* ... */ block comment.', 'Sum([Value])'],
   ['comment removal left no executable formula.', 'null'],
-].each_with_index do |reason, index|
+].each_with_index do |(reason, sigma_formula), index|
   blocked_comment, = resolve_entry(
     {
       'id' => "calculation-comment-block-#{index}",
       'name' => 'Malformed Comment Formula',
       'class' => 'projection',
       'originalSql' => '/* comment',
-      'sigmaFormula' => index.zero? ? 'Sum([Value])' : 'null',
+      'sigmaFormula' => sigma_formula,
       'converted' => true,
       'preWarnings' => ["#{COMMENT_BLOCK_PREFIX} #{reason}"],
     },
