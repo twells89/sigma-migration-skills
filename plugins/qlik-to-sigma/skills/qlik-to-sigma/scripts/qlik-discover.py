@@ -643,7 +643,6 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
         for chart in charts
         if chart.get("sheet")
         and chart.get("dimensions")
-        and chart.get("measures")
     ]
     chart_values = pmap(
         lambda chart: qlik_chart_rows(app, ctx, chart),

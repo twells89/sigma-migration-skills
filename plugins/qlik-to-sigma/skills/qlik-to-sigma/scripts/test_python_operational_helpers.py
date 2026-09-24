@@ -168,13 +168,16 @@ class WarehousePreflightTests(unittest.TestCase):
 
 
 class QlikSnapshotTests(unittest.TestCase):
-    def test_parses_qlik_cli_tabular_chart_data(self) -> None:
+    def load_discovery(self):
         path = Path(__file__).with_name("qlik-discover.py")
         spec = importlib.util.spec_from_file_location("qlik_discover_test", path)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader
         spec.loader.exec_module(module)
+        return module
 
+    def test_parses_qlik_cli_tabular_chart_data(self) -> None:
+        module = self.load_discovery()
         result = module.parse_tabular_chart_rows(
             "MonthYear     Revenue\n"
             "2024-01       14682555.21\n"
@@ -187,6 +190,46 @@ class QlikSnapshotTests(unittest.TestCase):
         )
         self.assertTrue(result["complete"])
         self.assertEqual(2, result["expectedRows"])
+
+    def test_snapshot_captures_dimension_only_visual_rows(self) -> None:
+        module = self.load_discovery()
+        captured = []
+        original_chart_rows = module.qlik_chart_rows
+        original_eval = module.qlik_eval
+        module.qlik_chart_rows = lambda _app, _ctx, chart: (
+            captured.append(chart["id"])
+            or {
+                "rows": [["Boston"], ["New York"]],
+                "complete": True,
+                "expectedRows": 2,
+                "pivot": False,
+            }
+        )
+        module.qlik_eval = lambda *_args: "0"
+        try:
+            snapshot = module.compute_snapshot(
+                "app",
+                [],
+                [
+                    {
+                        "id": "map-1",
+                        "title": "Stores",
+                        "sheet": "sheet-1",
+                        "dimensions": [["City"]],
+                        "measures": [],
+                    }
+                ],
+                [],
+                {},
+                1,
+                False,
+            )
+        finally:
+            module.qlik_chart_rows = original_chart_rows
+            module.qlik_eval = original_eval
+
+        self.assertEqual(["map-1"], captured)
+        self.assertEqual([["Boston"], ["New York"]], snapshot["chartData"][0]["rows"])
 
 
 class WorkbookLintTests(unittest.TestCase):
