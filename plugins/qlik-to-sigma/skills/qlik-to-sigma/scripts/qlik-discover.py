@@ -413,7 +413,9 @@ def parse_script(qvs):
 
 def qlik_eval(app, ctx_args, expr):
     """Evaluate one expression via the engine (read-only). Returns the raw value string or None."""
-    out = qlik_run(["app", "eval", expr, "-a", app, *ctx_args])
+    # qlik-cli echoes the expression before the value; flatten a multi-line
+    # expression so the value stays on line 2 (whitespace is insignificant).
+    out = qlik_run(["app", "eval", re.sub(r"\s*[\r\n]+\s*", " ", str(expr)), "-a", app, *ctx_args])
     lines = [l for l in out.stdout.splitlines() if l.strip()]
     return lines[1].strip() if out.returncode == 0 and len(lines) >= 2 else None
 

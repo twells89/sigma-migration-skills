@@ -143,8 +143,50 @@ class Resolver:
             self.raw_to_disp[dn.upper().replace(" ", "_")] = dn
     def __call__(self, qlik_name):
         if not qlik_name: return None
-        k = str(qlik_name).upper()
+        k = str(qlik_name).strip()
+        # `=Field` / `=[Field]` is a calculated dimension that only evaluates a
+        # field (common in drill-down groups) — resolve it as that field.
+        bare = re.fullmatch(r"=\s*\[?([^\[\]()=]+?)\]?\s*", k)
+        if bare:
+            k = bare.group(1)
+        k = k.upper()
         return self.raw_to_disp.get(k) or self.raw_to_disp.get(k.replace(" ", "_"))
+
+def _region_type(dim):
+    """Sigma region-map grain for a Qlik map-layer dim, or None (never guessed)."""
+    name = str(dim or "").upper()
+    return "us-state" if "STATE" in name else ("country" if "COUNTRY" in name else None)
+
+
+TRANSLATION_NOTES = []  # approximations recorded by translate_measure; drained into warnings
+
+
+def _display_wrapper_aggregate(e):
+    """A text-formatting wrapper around ONE aggregate -> that aggregate.
+
+    Qlik authors often hand-roll unit abbreviation, e.g.
+    If(Sum(X)>=1e9, '$'&Num(Sum(X)/1e9,'#,##0.0')&'B', If(..., ...)): every
+    branch displays the same number, so its value is Sum(X). Fail-closed: only
+    If/Num, a single distinct aggregate call, numeric literals, comparison and
+    arithmetic operators, and string literals may appear; anything else is left
+    untouched (and stays untranslated)."""
+    if not re.search(r"\bNum\s*\(", e, re.I) or "&" not in e:
+        return e
+    aggs = {re.sub(r"\s+", "", m.group(0)) for m in re.finditer(
+        r"\b(?:" + _AGG_ALT + r")\s*\([^()]*\)", e, flags=re.I)}
+    if len(aggs) != 1:
+        return e
+    agg = aggs.pop()
+    rest = re.sub(r"'[^']*'", "", e)
+    rest = re.sub(r"\b(?:" + _AGG_ALT + r")\s*\([^()]*\)", "", rest, flags=re.I)
+    rest = re.sub(r"\b(?:If|Num)\b", "", rest, flags=re.I)
+    if not re.fullmatch(r"[\s\d.,()&/*+\-<>=]*", rest):
+        return e
+    TRANSLATION_NOTES.append(
+        f"display-formatting wrapper (If/Num unit abbreviation) reduced to its value {agg}; "
+        "apply a Sigma number format for the abbreviated display")
+    return agg
+
 
 def translate_measure(expr, resolve):
     """Qlik measure expression -> Sigma formula over the master, or None.
@@ -152,6 +194,7 @@ def translate_measure(expr, resolve):
     arithmetic combinations of those (Sum(a)/Sum(b), Sum(a)/Count(DISTINCT b))."""
     e = str(expr or "").strip().lstrip("=").strip()
     if not e: return None
+    e = _display_wrapper_aggregate(e)
     unresolved = []
     def ref(f):
         d = resolve(f)
@@ -177,6 +220,21 @@ def translate_measure(expr, resolve):
             else f"{agg}({inner})"
     # aggregation function names + Sigma targets come from refs/catalogs/aggregation.json
     _cd = _AGG_TO_SIGMA.get("count_distinct", "CountDistinct")
+    # 0) clear-only set  Agg({<F1=, F2=>} X): "ignore selections on F1, F2". Sigma
+    #    controls filter the shared master globally (no per-chart opt-out), so the
+    #    plain aggregate is emitted and the approximation is recorded loudly —
+    #    exact whenever no control filters those fields.
+    def clear_only(m):
+        fields = [f.strip() for f in m.group(1).split(",")]
+        if not all(re.fullmatch(r"\[?[A-Za-z0-9_ ]+\]?\s*=\s*", f) for f in fields):
+            return m.group(0)
+        names = [re.sub(r"[\[\]=\s]", "", f) for f in fields]
+        TRANSLATION_NOTES.append(
+            f"set modifier {{<{', '.join(n + '=' for n in names)}>}} (ignore selections on "
+            f"{', '.join(names)}) emitted as the plain aggregate — Sigma controls cannot "
+            "exempt one chart; exact unless a control filters " + ", ".join(names))
+        return ""
+    e = re.sub(r"\{\s*<([^{}<>]*)>\s*\}\s*", clear_only, e)
     # 1) simple Set Analysis  Agg({<F={v,...}>} [DISTINCT] X)  (also F-={...} exclusion)
     e = re.sub(r"\b(" + _AGG_ALT + r")\s*\(\s*\{\s*<\s*([A-Za-z0-9_]+)\s*(-?=)\s*\{([^}]*)\}\s*>\s*\}\s*(?:DISTINCT\s+)?([A-Za-z0-9_]+)\s*\)",
                set_analysis, e, flags=re.I)
@@ -200,7 +258,7 @@ def date_field(info, raw):
     target (estate-repair gotcha) — date fields need date-range controls."""
     tags = [str(t).lower() for t in (info.get("tags") or [])]
     if "$date" in tags or "$timestamp" in tags: return True
-    if "$text" in tags: return False              # tagged, and tagged non-date
+    if tags: return False                         # tagged, and tagged non-date ($text, $numeric, ...)
     fmt = (info.get("numFmt") or "").upper()
     if re.search(r"[DMY]{2,}[-./ ]", fmt): return True
     return bool(re.search(r"(^|_)(DATE|DT|TIMESTAMP)(_|$)", str(raw or "").upper()))
@@ -526,7 +584,9 @@ def build_element(c, resolve, warnings, metrics=None):
     """One Qlik chart object -> one Sigma element (or None + warning). `metrics`
     (DM metrics referenceable on the master) lets a measure bind to a governed
     [Metrics/<name>] reference; None/empty keeps every measure inline."""
-    title = c.get("title") or c.get("vizType")
+    # An untitled Qlik KPI displays its measure label; use that before the viz type.
+    title = c.get("title") or next((l for l in (c.get("measureLabels") or []) if l), None) \
+        or c.get("vizType")
     dims_raw = [(d[0] if isinstance(d, list) else d) for d in (c.get("dimensions") or [])]
     dim_disp = [resolve(d) for d in dims_raw]
     labels = c.get("dimLabels") or [None] * len(dims_raw)
@@ -587,12 +647,17 @@ def build_element(c, resolve, warnings, metrics=None):
     cols, mids, mnames = [], [], []
     for i, mexpr in enumerate(mexprs):
         f = translate_measure(mexpr, resolve)
+        warnings.extend(f"'{title}' APPROXIMATION: {note}" for note in TRANSLATION_NOTES)
+        TRANSLATION_NOTES.clear()
         if f is None:
             warnings.append(f"'{title}': measure not translated: {mexpr}")
             continue
         # Prefer a governed [Metrics/<name>] ref when this inline aggregate matches a
         # DM metric by formula equivalence; safe no-op (inline) otherwise.
-        f = _mb.metric_ref_or_inline(f, MASTER, metrics)
+        # KPI values stay inline: preflight K1 rejects a bare ref as a kpi-chart
+        # value (bare sibling refs render null), and [Metrics/..] is bare.
+        if kind != "kpi-chart":
+            f = _mb.metric_ref_or_inline(f, MASTER, metrics)
         mname = mlabels[i] or (title if kind == "kpi-chart" else f"Measure {i+1}")
         cid = nid("y")
         _mcol = {"id": cid, "formula": f, "name": mname}
@@ -600,7 +665,15 @@ def build_element(c, resolve, warnings, metrics=None):
         if _fmt: _mcol["format"] = _fmt
         cols.append(_mcol)
         mids.append(cid); mnames.append(mname)
-    if not mids:
+    if kind == "region-map" and dims_raw and _region_type(dims_raw[0]) is None:
+        # No Sigma region grain for this location dim (e.g. City, which needs
+        # coordinates): rebuild the layer as a table of its locations rather
+        # than guessing a regionType or dropping the visual.
+        warnings.append(f"'{title}' (map) EXPLICIT APPROXIMATION: region grain '{dims_raw[0]}' "
+                        "is not a Sigma region type (us-state/country) and the source carries "
+                        "no coordinates — rebuilt as a table of its locations")
+        kind, vt = "table", "map-as-table"
+    if not mids and not (kind == "table" and vt == "map-as-table"):
         warnings.append(f"skip '{title}': no translatable measures"); return None
 
     el = {"id": "el-" + re.sub(r"[^a-z0-9]", "", str(c["id"]).lower()),
@@ -659,8 +732,7 @@ def build_element(c, resolve, warnings, metrics=None):
     if kind == "region-map":
         # Qlik map layer dim -> Sigma region-map; only emit when the region
         # grain is recognizable (else flag, never guess a wrong regionType)
-        dname = (dims_raw[0] or "").upper()
-        rtype = "us-state" if "STATE" in dname else ("country" if "COUNTRY" in dname else None)
+        rtype = _region_type(dims_raw[0])
         if rtype is None:
             warnings.append(f"skip '{title}' (map): region grain '{dims_raw[0]}' not recognized (us-state/country)")
             return None
