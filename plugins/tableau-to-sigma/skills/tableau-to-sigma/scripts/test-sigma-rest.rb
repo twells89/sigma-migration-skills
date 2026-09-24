@@ -30,7 +30,8 @@ end
 # --- test harness ----------------------------------------------------------
 
 ENV_KEYS = %w[SIGMA_BASE_URL SIGMA_CLIENT_ID SIGMA_CLIENT_SECRET
-              SIGMA_API_TOKEN SIGMA_TOKEN_MINTED_AT SIGMA_WORKDIR].freeze
+              SIGMA_API_TOKEN SIGMA_TOKEN_MINTED_AT SIGMA_WORKDIR
+              SIGMA_ALLOW_INSECURE_BASE_URL].freeze
 
 # The library's load-time bootstrap may have pulled real creds from
 # ~/.sigma-migration/env or ./auth.json — scrub them so every case starts clean
@@ -40,6 +41,10 @@ def reset_state!
   Sigma.instance_variable_set(:@token_override, nil)
   Sigma.instance_variable_set(:@minted_at, nil)
   Sigma.instance_variable_set(:@refresh_inflight, false)
+  Sigma.instance_variable_set(:@validated_bases, nil)
+  # Fake host (https://sigma.example): bypass the A2 host allowlist so these
+  # cases exercise the auth/HTTP seam; A2 itself is covered by case 14.
+  ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1'
 end
 
 # Stub the mint: no network, deterministic tokens, same state effects as the
@@ -229,6 +234,23 @@ out = Sigma.request(:get, '/v2/x', http: http)
 check(out == { 'ok' => 1 } && $mints == before + 1 && http.reqs.length == 1 &&
         http.reqs.first['Authorization'] == "Bearer minted-#{before + 1}",
       'stale token re-minted BEFORE the request (single roundtrip, fresh bearer)', fails)
+
+# 14. A2 on the request path: a pre-minted token skips the token exchange, so
+# request() itself must refuse a non-Sigma SIGMA_BASE_URL before any bearer
+# token goes out.
+reset_state!
+ENV.delete('SIGMA_ALLOW_INSECURE_BASE_URL')
+ENV['SIGMA_BASE_URL'] = 'https://evil.example'
+ENV['SIGMA_API_TOKEN'] = 'pre-minted'
+http = FakeHttp.new([http_res(Net::HTTPOK, 200, '{"ok":1}')])
+refused = false
+begin
+  Sigma.request(:get, '/v2/x', http: http)
+rescue SystemExit
+  refused = true
+end
+check(refused && http.reqs.empty?,
+      'request() refuses a non-Sigma SIGMA_BASE_URL with a pre-minted token (no bearer sent)', fails)
 
 puts
 if fails.empty?

@@ -33,7 +33,8 @@ end
 # --- test harness (test-sigma-rest.rb conventions) --------------------------
 
 ENV_KEYS = %w[SIGMA_BASE_URL SIGMA_CLIENT_ID SIGMA_CLIENT_SECRET
-              SIGMA_API_TOKEN SIGMA_TOKEN_MINTED_AT SIGMA_WORKDIR].freeze
+              SIGMA_API_TOKEN SIGMA_TOKEN_MINTED_AT SIGMA_WORKDIR
+              SIGMA_ALLOW_INSECURE_BASE_URL].freeze
 
 # The library's load-time bootstrap may have pulled real creds from
 # ~/.sigma-migration/env or ./auth.json — scrub them so every case starts clean
@@ -43,6 +44,10 @@ def reset_state!
   Sigma.instance_variable_set(:@token_override, nil)
   Sigma.instance_variable_set(:@minted_at, nil)
   Sigma.instance_variable_set(:@refresh_inflight, false)
+  Sigma.instance_variable_set(:@validated_bases, nil)
+  # Fake host (https://sigma.example): bypass the A2 host allowlist so these
+  # cases exercise the auth/HTTP seam; A2 itself is covered by case 14.
+  ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1'
 end
 
 # Stub the mint: no network, deterministic tokens.
