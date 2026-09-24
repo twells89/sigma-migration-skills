@@ -63,6 +63,7 @@ puts 'test-columns-pagination.rb — shared columns readers must paginate'
 #    an error column sitting past the default page size is still seen. This is the
 #    gate 3/7 false-GREEN scenario in miniature.
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1' # fake host: bypass the A2 allowlist
 ENV['SIGMA_API_TOKEN'] = 'tok'
 page1 = (1..50).map  { |i| { 'label' => "COL_#{i}", 'type' => { 'type' => 'text' } } }
 page2 = (51..100).map { |i| { 'label' => "COL_#{i}", 'type' => { 'type' => 'text' } } }

@@ -25,6 +25,8 @@ for _cand in (
 
 import sigma_rest  # noqa: E402
 
+_REAL_SEND = sigma_rest._send  # captured before Base.setUp monkeypatches it
+
 
 class Base(unittest.TestCase):
     # env keys we mutate — snapshot + restore so cases don't bleed.
@@ -44,6 +46,7 @@ class Base(unittest.TestCase):
         sigma_rest._token_override = None
         sigma_rest._minted_at = None
         sigma_rest._refresh_inflight = False
+        sigma_rest._validated_bases.clear()
         self._sends = []
         self._queue = []
         sigma_rest._send = self._fake_send  # monkeypatch the HTTP seam
@@ -75,6 +78,56 @@ class BaseUrl(Base):
     def test_raises_when_unset(self):
         with self.assertRaises(sigma_rest.SigmaError):
             sigma_rest.base_url()
+
+
+class RequestPathA2(Base):
+    """A2 must hold on request(), not only the token exchange: a pre-minted
+    SIGMA_API_TOKEN skips refresh_token(), so request() itself has to refuse a
+    poisoned SIGMA_BASE_URL before the bearer token (or a file:// read) goes out."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ.pop("SIGMA_ALLOW_INSECURE_BASE_URL", None)
+        os.environ["SIGMA_API_TOKEN"] = "pre-minted"
+
+    def test_rejects_non_sigma_host(self):
+        os.environ["SIGMA_BASE_URL"] = "https://evil.example"
+        with self.assertRaises(SystemExit):
+            sigma_rest.request("get", "/v2/whoami")
+        self.assertEqual(self._sends, [])
+
+    def test_rejects_file_scheme(self):
+        os.environ["SIGMA_BASE_URL"] = "file:///etc/passwd#"
+        with self.assertRaises(SystemExit):
+            sigma_rest.request("get", "/v2/whoami")
+        self.assertEqual(self._sends, [])
+
+    def test_allows_sigma_host(self):
+        os.environ["SIGMA_BASE_URL"] = "https://aws-api.sigmacomputing.com"
+        self.enqueue(200, {"ok": True})
+        sigma_rest.request("get", "/v2/whoami")
+        self.assertEqual(len(self._sends), 1)
+
+    def test_override_does_not_outlive_itself(self):
+        os.environ["SIGMA_BASE_URL"] = "https://evil.example"
+        os.environ["SIGMA_ALLOW_INSECURE_BASE_URL"] = "1"
+        self.enqueue(200, {"ok": True})
+        sigma_rest.request("get", "/v2/whoami")
+        os.environ.pop("SIGMA_ALLOW_INSECURE_BASE_URL")
+        with self.assertRaises(SystemExit):
+            sigma_rest.request("get", "/v2/whoami")
+
+    def test_send_never_opens_file_urls_even_with_override(self):
+        # Defense in depth: the insecure override relaxes the HOST check only;
+        # the real transport still refuses anything but http(s).
+        os.environ["SIGMA_ALLOW_INSECURE_BASE_URL"] = "1"
+        with self.assertRaises(SystemExit):
+            _REAL_SEND("GET", "file:///etc/passwd", {}, None, 5)
+
+    def test_opener_has_no_file_handler(self):
+        import urllib.request as ur
+        handlers = sigma_rest._http_opener().handlers
+        self.assertFalse(any(isinstance(h, (ur.FileHandler, ur.FTPHandler, ur.DataHandler)) for h in handlers))
 
 
 class NeutralEnv(Base):

@@ -258,7 +258,11 @@ module Sigma
   end
 
   def request(method, path, body: nil, content_type: 'application/json', accept: 'application/json', binary: false, http: nil)
-    uri = URI("#{base_url}#{path}")
+    # A2 on the request path too: a pre-minted SIGMA_API_TOKEN skips the token
+    # exchange, so the bearer token must not reach an unvalidated host.
+    base = base_url
+    (@validated_bases ||= {})[[base, ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] == '1']] ||= (Sigma.validate_base_url!(base); true)
+    uri = URI("#{base}#{path}")
     attempts = 0
     loop do
       attempts += 1
