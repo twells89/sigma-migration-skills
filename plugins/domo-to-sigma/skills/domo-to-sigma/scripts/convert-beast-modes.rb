@@ -283,7 +283,7 @@ end
 # function name remains callable in the final formula; a Domo semantic rewrite
 # such as CURDATE() → Today() or DATE_FORMAT() → DateFormat() clears the hazard.
 def unresolved_unknown_functions(entry, sigma, semantically_rewritten: false)
-  Array(entry['warnings']).filter_map do |warning|
+  Array(entry['warnings']).each_with_object([]) do |warning, functions|
     match = warning.to_s.match(/\A([A-Z_][A-Z0-9_]*)\(\) has no Sigma mapping\b/i)
     next unless match
 
@@ -291,7 +291,7 @@ def unresolved_unknown_functions(entry, sigma, semantically_rewritten: false)
     next if semantically_rewritten &&
             SEMANTICALLY_MAPPED_UNKNOWN_FUNCTIONS.include?(function.upcase)
 
-    function if sigma.to_s.match?(/\b#{Regexp.escape(function)}\s*\(/i)
+    functions << function if sigma.to_s.match?(/\b#{Regexp.escape(function)}\s*\(/i)
   end.uniq
 end
 
