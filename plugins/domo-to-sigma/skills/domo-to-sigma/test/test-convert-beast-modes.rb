@@ -127,6 +127,9 @@ semantic_cases = [
   ["CONVERT_TZ(`Date`, 'UTC', 'America/Denver')",
    'Convert_tz([Date], "UTC", "America/Denver")',
    'ConvertTimezone([Date], "America/Denver", "UTC")'],
+  ['100*(SUM(terminated_flag) / ((SUM(beginning_active_flag) + SUM(ending_active_flag)) / 2))',
+   '100*(Sum(terminated_flag) / ((Sum(beginning_active_flag) + Sum(ending_active_flag)) / 2))',
+   '100*((1.0 * Sum(terminated_flag)) / ((Sum(beginning_active_flag) + Sum(ending_active_flag)) / 2))'],
 ]
 semantic_cases.each do |source, generic, expected|
   result = DomoSigma::BeastModeSemantics.translate({ 'originalSql' => source }, generic)

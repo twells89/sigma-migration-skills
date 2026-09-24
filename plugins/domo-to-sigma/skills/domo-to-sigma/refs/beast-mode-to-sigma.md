@@ -118,6 +118,9 @@ Apply these to the raw Beast Mode string first:
    `COUNT`, …) wraps the expression, the result is a workbook/element aggregate;
    otherwise it's a row-level DM calc column. Domo decides this implicitly by the
    card's grouping — we must make it explicit.
+5. **Promote aggregate division to decimal.** Domo returns fractional
+   `SUM(flag)/SUM(population)` results even for integer columns; Sigma/Snowflake
+   can truncate to zero unless the numerator is multiplied by `1.0`.
 
 ---
 

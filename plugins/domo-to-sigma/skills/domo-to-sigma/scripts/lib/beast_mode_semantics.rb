@@ -39,6 +39,7 @@ module DomoSigma
       rewritten = rewrite_between(rewritten)
       rewritten = rewrite_date_functions(rewritten)
       rewritten = rewrite_mixed_if(rewritten)
+      rewritten = rewrite_integer_division(rewritten) if original.include?('/')
       return translated(rewritten) if rewritten != sigma
 
       return blocked('untranslated FIXED/LOD shape requires an explicit workbook placement') if original.match?(/\bFIXED\s*\(/i)
@@ -116,6 +117,13 @@ module DomoSigma
       formula.gsub(/\AIf\((.+),\s*(-?\d+(?:\.\d+)?),\s*("[^"]*")\)\z/) do
         "If(#{Regexp.last_match(1)}, Text(#{Regexp.last_match(2)}), #{Regexp.last_match(3)})"
       end
+    end
+
+    def rewrite_integer_division(formula)
+      formula.sub(
+        /(\b(?:Sum|Count|Avg|Min|Max)\s*\([^()]+\))\s*\//i,
+        '(1.0 * \1) /',
+      )
     end
 
     def translate_date_format(source)
