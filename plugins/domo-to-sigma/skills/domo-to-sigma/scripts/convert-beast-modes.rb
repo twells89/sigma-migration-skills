@@ -152,6 +152,11 @@ end
 
 # Removed from Beast Mode / unsupported in Sigma — warn if seen.
 UNSUPPORTED = %w[SQRT CONVERT_TZ MICROSECOND WEEKDAY].freeze
+# These source functions can retain the same letters after a successful
+# Domo-specific semantic rewrite. The generic converter still warns that it
+# does not know them, so case-insensitive residual-name matching alone would
+# incorrectly block valid Sigma MonthName/Ntile/Rank/Lag/Lead formulas.
+SEMANTICALLY_MAPPED_UNKNOWN_FUNCTIONS = %w[MONTHNAME NTILE RANK LAG LEAD].freeze
 
 # Convert a raw Beast Mode string toward what convert_sql_to_sigma_formula expects,
 # applying only the Domo-specific deltas. Returns [normalizedSql, warnings].
@@ -277,12 +282,15 @@ end
 # marked their emitted spellings converted:true. Keep only warnings whose source
 # function name remains callable in the final formula; a Domo semantic rewrite
 # such as CURDATE() → Today() or DATE_FORMAT() → DateFormat() clears the hazard.
-def unresolved_unknown_functions(entry, sigma)
+def unresolved_unknown_functions(entry, sigma, semantically_rewritten: false)
   Array(entry['warnings']).filter_map do |warning|
     match = warning.to_s.match(/\A([A-Z_][A-Z0-9_]*)\(\) has no Sigma mapping\b/i)
     next unless match
 
     function = match[1]
+    next if semantically_rewritten &&
+            SEMANTICALLY_MAPPED_UNKNOWN_FUNCTIONS.include?(function.upcase)
+
     function if sigma.to_s.match?(/\b#{Regexp.escape(function)}\s*\(/i)
   end.uniq
 end
@@ -440,7 +448,11 @@ def resolve_entry(entry, overrides)
   return [nil, warnings] if sigma.nil? || sigma.to_s.strip.empty?
 
   unless used_override
-    unknown_functions = unresolved_unknown_functions(entry, sigma)
+    unknown_functions = unresolved_unknown_functions(
+      entry,
+      sigma,
+      semantically_rewritten: used_semantic_synthesis,
+    )
     unless unknown_functions.empty?
       semantic_block_reason =
         "unmapped function(s) remain after conversion: #{unknown_functions.map { |fn| "#{fn}()" }.join(', ')}"

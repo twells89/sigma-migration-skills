@@ -499,6 +499,31 @@ ok(resolved_curdate['converted'] == true &&
 ok(unresolved_unknown_functions(resolved_curdate, resolved_curdate['sigmaFormula']).empty?,
    'the stale generic CURDATE warning no longer represents a residual function')
 
+puts '== resolve_entry: explicitly mapped same-name functions are not false-blocked =='
+[
+  ['MONTHNAME(`Date`)', 'Monthname([Date])',
+   'MONTHNAME() has no Sigma mapping — emitted as-is; verify it exists in Sigma.',
+   'MonthName([Date])'],
+  ['NTILE(4) OVER (ORDER BY SUM(`Sales`))', 'Ntile(4) OVER ([Order] BY Sum([Sales]))',
+   'NTILE() has no Sigma mapping — emitted as-is; verify it exists in Sigma.',
+   'Ntile(4, Sum([Sales]), "asc")'],
+].each do |source, generic, warning, expected|
+  mapped, = resolve_entry(
+    {
+      'id' => "calculation-#{source.split('(').first.downcase}",
+      'name' => source.split('(').first,
+      'class' => effective_formula_class(source),
+      'originalSql' => source,
+      'sigmaFormula' => generic,
+      'converted' => true,
+      'warnings' => [warning],
+    },
+    {},
+  )
+  ok(mapped['converted'] == true && mapped['sigmaFormula'] == expected,
+     "#{source.split('(').first} semantic mapping is trusted despite the generic warning")
+end
+
 puts '== resolve_entry: an actually unmapped warned function fails closed =='
 unknown_entry = {
   'id' => 'calculation-unknown',

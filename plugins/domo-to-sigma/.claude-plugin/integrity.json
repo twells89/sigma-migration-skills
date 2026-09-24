@@ -5,7 +5,7 @@
     ".claude-plugin/plugin.json": "3ea33484042bf01f0abb7af1a6464a2fa05a5c737483335a7f2f3a5061071f11",
     "skills/domo-to-sigma/SKILL.md": "4222c9ba13ebd9d53437d3fcba510668fdf681ca2fa30c19c9079d0b9be029f8",
     "skills/domo-to-sigma/scripts/migrate-domo.rb": "7b150954b218fa5800c4a7fea36cf7156f36400ad76b6d2d8badeed3042982d7",
-    "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "66ca521827899e80501d8dadc629093d04259cb6152c1174f2101aa187da8941",
+    "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "01375a9c0e787162d06aa29182262c91f01f95a4afc499ec2c89ffb245a4a4fe",
     "skills/domo-to-sigma/scripts/assert-beast-modes-accounted.rb": "f23a50eda0d20e8f9ef0fcd7df8f6064a34aa80d07966a11fd8cac3be2220ad9",
     "skills/domo-to-sigma/scripts/build-workbook.rb": "f8227e6950026ef7182d652c0a8bbfa5435bb08899c0a6bd81509abb075b6b51",
     "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "611e3c79a11ecc63f1f39aea82fad2feb4db5d230fbd72d759814d0662c90770",
