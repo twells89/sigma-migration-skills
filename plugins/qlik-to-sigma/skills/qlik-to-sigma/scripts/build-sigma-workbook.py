@@ -946,7 +946,6 @@ def banded_page(page_id, items, title, id_prefix=None, navigation_id=None):
         hdr, txt = f"{pfx}-hdr", f"{pfx}-hdrtext"
         extra.append({"id": hdr, "kind": "container", "style": dict(HEADER_STYLE)})
         extra.append({"id": txt, "kind": "text",
-                      "name": f"{title} Header",
                       "body": f'# <span style="color: #FFFFFF">{title}</span>'})
         children.append(_gc(hdr, 1, 25, 1 + offset, 1 + offset + HEADER_ROWS,
                             _le(txt, 1, 25, 1, 1 + HEADER_ROWS)))
