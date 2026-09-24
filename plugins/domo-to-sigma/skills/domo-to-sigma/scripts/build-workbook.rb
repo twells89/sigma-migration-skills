@@ -3176,8 +3176,10 @@ end
 # would fabricate a bogus source binding on an image element that never had
 # one. Every other element kind here (chart/table/kpi/pivot/map) always
 # carries `source`, so this only ever actually skips for an image.
-def retarget_to_submaster!(el, sm)
-  el['source'] = { 'kind' => 'table', 'elementId' => sm['id'] } if el.key?('source')
+def retarget_to_submaster!(el, sm, retarget_source: true)
+  if retarget_source && el.key?('source')
+    el['source'] = { 'kind' => 'table', 'elementId' => sm['id'] }
+  end
   walk = lambda do |n|
     case n
     # LIVE-VALIDATED FIX (2026-07-31): AXIS_OFF ({'marks'=>'none'}.freeze) is a
@@ -3311,6 +3313,11 @@ def build_element(card, overrides, master_ds = nil)
   end
 
   before = $companion_elements.length
+  verification_offsets = [
+    [$kpi_verification_elements, $kpi_verification_elements.length],
+    [$chart_verification_elements, $chart_verification_elements.length],
+    [$table_verification_elements, $table_verification_elements.length],
+  ]
   usage_before = $beast_mode_usage.length
   el = build_element_body(card, overrides)
   filter_helper = el && el['_filterHelper']
@@ -3333,6 +3340,9 @@ def build_element(card, overrides, master_ds = nil)
     # instead of the sub-master's — reintroducing the exact "Dependency not
     # found" whole-workbook-POST failure bead ziht exists to prevent.
     $companion_elements.slice!(before..-1)
+    verification_offsets.each do |elements, offset|
+      elements.slice!(offset..-1)
+    end
     $beast_mode_usage.slice!(usage_before..-1)
     return nil
   end
@@ -3362,6 +3372,22 @@ def build_element(card, overrides, master_ds = nil)
     $companion_elements[before..-1].each do |companion|
       next if filter_helper && companion.dig('source', 'elementId') == filter_helper['id']
       retarget_to_submaster!(companion, sm)
+    end
+    helper_ids = [
+      scatter_helper,
+      filter_helper,
+      *data_helpers,
+      *plugin_sources,
+    ].compact.map { |helper| helper['id'] }
+    verification_offsets.each do |elements, offset|
+      Array(elements[offset..-1]).each do |verification_element|
+        source_id = verification_element.dig('source', 'elementId')
+        retarget_to_submaster!(
+          verification_element,
+          sm,
+          retarget_source: !helper_ids.include?(source_id),
+        )
+      end
     end
     warn_card(card, "routed to sub-master '#{sm['name']}' for DataSet #{ds} (bead ziht) — " \
                     'verify column coverage against the card PNG; the sub-master passes through ' \

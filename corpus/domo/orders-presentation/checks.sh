@@ -9,7 +9,7 @@
 # emits the sidecars build-workbook.rb consumes. This asserts:
 #   1. currency KPI  -> compact scale/suffix/prefix + font size
 #   2. percent  KPI  -> font size only (never a bogus $ scale)
-#   3. chart w/ summary -> source-value header + compact currency axis
+#   3. chart w/ summary -> companion KPI + compact currency axis
 #   4. categorical order -> Domo row order, preserved
 #   5. KPI cards get NO chart-header override (their value IS the tile)
 #   6. high-cardinality SERIES colors are suppressed from measured card data
@@ -40,7 +40,6 @@ ruby -rjson -e '
   order = JSON.parse(File.read(File.join(dir, "category-order-overrides.json")))
   color = JSON.parse(File.read(File.join(dir, "chart-color-overrides.json")))
   headers = JSON.parse(File.read(File.join(dir, "kpi-card-header-overrides.json")))
-  card_headers = JSON.parse(File.read(File.join(dir, "card-header-overrides.json")))
   errs = []
 
   rev = kpi["kpi_rev"] || {}
@@ -69,12 +68,8 @@ ruby -rjson -e '
     guard["mode"] == "omit" && guard["distinctValuesObserved"] == 3 && guard["threshold"] == 2
   errs << "screenshot-backed KPI header missing dynamic full value" unless
     headers.dig("kpi_rev", "body").to_s.include?("{{Sum([Master/NET REVENUE]) | $,.1f}}")
-  errs << "screenshot-backed chart header missing title/full value" unless
-    card_headers.dig("bar_channel", "body").to_s.include?("**Revenue by Channel**") &&
-    card_headers.dig("bar_channel", "body").to_s.include?("{{Sum([Master/NET REVENUE]) | $,.1f}}")
-
-  # Screenshot-backed headers are safe because observed layout nests each one
-  # with its primary chart/KPI.
+  errs << "card-header-overrides.json was auto-emitted despite the operator-opt-in contract" if
+    File.exist?(File.join(dir, "card-header-overrides.json"))
 
   if errs.empty?
     puts "OK"
@@ -92,7 +87,7 @@ ruby -rjson -e '
   c = m["counts"] || {}
   abort "manifest counts wrong: #{c.inspect}" unless c["cards"] == 6 && c["kpi_formats"] == 5 &&
     c["kpi_headers"] == 2 &&
-    c["card_headers"] == 3 &&
+    c["card_headers"] == 0 &&
     c["axis_formats"] == 2 && c["category_orders"] == 1 && c["color_guards"] == 1
 ' "$TMP/discovery/presentation-overrides.json" && note "ok: presentation-overrides.json manifest records provenance + counts" \
   || { note "FAIL: presentation-overrides.json manifest missing/wrong"; fail=1; }
@@ -105,6 +100,10 @@ ruby -rjson -e '
   dir = ARGV[0]
   specs = JSON.parse(File.read(File.join(dir, "discovery", "chart-specs.json")))
   elements = specs.fetch("pages").flat_map { |page| page.fetch("elements") }
+  summary = elements.find { |element| element["id"] == "el-bar_channel-summary" }
+  abort "chart Summary Number companion KPI missing" unless summary && summary["kind"] == "kpi-chart"
+  abort "auto-derived chart text header escaped the opt-in contract" if
+    elements.any? { |element| element["id"] == "header-bar_channel" }
   control = elements.find { |element| element["kind"] == "control" && element["name"] == "Order ID" }
   abort "table Quick Filter control missing" unless control && control["controlType"] == "list"
   helper_id = control.dig("filters", 0, "source", "elementId")

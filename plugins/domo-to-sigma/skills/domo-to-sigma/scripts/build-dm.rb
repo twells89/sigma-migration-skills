@@ -321,14 +321,22 @@ def build_element(ds, map_entry, dataset_bms, outcomes: [])
     when 'projection'
       name = unique_semantic_name(bm['name'], used_names)
       id = beast_mode_spec_id('bm-col', bm)
-      cols << { 'id' => id, 'name' => name, 'formula' => bm['sigmaFormula'] }
+      cols << {
+        'id' => id,
+        'name' => name,
+        'formula' => normalize_formula_column_refs(bm['sigmaFormula']),
+      }
       order << id
       outcomes << common.merge('status' => 'emitted', 'target' => 'data-model-column',
                                'targetId' => id, 'sigmaName' => name)
     when 'aggregate'
       name = unique_semantic_name(bm['name'], used_names)
       id = beast_mode_spec_id('bm-metric', bm)
-      metrics << { 'id' => id, 'name' => name, 'formula' => bm['sigmaFormula'] }
+      metrics << {
+        'id' => id,
+        'name' => name,
+        'formula' => normalize_formula_column_refs(bm['sigmaFormula']),
+      }
       outcomes << common.merge('status' => 'emitted', 'target' => 'data-model-metric',
                                'targetId' => id, 'sigmaName' => name)
     when 'window', 'lod'

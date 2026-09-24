@@ -26,6 +26,11 @@ eq(display_name('Account.BillingState'), 'Account Billing State', 'dot is a word
 eq(display_name('Account.BillingCountry'), 'Account Billing Country', 'second dotted camelCase column')
 eq(display_name('Account.Name'), 'Account Name', 'dotted single-word column loses its dot too')
 eq(display_name('IsWon'), 'Is Won', 'plain camelCase still splits (Sigma does too)')
+eq(normalize_formula_column_refs(
+     'DateDiff("minute", [Call DateTime], [ResolutionDateTime]) + [RAW_TABLE/Exact Name] & "[Call DateTime]"'
+   ),
+   'DateDiff("minute", [Call Date Time], [Resolution Date Time]) + [RAW_TABLE/Exact Name] & "[Call DateTime]"',
+   'formula refs use DM humanization; qualified refs and bracket text inside strings stay exact')
 
 puts "== build_element =="
 ds = { 'id' => 'ds-1', 'name' => 'Orders',
@@ -89,6 +94,54 @@ eq(outcomes.find { |item| item['id'] == 'calculation_window' }['status'], 'defer
    'window formula receives an explicit deferred outcome')
 eq(outcomes.find { |item| item['id'] == 'calculation_bad' }['status'], 'blocked',
    'converted:false formula is blocked rather than emitted')
+
+puts "== Beast Mode refs match camel-humanized physical/override column names =="
+humanized = build_element(
+  {
+    'id' => 'ds-calls',
+    'name' => 'Calls',
+    'schema' => {
+      'columns' => [
+        { 'name' => 'Call DateTime', 'type' => 'DATETIME' },
+        { 'name' => 'ResolutionDateTime', 'type' => 'DATETIME' },
+      ],
+    },
+  },
+  map.merge(
+    'columnOverrides' => {
+      'Call DateTime' => { 'formula' => '[ORDERS/Call DateTime Raw]' },
+    },
+  ),
+  [
+    {
+      'id' => 'calculation_call_age',
+      'name' => 'Call Age',
+      'class' => 'projection',
+      'scope' => 'dataset',
+      'sigmaFormula' => 'DateDiff("minute", [Call DateTime], [ResolutionDateTime])',
+      'converted' => true,
+      'lintErrors' => [],
+    },
+    {
+      'id' => 'calculation_latest_call',
+      'name' => 'Latest Call',
+      'class' => 'aggregate',
+      'scope' => 'dataset',
+      'sigmaFormula' => 'Max([Call DateTime])',
+      'converted' => true,
+      'lintErrors' => [],
+    },
+  ],
+)
+eq(humanized['columns'].find { |column| column['name'] == 'Call Date Time' }['formula'],
+   '[ORDERS/Call DateTime Raw]',
+   'derived column keeps its explicit source formula and receives the humanized display name')
+eq(humanized['columns'].find { |column| column['name'] == 'Call Age' }['formula'],
+   'DateDiff("minute", [Call Date Time], [Resolution Date Time])',
+   'projection references resolve to the humanized DM column names')
+eq(humanized['metrics'].find { |metric_item| metric_item['name'] == 'Latest Call' }['formula'],
+   'Max([Call Date Time])',
+   'aggregate metric references resolve to the same humanized DM column name')
 
 puts "== Beast Mode name collisions are deterministic and visible =="
 collision_outcomes = []
