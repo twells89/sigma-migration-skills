@@ -107,18 +107,23 @@ compile check, set `"force": true` beside `sigmaFormula`; never edit generated
 
 Apply these to the raw Beast Mode string first:
 
-1. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
+1. **Remove MySQL comments before classification and translation.** Strip
+   `/* ... */`, `-- comment`, and `# comment` while preserving those markers
+   inside quoted strings and backtick identifiers. Replace comments with
+   whitespace/newlines so adjacent tokens never merge. An unterminated block
+   comment or a comment-only formula fails closed.
+2. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
    `` `Sales` `` and `` `Operating Budget` `` → `[Sales]`, `[Operating Budget]`.
-2. **Legacy `WEEKDAY`.** Domo replaces it with `DAYOFWEEK`; live card-data proved
+3. **Legacy `WEEKDAY`.** Domo replaces it with `DAYOFWEEK`; live card-data proved
    both return 1=Sunday..7=Saturday. Normalize both to Sigma `Weekday`.
-3. **Legacy functions.** Live Domo accepted `SQRT` and `CONVERT_TZ`; they map to
+4. **Legacy functions.** Live Domo accepted `SQRT` and `CONVERT_TZ`; they map to
    `Power(x,0.5)` and reordered `ConvertTimezone(date,to,from)`. `MICROSECOND`
    was `ILLEGAL_FUNCTION` and fails closed.
-4. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
+5. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
    `COUNT`, …) wraps the expression, the result is a workbook/element aggregate;
    otherwise it's a row-level DM calc column. Domo decides this implicitly by the
    card's grouping — we must make it explicit.
-5. **Promote aggregate division to decimal.** Domo returns fractional
+6. **Promote aggregate division to decimal.** Domo returns fractional
    `SUM(flag)/SUM(population)` results even for integer columns; Sigma/Snowflake
    can truncate to zero unless the numerator is multiplied by `1.0`.
 

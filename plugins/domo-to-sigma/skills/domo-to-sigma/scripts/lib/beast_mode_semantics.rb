@@ -8,7 +8,8 @@ module DomoSigma
     module_function
 
     def translate(entry, sigma_formula)
-      original = entry['originalSql'].to_s.strip
+      original, = strip_mysql_comments(entry['originalSql'])
+      original = original.strip
       sigma = sigma_formula.to_s
 
       return translated(rewrite_window(original)) if rewrite_window(original)
@@ -47,6 +48,85 @@ module DomoSigma
       return blocked('residual LIKE/BETWEEN SQL remains after conversion') if rewritten.match?(/\b(?:LIKE|BETWEEN)\b/i)
 
       nil
+    end
+
+    # Remove MySQL comments without touching comment-like text inside quoted
+    # strings or backtick identifiers. `--` starts a MySQL line comment only
+    # when followed by whitespace/end-of-input, so subtraction/negative-value
+    # expressions such as `a--1` remain executable code.
+    #
+    # Returns [comment_free_sql, removed_count, unterminated_block_comment].
+    def strip_mysql_comments(sql)
+      source = sql.to_s
+      output = +''
+      state = :normal
+      removed = 0
+      index = 0
+
+      while index < source.length
+        char = source[index]
+        following = source[index + 1]
+
+        case state
+        when :normal
+          if char == "'" || char == '"' || char == '`'
+            state = { "'" => :single_quote, '"' => :double_quote, '`' => :backtick }.fetch(char)
+            output << char
+            index += 1
+          elsif char == '/' && following == '*'
+            state = :block_comment
+            removed += 1
+            output << ' '
+            index += 2
+          elsif char == '#'
+            state = :line_comment
+            removed += 1
+            output << ' '
+            index += 1
+          elsif char == '-' && following == '-' &&
+                (index + 2 >= source.length || source[index + 2].match?(/\s/))
+            state = :line_comment
+            removed += 1
+            output << ' '
+            index += 2
+          else
+            output << char
+            index += 1
+          end
+        when :single_quote, :double_quote, :backtick
+          quote = { single_quote: "'", double_quote: '"', backtick: '`' }.fetch(state)
+          output << char
+          if char == '\\' && following
+            output << following
+            index += 2
+          elsif char == quote && following == quote
+            output << following
+            index += 2
+          elsif char == quote
+            state = :normal
+            index += 1
+          else
+            index += 1
+          end
+        when :line_comment
+          if char == "\n"
+            output << "\n"
+            state = :normal
+          end
+          index += 1
+        when :block_comment
+          if char == '*' && following == '/'
+            output << ' '
+            state = :normal
+            index += 2
+          else
+            output << "\n" if char == "\n"
+            index += 1
+          end
+        end
+      end
+
+      [output, removed, state == :block_comment]
     end
 
     def rewrite_window(original)
