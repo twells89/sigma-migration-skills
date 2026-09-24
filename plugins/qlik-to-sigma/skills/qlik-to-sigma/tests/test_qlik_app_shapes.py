@@ -18,6 +18,7 @@ Run: python3 tests/test_qlik_app_shapes.py
 """
 import importlib.util
 import os
+import re
 import sys
 
 
@@ -37,6 +38,10 @@ def load_module(filename, name):
 
 def load_build_sigma_workbook():
     return load_module("build-sigma-workbook.py", "build_sigma_workbook_test")
+
+
+def load_qlik_discover():
+    return load_module("qlik-discover.py", "qlik_discover_test")
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +201,179 @@ def test_python_orchestrator_display_match_mirrors_ruby():
              ("632313", 632313, True), ("$1.2B", 1249000000, True), ("abc", 1, False), (None, 1, False)]
     for shown, number, expected in cases:
         assert module.display_match(shown, number) is expected, (shown, number)
+
+
+# ---------------------------------------------------------------------------
+# 7) grid_layout — reflow chart/KPI columns onto the extent freed by lifted
+#    controls (e.g. a Qlik LEFT filter rail), and leave a no-controls sheet's
+#    mapping byte-identical to the un-reflowed formula.
+# ---------------------------------------------------------------------------
+def _cell(col, row, colspan, rowspan=2):
+    return {"col": col, "row": row, "colspan": colspan, "rowspan": rowspan}
+
+
+def test_grid_layout_reflows_onto_extent_freed_by_lifted_controls():
+    module = load_build_sigma_workbook()
+    # An 84-col sheet: a LEFT filter rail (3 stacked listboxes in cols 0-16)
+    # beside 4 KPIs and 2 charts that only ever occupy cols 16-84.
+    sheet = {"columns": 84, "rows": 12, "title": "Overview"}
+    placed = [
+        (_cell(0, 0, 16), {"id": "ctl1", "kind": "control"}),
+        (_cell(0, 3, 16), {"id": "ctl2", "kind": "control"}),
+        (_cell(0, 6, 16), {"id": "ctl3", "kind": "control"}),
+        (_cell(16, 0, 17, 3), {"id": "kpi1", "kind": "kpi-chart"}),
+        (_cell(33, 0, 17, 3), {"id": "kpi2", "kind": "kpi-chart"}),
+        (_cell(50, 0, 17, 3), {"id": "kpi3", "kind": "kpi-chart"}),
+        (_cell(67, 0, 17, 3), {"id": "kpi4", "kind": "kpi-chart"}),
+        (_cell(16, 4, 34, 6), {"id": "chart1", "kind": "bar-chart"}),
+        (_cell(50, 4, 34, 6), {"id": "chart2", "kind": "bar-chart"}),
+    ]
+    xml, _extra = module.grid_layout("pg-1", sheet, placed)
+    starts = dict(re.findall(r'elementId="(\w+)" gridColumn="(\d+) / \d+"', xml))
+    ends = dict(re.findall(r'elementId="(\w+)" gridColumn="\d+ / (\d+)"', xml))
+    # the freed columns (0-16) are absorbed: the first KPI/chart now starts
+    # at col 1 and the last KPI/chart now reaches col 25 -- not the ~1/6-in,
+    # ~5/6-out gap the unmodified [0, qcols] mapping would leave
+    assert starts["kpi1"] == "1" and starts["chart1"] == "1"
+    assert ends["kpi4"] == "25" and ends["chart2"] == "25"
+
+
+def test_grid_layout_without_controls_matches_unreflowed_mapping():
+    module = load_build_sigma_workbook()
+    sheet = {"columns": 24, "rows": 12, "title": "Overview"}
+    placed = [
+        (_cell(0, 0, 12, 4), {"id": "left", "kind": "bar-chart"}),
+        (_cell(12, 0, 12, 4), {"id": "right", "kind": "table"}),
+    ]
+    xml, _extra = module.grid_layout("pg-1", sheet, placed)
+    qcols = sheet["columns"]
+    for eid, col, colspan in (("left", 0, 12), ("right", 12, 12)):
+        c0 = round(col * 24 / qcols) + 1
+        c1 = round((col + colspan) * 24 / qcols) + 1
+        assert re.search(rf'elementId="{eid}" gridColumn="{c0} / {c1}"', xml)
+
+
+# ---------------------------------------------------------------------------
+# 8) qlik-discover.py's _listbox_label — an explicit listbox/pane-child title
+#    wins over the field's qFieldLabels override, which wins over the field's
+#    evaluated fallback title (== the raw field name)
+# ---------------------------------------------------------------------------
+def test_listbox_label_prefers_title_then_field_label_then_fallback():
+    module = load_qlik_discover()
+    assert module._listbox_label("Quarter", ["Fiscal Q"], {"label": "Order_quarter"}) == "Quarter"
+    assert module._listbox_label(None, ["Fiscal Q"], {"label": "Order_quarter"}) == "Fiscal Q"
+    assert module._listbox_label(None, None, {"label": "Order_quarter"}) == "Order_quarter"
+    assert module._listbox_label("", [], {"label": "Order_quarter"}) == "Order_quarter"
+
+
+# ---------------------------------------------------------------------------
+# 9) build_element — AUTO NUMBER FORMAT: Qlik qType "U" (its "Auto" format,
+#    i.e. no explicit qFmt) falls back to a d3 auto-abbreviate format; a
+#    display-formatting wrapper's captured "$" prefix carries through; tables
+#    keep full precision; charts without measureFmtTypes (old discovery
+#    output / fixtures) are unchanged.
+# ---------------------------------------------------------------------------
+def test_build_element_auto_number_format_from_qlik_auto_type():
+    module = load_build_sigma_workbook()
+    resolver = module.Resolver([("NetAmount", "NETAMOUNT"), ("City", "CITY")])
+
+    plain_kpi = {"id": "kpi-plain", "vizType": "kpi", "title": "Net Revenue",
+                 "dimensions": [], "measures": ["Sum(NetAmount)"],
+                 "measureLabels": ["Net Revenue"], "measureFmtTypes": ["U"]}
+    el = module.build_element(plain_kpi, resolver, [])
+    col = next(c for c in el["columns"] if c["id"] == el["value"]["columnId"])
+    assert col.get("format") == {"kind": "number", "formatString": ",.4s"}
+
+    wrapped_kpi = {"id": "kpi-wrapped", "vizType": "kpi", "title": "Net Revenue",
+                   "dimensions": [], "measureLabels": ["Net Revenue"],
+                   "measures": ["=If(Sum(NetAmount)>=1000000,'$'&Num(Sum(NetAmount)/1000000,"
+                                "'#,##0.0')&'M','$'&Num(Sum(NetAmount),'#,##0'))"],
+                   "measureFmtTypes": ["U"]}
+    el2 = module.build_element(wrapped_kpi, resolver, [])
+    col2 = next(c for c in el2["columns"] if c["id"] == el2["value"]["columnId"])
+    assert col2.get("format") == {"kind": "number", "formatString": "$,.4s"}
+
+    table_c = {"id": "tbl-1", "vizType": "table", "title": "Orders",
+               "dimensions": [["City"]], "measures": ["Sum(NetAmount)"],
+               "measureFmtTypes": ["U"]}
+    el3 = module.build_element(table_c, resolver, [])
+    tbl_col = next(c for c in el3["columns"] if c["formula"].startswith("Sum("))
+    assert "format" not in tbl_col
+
+    kpi_no_types = {"id": "kpi-old", "vizType": "kpi", "title": "Net Revenue",
+                    "dimensions": [], "measures": ["Sum(NetAmount)"],
+                    "measureLabels": ["Net Revenue"]}
+    el4 = module.build_element(kpi_no_types, resolver, [])
+    col4 = next(c for c in el4["columns"] if c["id"] == el4["value"]["columnId"])
+    assert "format" not in col4
+
+    bar_c = {"id": "bar-1", "vizType": "barchart", "title": "Net by City",
+             "dimensions": [["City"]], "measures": ["Sum(NetAmount)"],
+             "measureLabels": ["Net"], "measureFmtTypes": ["U"]}
+    el5 = module.build_element(bar_c, resolver, [])
+    bar_col = next(c for c in el5["columns"] if c["formula"].startswith("Sum("))
+    assert bar_col.get("format") == {"kind": "number", "formatString": ",.4~s"}
+
+
+# ---------------------------------------------------------------------------
+# 10) build_element — a horizontal Qlik bar chart emits el["orientation"] =
+#     "horizontal" (the live spec accepts + persists it); a line chart's own
+#     "horizontal" orientation flag (Qlik carries one; Sigma has no line-chart
+#     equivalent) is ignored.
+# ---------------------------------------------------------------------------
+def test_build_element_horizontal_bar_sets_orientation_line_chart_ignored():
+    module = load_build_sigma_workbook()
+    resolver = module.Resolver([("City", "CITY"), ("NetAmount", "NETAMOUNT")])
+
+    bar = {"id": "bar-1", "vizType": "barchart", "title": "Revenue by City",
+           "dimensions": [["City"]], "measures": ["Sum(NetAmount)"],
+           "presentation": {"orientation": "horizontal"}}
+    bar_el = module.build_element(bar, resolver, [])
+    assert bar_el["orientation"] == "horizontal"
+
+    line = {"id": "line-1", "vizType": "linechart", "title": "Revenue by City",
+            "dimensions": [["City"]], "measures": ["Sum(NetAmount)"],
+            "presentation": {"orientation": "horizontal"}}
+    line_el = module.build_element(line, resolver, [])
+    assert "orientation" not in line_el
+
+
+# ---------------------------------------------------------------------------
+# 11) qlik-discover.py's _choose_map_layer — a dimensioned AreaLayer (e.g.
+#     State) wins over a PointLayer (City) that precedes it; when the chosen
+#     AreaLayer has no measure shelf but is colored byMeasure, its
+#     byMeasureDef {key, label} becomes one synthetic measure. build_element
+#     then warns about the PointLayer mapLayers records but did NOT choose.
+# ---------------------------------------------------------------------------
+def test_choose_map_layer_prefers_dimensioned_area_layer_with_bymeasure_color():
+    module = load_qlik_discover()
+    ga_layers = [
+        {"type": "PointLayer",
+         "qHyperCubeDef": {"qDimensions": [{"qDef": {"qFieldDefs": ["CITY"]}}], "qMeasures": []}},
+        {"type": "AreaLayer",
+         "qHyperCubeDef": {"qDimensions": [{"qDef": {"qFieldDefs": ["STATE"]}}], "qMeasures": []},
+         "color": {"mode": "byMeasure",
+                   "byMeasureDef": {"key": "m1", "label": "Revenue", "type": "libraryItem"}}},
+    ]
+    qdims, qmeas = module._choose_map_layer(ga_layers)
+    assert qdims == [{"qDef": {"qFieldDefs": ["STATE"]}}]
+    assert [(mm.get("qDef", {}).get("qDef") or mm.get("qLibraryId")) for mm in qmeas] == ["m1"]
+    assert [mm.get("qDef", {}).get("qLabel") for mm in qmeas] == ["Revenue"]
+
+
+def test_build_element_map_warns_on_dropped_point_layer():
+    module = load_build_sigma_workbook()
+    resolver = module.Resolver([("State", "STATE"), ("NetAmount", "NETAMOUNT")])
+    warnings = []
+    c = {"id": "map-1", "vizType": "map", "title": "Orders by State",
+         "dimensions": [["State"]], "measures": ["Sum(NetAmount)"],
+         "mapLayers": [
+             {"type": "PointLayer", "dims": [["City"]]},
+             {"type": "AreaLayer", "dims": [["State"]]},
+         ]}
+    el = module.build_element(c, resolver, warnings)
+    assert el is not None and el["kind"] == "region-map"
+    assert any("dropped" in w for w in warnings)
 
 
 if __name__ == "__main__":

@@ -333,6 +333,69 @@ def _trellis_container(props, hc):
         return [], None
 
 
+def _listbox_label(title, field_labels, meta):
+    """Choose a listbox's display label. An explicit per-object title (Qlik's
+    own listbox/filterpane-child title, e.g. "Quarter") wins; then an
+    author-set qFieldLabels override; then the field's evaluated fallback
+    title (qDimensionInfo.qFallbackTitle == the raw field name, e.g.
+    "Order_quarter") as a last resort. Without this order a listbox with no
+    title override surfaced the raw field name instead of its authored
+    title."""
+    return title or (field_labels or [None])[0] or (meta or {}).get("label")
+
+
+def _layer_dims(layer):
+    """A single gaLayer's own hypercube dimensions, in the same field-defs
+    shape as the top-level chart record's `dimensions` — used to inventory
+    EVERY map layer (rec["mapLayers"]) regardless of which one was chosen."""
+    lhc = layer.get("qHyperCubeDef") or {}
+    return [(dd.get("qDef", {}).get("qFieldDefs") or [dd.get("qLibraryId")])
+            for dd in lhc.get("qDimensions", [])]
+
+
+def _choose_map_layer(ga_layers):
+    """A Qlik map object's hypercube lives per-layer (props.gaLayers), not on
+    the object itself. Layers commonly stack a City PointLayer (needs
+    coordinates a Sigma point map would need but the source doesn't carry)
+    UNDER a State/Country AreaLayer (a real Sigma region-map) — the first
+    DIMENSIONED AreaLayer wins so the region survives; otherwise fall back to
+    the first layer carrying any hypercube (the previous rule — byte-identical
+    when there is no AreaLayer).
+
+    A color-only AreaLayer (no measure shelf, colored `byMeasure`) still
+    carries a real value via color.byMeasureDef {key, label, type}: type
+    "libraryItem" makes `key` a master-measure library id (the builder's
+    existing dimensions.json/measures.json substitution resolves it later),
+    type "expression" makes it the raw expression. Either way it is folded
+    into one synthetic qMeasure so the caller's normal qMeasures extraction
+    (dimensions/measures/measureLabels/measureFmts below) needs no
+    map-specific branch.
+    Returns (qDimensions, qMeasures) — both [] when no gaLayer has a
+    hypercube."""
+    layers = ga_layers or []
+    def hc_of(layer):
+        return layer.get("qHyperCubeDef") or {}
+    area = next((l for l in layers if str(l.get("type")) == "AreaLayer"
+                and hc_of(l).get("qDimensions")), None)
+    layer = area or next((l for l in layers
+                          if hc_of(l).get("qDimensions") or hc_of(l).get("qMeasures")), None)
+    if layer is None:
+        return [], []
+    lhc = hc_of(layer)
+    qdims, qmeas = lhc.get("qDimensions", []), lhc.get("qMeasures", [])
+    if not qmeas:
+        color = layer.get("color") or {}
+        bmdef = color.get("byMeasureDef") if color.get("mode") == "byMeasure" else None
+        if bmdef and bmdef.get("key"):
+            synth = {"qDef": {"qLabel": bmdef.get("label")}}
+            if bmdef.get("type") == "libraryItem":
+                synth["qLibraryId"] = bmdef["key"]
+            else:
+                synth["qDef"]["qDef"] = bmdef["key"]
+            qmeas = [synth]
+    return qdims, qmeas
+
+
 def awrite(path, obj):
     """Atomic JSON write — orchestrators poll for these files from a
     concurrent lane and must never observe a half-written artifact."""
@@ -833,13 +896,11 @@ def main():
         qdims, qmeas = hc.get("qDimensions", []), hc.get("qMeasures", [])
         if not qdims and not qmeas:
             # map objects carry their hypercube on a layer (gaLayers[].qHyperCubeDef),
-            # not the top-level object -- surface the first layer that has one
-            for layer in (props.get("gaLayers") or []):
-                lhc = layer.get("qHyperCubeDef") or {}
-                if lhc.get("qDimensions") or lhc.get("qMeasures"):
-                    hc = lhc
-                    qdims, qmeas = lhc.get("qDimensions", []), lhc.get("qMeasures", [])
-                    break
+            # not the top-level object -- _choose_map_layer prefers a dimensioned
+            # AreaLayer (state/country) over a PointLayer (city, which needs
+            # coordinates Sigma doesn't have) and falls back to the first layer
+            # carrying a hypercube when there's no AreaLayer (the previous rule)
+            qdims, qmeas = _choose_map_layer(props.get("gaLayers"))
         rec = {
             "id": oid, "vizType": effective_type,
             "title": _resolve_title(effective, a.app, ctx) or _resolve_title(props, a.app, ctx),
@@ -851,6 +912,13 @@ def main():
             "measureLabels": [ mm.get("qDef", {}).get("qLabel") for mm in qmeas ],
             "measureFmts": [
                 ((mm.get("qNumFormat") or mm.get("qDef", {}).get("qNumFormat") or {}).get("qFmt"))
+                for mm in qmeas
+            ],
+            # qType "U" == Qlik's "Auto" format (no explicit qFmt) -- the builder
+            # uses this to ship an equivalent d3 auto-abbreviate format (",.4s")
+            # instead of the unformatted-number warning, which no longer applies.
+            "measureFmtTypes": [
+                (mm.get("qNumFormat") or mm.get("qDef", {}).get("qNumFormat") or {}).get("qType")
                 for mm in qmeas
             ],
             "sort": sort,
@@ -869,6 +937,12 @@ def main():
         presentation = _presentation(effective)
         if presentation:
             rec["presentation"] = presentation
+        ga_layers = props.get("gaLayers")
+        if ga_layers:
+            # Inventory of EVERY layer, chosen or not — the builder warns when a
+            # City PointLayer was dropped in favor of the chosen AreaLayer.
+            rec["mapLayers"] = [{"type": layer.get("type"), "dims": _layer_dims(layer)}
+                                for layer in ga_layers]
         if effective_type == "combochart":
             rec["seriesTypes"] = [_combo_series(measure) for measure in qmeas]
         rec.update(_content_fields(effective, effective_type))
@@ -890,8 +964,7 @@ def main():
             rec["listbox"] = {
                 "field": (ldef.get("qFieldDefs") or [None])[0] or lod.get("qLibraryId")
                          or meta.get("field"),
-                "label": (ldef.get("qFieldLabels") or [None])[0] or rec["title"]
-                         or meta.get("label"),
+                "label": _listbox_label(rec["title"], ldef.get("qFieldLabels"), meta),
                 "state": lod.get("qStateName") or props.get("qStateName") or meta.get("state"),
                 "tags": meta.get("tags") or [],
                 "numFmt": meta.get("numFmt"),
@@ -938,7 +1011,7 @@ def main():
                            "measures": [], "measureLabels": [], "measureFmts": [],
                            "sort": {},
                            "listbox": {"field": meta.get("field"),
-                                       "label": meta.get("label"),
+                                       "label": _listbox_label(meta.get("title"), None, meta),
                                        "state": meta.get("state"),
                                        "tags": meta.get("tags") or [],
                                        "numFmt": meta.get("numFmt")}})

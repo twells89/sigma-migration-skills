@@ -160,6 +160,10 @@ def _region_type(dim):
 
 TRANSLATION_NOTES = []  # approximations recorded by translate_measure; drained into warnings
 
+CURRENCY_PREFIX = []  # the literal immediately before "&Num(" in a display-formatting wrapper
+                       # (only "$" is recognized); drained into the AUTO NUMBER FORMAT prefix
+                       # per measure in build_element, same single-slot pattern as TRANSLATION_NOTES
+
 
 def _display_wrapper_aggregate(e):
     """A text-formatting wrapper around ONE aggregate -> that aggregate.
@@ -169,7 +173,9 @@ def _display_wrapper_aggregate(e):
     branch displays the same number, so its value is Sum(X). Fail-closed: only
     If/Num, a single distinct aggregate call, numeric literals, comparison and
     arithmetic operators, and string literals may appear; anything else is left
-    untouched (and stays untranslated)."""
+    untouched (and stays untranslated). The literal directly in front of the
+    first "&Num(" (e.g. '$') is recorded in CURRENCY_PREFIX so a caller that
+    falls back to an auto d3 format can still show a currency prefix."""
     if not re.search(r"\bNum\s*\(", e, re.I) or "&" not in e:
         return e
     aggs = {re.sub(r"\s+", "", m.group(0)) for m in re.finditer(
@@ -182,6 +188,8 @@ def _display_wrapper_aggregate(e):
     rest = re.sub(r"\b(?:If|Num)\b", "", rest, flags=re.I)
     if not re.fullmatch(r"[\s\d.,()&/*+\-<>=]*", rest):
         return e
+    prefix = re.search(r"'([^']*)'\s*&\s*Num\s*\(", e, re.I)
+    CURRENCY_PREFIX.append(prefix.group(1) if prefix and prefix.group(1) == "$" else "")
     TRANSLATION_NOTES.append(
         f"display-formatting wrapper (If/Num unit abbreviation) reduced to its value {agg}; "
         "apply a Sigma number format for the abbreviated display")
@@ -468,6 +476,12 @@ def apply_presentation(el, c):
             # The live API accepts "none" only when there are multiple series;
             # single-series grouped bars are represented by omitting stacking.
             el["stacking"] = "none"
+        if presentation.get("orientation") == "horizontal":
+            # Verified live (2026-09): bar-chart.orientation="horizontal" POSTs
+            # and PERSISTS on readback; "vertical" 400s, so it's just omitted
+            # (the released default). Only bar-chart — line charts also carry
+            # a Qlik orientation flag but have no Sigma equivalent.
+            el["orientation"] = "horizontal"
     if presentation.get("showLabels") is not None and el.get("kind", "").endswith("-chart"):
         el["dataLabel"] = {
             "labels": "shown" if presentation.get("showLabels") else "hidden"
@@ -599,6 +613,9 @@ def build_element(c, resolve, warnings, metrics=None):
         mexprs = [f"Count({dims_raw[0]})"]
     mlabels = c.get("measureLabels") or [None] * len(mexprs)
     mfmts = c.get("measureFmts") or [None] * len(mexprs)
+    # qType "U" (discovery's measureFmtTypes) == Qlik's "Auto" format. Absent on
+    # older discovery output / fixtures -> every entry None -> no behavior change.
+    mfmt_types = c.get("measureFmtTypes") or [None] * len(mexprs)
     for drill in (c.get("drillGroups") or []):
         fields = drill.get("fields") or []
         if len(fields) > 1:
@@ -636,10 +653,11 @@ def build_element(c, resolve, warnings, metrics=None):
         kind = "bar-chart"
     elif vt == "combochart" and c.get("seriesTypes") and set(c["seriesTypes"]) == {"line"}:
         kind = "line-chart"
-    if kind == "bar-chart" and presentation.get("orientation") == "horizontal":
-        warnings.append(
-            f"'{title}' (barchart) HORIZONTAL ORIENTATION GAP: current Sigma workbook "
-            "spec rejects bar-chart.orientation; emitted the valid default vertical orientation")
+    # Horizontal bar orientation is applied later in apply_presentation (the
+    # live Sigma spec DOES accept bar-chart.orientation="horizontal" and it
+    # survives readback — verified 2026-09; "vertical" is the one 400 case,
+    # so it's simply omitted). Line charts also carry a Qlik orientation but
+    # have no Sigma equivalent and are deliberately ignored there.
 
     if dims_raw and any(d is None for d in dim_disp):
         warnings.append(f"skip '{title}': dim(s) {dims_raw} not on the denorm element"); return None
@@ -649,6 +667,8 @@ def build_element(c, resolve, warnings, metrics=None):
         f = translate_measure(mexpr, resolve)
         warnings.extend(f"'{title}' APPROXIMATION: {note}" for note in TRANSLATION_NOTES)
         TRANSLATION_NOTES.clear()
+        _prefix = CURRENCY_PREFIX[0] if CURRENCY_PREFIX else ""
+        CURRENCY_PREFIX.clear()
         if f is None:
             warnings.append(f"'{title}': measure not translated: {mexpr}")
             continue
@@ -661,7 +681,18 @@ def build_element(c, resolve, warnings, metrics=None):
         mname = mlabels[i] or (title if kind == "kpi-chart" else f"Measure {i+1}")
         cid = nid("y")
         _mcol = {"id": cid, "formula": f, "name": mname}
-        _fmt = sigma_fmt(mfmts[i], mname, warnings)
+        # AUTO NUMBER FORMAT: no Qlik qFmt but the engine reports Qlik's "Auto"
+        # format (qType "U") -> ship the d3 equivalent (",.4s": 632313 -> "632.3k",
+        # matching Qlik's own abbreviation) instead of the unformatted-number
+        # warning, which no longer applies. Tables/pivots keep full precision —
+        # "Auto" in a Qlik table cell shows the raw number, not an abbreviation.
+        _auto = not mfmts[i] and mfmt_types[i] == "U" and kind not in ("table", "pivot-table")
+        _fmt = sigma_fmt(mfmts[i], mname, None if _auto else warnings)
+        if _fmt is None and _auto:
+            # KPIs keep the fixed ",.4s" ("632.3k"); chart axes/labels trim zeros
+            # (",.4~s") or the axis ticks read "5.000M" / "0.000".
+            _fmt = {"kind": "number",
+                    "formatString": _prefix + (",.4s" if kind == "kpi-chart" else ",.4~s")}
         if _fmt: _mcol["format"] = _fmt
         cols.append(_mcol)
         mids.append(cid); mnames.append(mname)
@@ -673,6 +704,17 @@ def build_element(c, resolve, warnings, metrics=None):
                         "is not a Sigma region type (us-state/country) and the source carries "
                         "no coordinates — rebuilt as a table of its locations")
         kind, vt = "table", "map-as-table"
+    if vt in ("map", "map-as-table") and c.get("mapLayers"):
+        # mapLayers inventories EVERY discovered gaLayer; the one actually built
+        # (dims_raw/dim_disp above) came from _choose_map_layer's pick. Any OTHER
+        # PointLayer lost that pick (e.g. a City layer under the chosen State
+        # AreaLayer) needs coordinates Sigma point maps don't get from this
+        # source — flagged loudly rather than silently dropped.
+        for layer in c["mapLayers"]:
+            if layer.get("type") == "PointLayer" and layer.get("dims") != c.get("dimensions"):
+                warnings.append(
+                    f"'{title}' (map): {layer.get('type')} on {layer.get('dims')} dropped — "
+                    "Sigma point maps need latitude/longitude and the source carries none")
     if not mids and not (kind == "table" and vt == "map-as-table"):
         warnings.append(f"skip '{title}': no translatable measures"); return None
 
@@ -1047,12 +1089,19 @@ def grid_layout(page_id, sheet, placed, navigation_id=None):
     preserving those coords renders filters stacked over charts. Charts/KPIs
     keep their relative geometry below the controls band; _decollide_bands in
     banded_page is the final safety net for any chart-on-chart overlap.
+
+    Lifting the controls out also frees up whatever Qlik columns they used to
+    float over — a LEFT filter rail (e.g. controls in cols 0-16 of an 84-col
+    sheet, charts in 16-84) otherwise leaves those freed columns empty on
+    every chart row, because charts still map onto the FULL [0, qcols] extent.
+    When at least one control was lifted AND the charts/KPIs only span a
+    narrower extent than the sheet, columns are instead mapped onto that
+    narrower extent so the charts fill the width the controls vacated. No
+    controls, or charts already spanning the full sheet -> identical mapping.
     Returns (page_xml, extra_spec_elements)."""
     qcols = sheet.get("columns") or 24
     ctls, charts = [], []
     for cell, el in placed:
-        c0 = round(cell["col"] * 24 / qcols) + 1
-        c1 = round((cell["col"] + cell["colspan"]) * 24 / qcols) + 1
         # control_subcell splits a filterpane cell fractionally — round to grid
         r0 = int(round(cell["row"] * ROW_SCALE)) + 1
         r1 = int(round((cell["row"] + cell["rowspan"]) * ROW_SCALE)) + 1
@@ -1061,7 +1110,19 @@ def grid_layout(page_id, sheet, placed, navigation_id=None):
         if el["kind"] == "control":
             ctls.append(el["id"])            # float-over-chart coords discarded
         else:
-            charts.append([el["id"], c0, c1, r0, r1, el])
+            charts.append([cell, r0, r1, el])
+    qmin, qmax = 0, qcols
+    if ctls and charts:
+        cmin = min(cell["col"] for cell, r0, r1, el in charts)
+        cmax = max(cell["col"] + cell["colspan"] for cell, r0, r1, el in charts)
+        if cmin > 0 or cmax < qcols:
+            qmin, qmax = cmin, cmax
+    span = qmax - qmin
+    chart_items = []
+    for cell, r0, r1, el in charts:
+        c0 = round((cell["col"] - qmin) * 24 / span) + 1
+        c1 = round((cell["col"] + cell["colspan"] - qmin) * 24 / span) + 1
+        chart_items.append([el["id"], c0, c1, r0, r1, el])
     items, row = [], 1
     if ctls:
         n = len(ctls)
@@ -1069,9 +1130,9 @@ def grid_layout(page_id, sheet, placed, navigation_id=None):
             cc0 = 1 + round(24 * i / n); cc1 = 1 + round(24 * (i + 1) / n)
             items.append([eid, cc0, cc1, row, row + 3])
         row += 3
-    if charts:
-        shift = row - min(c[3] for c in charts)   # drop charts below the controls band
-        items += [[c[0], c[1], c[2], c[3] + shift, c[4] + shift, *c[5:]] for c in charts]
+    if chart_items:
+        shift = row - min(c[3] for c in chart_items)   # drop charts below the controls band
+        items += [[c[0], c[1], c[2], c[3] + shift, c[4] + shift, *c[5:]] for c in chart_items]
     return banded_page(page_id, items, sheet.get("title"), navigation_id=navigation_id)
 
 def auto_layout(page_id, elems, title=None, navigation_id=None):
