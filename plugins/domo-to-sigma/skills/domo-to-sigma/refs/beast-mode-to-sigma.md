@@ -107,11 +107,13 @@ compile check, set `"force": true` beside `sigmaFormula`; never edit generated
 
 Apply these to the raw Beast Mode string first:
 
-1. **Remove MySQL comments before classification and translation.** Strip
-   `/* ... */`, `-- comment`, and `# comment` while preserving those markers
-   inside quoted strings and backtick identifiers. Replace comments with
-   whitespace/newlines so adjacent tokens never merge. An unterminated block
-   comment or a comment-only formula fails closed.
+1. **Remove comments before classification and translation.** Strip Domo-valid
+   `/* ... */` and `-- comment` forms while preserving those markers inside
+   quoted strings and backtick identifiers. The normalizer also strips
+   `# comment` defensively for imported MySQL text, but live Domo marks that
+   form `PARSING_ERROR`; do not describe it as a valid source Beast Mode.
+   Replace comments with whitespace/newlines so adjacent tokens never merge.
+   An unterminated block comment or a comment-only formula fails closed.
 2. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
    `` `Sales` `` and `` `Operating Budget` `` → `[Sales]`, `[Operating Budget]`.
 3. **Legacy `WEEKDAY`.** Domo replaces it with `DAYOFWEEK`; live card-data proved
