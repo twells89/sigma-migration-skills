@@ -185,6 +185,19 @@ def test_build_qlik_accounting_status_catalogs():
     assert {"businessmodel", "colormap"} <= set(module.STRUCTURAL)
 
 
+def test_python_orchestrator_display_match_mirrors_ruby():
+    lib = os.path.join(SCRIPTS, "lib")
+    if lib not in sys.path:
+        sys.path.insert(0, lib)
+    spec = importlib.util.spec_from_file_location("migrate_qlik_py_test", os.path.join(SCRIPTS, "migrate-qlik.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    cases = [("$529.2M", 529247958.49, True), ("$837.0", 837.00313, True), ("$529.3M", 529247958.49, False),
+             ("632313", 632313, True), ("$1.2B", 1249000000, True), ("abc", 1, False), (None, 1, False)]
+    for shown, number, expected in cases:
+        assert module.display_match(shown, number) is expected, (shown, number)
+
+
 if __name__ == "__main__":
     failures = 0
     for name, function in sorted((name, value) for name, value in globals().items() if name.startswith("test_")):
