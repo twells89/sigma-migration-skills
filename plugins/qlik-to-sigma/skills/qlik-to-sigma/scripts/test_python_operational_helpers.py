@@ -167,6 +167,30 @@ class WarehousePreflightTests(unittest.TestCase):
 
 
 class WorkbookLintTests(unittest.TestCase):
+    def test_layout_comparison_ignores_api_pretty_printing(self) -> None:
+        submitted = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<Page id="page-1">\n'
+            '  <Element elementId="chart-1" gridColumn="1 / 25"/>\n'
+            "</Page>"
+        )
+        readback = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<Page id="page-1">\n'
+            '    <Element elementId="chart-1" gridColumn="1 / 25"/>\n'
+            "</Page>\n"
+        )
+        changed = readback.replace('gridColumn="1 / 25"', 'gridColumn="1 / 13"')
+
+        self.assertEqual(
+            put_layout.comparable_layout(submitted),
+            put_layout.comparable_layout(readback),
+        )
+        self.assertNotEqual(
+            put_layout.comparable_layout(submitted),
+            put_layout.comparable_layout(changed),
+        )
+
     def test_render_integrity_requires_a_chart_value_binding(self) -> None:
         bad = workbook(
             [
