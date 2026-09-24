@@ -101,6 +101,8 @@ module DomoSigma
 
     def rewrite_date_functions(formula)
       rewritten = formula.dup
+      rewritten.gsub!(/\b(?:Curdate|Current_date)\s*\(\s*\)/i, 'Today()')
+      rewritten.gsub!(/\b(?:Curtime|Current_time|Current_timestamp|Sysdate)\s*\(\s*\)/i, 'Now()')
       rewritten.gsub!(/\bMonthname\s*\(/i, 'MonthName(')
       rewritten.gsub!(/\bDayofweek\s*\(/i, 'Weekday(')
       rewritten.gsub!(/\bLast_day\s*\(\s*([^)]+)\)/i, 'LastDay(\1, "month")')

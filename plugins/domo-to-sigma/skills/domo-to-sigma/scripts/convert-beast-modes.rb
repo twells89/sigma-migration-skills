@@ -273,6 +273,20 @@ def mask_strings_and_brackets(f)
   f.to_s.gsub(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\[[^\]]*\]/, ' ')
 end
 
+# The generic converter reports functions it cannot map, but historically still
+# marked their emitted spellings converted:true. Keep only warnings whose source
+# function name remains callable in the final formula; a Domo semantic rewrite
+# such as CURDATE() → Today() or DATE_FORMAT() → DateFormat() clears the hazard.
+def unresolved_unknown_functions(entry, sigma)
+  Array(entry['warnings']).filter_map do |warning|
+    match = warning.to_s.match(/\A([A-Z_][A-Z0-9_]*)\(\) has no Sigma mapping\b/i)
+    next unless match
+
+    function = match[1]
+    function if sigma.to_s.match?(/\b#{Regexp.escape(function)}\s*\(/i)
+  end.uniq
+end
+
 # Lint a translated Sigma formula for the traps that ship silently-broken output.
 # Returns [errors, warnings].
 def lint_formula(sigma, klass = nil)
@@ -425,6 +439,14 @@ def resolve_entry(entry, overrides)
 
   return [nil, warnings] if sigma.nil? || sigma.to_s.strip.empty?
 
+  unless used_override
+    unknown_functions = unresolved_unknown_functions(entry, sigma)
+    unless unknown_functions.empty?
+      semantic_block_reason =
+        "unmapped function(s) remain after conversion: #{unknown_functions.map { |fn| "#{fn}()" }.join(', ')}"
+    end
+  end
+
   errs, lint_warns = lint_formula(sigma, entry['class'])
   resolved = entry.merge('sigmaFormula' => sigma, 'lintErrors' => errs, 'lintWarnings' => lint_warns)
   if used_override
@@ -455,6 +477,11 @@ def resolve_entry(entry, overrides)
     resolved['note'] = 'Domo COUNT-or-SUM / FIXED-percent denominator synthesized as a workbook PercentOfTotal formula; final scope is selected from the card visual roles.'
     warnings << "#{entry['name'] || entry['id']}: recognized Domo fixed-percent-of-total LOD; " \
                 'the workbook builder will select color/x-axis/grand-total scope from the card bindings.'
+  elsif semantic_block_reason
+    resolved['_source'] = 'domo-semantic-block'
+    resolved['converted'] = false
+    resolved['note'] = semantic_block_reason
+    warnings << "#{entry['name'] || entry['id']}: blocked from automatic placement — #{semantic_block_reason}."
   elsif used_semantic_synthesis
     resolved['_source'] = 'domo-semantic-synthesis'
     resolved['semanticPlacement'] = semantic_placement if semantic_placement
@@ -462,11 +489,6 @@ def resolve_entry(entry, overrides)
     resolved.delete('note')
     resolved['note'] = 'Domo-specific semantic rewrite applied after generic SQL conversion.'
     warnings << "#{entry['name'] || entry['id']}: applied a Domo-specific semantic rewrite."
-  elsif semantic_block_reason
-    resolved['_source'] = 'domo-semantic-block'
-    resolved['converted'] = false
-    resolved['note'] = semantic_block_reason
-    warnings << "#{entry['name'] || entry['id']}: blocked from automatic placement — #{semantic_block_reason}."
   elsif entry['converted'] == false
     # Track E: --convert already computed a REAL converted flag (via the
     # vendored hasResidualCaseKeyword/hasResidualInfixOperator) — surface it

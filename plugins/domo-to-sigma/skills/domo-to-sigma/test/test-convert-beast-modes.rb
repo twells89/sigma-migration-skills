@@ -120,6 +120,14 @@ semantic_cases = [
    'DateFormat([Date], "%Y-%m")'],
   ["STR_TO_DATE(`Date_Text`, '%m/%d/%Y')", 'Str_to_date([Date_Text], "%m/%d/%Y")',
    'DateParse([Date_Text], "%m/%d/%Y")'],
+  ["CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+   'If([Inquiry Date] > Curdate(), "Yes", "No")',
+   'If([Inquiry Date] > Today(), "Yes", "No")'],
+  ['CURRENT_DATE()', 'Current_date()', 'Today()'],
+  ['CURTIME()', 'Curtime()', 'Now()'],
+  ['CURRENT_TIME()', 'Current_time()', 'Now()'],
+  ['CURRENT_TIMESTAMP()', 'Current_timestamp()', 'Now()'],
+  ['SYSDATE()', 'Sysdate()', 'Now()'],
   ['LAST_DAY(`Date`)', 'Last_day([Date])', 'LastDay([Date], "month")'],
   ['MONTHNAME(`Date`)', 'Monthname([Date])', 'MonthName([Date])'],
   ['DAYOFWEEK(`Date`)', 'Dayofweek([Date])', 'Weekday([Date])'],
@@ -471,6 +479,43 @@ ok(resolved_no_ov['_source'] == 'domo-semantic-synthesis',
    'automatic recovery is attributed separately from a human override')
 ok(warns_no_ov.any? { |w| w.include?('semantic rewrite') },
    'automatic recovery remains visible in conversion output')
+
+puts '== resolve_entry: supplied CURDATE failure maps to Today and clears the unknown-function hazard =='
+curdate_entry = {
+  'id' => 'calculation_future-inquiry',
+  'name' => 'Is Future Inquiry',
+  'class' => 'projection',
+  'originalSql' => "CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+  'sigmaFormula' => 'If([Inquiry Date] > Curdate(), "Yes", "No")',
+  'converted' => true,
+  'warnings' => ['CURDATE() has no Sigma mapping — emitted as-is; verify it exists in Sigma.'],
+}
+resolved_curdate, = resolve_entry(curdate_entry, {})
+ok(resolved_curdate['sigmaFormula'] == 'If([Inquiry Date] > Today(), "Yes", "No")',
+   'CURDATE becomes Sigma Today in the exact field-reported CASE formula')
+ok(resolved_curdate['converted'] == true &&
+   resolved_curdate['_source'] == 'domo-semantic-synthesis',
+   'the deterministic rewrite remains eligible for automatic placement')
+ok(unresolved_unknown_functions(resolved_curdate, resolved_curdate['sigmaFormula']).empty?,
+   'the stale generic CURDATE warning no longer represents a residual function')
+
+puts '== resolve_entry: an actually unmapped warned function fails closed =='
+unknown_entry = {
+  'id' => 'calculation-unknown',
+  'name' => 'Unknown Function',
+  'class' => 'projection',
+  'originalSql' => 'MYSTERY_FUNC(`Value`)',
+  'sigmaFormula' => 'Mystery_func([Value])',
+  'converted' => true,
+  'warnings' => ['MYSTERY_FUNC() has no Sigma mapping — emitted as-is; verify it exists in Sigma.'],
+}
+resolved_unknown, unknown_warnings = resolve_entry(unknown_entry, {})
+ok(resolved_unknown['converted'] == false &&
+   resolved_unknown['_source'] == 'domo-semantic-block',
+   'generic converted:true cannot ship while its unmapped function remains')
+ok(resolved_unknown['note'].include?('MYSTERY_FUNC()') &&
+   unknown_warnings.any? { |warning| warning.include?('blocked from automatic placement') },
+   'the blocked disposition names the exact unresolved function')
 
 puts '== resolve_entry: no override + no sigmaFormula → still dropped (unchanged honest-drop behaviour) =='
 pending_none = { 'id' => 'calculation_none-1', 'name' => 'Untranslatable', 'class' => nil, 'sigmaFormula' => nil }
