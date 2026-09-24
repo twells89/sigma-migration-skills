@@ -236,10 +236,12 @@ class CompletionContractTest(unittest.TestCase):
         )
 
     def test_unaccounted_source_object_fails_closed(self):
-        dm = json.loads((self.workdir / "dm-spec.json").read_text())
-        dm["pages"][0]["elements"][0]["columns"] = []
-        dm["pages"][0]["elements"][0]["name"] = "Orders"
-        write_json(self.workdir / "dm-spec.json", dm)
+        for filename in ("dm-spec.json", "datamodel-readback.json"):
+            path = self.workdir / filename
+            dm = json.loads(path.read_text())
+            dm["pages"][0]["elements"][0]["columns"] = []
+            dm["pages"][0]["elements"][0]["name"] = "Orders"
+            write_json(path, dm)
         result = self.run_script(
             "build-qlik-accounting.py", "--workdir", self.workdir
         )
