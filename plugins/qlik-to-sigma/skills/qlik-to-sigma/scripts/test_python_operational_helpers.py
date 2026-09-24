@@ -34,6 +34,49 @@ def workbook(elements: list[dict], layout: str) -> dict:
 
 
 class WarehousePreflightTests(unittest.TestCase):
+    def test_list_entries_does_not_double_encode_cursor(self) -> None:
+        calls = []
+        responses = [
+            {
+                "entries": [{"id": 1}],
+                "nextPage": "%7B%22path%22%3A%22SALES%22%7D",
+            },
+            {"entries": [{"id": 2}]},
+        ]
+        original = preflight_warehouse.sigma_rest.request
+
+        def request(_method: str, path: str) -> dict:
+            calls.append(path)
+            return responses.pop(0)
+
+        preflight_warehouse.sigma_rest.request = request
+        try:
+            rows = preflight_warehouse.list_entries(
+                "/v2/connections/paths?connectionId=conn"
+            )
+        finally:
+            preflight_warehouse.sigma_rest.request = original
+
+        self.assertEqual([1, 2], [row["id"] for row in rows])
+        self.assertIn(
+            "page=%7B%22path%22%3A%22SALES%22%7D",
+            calls[1],
+        )
+        self.assertNotIn("%257B", calls[1])
+
+    def test_list_entries_rejects_repeated_cursor(self) -> None:
+        original = preflight_warehouse.sigma_rest.request
+
+        def request(_method: str, _path: str) -> dict:
+            return {"entries": [], "nextPageToken": "same"}
+
+        preflight_warehouse.sigma_rest.request = request
+        try:
+            with self.assertRaisesRegex(RuntimeError, "repeated pagination cursor"):
+                preflight_warehouse.list_entries("/v2/workbooks/w/columns")
+        finally:
+            preflight_warehouse.sigma_rest.request = original
+
     def test_resolves_catalog_case_aliases_and_expression_inputs(self) -> None:
         reconcile = [
             {
