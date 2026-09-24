@@ -8,17 +8,20 @@ TMP="$(mktemp -d)"
 BLOCKED="$(mktemp -d)"
 trap 'rm -rf "$TMP" "$BLOCKED"' EXIT
 
-cp "$CASE_DIR"/fixtures/{datasets,cards,beast-modes}.json "$TMP/"
+cp "$CASE_DIR"/fixtures/{datasets,cards,beast-modes,dataset-map}.json "$TMP/"
 
 DOMO_DISCOVERY_DIR="$TMP" ruby "$SKILL/scripts/convert-beast-modes.rb" >/dev/null
 DOMO_DISCOVERY_DIR="$TMP" ruby "$SKILL/scripts/convert-beast-modes.rb" --convert >/dev/null
 DOMO_DISCOVERY_DIR="$TMP" ruby "$SKILL/scripts/convert-beast-modes.rb" --lint >/dev/null
+SIGMA_SKIP_DOCTOR_GATE='creds-free corpus fixture' \
+  SIGMA_SKIP_COLUMN_PREFLIGHT='synthetic warehouse mapping' \
+  DOMO_DISCOVERY_DIR="$TMP" ruby "$SKILL/scripts/build-dm.rb" >/dev/null
 DOMO_DISCOVERY_DIR="$TMP" DOMO_RUN_DIR="$TMP" ruby "$SKILL/scripts/build-workbook.rb" >/dev/null
 
 ruby -rjson -e '
   dir = ARGV[0]
   formulas = JSON.parse(File.read(File.join(dir, "formulas.json")))
-  abort "expected 35 source-valid formulas, got #{formulas.length}" unless formulas.length == 35
+  abort "expected 36 source-valid formulas, got #{formulas.length}" unless formulas.length == 36
   blocked = formulas.reject { |formula| formula["converted"] != false }
   abort "source-valid formula blocked: #{blocked.map { |formula| formula["name"] }.inspect}" unless blocked.empty?
   by_name = formulas.to_h { |formula| [formula["name"], formula] }
@@ -32,6 +35,7 @@ ruby -rjson -e '
     "Logic Between" => "If(([Value] >= 10 and [Value] <= 20), \"Mid\", \"Other\")",
     "Date Format" => "DateFormat([Date], \"%Y-%m\")",
     "Date Str To Date" => "DateParse([Date_Text], \"%m/%d/%Y\")",
+    "Date Curdate Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
     "Date Last Day" => "LastDay([Date], \"month\")",
     "Date Monthname" => "MonthName([Date])",
     "Date Weekday Legacy" => "Weekday([Date])",
@@ -45,11 +49,17 @@ ruby -rjson -e '
   end
   abort "SUM DISTINCT helper placement missing" unless
     by_name.dig("Aggregate Sum Distinct", "semanticPlacement", "kind") == "sum-distinct"
+  dm = JSON.parse(File.read(File.join(dir, "dm-spec.json")))
+  dm_formula = dm.fetch("pages").flat_map { |page| page.fetch("elements") }
+    .flat_map { |element| element.fetch("columns", []) }
+    .find { |column| column["name"] == "Date Curdate Case" }
+  abort "CURDATE did not become a DM calculated column using Today()" unless
+    dm_formula && dm_formula["formula"] == "If([Inquiry Date] > Today(), \"Yes\", \"No\")"
 
   specs = JSON.parse(File.read(File.join(dir, "chart-specs.json")))
   visible = specs.fetch("pages").flat_map { |page| page.fetch("elements") }
   helpers = specs.fetch("data_elements")
-  abort "expected all 35 source cards, got #{visible.length}" unless visible.length == 35
+  abort "expected all 36 source cards, got #{visible.length}" unless visible.length == 36
   abort "expected 7 grouped helpers, got #{helpers.length}" unless helpers.length == 7
   distinct = visible.find { |element| element["name"].to_s.include?("Aggregate Sum Distinct") }
   abort "SUM DISTINCT visible formula wrong" unless

@@ -270,7 +270,7 @@ if source_grain_src
   eq(count, 2, 'source-grain rewrites are auditable')
 end
 
-display_src = oracle_src[/^def canonicalise_numeric_display\(rows, expected_rows = nil\)\n.*?\nend\n/m]
+display_src = oracle_src[/^def canonicalise_numeric_display\(rows, expected_rows = nil, percentage_points: false\)\n.*?\nend\n/m]
 ok(display_src, 'extracted canonicalise_numeric_display(rows) from build-parity-oracle.rb')
 eval(display_src, TOPLEVEL_BINDING) if display_src # rubocop:disable Security/Eval
 if display_src
@@ -289,6 +289,13 @@ if display_src
   eq(canonicalise_numeric_display([['2026-09-17', '40.0%']], [['2026-09-17', 40.0]]),
      [['2026-09-17', 40.0]],
      'a Domo formula that already returns percentage points is not divided by 100 again')
+  eq(canonicalise_numeric_display(
+       [['Engineering', '0.1%']],
+       [['Engineering', 0.11]],
+       percentage_points: true
+     ),
+     [['Engineering', 0.11]],
+     'an explicitly x100-scaled sub-one-percent value stays in percentage points')
   eq(canonicalise_numeric_display([['38%']], [[0.375]]),
      [[0.375]],
      'a one-cell KPI percent also recovers its exact source value at printed precision')

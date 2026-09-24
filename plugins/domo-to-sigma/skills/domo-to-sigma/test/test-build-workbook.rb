@@ -1082,6 +1082,38 @@ override_kpi = build_kpi({ 'id' => 'c34', 'title' => 'Margin % by Channel',
                          { 'c34' => { 'column' => 'net_revenue', 'aggregation' => 'SUM' } })
 eq(override_kpi['columns'][0]['formula'], 'Sum([Master/Net Revenue])', 'override still wins over the calc inlining')
 
+puts "== clean converter output with bare aggregate identifiers is grounded to Master =="
+$dataset_schema_by_id = {
+  'ds-hr' => {
+    'schema' => { 'columns' => [
+      { 'name' => 'terminated_flag', 'type' => 'LONG' },
+      { 'name' => 'beginning_active_flag', 'type' => 'LONG' },
+      { 'name' => 'ending_active_flag', 'type' => 'LONG' },
+    ] },
+  },
+}
+$translated_bms = {
+  'calc-turnover' => {
+    'id' => 'calc-turnover', 'name' => 'Turnover Rate',
+    'class' => 'aggregate', 'scope' => 'dataset',
+    'sigmaFormula' => '100 * (Sum(terminated_flag) / ((Sum(beginning_active_flag) + Sum(ending_active_flag)) / 2))',
+  },
+}
+turnover_measure = inline_beast_mode_measure(
+  { 'id' => 'turnover-card', 'datasetId' => 'ds-hr' },
+  {
+    'column' => 'Turnover Rate', 'beastModeId' => 'calc-turnover',
+    '_isCalc' => true, 'mapping' => 'VALUE',
+  },
+)
+eq(
+  turnover_measure['formula'],
+  '100 * (Sum([Master/Terminated Flag]) / ((Sum([Master/Beginning Active Flag]) + Sum([Master/Ending Active Flag])) / 2))',
+  'bare snake_case metric refs receive Master qualification and display-name normalization',
+)
+$translated_bms = nil
+$dataset_schema_by_id = nil
+
 puts "== Domo FIXED percent-of-total Beast Mode receives a real workbook placement =="
 $beast_mode_usage = []
 $translated_bms = {

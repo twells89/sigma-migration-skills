@@ -8,6 +8,10 @@
           "name": "Date"
         },
         {
+          "type": "DATETIME",
+          "name": "Inquiry Date"
+        },
+        {
           "type": "STRING",
           "name": "Date_Text"
         },

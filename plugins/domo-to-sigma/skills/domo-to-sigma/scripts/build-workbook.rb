@@ -550,7 +550,7 @@ def inline_beast_mode_dimension(card, c)
   formula =
     if %w[aggregate window].include?(bm['class'].to_s) ||
        (bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card')
-      masterize_formula(bm['sigmaFormula'])
+      masterize_formula(bm['sigmaFormula'], card)
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
       mref(bm['sigmaName'] || bm['name'] || c['column'])
     end
@@ -2185,7 +2185,11 @@ end
 # but every element here sources the hidden `master` table, so its formulas must
 # read [Master/Net Revenue]. Already-qualified refs (any "<something>/") are left
 # alone so this is idempotent.
-def masterize_formula(formula)
+GROUNDABLE_AGGREGATES = %w[
+  Sum Count Avg Min Max Median StdDev Variance VariancePop CountDistinct
+].freeze
+
+def masterize_formula(formula, card = nil)
   # Re-point a converted Beast Mode's bare column refs at the master element,
   # AND normalize the column name the same way the master's columns are named.
   # A Beast Mode's SQL carries the RAW Domo column name (e.g. Account.BillingState
@@ -2193,7 +2197,25 @@ def masterize_formula(formula)
   # display_name ("Account Billing State"), so a bare re-point dangles:
   #   'Dependency not found: master (pdp_example_dataset)/account.billingstate'
   # display_name is idempotent, so a ref already in display form is unchanged.
-  formula.to_s.gsub(/\[([^\[\]\/]+)\]/) { "[Master/#{display_name(Regexp.last_match(1))}]" }
+  grounded = formula.to_s.gsub(/\[([^\[\]\/]+)\]/) {
+    "[Master/#{display_name(Regexp.last_match(1))}]"
+  }
+  return grounded unless card
+
+  dataset = dataset_schema_by_id[card['datasetId'].to_s]
+  known = Array(dataset&.dig('schema', 'columns')).each_with_object({}) do |column, out|
+    raw = column['name'] || column['id']
+    next if raw.to_s.empty?
+    out[DomoSigma::BeastModeLod.normalized_name(raw)] = display_name(raw)
+  end
+  functions = GROUNDABLE_AGGREGATES.join('|')
+  grounded.gsub(/\b(#{functions})\s*\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\)/i) do
+    function = Regexp.last_match(1)
+    raw = Regexp.last_match(2)
+    display = known[DomoSigma::BeastModeLod.normalized_name(raw)]
+    display ||= display_name(raw) if raw.include?('_')
+    display ? "#{function}([Master/#{display}])" : Regexp.last_match(0)
+  end
 end
 
 def lod_fixed_percent_mode(card, plan)
@@ -2226,7 +2248,7 @@ end
 def lod_workbook_formula(card, bm)
   return nil unless bm.is_a?(Hash) && bm['class'].to_s == 'lod'
   if bm['_source'] == 'formula-override'
-    return masterize_formula(bm['sigmaFormula'])
+    return masterize_formula(bm['sigmaFormula'], card)
   end
 
   plan = bm['lodPlacement']
@@ -2330,9 +2352,9 @@ def inline_beast_mode_measure(card, c, record: true)
     if bm['class'].to_s == 'lod'
       lod_workbook_formula(card, bm)
     elsif %w[aggregate window].include?(bm['class'].to_s)
-      masterize_formula(bm['sigmaFormula'])
+      masterize_formula(bm['sigmaFormula'], card)
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card'
-      row_formula = masterize_formula(bm['sigmaFormula'])
+      row_formula = masterize_formula(bm['sigmaFormula'], card)
       if c['aggregation'].to_s.empty? &&
          bm['originalSql'].to_s.match?(/\A\s*(?:CEILING|FLOOR)\s*\(/i)
         # Live Domo card-data groups unaggregated CEILING/FLOOR VALUE bindings
@@ -2540,7 +2562,7 @@ def resolve_filter_column(col, beast_mode_id: nil, card: nil)
     formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
                 mref(bm['sigmaName'] || disp)
               else
-                masterize_formula(bm['sigmaFormula'])
+                masterize_formula(bm['sigmaFormula'], card)
               end
     record_beast_mode_usage(card, bm, 'workbook-filter-formula')
     [disp, formula]
@@ -2564,7 +2586,7 @@ def resolve_filter_column(col, beast_mode_id: nil, card: nil)
       formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
                   mref(bm['sigmaName'] || disp)
                 else
-                  masterize_formula(bm['sigmaFormula'])
+                  masterize_formula(bm['sigmaFormula'], card)
                 end
       record_beast_mode_usage(card, bm, 'workbook-filter-formula')
       [disp, formula]

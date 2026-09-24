@@ -97,7 +97,9 @@ Unknown or expression-valued LOD shapes remain explicit. Put the intended workbo
 `discovery/formula-overrides.json`; for an LOD entry, that sidecar is a supported
 workbook placement even when the generic SQL converter returned a string marked
 clean. The workbook builder inlines it, and Beast Mode accounting records the
-element usage. Never edit generated `chart-specs.json`.
+element usage. For any other converted:true formula later disproven by Sigma's
+compile check, set `"force": true` beside `sigmaFormula`; never edit generated
+`chart-specs.json`.
 
 ---
 
@@ -116,6 +118,9 @@ Apply these to the raw Beast Mode string first:
    `COUNT`, …) wraps the expression, the result is a workbook/element aggregate;
    otherwise it's a row-level DM calc column. Domo decides this implicitly by the
    card's grouping — we must make it explicit.
+5. **Promote aggregate division to decimal.** Domo returns fractional
+   `SUM(flag)/SUM(population)` results even for integer columns; Sigma/Snowflake
+   can truncate to zero unless the numerator is multiplied by `1.0`.
 
 ---
 

@@ -242,7 +242,7 @@ end
 # Sigma element CSV exports use display formatting. Canonicalize only strings
 # that unambiguously carry numeric decoration so strict parity compares Domo's
 # raw numbers to their displayed equivalents without weakening plain strings.
-def canonicalise_numeric_display(rows, expected_rows = nil)
+def canonicalise_numeric_display(rows, expected_rows = nil, percentage_points: false)
   numeric_positions = nil
   expected = Array(expected_rows).map { |row| Array(row) }
   if expected_rows
@@ -274,10 +274,10 @@ def canonicalise_numeric_display(rows, expected_rows = nil)
       decimals = body.include?('.') ? body.split('.', 2).last.length : 0
       number *= multiplier
       tolerance = (10.0**-decimals) * multiplier / 2.0
-      percent_points = percent && expected.any? do |row|
+      percent_points = percent && (percentage_points || expected.any? do |row|
         candidate = row[index]
         candidate.is_a?(Numeric) && candidate.abs > 1.0
-      end
+      end)
       if percent && !percent_points
         number /= 100.0
         tolerance /= 100.0
@@ -682,7 +682,14 @@ charts.each do |c|
   exp_rows, source_grain_n = canonicalise_source_grain(exp_rows, source_cards[cid])
   exp_rows, expected_canon_n = canonicalise_dim(exp_rows)
   act_rows, actual_canon_n = canonicalise_dim(act_rows)
-  act_rows = canonicalise_numeric_display(act_rows, exp_rows)
+  percentage_points = Array(source_cards.dig(cid, 'beastModes')).any? do |formula|
+    formula['sql'].to_s.match?(/\A\s*\(?\s*100(?:\.0+)?\s*\*/i)
+  end
+  act_rows = canonicalise_numeric_display(
+    act_rows,
+    exp_rows,
+    percentage_points: percentage_points,
+  )
   canonicalised += source_grain_n + expected_canon_n + actual_canon_n
 
   verified_entry = {
