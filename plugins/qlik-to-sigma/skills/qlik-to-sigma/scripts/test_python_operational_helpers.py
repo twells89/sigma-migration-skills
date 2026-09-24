@@ -254,6 +254,21 @@ class QlikSnapshotTests(unittest.TestCase):
 
 
 class WorkbookLintTests(unittest.TestCase):
+    def test_generated_header_text_has_display_name(self) -> None:
+        path = Path(__file__).with_name("build-sigma-workbook.py")
+        spec = importlib.util.spec_from_file_location("qlik_workbook_test", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader
+        spec.loader.exec_module(module)
+
+        _layout, extra = module.banded_page(
+            "page-1",
+            [],
+            "Sales Dashboard",
+        )
+        header = next(element for element in extra if element["kind"] == "text")
+        self.assertEqual("Sales Dashboard Header", header["name"])
+
     def test_layout_comparison_ignores_api_pretty_printing(self) -> None:
         submitted = (
             '<?xml version="1.0" encoding="utf-8"?>\n'
