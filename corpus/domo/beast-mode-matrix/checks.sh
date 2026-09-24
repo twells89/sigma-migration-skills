@@ -21,7 +21,7 @@ DOMO_DISCOVERY_DIR="$TMP" DOMO_RUN_DIR="$TMP" ruby "$SKILL/scripts/build-workboo
 ruby -rjson -e '
   dir = ARGV[0]
   formulas = JSON.parse(File.read(File.join(dir, "formulas.json")))
-  abort "expected 36 source-valid formulas, got #{formulas.length}" unless formulas.length == 36
+  abort "expected 38 source-valid formulas, got #{formulas.length}" unless formulas.length == 38
   blocked = formulas.reject { |formula| formula["converted"] != false }
   abort "source-valid formula blocked: #{blocked.map { |formula| formula["name"] }.inspect}" unless blocked.empty?
   by_name = formulas.to_h { |formula| [formula["name"], formula] }
@@ -36,6 +36,8 @@ ruby -rjson -e '
     "Date Format" => "DateFormat([Date], \"%Y-%m\")",
     "Date Str To Date" => "DateParse([Date_Text], \"%m/%d/%Y\")",
     "Date Curdate Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
+    "Comment Block Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
+    "Comment Dash Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
     "Date Last Day" => "LastDay([Date], \"month\")",
     "Date Monthname" => "MonthName([Date])",
     "Date Weekday Legacy" => "Weekday([Date])",
@@ -49,12 +51,18 @@ ruby -rjson -e '
   end
   abort "SUM DISTINCT helper placement missing" unless
     by_name.dig("Aggregate Sum Distinct", "semanticPlacement", "kind") == "sum-distinct"
+  %w[Comment\ Block\ Case Comment\ Dash\ Case].each do |name|
+    abort "#{name}: comment removal was not recorded" unless
+      Array(by_name.dig(name, "preWarnings")).any? { |warning| warning.include?("Removed 1 MySQL comment") }
+  end
   dm = JSON.parse(File.read(File.join(dir, "dm-spec.json")))
-  dm_formula = dm.fetch("pages").flat_map { |page| page.fetch("elements") }
+  dm_columns = dm.fetch("pages").flat_map { |page| page.fetch("elements") }
     .flat_map { |element| element.fetch("columns", []) }
-    .find { |column| column["name"] == "Date Curdate Case" }
-  abort "CURDATE did not become a DM calculated column using Today()" unless
-    dm_formula && dm_formula["formula"] == "If([Inquiry Date] > Today(), \"Yes\", \"No\")"
+    .to_h { |column| [column["name"], column["formula"]] }
+  %w[Date\ Curdate\ Case Comment\ Block\ Case Comment\ Dash\ Case].each do |name|
+    abort "#{name} did not become a DM calculated column using Today()" unless
+      dm_columns[name] == "If([Inquiry Date] > Today(), \"Yes\", \"No\")"
+  end
 
   specs = JSON.parse(File.read(File.join(dir, "chart-specs.json")))
   visible = specs.fetch("pages").flat_map { |page| page.fetch("elements") }

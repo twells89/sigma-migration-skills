@@ -157,12 +157,22 @@ UNSUPPORTED = %w[SQRT CONVERT_TZ MICROSECOND WEEKDAY].freeze
 # does not know them, so case-insensitive residual-name matching alone would
 # incorrectly block valid Sigma MonthName/Ntile/Rank/Lag/Lead formulas.
 SEMANTICALLY_MAPPED_UNKNOWN_FUNCTIONS = %w[MONTHNAME NTILE RANK LAG LEAD].freeze
+COMMENT_BLOCK_PREFIX = 'Comment normalization blocked:'.freeze
 
 # Convert a raw Beast Mode string toward what convert_sql_to_sigma_formula expects,
 # applying only the Domo-specific deltas. Returns [normalizedSql, warnings].
 def normalize_bm(sql, klass = nil)
   warnings = []
-  s = sql.to_s.dup
+  s, removed_comments, unterminated_comment =
+    DomoSigma::BeastModeSemantics.strip_mysql_comments(sql)
+  if removed_comments.positive?
+    warnings << "Removed #{removed_comments} MySQL comment#{removed_comments == 1 ? '' : 's'} before formula translation."
+  end
+  if unterminated_comment
+    warnings << "#{COMMENT_BLOCK_PREFIX} unterminated /* ... */ block comment."
+  elsif removed_comments.positive? && s.strip.empty?
+    warnings << "#{COMMENT_BLOCK_PREFIX} comment removal left no executable formula."
+  end
 
   # 1. Backtick / bracket MySQL identifier quoting → Sigma [Column Name].
   s = s.gsub(/`([^`]+)`/) { "[#{$1}]" }
@@ -203,7 +213,7 @@ PROVENANCE_KEYS = %w[
 ].freeze
 
 def effective_formula_class(sql, recorded = nil)
-  source = sql.to_s
+  source, = DomoSigma::BeastModeSemantics.strip_mysql_comments(sql)
   return 'lod' if source.match?(/\bFIXED\s*\(/i)
   return 'window' if source.match?(/\bOVER\s*\(|\b(?:RANK|DENSE_RANK|ROW_NUMBER|LAG|LEAD|NTILE|PERCENT_RANK|CUME_DIST)\s*\(/i)
   return 'aggregate' if source.match?(AGGREGATE_SQL_RE)
@@ -416,7 +426,10 @@ def resolve_entry(entry, overrides)
   used_lod_synthesis = false
   semantic = DomoSigma::BeastModeSemantics.translate(entry, sigma)
   used_semantic_synthesis = false
-  semantic_block_reason = nil
+  comment_block_warning = Array(entry['preWarnings']).find {
+    |warning| warning.to_s.start_with?(COMMENT_BLOCK_PREFIX)
+  }
+  semantic_block_reason = comment_block_warning&.sub(/\A#{Regexp.escape(COMMENT_BLOCK_PREFIX)}\s*/, '')
   semantic_placement = nil
 
   if override && !override['sigmaFormula'].to_s.strip.empty?

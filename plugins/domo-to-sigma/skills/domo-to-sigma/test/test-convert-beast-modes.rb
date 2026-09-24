@@ -25,6 +25,39 @@ ok(n == "CONCAT([StringColumnCity], ', ', [StringColumnState])", 'backticks → 
 n, _ = normalize_bm("SUM(`Operating Budget`)")
 ok(n == 'SUM([Operating Budget])', 'spaced identifier preserved in brackets')
 
+puts '== normalize_bm: MySQL comments are removed without touching quoted text =='
+commented_sql = <<~SQL
+  /* retired branch:
+  CASE WHEN `Inquiry Date` IS NULL THEN 'Unknown' END
+  */
+  CASE
+    -- an older future-date label
+    WHEN `Inquiry Date` > CURDATE() THEN 'Yes'
+    # current and past rows
+    ELSE 'No'
+  END
+SQL
+n, w = normalize_bm(commented_sql)
+ok(!n.match?(%r{/\*|\*/|--|#}) &&
+   n.include?("WHEN [Inquiry Date] > CURDATE() THEN 'Yes'"),
+   'block, dash-line, and hash-line comments are removed before translation')
+ok(w.any? { |warning| warning.include?('Removed 3 MySQL comments') },
+   'comment removal is recorded in formula provenance')
+
+literal_sql = "CONCAT('https://example.test/#anchor', '-- literal', '/* literal */', `Order #`) + (5--1)"
+n, w = normalize_bm(literal_sql)
+ok(n.include?("'https://example.test/#anchor'") &&
+   n.include?("'-- literal'") &&
+   n.include?("'/* literal */'") &&
+   n.include?('[Order #]') &&
+   n.include?('5--1'),
+   'comment markers inside strings/backticks and minus-negative arithmetic survive')
+ok(w.none? { |warning| warning.include?('Removed') },
+   'literal comment markers do not produce a false removal warning')
+
+ok(effective_formula_class("`Value` /* SUM(`Value`) OVER (ORDER BY `Date`) */") == 'projection',
+   'commented aggregate/window code cannot misclassify a projection')
+
 puts "== normalize_bm: Domo legacy WEEKDAY normalizes to live-equivalent DAYOFWEEK =="
 n, w = normalize_bm('WEEKDAY(`d`)')
 ok(n == 'DAYOFWEEK([d])', 'WEEKDAY rewrites to Domo DAYOFWEEK before generic conversion')
@@ -541,6 +574,45 @@ ok(resolved_unknown['converted'] == false &&
 ok(resolved_unknown['note'].include?('MYSTERY_FUNC()') &&
    unknown_warnings.any? { |warning| warning.include?('blocked from automatic placement') },
    'the blocked disposition names the exact unresolved function')
+
+puts '== resolve_entry: comments are gone before Domo semantic matching =='
+commented_curdate_entry = {
+  'id' => 'calculation-commented-curdate',
+  'name' => 'Commented Future Inquiry',
+  'class' => 'projection',
+  'originalSql' => "/* retired CASE branch */\nCASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' -- future\nELSE 'No' END",
+  'sigmaFormula' => 'If([Inquiry Date] > Curdate(), "Yes", "No")',
+  'converted' => true,
+  'warnings' => ['CURDATE() has no Sigma mapping — emitted as-is; verify it exists in Sigma.'],
+  'preWarnings' => ['Removed 2 MySQL comments before formula translation.'],
+}
+resolved_commented, = resolve_entry(commented_curdate_entry, {})
+ok(resolved_commented['sigmaFormula'] == 'If([Inquiry Date] > Today(), "Yes", "No")' &&
+   resolved_commented['converted'] == true,
+   'commented CURDATE CASE still receives the deterministic Today rewrite')
+
+puts '== resolve_entry: malformed or comment-only formulas fail closed =='
+[
+  ['unterminated /* ... */ block comment.', 'Sum([Value])'],
+  ['comment removal left no executable formula.', 'null'],
+].each_with_index do |(reason, sigma_formula), index|
+  blocked_comment, = resolve_entry(
+    {
+      'id' => "calculation-comment-block-#{index}",
+      'name' => 'Malformed Comment Formula',
+      'class' => 'projection',
+      'originalSql' => '/* comment',
+      'sigmaFormula' => sigma_formula,
+      'converted' => true,
+      'preWarnings' => ["#{COMMENT_BLOCK_PREFIX} #{reason}"],
+    },
+    {},
+  )
+  ok(blocked_comment['converted'] == false &&
+     blocked_comment['_source'] == 'domo-semantic-block' &&
+     blocked_comment['note'].include?(reason),
+     "#{reason} is blocked instead of shipping plausible output")
+end
 
 puts '== resolve_entry: no override + no sigmaFormula → still dropped (unchanged honest-drop behaviour) =='
 pending_none = { 'id' => 'calculation_none-1', 'name' => 'Untranslatable', 'class' => nil, 'sigmaFormula' => nil }

@@ -395,5 +395,27 @@
     "persistedOnDataSource": true,
     "sourceFormulaScope": "dataset-api",
     "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_37",
+    "name": "Comment Block Case",
+    "sql": "/* Retired implementation:\nSUM(SUM(`Sales`)) OVER (ORDER BY `Date`)\n*/\nCASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_38",
+    "name": "Comment Dash Case",
+    "sql": "CASE\n  -- WHEN `Inquiry Date` IS NULL THEN 'Unknown'\n  WHEN `Inquiry Date` > CURDATE() THEN 'Yes'\n  ELSE 'No'\nEND",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
   }
 ]
