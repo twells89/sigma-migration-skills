@@ -3176,8 +3176,10 @@ end
 # would fabricate a bogus source binding on an image element that never had
 # one. Every other element kind here (chart/table/kpi/pivot/map) always
 # carries `source`, so this only ever actually skips for an image.
-def retarget_to_submaster!(el, sm)
-  el['source'] = { 'kind' => 'table', 'elementId' => sm['id'] } if el.key?('source')
+def retarget_to_submaster!(el, sm, retarget_source: true)
+  if retarget_source && el.key?('source')
+    el['source'] = { 'kind' => 'table', 'elementId' => sm['id'] }
+  end
   walk = lambda do |n|
     case n
     # LIVE-VALIDATED FIX (2026-07-31): AXIS_OFF ({'marks'=>'none'}.freeze) is a
@@ -3195,6 +3197,38 @@ def retarget_to_submaster!(el, sm)
   end
   walk.call(el)
   el
+end
+
+def contains_primary_master_ref?(node)
+  case node
+  when Hash
+    node.any? { |_, value| contains_primary_master_ref?(value) }
+  when Array
+    node.any? { |value| contains_primary_master_ref?(value) }
+  when String
+    node.include?('[Master/')
+  else
+    false
+  end
+end
+
+def validate_routed_verification_affinity!(card, elements, sub_master, helper_ids)
+  allowed_sources = [sub_master['id'], *helper_ids].compact
+  failures = Array(elements).each_with_object([]) do |element, out|
+    source_id = element.dig('source', 'elementId')
+    wrong_source = !allowed_sources.include?(source_id)
+    stale_formula = contains_primary_master_ref?(element)
+    next unless wrong_source || stale_formula
+
+    reasons = []
+    reasons << "source=#{source_id.inspect}" if wrong_source
+    reasons << 'contains [Master/...]' if stale_formula
+    out << "#{element['id']}: #{reasons.join(', ')}"
+  end
+  return if failures.empty?
+
+  raise "INTERNAL: routed verification source-affinity failed for card " \
+        "#{card['id']} (DataSet #{card['datasetId']}): #{failures.join('; ')}"
 end
 
 # Sigma rejects a workbook whose element repeats a column id
@@ -3311,6 +3345,11 @@ def build_element(card, overrides, master_ds = nil)
   end
 
   before = $companion_elements.length
+  verification_offsets = [
+    [$kpi_verification_elements, $kpi_verification_elements.length],
+    [$chart_verification_elements, $chart_verification_elements.length],
+    [$table_verification_elements, $table_verification_elements.length],
+  ]
   usage_before = $beast_mode_usage.length
   el = build_element_body(card, overrides)
   filter_helper = el && el['_filterHelper']
@@ -3333,6 +3372,9 @@ def build_element(card, overrides, master_ds = nil)
     # instead of the sub-master's — reintroducing the exact "Dependency not
     # found" whole-workbook-POST failure bead ziht exists to prevent.
     $companion_elements.slice!(before..-1)
+    verification_offsets.each do |elements, offset|
+      elements.slice!(offset..-1)
+    end
     $beast_mode_usage.slice!(usage_before..-1)
     return nil
   end
@@ -3363,6 +3405,29 @@ def build_element(card, overrides, master_ds = nil)
       next if filter_helper && companion.dig('source', 'elementId') == filter_helper['id']
       retarget_to_submaster!(companion, sm)
     end
+    helper_ids = [
+      scatter_helper,
+      filter_helper,
+      *data_helpers,
+      *plugin_sources,
+    ].compact.map { |helper| helper['id'] }
+    new_verification_elements = verification_offsets.flat_map do |elements, offset|
+      Array(elements[offset..-1])
+    end
+    new_verification_elements.each do |verification_element|
+      source_id = verification_element.dig('source', 'elementId')
+      retarget_to_submaster!(
+        verification_element,
+        sm,
+        retarget_source: !helper_ids.include?(source_id),
+      )
+    end
+    validate_routed_verification_affinity!(
+      card,
+      new_verification_elements,
+      sm,
+      helper_ids,
+    )
     warn_card(card, "routed to sub-master '#{sm['name']}' for DataSet #{ds} (bead ziht) — " \
                     'verify column coverage against the card PNG; the sub-master passes through ' \
                     "every column of #{sm['name']}, not just the ones this card uses.")

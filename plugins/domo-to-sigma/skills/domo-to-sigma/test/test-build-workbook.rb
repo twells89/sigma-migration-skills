@@ -889,6 +889,37 @@ retarget_to_submaster!(chart_el, sm_fixture)
 eq(chart_el['source'], { 'kind' => 'table', 'elementId' => 'master-ds-dim' },
    'an element that DOES carry a source key still gets retargeted normally (unchanged behavior)')
 
+helper_bound = {
+  'id' => 'el-helper-bound',
+  'kind' => 'kpi-chart',
+  'source' => { 'kind' => 'table', 'elementId' => 'filter-helper' },
+  'columns' => [{ 'id' => 'm-value', 'formula' => 'Sum([Master/Segment])' }],
+}
+retarget_to_submaster!(helper_bound, sm_fixture, retarget_source: false)
+eq(helper_bound['source'], { 'kind' => 'table', 'elementId' => 'filter-helper' },
+   'helper-bound verification elements can preserve their helper source')
+eq(helper_bound['columns'].first['formula'], 'Sum([Master (Customer Dim)/Segment])',
+   'preserving a helper source still rewrites any residual Master references')
+
+begin
+  validate_routed_verification_affinity!(
+    { 'id' => 'c-affinity', 'datasetId' => 'ds-dim' },
+    [{
+      'id' => 'el-c-affinity-summary-verify',
+      'source' => { 'kind' => 'table', 'elementId' => 'master' },
+      'columns' => [{ 'formula' => 'Sum([Master/Segment])' }],
+    }],
+    sm_fixture,
+    [],
+  )
+  ok(false, 'source-affinity gate rejects an unretargeted parity twin')
+rescue RuntimeError => e
+  ok(e.message.include?('source-affinity') &&
+     e.message.include?('source="master"') &&
+     e.message.include?('[Master/...]'),
+     'source-affinity failure names both stale source and formula namespace')
+end
+
 puts "== live-found 2026-07-31: retarget_to_submaster! must not raise FrozenError on a " \
      'shared frozen constant (AXIS_OFF) nested inside an axis-chart element =='
 axis_el = { 'id' => 'el-axis1', 'kind' => 'bar-chart',
@@ -926,6 +957,66 @@ Dir.mktmpdir do |dir|
       eq(routed['columns'].first['formula'], '[Master (Customer Dim)/Region]', 'formula re-qualified to the sub-master\'s namespace')
       ok($warnings.any? { |w| w['warning'].include?('routed to sub-master') }, 'routing is reported, not silent')
       ok($sub_masters.key?('ds-dim'), 'the sub-master was registered for the main block to emit under data_elements')
+    end
+  end
+end
+
+puts "== multi-dataset card-header parity twin routes to the card sub-master =="
+Dir.mktmpdir do |dir|
+  dm_spec_path = File.join(dir, 'dm-spec.json')
+  dm_ids_path  = File.join(dir, 'dm-ids.json')
+  File.write(dm_spec_path, JSON.generate('pages' => [{ 'elements' => [
+    { 'id' => 'el-dim-1', 'name' => 'Customer Dim', '_datasetId' => 'ds-dim' },
+  ] }]))
+  File.write(dm_ids_path, JSON.generate('dataModelId' => 'dm-live-1', 'pages' => [{ 'elements' => [
+    { 'id' => 'el-dim-1', 'name' => 'Customer Dim', 'columnLabels' => ['Region', 'Segment'] },
+  ] }]))
+  File.write(File.join(dir, 'card-header-overrides.json'), JSON.generate(
+    'c25-header' => {
+      'body' => '**Customers by Region**\n{{Count([Master/Segment])}}',
+    },
+  ))
+  stub_const('OUT', dir) do
+    stub_const('DM_SPEC_PATH', dm_spec_path) do
+      stub_const('DM_IDS_PATH', dm_ids_path) do
+        $ds_element_map = nil
+        $sub_masters = {}
+        $warnings = []
+        $companion_elements = []
+        $kpi_verification_elements = []
+        $chart_verification_elements = []
+        $table_verification_elements = []
+        routed = build_element(
+          {
+            'id' => 'c25-header',
+            'title' => 'Customers by Region',
+            'chartType' => 'badge_vert_bar',
+            'datasetId' => 'ds-dim',
+            'groupBy' => ['region'],
+            'columns' => [
+              { 'column' => 'region', 'mapping' => 'ITEM' },
+              { 'column' => 'segment', 'aggregation' => 'COUNT', 'mapping' => 'VALUE' },
+            ],
+            'summaryNumber' => {
+              'column' => 'segment',
+              'aggregation' => 'COUNT',
+              'label' => 'Customer Count',
+            },
+          },
+          {},
+          'ds-fact',
+        )
+        ok(!routed.nil?, 'operator-authored header card still builds on its non-dominant dataset')
+        twin = $kpi_verification_elements.find { |element| element['id'] == 'el-c25-header-summary-verify' }
+        ok(!twin.nil?, 'the Summary parity twin is retained for source verification')
+        eq(twin['source'], { 'kind' => 'table', 'elementId' => 'master-ds-dim' },
+           'the parity twin targets the card sub-master, never the dominant Master')
+        eq(twin['columns'].first['formula'], 'Count([Master (Customer Dim)/Segment])',
+           'the parity twin formula is re-qualified to the same sub-master')
+        header = $companion_elements.find { |element| element['id'] == 'header-c25-header' }
+        ok(header['body'].include?('[Master (Customer Dim)/Segment]'),
+           'the operator-authored text header follows the same sub-master routing')
+      end
     end
   end
 end
