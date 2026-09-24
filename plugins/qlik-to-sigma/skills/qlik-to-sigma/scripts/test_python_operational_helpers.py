@@ -77,6 +77,37 @@ class WarehousePreflightTests(unittest.TestCase):
         finally:
             preflight_warehouse.sigma_rest.request = original
 
+    def test_list_entries_stops_when_required_paths_are_present(self) -> None:
+        calls = []
+        original = preflight_warehouse.sigma_rest.request
+
+        def request(_method: str, path: str) -> dict:
+            calls.append(path)
+            return {
+                "entries": [
+                    {
+                        "connectionId": "conn",
+                        "path": ["DB", "SCHEMA", "SALES"],
+                    }
+                ],
+                "nextPage": "unneeded",
+            }
+
+        preflight_warehouse.sigma_rest.request = request
+        try:
+            rows = preflight_warehouse.list_entries(
+                "/v2/connections/paths?connectionId=conn",
+                stop_when=lambda entries: any(
+                    row.get("path") == ["DB", "SCHEMA", "SALES"]
+                    for row in entries
+                ),
+            )
+        finally:
+            preflight_warehouse.sigma_rest.request = original
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual(1, len(calls))
+
     def test_resolves_catalog_case_aliases_and_expression_inputs(self) -> None:
         reconcile = [
             {
