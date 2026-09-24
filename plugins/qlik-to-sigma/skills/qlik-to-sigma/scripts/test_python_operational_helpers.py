@@ -193,19 +193,35 @@ class QlikSnapshotTests(unittest.TestCase):
 
     def test_snapshot_captures_dimension_only_visual_rows(self) -> None:
         module = self.load_discovery()
-        captured = []
-        original_chart_rows = module.qlik_chart_rows
+        calls = []
+        original_run = module.qlik_run
         original_eval = module.qlik_eval
-        module.qlik_chart_rows = lambda _app, _ctx, chart: (
-            captured.append(chart["id"])
-            or {
-                "rows": [["Boston"], ["New York"]],
-                "complete": True,
-                "expectedRows": 2,
-                "pivot": False,
-            }
-        )
-        module.qlik_eval = lambda *_args: "0"
+
+        def run(args, attempts=4):
+            del attempts
+            calls.append(args)
+            if args[:3] == ["app", "object", "data"]:
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "returncode": 1,
+                        "stdout": "object map-1 contains no data\n",
+                        "stderr": "",
+                    },
+                )()
+            return type(
+                "Result",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": "Boston\nNew York\n",
+                    "stderr": "",
+                },
+            )()
+
+        module.qlik_run = run
+        module.qlik_eval = lambda *_args: "2"
         try:
             snapshot = module.compute_snapshot(
                 "app",
@@ -225,11 +241,16 @@ class QlikSnapshotTests(unittest.TestCase):
                 False,
             )
         finally:
-            module.qlik_chart_rows = original_chart_rows
+            module.qlik_run = original_run
             module.qlik_eval = original_eval
 
-        self.assertEqual(["map-1"], captured)
+        self.assertTrue(any(call[:2] == ["app", "values"] for call in calls))
         self.assertEqual([["Boston"], ["New York"]], snapshot["chartData"][0]["rows"])
+        self.assertTrue(snapshot["chartData"][0]["complete"])
+        self.assertIn(
+            {"expr": "Count(distinct [City])", "value": "2"},
+            snapshot["buckets"],
+        )
 
 
 class WorkbookLintTests(unittest.TestCase):
