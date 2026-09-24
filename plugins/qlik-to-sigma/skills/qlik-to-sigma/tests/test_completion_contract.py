@@ -222,6 +222,19 @@ class CompletionContractTest(unittest.TestCase):
         terminal = self.finalize()
         self.assertEqual(terminal.returncode, 0, terminal.stdout + terminal.stderr)
 
+    def test_reused_dm_readback_without_local_spec_is_accounted(self):
+        (self.workdir / "dm-spec.json").unlink()
+        result = self.run_script(
+            "build-qlik-accounting.py", "--workdir", self.workdir
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        census = json.loads((self.workdir / "source-object-census.json").read_text())
+        self.assertTrue(census["summary"]["complete"])
+        self.assertNotIn(
+            "field:Orders.Country",
+            census["diagnostics"]["unaccounted"],
+        )
+
     def test_unaccounted_source_object_fails_closed(self):
         dm = json.loads((self.workdir / "dm-spec.json").read_text())
         dm["pages"][0]["elements"][0]["columns"] = []

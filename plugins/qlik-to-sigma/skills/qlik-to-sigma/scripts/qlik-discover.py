@@ -418,12 +418,53 @@ def qlik_eval(app, ctx_args, expr):
     return lines[1].strip() if out.returncode == 0 and len(lines) >= 2 else None
 
 
+def parse_tabular_chart_rows(text, dimension_count):
+    """Parse qlik-cli's padded table output when --json is unsupported."""
+    lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
+    if len(lines) < 2:
+        return None
+    headers = re.split(r"\t+|\s{2,}", lines[0].strip())
+    rows = []
+    number = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+    for line in lines[1:]:
+        cells = re.split(r"\t+|\s{2,}", line.strip())
+        if len(cells) != len(headers):
+            return None
+        row = []
+        for index, cell in enumerate(cells):
+            if index >= dimension_count and number.fullmatch(cell):
+                row.append(float(cell))
+            else:
+                row.append(cell)
+        rows.append(row)
+    return {
+        "rows": rows,
+        "complete": bool(rows),
+        "expectedRows": len(rows),
+        "pivot": False,
+    }
+
+
 def qlik_chart_rows(app, ctx_args, chart):
     """Read one chart's evaluated hypercube rows through qlik-cli."""
-    data = qlik(
+    command = [
         "app", "object", "data", str(chart.get("id")),
         "-a", app, *ctx_args, "--json",
-    )
+    ]
+    response = qlik_run(command)
+    if response.returncode != 0:
+        sys.stderr.write(
+            f"WARN {' '.join(str(value) for value in command)} -> "
+            f"{((response.stderr or response.stdout) or '')[:200]}\n"
+        )
+        return {}
+    try:
+        data = json.loads(response.stdout or "null")
+    except json.JSONDecodeError:
+        return parse_tabular_chart_rows(
+            response.stdout,
+            len(chart.get("dimensions") or []),
+        ) or {}
 
     def matrices(value):
         found = []

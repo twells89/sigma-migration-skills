@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import tempfile
@@ -164,6 +165,28 @@ class WarehousePreflightTests(unittest.TestCase):
         )
         self.assertIsNone(path)
         self.assertIn("ambiguous", error or "")
+
+
+class QlikSnapshotTests(unittest.TestCase):
+    def test_parses_qlik_cli_tabular_chart_data(self) -> None:
+        path = Path(__file__).with_name("qlik-discover.py")
+        spec = importlib.util.spec_from_file_location("qlik_discover_test", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader
+        spec.loader.exec_module(module)
+
+        result = module.parse_tabular_chart_rows(
+            "MonthYear     Revenue\n"
+            "2024-01       14682555.21\n"
+            "2024-02       17394702.24\n",
+            1,
+        )
+        self.assertEqual(
+            [["2024-01", 14682555.21], ["2024-02", 17394702.24]],
+            result["rows"],
+        )
+        self.assertTrue(result["complete"])
+        self.assertEqual(2, result["expectedRows"])
 
 
 class WorkbookLintTests(unittest.TestCase):
