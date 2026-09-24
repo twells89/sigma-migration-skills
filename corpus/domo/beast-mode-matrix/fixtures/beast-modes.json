@@ -383,5 +383,17 @@
     "dataType": "LONG",
     "sourceFormulaScope": "card-definition",
     "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_36",
+    "name": "Date Curdate Case",
+    "sql": "CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+    "scope": "dataset",
+    "class": "projection",
+    "cardId": "bm-card-36",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
   }
 ]

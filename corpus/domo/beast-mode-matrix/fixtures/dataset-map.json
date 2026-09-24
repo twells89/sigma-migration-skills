@@ -1,0 +1,9 @@
+{
+  "ds-bm-matrix": {
+    "connectionId": "00000000-0000-0000-0000-000000000000",
+    "database": "CORPUS",
+    "schema": "DOMO",
+    "table": "BEAST_MODE_MATRIX",
+    "name": "Synthetic Beast Mode Matrix"
+  }
+}
