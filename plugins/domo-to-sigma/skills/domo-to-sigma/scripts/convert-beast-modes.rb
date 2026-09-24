@@ -100,6 +100,9 @@
 #     entry's `converted` is forced to `true` and any stale converted:false
 #     "could not fully translate" note is cleared first — a human-authored
 #     formula must never carry forward the discarded automated attempt's note.
+#     After a live Sigma compile failure proves a converted:true result wrong,
+#     set `"force": true` on the override to supersede that clean-but-invalid
+#     formula. The same lint/readback gates still apply.
 #   - Every use is still POST-linted by lint_formula (raw IN(, And()/Or()/
 #     Not() as calls, unbalanced brackets) — a hand-authored typo is a hard
 #     lintError in formulas.json, never a silent pass.
@@ -395,11 +398,12 @@ def resolve_entry(entry, overrides)
   semantic_placement = nil
 
   if override && !override['sigmaFormula'].to_s.strip.empty?
-    if already_resolved && entry['class'].to_s != 'lod'
+    force_override = override['force'] == true
+    if already_resolved && entry['class'].to_s != 'lod' && !force_override
       warnings << "formula-overrides.json has an entry for " \
         "#{entry['name'] || entry['id']} but it already has a sigmaFormula that " \
         "converted cleanly (converted:true) — override NOT applied (an override " \
-        "only supersedes a missing or converted:false result)."
+        "only supersedes a missing or converted:false result unless it sets \"force\": true)."
     else
       sigma = override['sigmaFormula']
       used_override = true

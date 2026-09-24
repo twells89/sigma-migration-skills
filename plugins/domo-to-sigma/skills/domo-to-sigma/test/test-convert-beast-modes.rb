@@ -419,6 +419,20 @@ ok(!resolved_true.key?('_source'), 'no formula-override attribution when convert
 ok(warns_true.any? { |w| w.include?('NOT applied') && w.include?('converted:true') },
    'the NOT-applied warning names converted:true as the reason (widened-rule wording)')
 
+puts '== resolve_entry: force override supersedes a converted:true formula disproven by live compile =='
+forced_override = {
+  'calculation_true-1' => {
+    'sigmaFormula' => 'Sum([Terminated Flag])',
+    'force' => true,
+    'note' => 'live Sigma compile proved the automated bare identifier invalid',
+  },
+}
+resolved_forced, = resolve_entry(pending_true, forced_override)
+ok(resolved_forced['sigmaFormula'] == 'Sum([Terminated Flag])',
+   'force:true replaces the clean-but-invalid automated formula')
+ok(resolved_forced['_source'] == 'formula-override',
+   'forced replacement remains visibly operator-authored')
+
 # ---------------------------------------------------------------------------
 # Fix 2 (final review): widen override eligibility to also supersede a
 # converted:false formula, not just a blank one — --convert's
