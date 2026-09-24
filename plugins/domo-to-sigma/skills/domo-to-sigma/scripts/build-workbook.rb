@@ -3199,6 +3199,38 @@ def retarget_to_submaster!(el, sm, retarget_source: true)
   el
 end
 
+def contains_primary_master_ref?(node)
+  case node
+  when Hash
+    node.any? { |_, value| contains_primary_master_ref?(value) }
+  when Array
+    node.any? { |value| contains_primary_master_ref?(value) }
+  when String
+    node.include?('[Master/')
+  else
+    false
+  end
+end
+
+def validate_routed_verification_affinity!(card, elements, sub_master, helper_ids)
+  allowed_sources = [sub_master['id'], *helper_ids].compact
+  failures = Array(elements).each_with_object([]) do |element, out|
+    source_id = element.dig('source', 'elementId')
+    wrong_source = !allowed_sources.include?(source_id)
+    stale_formula = contains_primary_master_ref?(element)
+    next unless wrong_source || stale_formula
+
+    reasons = []
+    reasons << "source=#{source_id.inspect}" if wrong_source
+    reasons << 'contains [Master/...]' if stale_formula
+    out << "#{element['id']}: #{reasons.join(', ')}"
+  end
+  return if failures.empty?
+
+  raise "INTERNAL: routed verification source-affinity failed for card " \
+        "#{card['id']} (DataSet #{card['datasetId']}): #{failures.join('; ')}"
+end
+
 # Sigma rejects a workbook whose element repeats a column id
 # ("pages[1].elements[1].columns[3].id: Duplicate id: 'm-engaged-users'").
 # mcol_id() derives an id from the DISPLAY NAME alone, so plotting the same
@@ -3379,16 +3411,23 @@ def build_element(card, overrides, master_ds = nil)
       *data_helpers,
       *plugin_sources,
     ].compact.map { |helper| helper['id'] }
-    verification_offsets.each do |elements, offset|
-      Array(elements[offset..-1]).each do |verification_element|
-        source_id = verification_element.dig('source', 'elementId')
-        retarget_to_submaster!(
-          verification_element,
-          sm,
-          retarget_source: !helper_ids.include?(source_id),
-        )
-      end
+    new_verification_elements = verification_offsets.flat_map do |elements, offset|
+      Array(elements[offset..-1])
     end
+    new_verification_elements.each do |verification_element|
+      source_id = verification_element.dig('source', 'elementId')
+      retarget_to_submaster!(
+        verification_element,
+        sm,
+        retarget_source: !helper_ids.include?(source_id),
+      )
+    end
+    validate_routed_verification_affinity!(
+      card,
+      new_verification_elements,
+      sm,
+      helper_ids,
+    )
     warn_card(card, "routed to sub-master '#{sm['name']}' for DataSet #{ds} (bead ziht) — " \
                     'verify column coverage against the card PNG; the sub-master passes through ' \
                     "every column of #{sm['name']}, not just the ones this card uses.")

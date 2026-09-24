@@ -901,6 +901,25 @@ eq(helper_bound['source'], { 'kind' => 'table', 'elementId' => 'filter-helper' }
 eq(helper_bound['columns'].first['formula'], 'Sum([Master (Customer Dim)/Segment])',
    'preserving a helper source still rewrites any residual Master references')
 
+begin
+  validate_routed_verification_affinity!(
+    { 'id' => 'c-affinity', 'datasetId' => 'ds-dim' },
+    [{
+      'id' => 'el-c-affinity-summary-verify',
+      'source' => { 'kind' => 'table', 'elementId' => 'master' },
+      'columns' => [{ 'formula' => 'Sum([Master/Segment])' }],
+    }],
+    sm_fixture,
+    [],
+  )
+  ok(false, 'source-affinity gate rejects an unretargeted parity twin')
+rescue RuntimeError => e
+  ok(e.message.include?('source-affinity') &&
+     e.message.include?('source="master"') &&
+     e.message.include?('[Master/...]'),
+     'source-affinity failure names both stale source and formula namespace')
+end
+
 puts "== live-found 2026-07-31: retarget_to_submaster! must not raise FrozenError on a " \
      'shared frozen constant (AXIS_OFF) nested inside an axis-chart element =='
 axis_el = { 'id' => 'el-axis1', 'kind' => 'bar-chart',

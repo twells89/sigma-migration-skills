@@ -99,6 +99,43 @@ module DomoSigma
     output
   end
 
+  # Return unqualified [Column] references outside quoted string literals.
+  # Qualified [Table/Column] paths bind to an external source and are excluded
+  # from same-element symbol-table checks.
+  def formula_column_references(formula)
+    source = formula.to_s
+    references = []
+    quote = nil
+    index = 0
+
+    while index < source.length
+      char = source[index]
+      following = source[index + 1]
+      if quote
+        if char == '\\' && following
+          index += 2
+        elsif char == quote && following == quote
+          index += 2
+        elsif char == quote
+          quote = nil
+          index += 1
+        else
+          index += 1
+        end
+      elsif char == "'" || char == '"'
+        quote = char
+        index += 1
+      elsif char == '[' && (closing = source.index(']', index + 1))
+        raw = source[(index + 1)...closing]
+        references << raw unless raw.include?('/')
+        index = closing + 1
+      else
+        index += 1
+      end
+    end
+    references
+  end
+
   B62 = (('0'..'9').to_a + ('a'..'z').to_a + ('A'..'Z').to_a).freeze
 
   # Client-side id. Sigma preserves client IDs on CREATE (feedback_sigma_spec_id_stability).

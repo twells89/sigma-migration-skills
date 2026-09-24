@@ -142,6 +142,28 @@ eq(humanized['columns'].find { |column| column['name'] == 'Call Age' }['formula'
 eq(humanized['metrics'].find { |metric_item| metric_item['name'] == 'Latest Call' }['formula'],
    'Max([Call Date Time])',
    'aggregate metric references resolve to the same humanized DM column name')
+eq(formula_column_references(
+     'If([Call Date Time] > 0, "[Ignored Ref]", [SOURCE/Qualified])'
+   ),
+   ['Call Date Time'],
+   'symbol-table scanner ignores string content and qualified source paths')
+
+begin
+  validate_element_formula_references!(
+    {
+      'columns' => [
+        { 'id' => 'physical', 'formula' => '[CALLS/Call Date Time]' },
+        { 'id' => 'broken', 'name' => 'Broken Calc', 'formula' => '[Call DateTime] + 1' },
+      ],
+      'metrics' => [],
+    },
+    dataset_id: 'ds-calls',
+  )
+  ok(false, 'preflight rejects a raw mixed camel/spaced reference before POST')
+rescue ArgumentError => e
+  ok(e.message.include?('[Call DateTime]') && e.message.include?('Call Date Time'),
+     'preflight names the unresolved reference and emitted namespace')
+end
 
 puts "== Beast Mode name collisions are deterministic and visible =="
 collision_outcomes = []
