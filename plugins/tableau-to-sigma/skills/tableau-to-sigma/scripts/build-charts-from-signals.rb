@@ -9741,6 +9741,17 @@ end
 #     missing from the spec is a lint failure by design — the drop is already
 #     loud above); rich detail keys ride along, the lint ignores unknown keys.
 unless control_scope_records.empty?
+  final_scope_pages =
+    if defined?(_out) && _out.is_a?(Hash) && _out['pages']
+      _out['pages']
+    elsif defined?(all_elements)
+      [{ 'name' => nil, 'elements' => all_elements }]
+    else
+      []
+    end
+  final_scope_ids = final_scope_pages.flat_map do |page|
+    Array(page['elements']).map { |element| element['id'] }
+  end.compact.uniq
   unreach_names = ->(r) { Array(r['unreachable']).flat_map { |u| u['elements'] || [] } }
   page_chart_ids = lambda do |page|
     page ? ctl_chart_index.select { |c| c['dash'] == page || c['ws'] == page }.map { |c| c['id'] }
@@ -9753,16 +9764,34 @@ unless control_scope_records.empty?
     ints = ints.select { |i| (i['dashboard'] || i['worksheet']).nil? || i['dashboard'] == page || i['worksheet'] == page } if page
     bad = unreach_names.call(r)
     reached = ints.reject { |i| bad.include?(i['name']) }
-    reached_ids = reached.map { |i| i['element_id'] }.uniq
+    reached_ids = reached.map { |i| i['element_id'] }.uniq & final_scope_ids
+    final_page = final_scope_pages.find { |candidate| page.nil? || candidate['name'] == page }
+    formula_ids = Array(final_page && final_page['elements']).select do |element|
+      element.to_json.include?("[#{cid}]")
+    end.map { |element| element['id'] }.compact
+    # Formula controls are authoritative from the FINAL post-collapse,
+    # post-namespacing spec. Their earlier intended set can still contain
+    # trellis-collapsed siblings that no longer exist.
+    reached_ids = formula_ids unless formula_ids.empty?
     e = r.merge('controlId' => cid, 'sourceName' => r['source_signal'])
     e.delete('page_instances')
-    e['scope'] = (page_chart_ids.call(page) - reached_ids).empty? ? 'page' : reached_ids
+    final_page_chart_ids = page_chart_ids.call(page) & final_scope_ids
+    e['scope'] = (final_page_chart_ids - reached_ids).empty? ? 'page' : reached_ids
     aws = Array(r['action_worksheets'])
     must = reached.select { |i| aws.include?(i['worksheet']) }.map { |i| i['element_id'] }.uniq
     e['mustReach'] = must if must.any?
     e
   end
   emitted_rs, dropped_rs = control_scope_records.partition { |r| r['status'] != 'dropped' }
+  if opts[:pages_mode]
+    pruned_rs, emitted_rs = emitted_rs.partition { |r| Array(r['page_instances']).empty? }
+    dropped_rs.concat(pruned_rs.map do |record|
+      record.merge(
+        'status' => 'dropped',
+        'reason' => 'no final page instance (control had no formula/filter consumer after page scoping)'
+      )
+    end)
+  end
   contract_controls = emitted_rs.flat_map do |r|
     if (insts = Array(r['page_instances'])).any?
       insts.map { |pi| to_contract.call(r, pi['controlId'], pi['page']) }
