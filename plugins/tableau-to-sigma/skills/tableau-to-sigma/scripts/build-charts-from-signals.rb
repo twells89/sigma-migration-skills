@@ -10344,7 +10344,7 @@ built_n = (defined?(elements) && elements.respond_to?(:size)) ? elements.size : 
 dropped_n = coverage_unresolved.select { |u| u['severity'] == 'dropped' }.map { |u| u['visual'] }.uniq.size
 by_sev = coverage_unresolved.group_by { |u| u['severity'] }.transform_values(&:size)
 source_chart_zones = Array(layout).sum do |dashboard|
-  Array(dashboard['zones']).count { |zone| zone['kind'].to_s == 'chart' }
+  ZoneCensus.content_zones(dashboard['zones']).size
 end
 built_chart_elements = Array(elements).count do |element|
   kind = element['kind'].to_s
