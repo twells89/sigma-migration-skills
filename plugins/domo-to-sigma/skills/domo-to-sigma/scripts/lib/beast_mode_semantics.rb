@@ -40,6 +40,7 @@ module DomoSigma
       rewritten = rewrite_between(rewritten)
       rewritten = rewrite_string_functions(rewritten)
       rewritten = rewrite_date_functions(rewritten)
+      rewritten = rewrite_concat_arguments(rewritten)
       rewritten = rewrite_mixed_if(rewritten)
       rewritten = rewrite_integer_division(rewritten) if original.include?('/')
       return translated(rewritten) if rewritten != sigma
@@ -183,6 +184,7 @@ module DomoSigma
     def rewrite_string_functions(formula)
       rewrite_named_functions(
         formula,
+        'LENGTH' => 'Len',
         'SUBSTRING' => 'Mid',
         'SUBSTR' => 'Mid',
       )
@@ -233,6 +235,130 @@ module DomoSigma
         end
       end
       output
+    end
+
+    # MySQL CONCAT coerces every argument to text; Sigma Concat requires text
+    # arguments. Wrap every non-literal argument in Text() so date/number
+    # expressions (for example Day(Today())) compile without changing ordinary
+    # text-column behavior.
+    def rewrite_concat_arguments(formula)
+      source = formula.to_s
+      output = +''
+      index = 0
+
+      while index < source.length
+        if source[index] == '"' || source[index] == "'"
+          finish = quoted_segment_end(source, index)
+          output << source[index...finish]
+          index = finish
+          next
+        end
+        if source[index] == '[' && (closing = source.index(']', index + 1))
+          output << source[index..closing]
+          index = closing + 1
+          next
+        end
+        unless source[index].match?(/[A-Za-z_]/)
+          output << source[index]
+          index += 1
+          next
+        end
+
+        finish = index + 1
+        finish += 1 while finish < source.length && source[finish].match?(/[A-Za-z0-9_]/)
+        name = source[index...finish]
+        opening = finish
+        opening += 1 while opening < source.length && source[opening].match?(/\s/)
+        unless name.casecmp('Concat').zero? && source[opening] == '('
+          output << name
+          index = finish
+          next
+        end
+
+        closing = matching_paren(source, opening)
+        unless closing
+          output << source[index..]
+          break
+        end
+        arguments = split_formula_arguments(source[(opening + 1)...closing]).map do |argument|
+          rewritten = rewrite_concat_arguments(argument).strip
+          if rewritten.match?(/\A(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\z/) ||
+             rewritten.match?(/\AText\s*\(/i)
+            rewritten
+          else
+            "Text(#{rewritten})"
+          end
+        end
+        output << "Concat(#{arguments.join(', ')})"
+        index = closing + 1
+      end
+      output
+    end
+
+    def quoted_segment_end(source, opening)
+      quote = source[opening]
+      index = opening + 1
+      while index < source.length
+        if source[index] == '\\' && index + 1 < source.length
+          index += 2
+        elsif source[index] == quote && source[index + 1] == quote
+          index += 2
+        elsif source[index] == quote
+          return index + 1
+        else
+          index += 1
+        end
+      end
+      source.length
+    end
+
+    def matching_paren(source, opening)
+      depth = 0
+      index = opening
+      while index < source.length
+        char = source[index]
+        if char == '"' || char == "'"
+          index = quoted_segment_end(source, index)
+          next
+        elsif char == '[' && (closing = source.index(']', index + 1))
+          index = closing + 1
+          next
+        elsif char == '('
+          depth += 1
+        elsif char == ')'
+          depth -= 1
+          return index if depth.zero?
+        end
+        index += 1
+      end
+      nil
+    end
+
+    def split_formula_arguments(source)
+      arguments = []
+      start = 0
+      depth = 0
+      index = 0
+      while index < source.length
+        char = source[index]
+        if char == '"' || char == "'"
+          index = quoted_segment_end(source, index)
+          next
+        elsif char == '[' && (closing = source.index(']', index + 1))
+          index = closing + 1
+          next
+        elsif char == '('
+          depth += 1
+        elsif char == ')'
+          depth -= 1
+        elsif char == ',' && depth.zero?
+          arguments << source[start...index]
+          start = index + 1
+        end
+        index += 1
+      end
+      arguments << source[start..]
+      arguments
     end
 
     def rewrite_date_functions(formula)

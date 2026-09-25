@@ -4,9 +4,9 @@ Sanitized synthetic discovery fixture generated from a disposable 2026-09-23
 live Domo acceptance page. It covers every source-valid formula family measured
 in that run: FIXED BY/ADD/REMOVE/filter policies/percent totals, running/ranking/
 shifting windows, aggregate edge cases, LIKE/BETWEEN and mixed CASE expressions,
-date/time functions (including the field-reported `CURDATE()` CASE shape),
-timezone conversion, legacy function aliases, `SUBSTRING()` text extraction,
-and Domo-valid block/line comments.
+date/time functions (including field-reported `CURDATE()`/numeric-`CONCAT`
+CASE shapes), timezone conversion, legacy function aliases, `LENGTH()` /
+`SUBSTRING()` text handling, and Domo-valid block/line comments.
 
 The original live source had 37 cards. Domo served values for 35; `PERCENT_RANK` failed
 with “Not a valid analytic function,” and `MICROSECOND` was marked
@@ -30,9 +30,9 @@ migrate with strict parity. Domo rejected `# comment` as `PARSING_ERROR`.
 
 | File | Purpose |
 |---|---|
-| `fixtures/datasets.json` | Synthetic 19-column workforce/sales schema |
+| `fixtures/datasets.json` | Synthetic 20-column workforce/sales schema |
 | `fixtures/cards.json` | 36 source-valid formula cards with stable sanitized ids |
-| `fixtures/beast-modes.json` | Raw Domo SQL for 39 formulas (36 card formulas + dataset-level date/comment/substring regressions) |
+| `fixtures/beast-modes.json` | Raw Domo SQL for 40 formulas (36 card formulas + dataset-level date/comment/text regressions) |
 | `fixtures/dataset-map.json` | Synthetic mapping used to exercise data-model formula placement |
 | `fixtures/blocked-beast-modes.json` | Two live-proven source-invalid formulas |
 | `checks.sh` | Runs the real vendored converter and workbook builder, then asserts every translation, placement, helper, and fail-closed disposition |

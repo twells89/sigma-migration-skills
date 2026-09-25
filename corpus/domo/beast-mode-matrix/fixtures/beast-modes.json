@@ -428,5 +428,16 @@
     "persistedOnDataSource": true,
     "sourceFormulaScope": "dataset-api",
     "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_40",
+    "name": "Month Split Curdate",
+    "sql": "CASE WHEN DAY(`Current Date`) < DAY(CURDATE()) THEN CONCAT('Days 1-', (DAY(CURDATE()) - 1)) ELSE CONCAT('Days ', DAY(CURDATE()), '-EOM') END",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
   }
 ]

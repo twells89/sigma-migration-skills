@@ -210,11 +210,11 @@ failure when broken:
 
 | Beast Mode | Sigma |
 |---|---|
-| `CONCAT(a, ' ', b)` | `[a] & " " & [b]` |
+| `CONCAT(a, ' ', b)` | `Concat(Text([a]), " ", Text([b]))` — MySQL auto-casts; Sigma requires every non-literal argument to be text |
 | `INSTR(col, 's')` | `Find([col], "s")` (1-based, mind index base) |
 | `LEFT(col, n)` | `Left([col], n)` |
 | `RIGHT(col, n)` | `Right([col], n)` |
-| `LENGTH(col)` | `Length([col])` |
+| `LENGTH(col)` | `Len([col])` |
 | `LOWER(col)` | `Lower([col])` |
 | `UPPER(col)` | `Upper([col])` |
 | `REPLACE(col, 'a', 'b')` | `Replace([col], "a", "b")` |

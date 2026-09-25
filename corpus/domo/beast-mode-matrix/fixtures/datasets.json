@@ -12,6 +12,10 @@
           "name": "Inquiry Date"
         },
         {
+          "type": "DATETIME",
+          "name": "Current Date"
+        },
+        {
           "type": "STRING",
           "name": "Date_Text"
         },
