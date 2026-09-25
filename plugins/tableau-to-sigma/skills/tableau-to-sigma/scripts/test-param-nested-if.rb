@@ -25,7 +25,9 @@ master_map = {
   '(?i)^UPLOADED_TS_EST$' => { 'id' => 'm-uploaded', 'name' => 'UPLOADED_TS_EST' },
   '(?i)^DOC_PK$' => { 'id' => 'm-doc', 'name' => 'DOC_PK' },
   '(?i)^TAT_SETTING$' => { 'id' => 'm-setting', 'name' => 'TAT_SETTING' },
-  '(?i)^VERIFIED_PAGES$' => { 'id' => 'm-verified', 'name' => 'VERIFIED_PAGES' }
+  '(?i)^VERIFIED_PAGES$' => { 'id' => 'm-verified', 'name' => 'VERIFIED_PAGES' },
+  '(?i)^Instant/Complete/Requeue$' => { 'id' => 'm-disposition', 'name' => 'Instant/Complete/Requeue' },
+  '(?i)^VERIFICATION_FLOW_TYPE$' => { 'id' => 'm-verification-flow', 'name' => 'VERIFICATION_FLOW_TYPE' }
 }
 formula = <<~TABLEAU
   PERCENTILE(
@@ -123,6 +125,14 @@ columns_by_guid = {
       IF [Measure Name] = 'UPLOADED_PAGES' THEN [Measure Value] ELSE NULL END
       // retired source-specific page-count branch
     TABLEAU
+  },
+  'Calculation_Requeue' => {
+    'caption' => 'Requeue Count',
+    'formula' => "IF [Instant/Complete/Requeue] = 'Requeue' AND [VERIFICATION_FLOW_TYPE] <> 'UNKNOWN' THEN [Measure Value] END"
+  },
+  'Calculation_Instant' => {
+    'caption' => 'Instant Count',
+    'formula' => "IF [Instant/Complete/Requeue] = 'Instant' AND [VERIFICATION_FLOW_TYPE] <> 'UNKNOWN' THEN [Measure Value] END"
   }
 }
 nth = translate_user_agg_formula(
@@ -173,6 +183,17 @@ check.call(
   nested_ratio ==
     'Sum([Master/VERIFIED_PAGES]) / Sum(If([Master/Measure Name] = "UPLOADED_PAGES", [Master/Measure Value], NULL))',
   "aggregates recursively expand referenced row-level calculations (got #{nested_ratio.inspect})"
+)
+requeue_ratio = translate_user_agg_formula(
+  'SUM([Calculation_Requeue]) / (SUM([Calculation_Requeue]) + SUM([Calculation_Instant]))',
+  master_map,
+  columns_by_guid
+)
+check.call(
+  requeue_ratio&.scan('If(')&.length == 3 &&
+    requeue_ratio.include?('[Master/Instant/Complete/Requeue]') &&
+    requeue_ratio.include?('[Master/VERIFICATION_FLOW_TYPE]'),
+  "nested conditional ratio preserves boolean predicates (got #{requeue_ratio.inspect})"
 )
 
 if failures.empty?

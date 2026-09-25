@@ -898,6 +898,7 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
   residue.gsub!(/\[Master\/[^\]]+\]/, '1')
   allowed = %w[Sum Avg Min Max Median CountDistinct CountIf IsNotNull Coalesce If Abs Null NULL] + extra_fns
   residue.gsub!(/\b(#{allowed.map { |f| Regexp.escape(f) }.join('|')})\b/, '')
+  residue.gsub!(/\b(?:and|or|not|null)\b/i, '')
   return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
   out
 end
