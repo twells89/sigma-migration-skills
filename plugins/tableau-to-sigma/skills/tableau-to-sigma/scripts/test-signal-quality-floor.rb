@@ -44,7 +44,8 @@ z_pill = {
   'x_pct' => 0.0, 'y_pct' => 0.0, 'w_pct' => 30.0, 'h_pct' => 20.0,
   'rows_shelf' => { 'raw' => "(#{FED}.[usr:CalcA:qk] / #{FED}.[usr:CalcB:qk])",
                     'fields' => [{ 'guid' => nil, 'role' => 'measure', 'derivation' => 'usr' },
-                                 { 'guid' => 'Multiple Values', 'role' => 'dim', 'derivation' => nil }] },
+                                 { 'guid' => 'Multiple Values', 'role' => 'dim', 'derivation' => nil }],
+                    'dim_count' => 1, 'measure_count' => 1 },
   'cols_shelf' => {},
   'channels' => { 'color' => { 'column' => "#{FED}.[none:CATEGORY_SEL:nk]" } },
   'aggregations' => { '[CATEGORY_SEL]' => 'Sum' }
@@ -67,8 +68,10 @@ z_pie = {
   'id' => '3', 'kind' => 'chart', 'caption' => 'Category Pie', 'chart_kind' => 'pie',
   'x_pct' => 0.0, 'y_pct' => 30.0, 'w_pct' => 30.0, 'h_pct' => 30.0,
   'rows_shelf' => { 'raw' => "#{FED}.[avg:CalcAnchor:qk]",
-                    'fields' => [{ 'guid' => 'CalcAnchor', 'role' => 'measure', 'derivation' => 'avg' }] },
-  'cols_shelf' => { 'fields' => [{ 'guid' => 'CATEGORY', 'role' => 'dim', 'derivation' => 'none' }] },
+                    'fields' => [{ 'guid' => 'CalcAnchor', 'role' => 'measure', 'derivation' => 'avg' }],
+                    'measure_count' => 1 },
+  'cols_shelf' => { 'fields' => [{ 'guid' => 'CATEGORY', 'role' => 'dim', 'derivation' => 'none' }],
+                    'dim_count' => 1 },
   'channels' => { 'color' => { 'column' => "#{FED}.[none:CATEGORY:nk]" } },
   'aggregations' => { '[CATEGORY]' => 'None', '[SALES]' => 'Sum' }
 }
@@ -77,7 +80,8 @@ z_donut = JSON.parse(JSON.generate(z_pie)).merge(
   'id' => '4', 'caption' => 'Share Donut', 'x_pct' => 40.0,
   'rows_shelf' => { 'raw' => "(#{FED}.[avg:CalcAnchor:qk] + #{FED}.[avg:CalcAnchor2:qk])",
                     'fields' => [{ 'guid' => 'CalcAnchor', 'role' => 'measure', 'derivation' => 'avg' },
-                                 { 'guid' => 'CalcAnchor2', 'role' => 'measure', 'derivation' => 'avg' }] })
+                                 { 'guid' => 'CalcAnchor2', 'role' => 'measure', 'derivation' => 'avg' }],
+                    'measure_count' => 2 })
 # Z5: KPI scoped by a DATE param equality — must fail closed (STAYS-MANUAL).
 z_date = {
   'id' => '5', 'kind' => 'chart', 'caption' => 'Revenue KPI', 'chart_kind' => 'kpi',
