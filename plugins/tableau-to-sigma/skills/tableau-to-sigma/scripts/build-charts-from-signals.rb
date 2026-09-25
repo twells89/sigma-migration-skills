@@ -3604,6 +3604,56 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     end
   end
 
+  pivot_filters = []
+  Array(z['filters']).reject { |filter| filter['is_action'] }.each do |filter|
+    next unless filter['kind'] == 'list'
+    next if Array(filter['members']).empty? || full_boolean_domain_filter?(filter)
+    filter_caption = filter['column_caption'] || filter['raw_param']
+    mapped = filter_caption && map_column(filter_caption, mmap)
+    if mapped.nil? && filter_caption
+      calculation = worksheet_calculation_for(z['calculations'], filter_caption)
+      translated = calculation && translate_boolean_filter_calc(
+        calculation['formula'], mmap, meta['columns_by_guid'] || {},
+        meta['parameters'] || []
+      )
+      if translated
+        mapped = {
+          'name' => filter_caption,
+          'formula' => translated
+        }
+      end
+    end
+    unless mapped
+      warnings << "'#{cap}' pivot value filter '#{filter_caption}' could not be resolved — skipped"
+      next
+    end
+    if source['elementId'] != opts[:master_id]
+      warnings << "'#{cap}' pivot value filter '#{filter_caption}' cannot reach its two-stage helper source — skipped"
+      next
+    end
+    filter_column = cols_array.find do |column|
+      column['name'].to_s.strip.casecmp?(mapped['name'].to_s.strip)
+    end
+    unless filter_column
+      filter_id = "pf-#{el_id}-#{mapped['name'].to_s.downcase.gsub(/\W+/, '-')[0..36]}".sub(/-$/, '')
+      filter_column = {
+        'id' => filter_id,
+        'name' => mapped['name'],
+        'formula' => mapped['formula'] || "[Master/#{mapped['name']}]"
+      }
+      cols_array << filter_column
+    end
+    pivot_filters << {
+      'id' => "flt-#{el_id}-#{pivot_filters.length}",
+      'columnId' => filter_column['id'],
+      'kind' => 'list',
+      'mode' => (filter['exclude'] ? 'exclude' : 'include'),
+      'selectionMode' => 'multiple',
+      'values' => typed_filter_members(filter),
+      'includeNulls' => 'never'
+    }
+  end
+
   el = {
     'id'        => el_id,
     'kind'      => 'pivot-table',
@@ -3619,6 +3669,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     # no-visible-subtotals setting for expanded pivots (live-probed).
     'totals'    => { 'showGrandTotals' => 'hidden', 'showSubtotals' => 'when-collapsed' }
   }
+  el['filters'] = pivot_filters unless pivot_filters.empty?
   # v5.1 defect-4 fix: heat scale from the SOURCE ramp (parser heat_scheme),
   # 3-point downsample; never a default accent. Value-format cascade: a
   # PercentOfTotal value with no matched format renders 1-decimal like the
