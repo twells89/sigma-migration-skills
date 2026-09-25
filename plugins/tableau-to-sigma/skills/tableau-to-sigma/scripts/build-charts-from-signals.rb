@@ -7977,7 +7977,7 @@ unless opts[:no_auto_controls]   # default-on: never miss a .twb parameter/filte
       # mode is REQUIRED on date (=|>=|<=).
       spec['controlType'] = 'date'
       spec['mode']  = '='
-      spec['value'] = p['default_value']
+      spec['value'] = iso_utc_datestamp(p['default_value'])
       spec['includeNulls'] = 'when-no-value-is-selected'
     elsif %w[integer real].include?(p['datatype'])
       # Single-value numeric parameter (not a range) → Sigma `number` control.
