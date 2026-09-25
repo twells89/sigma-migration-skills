@@ -574,6 +574,11 @@ def typed_filter_members(filter)
   end
 end
 
+def full_boolean_domain_filter?(filter)
+  return false if filter['exclude'] || filter['datatype'].to_s.downcase != 'boolean'
+  typed_filter_members(filter).uniq.sort_by { |value| value ? 1 : 0 } == [false, true]
+end
+
 # Tableau reserved placeholder captions that the shelf parser can surface as
 # field keys but that are NEVER columns. 'Multiple Values' is the caption
 # Tableau renders for a multi-pill shelf expression (grammar-level constant,
@@ -6754,6 +6759,11 @@ layout.each do |dash|
                       else
                         "'#{cap}' quick filter on '#{fcap}' has no explicit members (Tableau 'All') — no Sigma element filter emitted"
                       end
+          next
+        end
+        if full_boolean_domain_filter?(f)
+          warnings << "'#{cap}' boolean quick filter on '#{fcap}' selects both true and false — " \
+                      "the complete domain is unrestricted; no Sigma element filter emitted"
           next
         end
         fcol = el_filter_col_for.call(m)

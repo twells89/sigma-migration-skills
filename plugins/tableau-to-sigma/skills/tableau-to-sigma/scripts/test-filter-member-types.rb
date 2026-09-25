@@ -2,9 +2,11 @@
 # frozen_string_literal: true
 
 source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
-definition = source.match(/^def typed_filter_members.*?\n^end$/m)
-abort 'could not extract typed_filter_members' unless definition
-eval(definition[0]) # rubocop:disable Security/Eval -- first-party test extraction
+%w[typed_filter_members full_boolean_domain_filter?].each do |name|
+  definition = source.match(/^def #{Regexp.escape(name)}.*?\n^end$/m)
+  abort "could not extract #{name}" unless definition
+  eval(definition[0]) # rubocop:disable Security/Eval -- first-party test extraction
+end
 
 failures = []
 check = lambda do |condition, message|
@@ -35,6 +37,24 @@ check.call(
     'datatype' => 'string', 'members' => %w[false true]
   ) == %w[false true],
   'string columns retain literal true/false text'
+)
+check.call(
+  full_boolean_domain_filter?(
+    'datatype' => 'boolean', 'members' => %w[false true]
+  ),
+  'both boolean members are recognized as the unrestricted full domain'
+)
+check.call(
+  !full_boolean_domain_filter?(
+    'datatype' => 'boolean', 'members' => ['true']
+  ),
+  'a single boolean member remains a real filter'
+)
+check.call(
+  !full_boolean_domain_filter?(
+    'datatype' => 'string', 'members' => %w[false true]
+  ),
+  'string literals named true/false are not mistaken for a boolean domain'
 )
 
 if failures.empty?
