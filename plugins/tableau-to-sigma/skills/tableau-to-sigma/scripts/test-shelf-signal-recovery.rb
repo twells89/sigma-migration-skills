@@ -114,7 +114,12 @@ Dir.mktmpdir do |dir|
   FileUtils.mkdir_p(File.join(dir, 'views'))
   File.write(File.join(dir, 'png-read.json'), JSON.generate(
     'source_png' => 'source.png',
-    'tiles' => zones.map { |zone| { 'title' => zone['caption'], 'kind' => "#{zone['chart_kind']}-chart" } },
+    'tiles' => zones.map do |zone|
+      kind = "#{zone['chart_kind']}-chart"
+      { 'title' => zone['caption'], 'kind' => kind }.tap do |tile|
+        tile['orientation'] = 'vertical' if kind == 'bar-chart'
+      end
+    end,
     'text_elements' => [], 'filter_shelf' => []
   ))
   out_path = File.join(dir, 'chart-specs.json')
@@ -132,10 +137,12 @@ Dir.mktmpdir do |dir|
   coverage = JSON.parse(File.read(File.join(dir, 'coverage.json'))) rescue {}
 end
 
-%w[Slash\ Axis Quick\ Share Measure\ Values Data\ Until].each do |name|
+%w[Slash\ Axis Quick\ Share Measure\ Values].each do |name|
   check(elements.any? { |element| element['name'].to_s.casecmp?(name) },
         "#{name.inspect} is built instead of dropped", fails)
 end
+check(elements.any? { |element| element['kind'] == 'kpi-chart' },
+      '"Data Until" text-only aggregate is built as a KPI', fails)
 measure_values = elements.find { |element| element['name'].to_s.casecmp?('Measure Values') }
 check(Array(measure_values&.dig('yAxis', 'columnIds')).length == 2,
       'Measure Values worksheet emits both ordered measures', fails)
@@ -148,5 +155,6 @@ if fails.empty?
   puts 'ALL PASS — slash, quick-calc, Measure Values, and text-KPI signals recover'
 else
   warn "#{fails.length} failure(s): #{fails.join('; ')}"
+  warn "--- build log ---\n#{log}"
   exit 1
 end
