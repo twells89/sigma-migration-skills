@@ -6,7 +6,7 @@ source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
   map_column qualify_master_formula normalize_mapped_formula
   rewrite_page_control_text
   render_agg aggregate_mapped_measure_formula strip_tableau_comments
-  worksheet_calculation_for
+  worksheet_calculation_for translate_boolean_filter_calc
   translate_row_level_calc translate_dim_calc
   translated_calc_reference translate_sla_ratio canonical_switch_value
   split_top_level_args parse_tableau_function_call
@@ -29,6 +29,8 @@ master_map = {
   '(?i)^DOC_PK$' => { 'id' => 'm-doc', 'name' => 'DOC_PK' },
   '(?i)^TAT_SETTING$' => { 'id' => 'm-setting', 'name' => 'TAT_SETTING' },
   '(?i)^VERIFIED_PAGES$' => { 'id' => 'm-verified', 'name' => 'VERIFIED_PAGES' },
+  '(?i)^VERIFICATION_DATE$' => { 'id' => 'm-verification-date', 'name' => 'VERIFICATION_DATE' },
+  '(?i)^UPLOAD_DATE$' => { 'id' => 'm-upload-date', 'name' => 'UPLOAD_DATE' },
   '(?i)^Instant/Complete/Requeue$' => { 'id' => 'm-disposition', 'name' => 'Instant/Complete/Requeue' },
   '(?i)^VERIFICATION_FLOW_TYPE$' => { 'id' => 'm-verification-flow', 'name' => 'VERIFICATION_FLOW_TYPE' }
 }
@@ -223,6 +225,26 @@ check.call(
   aggregate_mapped_measure_formula('[Metrics/Total Revenue]', 'Sum') ==
     '[Metrics/Total Revenue]',
   'governed metric references are not double-aggregated'
+)
+date_filter = translate_boolean_filter_calc(
+  'DATE([Calculation_Date]) >= [Parameters].[Parameter Start] AND ' \
+    'DATE([Calculation_Date]) <= [Parameters].[Parameter End]',
+  master_map,
+  {
+    'Calculation_Date' => {
+      'formula' => 'IFNULL([VERIFICATION_DATE], [UPLOAD_DATE])'
+    }
+  },
+  [
+    { 'name' => '[Parameter Start]', 'caption' => 'Start Date' },
+    { 'name' => '[Parameter End]', 'caption' => 'End Date' }
+  ]
+)
+check.call(
+  date_filter ==
+    'Date(Coalesce([Master/VERIFICATION_DATE], [Master/UPLOAD_DATE])) >= [ctl-param-start-date] AND ' \
+    'Date(Coalesce([Master/VERIFICATION_DATE], [Master/UPLOAD_DATE])) <= [ctl-param-end-date]',
+  "parameter-driven date filters become local Sigma formulas (got #{date_filter.inspect})"
 )
 dynamic_title = rewrite_page_control_text(
   'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}} for <[sqlproxy.x].[none:ORG:nk]>',

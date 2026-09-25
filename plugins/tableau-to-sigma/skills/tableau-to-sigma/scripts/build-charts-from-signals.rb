@@ -978,6 +978,42 @@ def translate_row_level_calc(formula, mmap, columns_by_guid = {})
   out
 end
 
+def translate_boolean_filter_calc(formula, mmap, columns_by_guid, parameters)
+  source = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
+  return nil if source.empty?
+  parameter_names = {}
+  Array(parameters).each do |parameter|
+    name = parameter['name'].to_s.gsub(/^\[|\]$/, '').strip
+    caption = parameter['caption'].to_s.strip
+    parameter_names[name] = caption unless name.empty? || caption.empty?
+  end
+  source = source.gsub(/\[Parameters?\]\s*\.\s*\[([^\]]+)\]/i) do
+    token = Regexp.last_match(1)
+    "[#{param_control_ref(parameter_names[token] || token)}]"
+  end
+  source = source.gsub(/\[([^\]]+)\]/) do
+    token = Regexp.last_match(1).strip
+    next Regexp.last_match(0) if token.start_with?('Master/', 'Metrics/', 'ctl-')
+    translated_calc_reference(token, mmap, columns_by_guid) ||
+      begin
+        mapped = map_column(token, mmap)
+        "[Master/#{mapped ? mapped['name'] : token}]"
+      end
+  end
+  source = source.gsub(/\bIFNULL\s*\(/i, 'Coalesce(')
+                 .gsub(/\bISNULL\s*\(/i, 'IsNull(')
+                 .gsub(/\bDATE\s*\(/i, 'Date(')
+                 .gsub(/\bUPPER\s*\(/i, 'Upper(')
+                 .gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") }
+  residue = source.dup
+  residue.gsub!(/"(?:\\.|[^"\\])*"/, '1')
+  residue.gsub!(/\[[^\]]+\]/, '1')
+  residue.gsub!(/\b(?:Date|Coalesce|IsNull|Upper|If|Abs)\b/, '')
+  residue.gsub!(/\b(?:and|or|not|null|true|false)\b/i, '')
+  return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
+  source
+end
+
 # Worksheet-local DIMENSION calc -> Sigma formula over master columns
 # (bead z1d0: "Channel Group" CASE / "High Value Flag" IF-chain dims used to
 # fall back to an unresolvable raw header). Handles:
@@ -6762,6 +6798,20 @@ layout.each do |dash|
         next
       end
       m = fcap ? map_column(fcap, mmap) : nil
+      if m.nil? && fcap && (calc_formula = calc_formula_by_caption[fcap])
+        translated_filter = translate_boolean_filter_calc(
+          calc_formula, mmap, meta['columns_by_guid'] || {}, meta['parameters'] || []
+        )
+        if translated_filter
+          m = {
+            'id' => "calc-filter-#{fcap.downcase.gsub(/\W+/, '-').sub(/-$/, '')}",
+            'name' => fcap,
+            'formula' => translated_filter
+          }
+          warnings << "value filter on '#{cap}' targets calculated field '#{fcap}' — " \
+                      "translated it into an element-local filter column"
+        end
+      end
       if m.nil?
         warnings << "value filter on '#{cap}' targets '#{fcap}' — no master column matched, skipping"
         next
