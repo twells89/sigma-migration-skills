@@ -7,6 +7,7 @@ source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
   rewrite_page_control_text
   render_agg aggregate_mapped_measure_formula strip_tableau_comments
   worksheet_calculation_for translate_boolean_filter_calc pivot_hidden_sort_pill?
+  pivot_dimension_formula
   translate_row_level_calc translate_dim_calc
   translated_calc_reference translate_sla_ratio canonical_switch_value
   split_top_level_args parse_tableau_function_call
@@ -18,6 +19,10 @@ source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
   abort "could not extract #{name}" unless definition
   eval(definition[0]) # rubocop:disable Security/Eval -- first-party helper test
 end
+
+SHELF_TRUNC_FOR_PREFIX = {
+  'tmn' => 'month', 'twk' => 'week'
+}.freeze unless Object.const_defined?(:SHELF_TRUNC_FOR_PREFIX)
 
 master_map = {
   '(?i)^Measure Name$' => { 'id' => 'm-name', 'name' => 'Measure Name' },
@@ -264,6 +269,19 @@ check.call(
     'raw' => '([none:TAT_TIER:ok] * [usr:SLA_RATE:qk])'
   ),
   'combined discrete-axis and quantitative-value expressions retain the value pill'
+)
+check.call(
+  pivot_dimension_formula(
+    { 'name' => 'Order Date', 'formula' => '[Master/Order Date]' }, 'tmn'
+  ) == 'DateTrunc("month", [Master/Order Date])',
+  'pivot date grain wraps reused passthrough formulas'
+)
+dynamic_pivot_date = 'Switch([ctl-period], "Monthly", DateTrunc("month", [Master/Date]), [Master/Date])'
+check.call(
+  pivot_dimension_formula(
+    { 'name' => 'Dynamic Date', 'formula' => dynamic_pivot_date }, 'none'
+  ) == dynamic_pivot_date,
+  'untruncated derived pivot dimensions keep their translated formula'
 )
 dynamic_title = rewrite_page_control_text(
   'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}} for <[sqlproxy.x].[none:ORG:nk]>',

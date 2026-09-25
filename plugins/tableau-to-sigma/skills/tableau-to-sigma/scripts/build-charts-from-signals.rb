@@ -3071,6 +3071,18 @@ SHELF_TRUNC_FOR_PREFIX = {
   'twk' => 'week', 'tdy' => 'day', 'thr' => 'hour'
 }.freeze
 
+def pivot_dimension_formula(master, derivation)
+  dim_ref = master['formula'] || "[Master/#{master['name']}]"
+  grain = SHELF_TRUNC_FOR_PREFIX[derivation.to_s.downcase]
+  if grain == 'week'
+    %(DateAdd("day", 1 - Weekday(#{dim_ref}), DateTrunc("day", #{dim_ref})))
+  elsif grain
+    %(DateTrunc("#{grain}", #{dim_ref}))
+  else
+    dim_ref
+  end
+end
+
 def resolve_shelf_field(field, meta, mmap)
   cols_by_guid = meta['columns_by_guid'] || {}
   guid = field['guid']
@@ -3170,15 +3182,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
         else
           "#{agg}([Master/#{m['name']}])"
         end
-      elsif field['role'] == 'dim' && m['formula']
-        m['formula']
-      elsif field['role'] == 'dim' && SHELF_TRUNC_FOR_PREFIX[deriv] == 'week'
-        # Tableau weeks are Sunday-anchored; Sigma DateTrunc("week") follows
-        # the warehouse week start (Monday on Snowflake) — use the verified
-        # Sunday-anchored arithmetic instead (Weekday() is 1=Sunday).
-        %(DateAdd("day", 1 - Weekday([Master/#{m['name']}]), DateTrunc("day", [Master/#{m['name']}])))
-      elsif field['role'] == 'dim' && SHELF_TRUNC_FOR_PREFIX[deriv]
-        %(DateTrunc("#{SHELF_TRUNC_FOR_PREFIX[deriv]}", [Master/#{m['name']}]))
+      elsif field['role'] == 'dim'
+        pivot_dimension_formula(m, deriv)
       else
         "[Master/#{m['name']}]"
       end
@@ -5314,7 +5319,9 @@ layout.each do |dash|
         color_dim = dim.dup
         warnings << "'#{cap}' uses '#{color_caption}' on both the axis and Color shelf — " \
                     'emitted a duplicate category column for Sigma color-channel exclusivity'
-      elsif !color_caption.empty? && (mapped_color = map_column(color_caption, mmap))
+      elsif !color_caption.empty? &&
+            !channel_is_measure?(z.dig('channels', 'color')) &&
+            (mapped_color = map_column(color_caption, mmap))
         # Signal-only embedded worksheets often have no per-sheet CSV, so the
         # synthetic two-column header cannot expose the Color shelf as a third
         # column. The .twb channel is still authoritative: materialize it from

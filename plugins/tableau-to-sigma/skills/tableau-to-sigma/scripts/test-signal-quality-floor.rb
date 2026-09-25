@@ -112,9 +112,13 @@ z_series = {
   'aggregations' => { '[SALES]' => 'Sum', '[AS_OF_DATE]' => 'None', '[CATEGORY]' => 'None' },
   'filters' => []
 }
+z_ramp = JSON.parse(JSON.generate(z_series)).merge(
+  'id' => '7', 'caption' => 'Sales Heat', 'x_pct' => 50.0,
+  'channels' => { 'color' => { 'column' => "#{FED}.[sum:PROFIT:qk]" } }
+)
 
 layout = [{ 'dashboard' => 'Dash', 'is_story' => false, 'canvas_px' => { 'w' => 1200, 'h' => 800 },
-            'zones' => [z_pill, z_kpi, z_pie, z_donut, z_date, z_series] }]
+            'zones' => [z_pill, z_kpi, z_pie, z_donut, z_date, z_series, z_ramp] }]
 meta = {
   'worksheets' => {}, 'stories' => [], 'shared_filters' => [], 'column_aliases' => {},
   'parameters' => [{ 'name' => '[As of Date]', 'caption' => 'As of Date', 'datatype' => 'date',
@@ -193,6 +197,11 @@ check(color_col && color_col['name'] == 'Category',
       "Color shelf becomes a categorical Sigma series column (got #{color_col.inspect})", fails)
 check(log.include?("recovered Color shelf 'Category' from .twb signals"),
       'signal-only color recovery is stated in the build log', fails)
+ramp = els.find { |e| e['name'].to_s == 'Sales Heat' }
+check(ramp && ramp.dig('color', 'by') == 'scale',
+      "continuous measure Color shelf remains a scale, not a series (got #{ramp && ramp['color']})", fails)
+check(ramp && Array(ramp['columns']).any? { |column| column['id'].to_s.start_with?('clr-') },
+      'continuous Color shelf uses a duplicate measure column', fails)
 
 puts 'donut discriminator needs the stacked dual axis'
 pie = els.find { |e| e['name'].to_s == 'Category Pie' }

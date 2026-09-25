@@ -27,9 +27,9 @@ module ZoneCensus
 
   def hidden_chart_host?(z)
     return false unless chart_zone?(z)
-    (z['w_pct'] && z['w_pct'].to_f.positive? &&
+    (z.key?('w_pct') && !z['w_pct'].nil? &&
       z['w_pct'].to_f < MIN_VISIBLE_CHART_PCT) ||
-      (z['h_pct'] && z['h_pct'].to_f.positive? &&
+      (z.key?('h_pct') && !z['h_pct'].nil? &&
         z['h_pct'].to_f < MIN_VISIBLE_CHART_PCT)
   end
 
