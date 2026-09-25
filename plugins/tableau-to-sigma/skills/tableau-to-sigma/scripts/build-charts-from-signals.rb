@@ -4975,7 +4975,9 @@ layout.each do |dash|
              { 'id' => "m-#{dim_hdr.downcase.gsub(/\W+/, '-')}", 'name' => dim_hdr }
       el_id = worksheet_element_id(cap)
       mm_dim_formula =
-        if mm_trunc == 'week'
+        if dimm['formula']
+          dimm['formula']
+        elsif mm_trunc == 'week'
           # Tableau weeks are Sunday-anchored (see the week note below).
           %(DateAdd("day", 1 - Weekday([Master/#{dimm['name']}]), DateTrunc("day", [Master/#{dimm['name']}])))
         elsif mm_trunc
@@ -6112,11 +6114,20 @@ layout.each do |dash|
             # bins>; the bins are the chart's x grouping (dim_col_obj's formula:
             # `[Master/Region]` or `DateTrunc("month", [Master/Order Date])`).
             dim_grp = dim_col_obj && dim_col_obj['formula'].to_s
+            simple_master_measure =
+              meas_col_obj['formula'].to_s.match?(
+                /\A(?:Sum|Avg|Min|Max|Median|Count|CountDistinct)\(\[Master\/#{Regexp.escape(meas_name)}\]\)\z/
+              )
             value_formula =
-              if fagg == 'Avg' && dim_grp && !dim_grp.strip.empty?
+              if fagg == 'Avg' && !simple_master_measure
+                # A derived/parameterized plotted measure has no same-named
+                # master column. Reference its chart column directly; the old
+                # [Master/<display name>] hard-failed readback.
+                "Avg([#{meas_name}])"
+              elsif fagg == 'Avg' && dim_grp && !dim_grp.strip.empty?
                 "Sum([Master/#{meas_name}]) / CountDistinct(#{dim_grp})"
               else
-                "#{fagg}([Master/#{meas_name}])"
+                "#{fagg}(#{simple_master_measure ? "[Master/#{meas_name}]" : "[#{meas_name}]"})"
               end
             if fagg == 'Avg' && !(dim_grp && !dim_grp.strip.empty?)
               warnings << "'#{cap}' average reference line fell back to ROW-LEVEL (couldn't resolve the x-axis grouping for a mark-level mean) — verify the line value vs Tableau at Phase 6f"
