@@ -3,10 +3,13 @@
 
 source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
 %w[
-  map_column translate_row_level_calc translate_dim_calc canonical_switch_value
+  map_column strip_tableau_comments worksheet_calculation_for
+  translate_row_level_calc translate_dim_calc
+  translated_calc_reference translate_sla_ratio canonical_switch_value
+  split_top_level_args parse_tableau_function_call
   coerce_case_literal param_control_ref remap_param_branch split_outer_tableau_if
   translate_nested_param_if translate_case_on_param translate_if_chain_on_param
-  translate_user_agg_formula
+  translate_user_agg_formula decompose_nested_fixed
 ].each do |name|
   definition = source.match(/^def #{name}\b.*?\n^end$/m)
   abort "could not extract #{name}" unless definition
@@ -19,7 +22,9 @@ master_map = {
   '(?i)^Verification Flow Type$' => { 'id' => 'm-flow', 'name' => 'Verification Flow Type' },
   '(?i)^Measure Value$' => { 'id' => 'm-value', 'name' => 'Measure Value' },
   '(?i)^Verification Date$' => { 'id' => 'm-date', 'name' => 'Verification Date' },
-  '(?i)^UPLOADED_TS_EST$' => { 'id' => 'm-uploaded', 'name' => 'UPLOADED_TS_EST' }
+  '(?i)^UPLOADED_TS_EST$' => { 'id' => 'm-uploaded', 'name' => 'UPLOADED_TS_EST' },
+  '(?i)^DOC_PK$' => { 'id' => 'm-doc', 'name' => 'DOC_PK' },
+  '(?i)^TAT_SETTING$' => { 'id' => 'm-setting', 'name' => 'TAT_SETTING' }
 }
 formula = <<~TABLEAU
   PERCENTILE(
@@ -89,6 +94,63 @@ check.call(
   conditional_percentile ==
     'PercentileCont(If([Master/Measure Name] = "TAT", [Master/Measure Value], NULL), 0.75) / 60',
   "conditional percentile becomes PercentileCont over If (got #{conditional_percentile.inspect})"
+)
+
+columns_by_guid = {
+  'TAT Calc (copy)_123' => {
+    'caption' => 'TAT in mins',
+    'formula' => <<~TABLEAU
+      (IF [Measure Name] = 'TAT' THEN [Measure Value] ELSE NULL END)/60
+      /* { FIXED [DOC_PK] : MAX([Measure Value]) } */
+    TABLEAU
+  },
+  'Calc Setting' => {
+    'caption' => 'TAT Setting- Calc',
+    'formula' => "// retired override\n[TAT_SETTING]"
+  },
+  'Calc Exceeding' => {
+    'caption' => 'Number of Docs exceeding TAT Setting',
+    'formula' => 'COUNTD(IF [TAT Calc (copy)_123] > [Calc Setting] THEN [DOC_PK] ELSE NULL END)'
+  },
+  'Nth Param (copy)_456' => {
+    'caption' => 'Nth Percentile - TAT Tierwise',
+    'formula' => '0.95'
+  }
+}
+nth = translate_user_agg_formula(
+  "// PERCENTILE([TAT Calc (copy)_123], 0.95)\n" \
+  "PERCENTILE([TAT Calc (copy)_123], [Parameters].[Nth Param (copy)_456])",
+  master_map,
+  columns_by_guid
+)
+check.call(
+  nth&.include?('PercentileCont(If([Master/Measure Name] = "TAT"') &&
+    nth.include?('[ctl-param-nth-percentile-tat-tierwise]'),
+  "commented LOD percentile becomes an inline control-driven percentile (got #{nth.inspect})"
+)
+sla = translate_user_agg_formula(
+  '(COUNTD([DOC_PK]) - [Calc Exceeding]) / COUNTD([DOC_PK])',
+  master_map,
+  columns_by_guid
+)
+check.call(
+  sla&.include?('CountDistinct(If(If([Master/Measure Name] = "TAT"') &&
+    sla.include?('[Master/TAT_SETTING]') &&
+    !sla.include?('Calc Exceeding'),
+  "SLA ratio recursively expands the active TAT calculation (got #{sla.inspect})"
+)
+check.call(
+  decompose_nested_fixed(columns_by_guid['TAT Calc (copy)_123']['formula']).nil?,
+  'FIXED expressions inside Tableau comments do not create false LOD helper chains'
+)
+caption_matched_calc = worksheet_calculation_for(
+  [{ 'name' => '[Calculation_75th_TAT]', 'caption' => '75th Percentile TAT',
+     'formula' => 'PERCENTILE([TAT Calc (copy)_123], 0.75)' }],
+  '75th Percentile TAT'
+)
+check.call(
+  caption_matched_calc && caption_matched_calc['name'] == '[Calculation_75th_TAT]',
+  'pivot measures resolve worksheet calculations by display caption'
 )
 
 if failures.empty?

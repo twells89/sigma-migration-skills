@@ -714,12 +714,126 @@ USER_AGG_FN = {
   'MEDIAN' => 'Median'
 }.freeze
 
+def strip_tableau_comments(formula)
+  formula.to_s.gsub(%r{/\*.*?\*/}m, '').gsub(%r{//[^\r\n]*}, '')
+end
+
+def worksheet_calculation_for(calculations, *candidates)
+  normalized = candidates.flatten.compact.map do |candidate|
+    candidate.to_s.gsub(/^\[|\]$/, '').strip.downcase
+  end.reject(&:empty?)
+  Array(calculations).find do |calculation|
+    [calculation['name'], calculation['caption']].compact.any? do |candidate|
+      normalized.include?(candidate.to_s.gsub(/^\[|\]$/, '').strip.downcase)
+    end
+  end
+end
+
+def translated_calc_reference(name, mmap, columns_by_guid)
+  key = name.to_s.gsub(/^\[|\]$/, '').strip
+  return nil if key.empty?
+  mapped = map_column(key, mmap)
+  return "[Master/#{mapped['name']}]" if mapped
+  info = (columns_by_guid || {})[key]
+  active = strip_tableau_comments(info && info['formula']).strip
+  return nil if active.empty?
+  translate_dim_calc(active, mmap, columns_by_guid) ||
+    translate_row_level_calc(active, mmap, columns_by_guid)
+end
+
+def translate_sla_ratio(formula, mmap, columns_by_guid)
+  text = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
+  match = text.match(
+    %r{\A\(?\s*COUNTD\(\[([^\]]+)\]\)\s*-\s*\[([^\]]+)\]\s*\)?\s*/\s*COUNTD\(\[\1\]\)\z}i
+  )
+  return nil unless match
+  doc_ref = translated_calc_reference(match[1], mmap, columns_by_guid)
+  nested = (columns_by_guid[match[2]] || {})['formula'].to_s
+  conditional = strip_tableau_comments(nested).match(/\ACOUNTD\s*\(\s*(IF\b.*\bEND)\s*\)\z/i)
+  return nil unless doc_ref && conditional
+  expanded = conditional[1].gsub(/\[([^\/\]]+)\]/) do
+    translated_calc_reference(Regexp.last_match(1), mmap, columns_by_guid) ||
+      "[#{Regexp.last_match(1)}]"
+  end
+  sigma_if = translate_dim_calc(expanded, mmap, columns_by_guid)
+  return nil unless sigma_if
+  "(CountDistinct(#{doc_ref}) - CountDistinct(#{sigma_if})) / CountDistinct(#{doc_ref})"
+end
+
+def split_top_level_args(text)
+  args = []
+  buffer = +''
+  paren_depth = 0
+  bracket_depth = 0
+  quote = nil
+  text.to_s.each_char do |char|
+    if quote
+      quote = nil if char == quote
+      buffer << char
+      next
+    end
+    if %w[' "].include?(char)
+      quote = char
+    elsif char == '['
+      bracket_depth += 1
+    elsif char == ']' && bracket_depth.positive?
+      bracket_depth -= 1
+    elsif bracket_depth.zero?
+      paren_depth += 1 if char == '('
+      paren_depth -= 1 if char == ')' && paren_depth.positive?
+      if char == ',' && paren_depth.zero?
+        args << buffer.strip
+        buffer = +''
+        next
+      end
+    end
+    buffer << char
+  end
+  args << buffer.strip unless buffer.strip.empty?
+  args
+end
+
+def parse_tableau_function_call(text, function_name)
+  source = text.to_s.strip
+  match = source.match(/\A#{Regexp.escape(function_name)}\s*\(/i)
+  return nil unless match
+  index = match.end(0)
+  start = index
+  depth = 1
+  bracket_depth = 0
+  quote = nil
+  while index < source.length
+    char = source[index]
+    if quote
+      quote = nil if char == quote
+    elsif %w[' "].include?(char)
+      quote = char
+    elsif char == '['
+      bracket_depth += 1
+    elsif char == ']' && bracket_depth.positive?
+      bracket_depth -= 1
+    elsif bracket_depth.zero?
+      depth += 1 if char == '('
+      if char == ')'
+        depth -= 1
+        if depth.zero?
+          return [split_top_level_args(source[start...index]), source[(index + 1)..].to_s.strip]
+        end
+      end
+    end
+    index += 1
+  end
+  nil
+end
+
 # extra_fns: additional Sigma function names the residue validator should
 # accept (the window-calc path passes WINDOW_SIGMA_FNS so Cumulative*/Moving*/
 # Rank/Lag/... formulas validate; plain ratio decomposition passes none).
 def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [])
-  s = formula.to_s.gsub(/\s+/, ' ').strip
+  s = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
   return nil if s.empty?
+  sla = translate_sla_ratio(s, mmap, columns_by_guid)
+  return sla if sla
   # Resolve Tableau-internal GUID refs ([d3b60b0e-…]) to their captions first —
   # worksheet calc formulas reference columns by GUID, not caption.
   s = s.gsub(/\[([0-9a-f\-]{36})\]/i) do
@@ -729,16 +843,22 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
   # IIF(c, t, e) → If(c, t, e) so guarded ratios (divide-by-zero protection)
   # survive the decomposition.
   s = s.gsub(/\bIIF\s*\(/i, 'If(')
-  if (percentile = s.match(/\APERCENTILE\s*\(\s*(.+)\s*,\s*([0-9.]+)\s*\)\s*(.*)\z/i))
-    value = percentile[1].strip
+  if (percentile = parse_tableau_function_call(s, 'PERCENTILE')) && percentile[0].length == 2
+    value, raw_arg = percentile[0]
     translated_value =
       if value =~ /\AIF\b.*\bEND\z/i
         translate_dim_calc(value, mmap, columns_by_guid)
       elsif (column = value.match(/\A\[([^\]]+)\]\z/))
-        mapped = map_column(column[1], mmap)
-        "[Master/#{mapped ? mapped['name'] : column[1]}]"
+        translated_calc_reference(column[1], mmap, columns_by_guid)
       end
-    return "PercentileCont(#{translated_value}, #{percentile[2]}) #{percentile[3]}".strip if translated_value
+    percentile_arg =
+      if raw_arg =~ /\A[0-9.]+\z/
+        raw_arg
+      elsif (parameter = raw_arg.match(/\A\[Parameters?\]\s*\.\s*\[([^\]]+)\]\z/i))
+        info = (columns_by_guid || {})[parameter[1]]
+        param_control_ref((info && info['caption']) || parameter[1])
+      end
+    return "PercentileCont(#{translated_value}, #{percentile_arg}) #{percentile[1]}".strip if translated_value && percentile_arg
   end
   if (conditional = s.match(/\A(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*(IF\b.*\bEND)\s*\)\s*(.*)\z/i))
     row_formula = translate_dim_calc(conditional[2], mmap, columns_by_guid)
@@ -783,8 +903,12 @@ end
 # date/logic functions, rewrites bare refs to [Master/...]. Returns nil when
 # the result still contains constructs we can't vouch for.
 def translate_row_level_calc(formula, mmap, columns_by_guid = {})
-  s = formula.to_s.gsub(/\s+/, ' ').strip
+  s = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
   return nil if s.empty?
+  if (wrapped_if = s.match(/\A\(?\s*(IF\b.*\bEND)\s*\)?\s*(.*)\z/i))
+    translated_if = translate_dim_calc(wrapped_if[1], mmap, columns_by_guid)
+    return "#{translated_if} #{wrapped_if[2]}".strip if translated_if
+  end
   s = s.gsub(/\[([0-9a-f\-]{36})\]/i) do
     info = columns_by_guid[Regexp.last_match(1)]
     info && info['caption'] ? "[#{info['caption'].strip}]" : Regexp.last_match(0)
@@ -842,7 +966,7 @@ end
 #   IF c THEN r [ELSEIF c2 THEN r2]* [ELSE e] END -> nested If(...)
 # Returns nil when the construct isn't recognized.
 def translate_dim_calc(formula, mmap, columns_by_guid = {})
-  s = formula.to_s.gsub(/\s+/, ' ').strip
+  s = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
   return nil if s.empty?
   s = s.gsub(/\[([0-9a-f\-]{36})\]/i) do
     info = columns_by_guid[Regexp.last_match(1)]
@@ -2268,8 +2392,9 @@ LOD_AGG_FN = { 'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
                'COUNT' => 'Count', 'COUNTD' => 'CountDistinct', 'MEDIAN' => 'Median' }.freeze
 
 def decompose_nested_fixed(formula)
-  return nil unless formula.to_s.scan(/\{\s*FIXED/i).length >= 2
-  s = formula.gsub(/\s+/, ' ').strip
+  active_formula = strip_tableau_comments(formula)
+  return nil unless active_formula.scan(/\{\s*FIXED/i).length >= 2
+  s = active_formula.gsub(/\s+/, ' ').strip
   chain = []
   k = 0
   # Innermost-first: a {FIXED ...} whose body holds no further brace. After
@@ -3070,9 +3195,9 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
                   "[#{plan['control_id']}] (#{psw['cases'].size} option(s))#{drp}: #{plan['sibling_form'].gsub(/\s+/, ' ')[0..100]}"
       next
     end
-    ws_calc = (z['calculations'] || []).find do |c|
-      c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(uv['name'])
-    end
+    ws_calc = worksheet_calculation_for(
+      z['calculations'], uv['name'], uv['raw'], uv['col']['name']
+    )
     next unless ws_calc
     plan = translate_window_calc(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
     record_window_calc(z, ws_calc, plan, mode: 'pivot-value') if plan
