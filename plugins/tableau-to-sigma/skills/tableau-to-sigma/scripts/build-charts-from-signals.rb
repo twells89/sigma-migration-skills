@@ -989,7 +989,7 @@ def translate_boolean_filter_calc(formula, mmap, columns_by_guid, parameters)
   end
   source = source.gsub(/\[Parameters?\]\s*\.\s*\[([^\]]+)\]/i) do
     token = Regexp.last_match(1)
-    "[#{param_control_ref(parameter_names[token] || token)}]"
+    param_control_ref(parameter_names[token] || token)
   end
   source = source.gsub(/\[([^\]]+)\]/) do
     token = Regexp.last_match(1).strip
