@@ -3,7 +3,8 @@
 
 source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
 %w[
-  map_column qualify_master_formula strip_tableau_comments worksheet_calculation_for
+  map_column qualify_master_formula rewrite_page_control_text
+  strip_tableau_comments worksheet_calculation_for
   translate_row_level_calc translate_dim_calc
   translated_calc_reference translate_sla_ratio canonical_switch_value
   split_top_level_args parse_tableau_function_call
@@ -203,6 +204,16 @@ check.call(
   qualified_master_formula ==
     'If([Master/VERIFICATION_FLOW_TYPE] = "UNKNOWN", Null, [Master/Measure Value])',
   "master-derived formulas are qualified for chart reuse (got #{qualified_master_formula.inspect})"
+)
+dynamic_title = rewrite_page_control_text(
+  'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}}',
+  { 'ctl-period' => 'ctl-period-page' },
+  { 'ctl-start' => '2026-08-18', 'ctl-end' => '2026-09-17', 'ctl-period' => 'Daily' }
+)
+check.call(
+  dynamic_title ==
+    'From 2026-08-18 to 2026-09-17 by {{[ctl-period-page]}}',
+  "pruned title-only controls resolve to defaults while active controls stay dynamic (got #{dynamic_title.inspect})"
 )
 
 if failures.empty?

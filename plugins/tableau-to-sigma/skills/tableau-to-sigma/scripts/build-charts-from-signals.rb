@@ -1277,6 +1277,19 @@ def qualify_master_formula(formula, mmap)
   end
 end
 
+def rewrite_page_control_text(text, control_rewrites, control_defaults)
+  rewritten = text.to_s.dup
+  control_rewrites.each do |from, to|
+    rewritten.gsub!("{{[#{from}]}}", "{{[#{to}]}}")
+  end
+  active_ids = control_rewrites.values
+  rewritten.gsub(/\{\{\[([^\]]+)\]\}\}/) do |token|
+    control_id = Regexp.last_match(1)
+    next token if active_ids.include?(control_id)
+    control_defaults.fetch(control_id, '')
+  end
+end
+
 # Resolve a calc-bound quick-filter to an ALREADY-materialized master column by
 # the calc's IDENTITY, not a naive caption match (bead: calc-bound-filter wiring
 # / #259). A quick-filter on a calculated field maps to no raw column, so
@@ -9338,6 +9351,18 @@ end
 #                          auto-controls AND a title text duplicated onto each
 #                          page so the customer sees the same filter set on
 #                          every page (Tableau dashboard-level filter semantics).
+control_text_defaults = (param_controls + auto_controls).each_with_object({}) do |control, defaults|
+  value =
+    if control.key?('value')
+      control['value']
+    elsif control['values'].is_a?(Array)
+      control['values'].join(', ')
+    elsif control.key?('startDate') || control.key?('endDate')
+      [control['startDate'], control['endDate']].compact.join(' to ')
+    end
+  defaults[control['controlId']] = value.nil? ? '' : value.to_s
+end
+
 if opts[:pages_mode] == :worksheet
   pages = []
   by_ws = elements.group_by { |e| e['_worksheet'] }
@@ -9382,8 +9407,7 @@ if opts[:pages_mode] == :worksheet
       # an id this page no longer carries and renders nothing.
       %w[name body].each do |field|
         next unless el[field].is_a?(String)
-
-        ctl_rewrites.each { |from, to| el[field] = el[field].gsub("{{[#{from}]}}", "{{[#{to}]}}") }
+        el[field] = rewrite_page_control_text(el[field], ctl_rewrites, control_text_defaults)
       end
       # A set-control-value effect's `control` names a param/auto controlId —
       # the SAME id this page just suffixed above. Without this, an emitted
@@ -9505,8 +9529,7 @@ elsif opts[:pages_mode] == :dashboard
       # as a formula reference (see the page-per-worksheet branch above).
       %w[name body].each do |field|
         next unless el[field].is_a?(String)
-
-        ctl_rewrites.each { |from, to| el[field] = el[field].gsub("{{[#{from}]}}", "{{[#{to}]}}") }
+        el[field] = rewrite_page_control_text(el[field], ctl_rewrites, control_text_defaults)
       end
       # A parameter-action's set-control-value effect names a param/auto
       # controlId — the SAME id this dashboard page just suffixed above via
