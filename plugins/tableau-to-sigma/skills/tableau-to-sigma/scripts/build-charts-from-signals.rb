@@ -5469,16 +5469,17 @@ layout.each do |dash|
     # order can hand a string column to the measure slot (the scatter
     # y=Sum(text) class) — emit the raw column ref + a loud note instead of a
     # dead column. Datatype from the twb column registry; unknown types pass.
-    if (tm = measure_formula.match(/\A(Sum|Avg|Median)\(\[Master\/([^\]]+)\]\)\z/))
+    if (tm = measure_formula.match(/\A(Sum|Avg|Median)\((\[[^\]]+\])\)\z/))
+      text_candidate = tm[2].sub(/\A\[[^\/\]]+\//, '').sub(/\]\z/, '')
       tinfo = (meta['columns_by_guid'] || {}).values.find do |v|
-        v.is_a?(Hash) && v['caption'].to_s.strip.casecmp?(tm[2].strip)
+        v.is_a?(Hash) && v['caption'].to_s.strip.casecmp?(text_candidate.strip)
       end
-      tinfo ||= (meta['columns_by_guid'] || {})[tm[2]]
+      tinfo ||= (meta['columns_by_guid'] || {})[text_candidate]
       if tinfo.is_a?(Hash) && tinfo['datatype'].to_s == 'string'
-        warnings << "'#{cap}' measure #{tm[1]}([#{tm[2]}]) aggregates a TEXT column — emitted the raw column " \
+        warnings << "'#{cap}' measure #{tm[1]}(#{tm[2]}) aggregates a TEXT column — emitted the raw column " \
                     'instead (numeric aggregates over text compile to type=error); the source likely encodes ' \
                     'this on label/shape/detail — VERIFY the tile or re-author'
-        measure_formula = "[Master/#{tm[2]}]"
+        measure_formula = tm[2]
       end
     end
 
