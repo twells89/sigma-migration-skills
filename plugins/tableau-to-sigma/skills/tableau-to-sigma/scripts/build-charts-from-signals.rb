@@ -751,7 +751,7 @@ def translate_sla_ratio(formula, mmap, columns_by_guid)
   nested = (columns_by_guid[match[2]] || {})['formula'].to_s
   conditional = strip_tableau_comments(nested).match(/\ACOUNTD\s*\(\s*(IF\b.*\bEND)\s*\)\z/i)
   return nil unless doc_ref && conditional
-  expanded = conditional[1].gsub(/\[([^\/\]]+)\]/) do
+  expanded = conditional[1].gsub(/\[([^\]]+)\]/) do
     translated_calc_reference(Regexp.last_match(1), mmap, columns_by_guid) ||
       "[#{Regexp.last_match(1)}]"
   end
@@ -952,8 +952,9 @@ def translate_row_level_calc(formula, mmap, columns_by_guid = {})
        .gsub(/\bSTARTSWITH\s*\(/i, 'StartsWith(').gsub(/\bENDSWITH\s*\(/i, 'EndsWith(')
        .gsub(/\bMID\s*\(/i, 'Mid(')
   s = s.gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") } # remaining single-quoted strings
-  out = s.gsub(/\[([^\/\]]+)\]/) do
+  out = s.gsub(/\[([^\]]+)\]/) do
     cap = Regexp.last_match(1).strip
+    next Regexp.last_match(0) if cap.start_with?('Master/') || cap.start_with?('ctl-')
     m = map_column(cap, mmap)
     "[Master/#{m ? m['name'] : cap}]"
   end
@@ -981,8 +982,9 @@ def translate_dim_calc(formula, mmap, columns_by_guid = {})
   return nil if s =~ /\[[0-9a-f\-]{36}\]/i
   s = s.gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") }
   master_ref = lambda do |str|
-    str.gsub(/\[([^\/\]]+)\]/) do
+    str.gsub(/\[([^\]]+)\]/) do
       cap = Regexp.last_match(1).strip
+      next Regexp.last_match(0) if cap.start_with?('Master/') || cap.start_with?('ctl-')
       m = map_column(cap, mmap)
       "[Master/#{m ? m['name'] : cap}]"
     end
