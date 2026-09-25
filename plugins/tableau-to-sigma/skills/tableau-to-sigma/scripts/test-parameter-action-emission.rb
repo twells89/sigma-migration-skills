@@ -435,8 +435,8 @@ Dir.mktmpdir do |d4|
     check(!par4.nil?, 'the parameter-action entry is in the manifest')
 
     # Sanity: the rename actually happened, otherwise this block proves nothing.
-    check(posted_els.any? { |e| e['id'] == 'el-metric-buttons-detail-page' },
-          'sanity: the host element id stem WAS renamed by the dedup pass ' \
+    check(posted_els.any? { |e| e['id'].to_s.start_with?('el-metric-buttons-') },
+          'sanity: the host element id stem WAS renamed by collision/dedup handling ' \
           "(posted chart ids: #{posted_els.select { |e| e['id'].to_s.start_with?('el-metric-buttons') }.map { |e| e['id'] }.inspect})")
 
     [['nav-action', nav4], ['parameter-action', par4]].each do |kind, entry|

@@ -85,7 +85,9 @@ def worksheet_element_id(caption, kpi: false)
   base = "#{prefix}#{slug}"
   $worksheet_element_id_owners ||= {}
   owner = $worksheet_element_id_owners[base]
-  if owner && owner != caption.to_s
+  same_worksheet = owner &&
+                   owner.to_s.strip.downcase == caption.to_s.strip.downcase
+  if owner && !same_worksheet
     digest = Digest::SHA1.hexdigest(caption.to_s)[0, 8]
     resolved = "#{base}-#{digest}"
     ($worksheet_element_id_collisions ||= []) << {
@@ -5210,16 +5212,6 @@ layout.each do |dash|
       if user_agg_formula && !(window_plan && window_plan['mode'] == 'inline')
         warnings << "'#{cap}' measure '#{meas['name']}' is a Tableau User-aggregated calc — emitted its decomposed Sigma formula directly: #{user_agg_formula[0..140]}"
       elsif user_agg_formula.nil? && !(window_plan && window_plan['mode'] == 'two-stage')
-        multi_instance_trend = %w[line area].include?(z['chart_kind'].to_s) &&
-                               [z.dig('rows_shelf', 'raw'), z.dig('cols_shelf', 'raw')]
-                                 .compact.any? { |raw| raw.to_s.include?('+') && raw.to_s.include?(':qk') }
-        if meas_unresolved && !multi_instance_trend
-          warnings << "ZONE DROPPED: '#{cap}' measure '#{meas_hdr}' is a worksheet calculation with no " \
-                      'translated formula and no mapped master column — emitting a guessed ' \
-                      "Sum([Master/#{meas['name']}]) would fail the workbook POST; build the named " \
-                      'LOD/helper calculation, then re-run'
-          next
-        end
         # Fall back to the CSV-header aggregation hint ("Avg. X" → Avg), not a
         # raw column ref (which Sigma's yAxis silently Sum()s — bead z1d0).
         sigma_agg = SIGMA_AGG[infer_csv_agg(meas_hdr) || 'Sum'] || 'Sum'
