@@ -17,6 +17,9 @@ o = Object.new
 # map_column needs the full mmap infra; nil is fine here — refs fall back to the
 # raw caption inside [Master/…], which is all the residue validator inspects.
 o.define_singleton_method(:map_column) { |_cap, _mmap| nil }
+comments = src.match(/^def strip_tableau_comments\b.*?\n^end$/m)
+abort 'test bug: could not extract strip_tableau_comments' unless comments
+o.instance_eval(comments[0])
 defsrc = src.match(/^def translate_row_level_calc\b.*?\n^end$/m)
 abort 'test bug: could not extract translate_row_level_calc' unless defsrc
 o.instance_eval(defsrc[0])

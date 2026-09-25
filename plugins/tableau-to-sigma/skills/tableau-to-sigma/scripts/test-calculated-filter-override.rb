@@ -10,7 +10,10 @@
 require_relative 'lib/ruby_compat'
 DIR = __dir__
 SOURCE = File.read(File.join(DIR, 'build-charts-from-signals.rb'))
-%w[map_column translate_row_level_calc translate_dim_calc master_calc_filter_override].each do |name|
+%w[
+  map_column strip_tableau_comments translate_row_level_calc
+  translate_dim_calc master_calc_filter_override
+].each do |name|
   match = SOURCE.match(/^def #{name}\b.*?\n^end$/m) or abort("could not extract #{name}")
   eval(match[0]) # rubocop:disable Security/Eval -- test-only first-party helper extraction
 end

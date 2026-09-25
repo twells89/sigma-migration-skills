@@ -22,7 +22,10 @@ require_relative 'lib/ruby_compat'
 
 DIR = __dir__
 SRC = File.read(File.join(DIR, 'build-charts-from-signals.rb'))
-%w[deep_gsub! route_multi_ds!].each do |fn|
+%w[
+  strip_tableau_comments translate_sla_ratio translate_user_agg_formula
+  deep_gsub! route_multi_ds!
+].each do |fn|
   m = SRC.match(/^def #{Regexp.escape(fn)}.*?\n^end$/m) or abort("could not extract #{fn}")
   eval(m[0]) # rubocop:disable Security/Eval — test-only extraction of first-party code
 end
