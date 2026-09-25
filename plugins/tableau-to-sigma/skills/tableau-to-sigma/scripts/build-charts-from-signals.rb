@@ -7904,19 +7904,19 @@ unless opts[:no_auto_controls]   # default-on: never miss a .twb parameter/filte
       # Canonicalise so the default matches a control option value (0.→0).
       spec['value'] = canonical_switch_value(p['default_value'])
     elsif p['param_domain'] == 'range' && %w[integer real].include?(p['datatype'])
-      # Numeric range parameter → Sigma `number-range` control (discovered by
-      # gap-scout 2026-05-20, beads-sigma-ebw). Two-handle slider; the single-
-      # value Tableau parameter is rendered as a range with handles initially
-      # collapsed to the default. Bounds are the schema's flat min/max (the old
-      # mode:'between' + values:[…] pair was out-of-schema and never
-      # round-tripped on readback).
-      spec['controlType'] = 'number-range'
+      # A Tableau numeric range parameter is still ONE scalar value. Sigma's
+      # number-range control returns a two-value range, which makes formulas
+      # such as PercentileCont(x, [control]) compile to type=error. Preserve
+      # the scalar contract with a single-handle slider.
+      spec['controlType'] = 'slider'
       min = p['min'] ? (p['datatype'] == 'real' ? p['min'].to_f : p['min'].to_i) : nil
       max = p['max'] ? (p['datatype'] == 'real' ? p['max'].to_f : p['max'].to_i) : nil
-      spec['min'] = min if min
-      spec['max'] = max if max
+      spec['low'] = min if min
+      spec['high'] = max if max
+      spec['mode'] = '='
+      spec['value'] = p['datatype'] == 'real' ? p['default_value'].to_f : p['default_value'].to_i
       spec['includeNulls'] = 'when-no-value-is-selected'
-      warnings << "parameter '#{cap}' is a numeric range — emitted as number-range control (Sigma 2-handle slider; Tableau's single-handle UX needs manual post-publish tweak)"
+      warnings << "parameter '#{cap}' is a scalar numeric range — emitted as a single-handle slider"
     elsif p['param_domain'] == 'range' && %w[date datetime].include?(p['datatype'])
       spec['controlType'] = 'date-range'
       spec['mode'] = 'between'
