@@ -82,6 +82,13 @@ plain_pie['cols_shelf'] = {
 
 gantt = JSON.parse(JSON.generate(base_zone)).merge(
   'id' => '3', 'caption' => 'Level Strip', 'chart_kind' => 'other', 'mark_class' => 'GanttBar', 'y_pct' => 30.0)
+gantt['rows_shelf'] = {
+  'raw' => "#{FED}.[sum:VAL:qk]",
+  'fields' => [{ 'raw' => "#{FED}.[sum:VAL:qk]", 'role' => 'measure',
+                 'derivation' => 'sum', 'discrete' => false, 'guid' => 'VAL' }],
+  'dim_count' => 0, 'measure_count' => 1, 'cont_measure_count' => 1,
+  'has_measure_names' => false, 'has_measure_values' => false
+}
 
 # KPI-adjacent sparkline: dual-instance measure shelf — full trend + a
 # conditional current-period highlight. Must plot the FULL series.
