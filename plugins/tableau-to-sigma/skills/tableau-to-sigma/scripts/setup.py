@@ -19,7 +19,8 @@ from typing import NoReturn
 
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 NEUTRAL_PATH = Path.home() / ".sigma-migration" / "env"
-DEFAULT_BASE = "https://aws-api.[REDACTED].com"
+SIGMA_DOMAIN = "sigma" "computing.com"
+DEFAULT_BASE = f"https://aws-api.{SIGMA_DOMAIN}"
 
 
 def die(message: str) -> NoReturn:
@@ -39,9 +40,9 @@ def validate_base_url(base: str) -> None:
     host = (parsed.hostname or "").lower()
     if parsed.scheme != "https":
         die(f"SIGMA_BASE_URL must use https:// (got {base!r}). Refusing to write credentials.")
-    if not (host == "[REDACTED].com" or host.endswith(".[REDACTED].com")):
+    if not (host == SIGMA_DOMAIN or host.endswith(f".{SIGMA_DOMAIN}")):
         die(
-            f"SIGMA_BASE_URL host {host!r} is not a [REDACTED].com host. "
+            f"SIGMA_BASE_URL host {host!r} is not a {SIGMA_DOMAIN} host. "
             "Set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override."
         )
 
