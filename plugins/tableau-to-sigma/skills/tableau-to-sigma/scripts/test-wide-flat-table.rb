@@ -31,7 +31,9 @@ zone = {
     'raw' => headers.map { |header| "[none:#{header}:nk]" }.join(' / '),
     'fields' => dimensions.map { |header| { 'guid' => header, 'role' => 'dim', 'derivation' => 'none' } } +
                 [{ 'guid' => 'AMOUNT_INTERNAL', 'role' => 'measure', 'derivation' => 'sum' },
-                 { 'guid' => 'SLA_INTERNAL', 'role' => 'measure', 'derivation' => 'usr' }]
+                 { 'guid' => 'SLA_INTERNAL', 'role' => 'measure', 'derivation' => 'usr' }],
+    'dim_count' => dimensions.length,
+    'measure_count' => 2
   },
   'cols_shelf' => { 'raw' => '', 'fields' => [] },
   'channels' => {},
