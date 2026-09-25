@@ -78,6 +78,27 @@ require 'erb'
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
 
+def worksheet_element_id(caption, kpi: false)
+  prefix = kpi ? 'el-kpi-' : 'el-'
+  limit = kpi ? 38 : 40
+  slug = caption.to_s.downcase.gsub(/\W+/, '-')[0..limit].to_s.sub(/-$/, '')
+  base = "#{prefix}#{slug}"
+  $worksheet_element_id_owners ||= {}
+  owner = $worksheet_element_id_owners[base]
+  if owner && owner != caption.to_s
+    digest = Digest::SHA1.hexdigest(caption.to_s)[0, 8]
+    resolved = "#{base}-#{digest}"
+    ($worksheet_element_id_collisions ||= []) << {
+      'base' => base, 'first' => owner, 'second' => caption.to_s, 'resolved' => resolved
+    }
+    $worksheet_element_id_owners[resolved] = caption.to_s
+    resolved
+  else
+    $worksheet_element_id_owners[base] ||= caption.to_s
+    base
+  end
+end
+
 opts = { master_id: 'master' }
 OptionParser.new do |p|
   p.on('--tableau-dir DIR')         { |v| opts[:tab] = v }
@@ -706,6 +727,27 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
   # IIF(c, t, e) → If(c, t, e) so guarded ratios (divide-by-zero protection)
   # survive the decomposition.
   s = s.gsub(/\bIIF\s*\(/i, 'If(')
+  if (percentile = s.match(/\APERCENTILE\s*\(\s*(.+)\s*,\s*([0-9.]+)\s*\)\s*(.*)\z/i))
+    value = percentile[1].strip
+    translated_value =
+      if value =~ /\AIF\b.*\bEND\z/i
+        translate_dim_calc(value, mmap, columns_by_guid)
+      elsif (column = value.match(/\A\[([^\]]+)\]\z/))
+        mapped = map_column(column[1], mmap)
+        "[Master/#{mapped ? mapped['name'] : column[1]}]"
+      end
+    return "PercentileCont(#{translated_value}, #{percentile[2]}) #{percentile[3]}".strip if translated_value
+  end
+  if (conditional = s.match(/\A(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*(IF\b.*\bEND)\s*\)\s*(.*)\z/i))
+    row_formula = translate_dim_calc(conditional[2], mmap, columns_by_guid)
+    if row_formula
+      function = {
+        'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
+        'MEDIAN' => 'Median', 'COUNTD' => 'CountDistinct', 'COUNT' => 'Count'
+      }[conditional[1].upcase]
+      return "#{function}(#{row_formula}) #{conditional[3]}".strip
+    end
+  end
   out = s.gsub(/\b(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*\[([^\]]+)\]\s*\)/i) do
     agg = Regexp.last_match(1).upcase
     col = Regexp.last_match(2)
@@ -755,6 +797,7 @@ def translate_row_level_calc(formula, mmap, columns_by_guid = {})
   s = s.gsub(/\bIIF\s*\(/i, 'If(')
   s = s.gsub(/\bIFNULL\s*\(/i, 'Coalesce(')
   s = s.gsub(/\bABS\s*\(/i, 'Abs(')
+  s = s.gsub(/\bSTR\s*\(/i, 'Text(')
   # Date-part extracts — align with the TS TABLEAU_FUNC_MAP so a row-level date
   # calc auto-translates instead of failing the residue check and dropping to a
   # manual warning (bead tt3z.4). WEEK has NO Sigma Week() fn — it maps to
@@ -785,7 +828,7 @@ def translate_row_level_calc(formula, mmap, columns_by_guid = {})
   residue = out.dup
   residue.gsub!(/"(?:\\.|[^"\\])*"/, '1')
   residue.gsub!(/\[Master\/[^\]]+\]/, '1')
-  residue.gsub!(/\b(DateDiff|DateAdd|DateTrunc|DatePart|Today|Now|If|Coalesce|Abs|Year|Month|Day|Quarter|Hour|Minute|Second|Replace|Upper|Lower|Ltrim|Rtrim|Trim|Left|Right|Len|Contains|StartsWith|EndsWith|Mid)\b/, '')
+  residue.gsub!(/\b(DateDiff|DateAdd|DateTrunc|DatePart|Today|Now|If|Coalesce|Abs|Text|Year|Month|Day|Quarter|Hour|Minute|Second|Replace|Upper|Lower|Ltrim|Rtrim|Trim|Left|Right|Len|Contains|StartsWith|EndsWith|Mid)\b/, '')
   return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
   out
 end
@@ -804,6 +847,7 @@ def translate_dim_calc(formula, mmap, columns_by_guid = {})
     info && info['caption'] ? "[#{info['caption'].strip}]" : Regexp.last_match(0)
   end
   return nil if s =~ /\[[0-9a-f\-]{36}\]/i
+  s = s.gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") }
   master_ref = lambda do |str|
     str.gsub(/\[([^\/\]]+)\]/) do
       cap = Regexp.last_match(1).strip
@@ -2325,10 +2369,61 @@ def remap_param_branch(expr, mmap, columns_by_guid)
   s
 end
 
+def split_outer_tableau_if(formula)
+  text = formula.to_s.gsub(/\s+/, ' ').strip
+  return nil unless text =~ /\AIF\b/i && text =~ /\bEND\z/i
+  head = text.match(/\AIF\s+(.+?)\s+THEN\s+/i)
+  return nil unless head
+  condition = head[1].strip
+  body_start = head.end(0)
+  body = text[body_start...text.rindex(/\bEND\z/i)].to_s.strip
+  depth = 0
+  split_at = nil
+  split_len = 0
+  body.to_enum(:scan, /\b(IF|END|ELSEIF|ELSE)\b/i).each do
+    match = Regexp.last_match
+    token = match[1].upcase
+    if token == 'IF'
+      depth += 1
+    elsif token == 'END'
+      depth -= 1 if depth.positive?
+    elsif depth.zero? && %w[ELSE ELSEIF].include?(token)
+      split_at = match.begin(0)
+      split_len = token.length
+      break
+    end
+  end
+  then_expr = split_at ? body[0...split_at].strip : body
+  else_expr = split_at ? body[(split_at + split_len)..].to_s.strip : nil
+  else_expr = "IF #{else_expr} END" if split_len == 'ELSEIF'.length
+  [condition, then_expr, else_expr]
+end
+
+def translate_nested_param_if(formula, param_captions, mmap, columns_by_guid)
+  parts = split_outer_tableau_if(formula)
+  return nil unless parts
+  condition, then_expr, else_expr = parts
+  match = condition.match(
+    /\A(?:\[Parameters?(?:\s*\([^)]*\))?\]\s*\.\s*)?\[([^\]]+)\]\s*=\s*(.+)\z/i
+  )
+  return nil unless match
+  caption = match[1]
+  return nil unless param_captions.include?(caption)
+  translate_result = lambda do |expr|
+    next 'Null' if expr.nil? || expr.empty?
+    translate_nested_param_if(expr, param_captions, mmap, columns_by_guid) ||
+      translate_dim_calc(expr, mmap, columns_by_guid) ||
+      translate_row_level_calc(expr, mmap, columns_by_guid) ||
+      remap_param_branch(expr, mmap, columns_by_guid)
+  end
+  "Switch(#{param_control_ref(caption)}, #{coerce_case_literal(match[2])}, " \
+    "#{translate_result.call(then_expr)}, #{translate_result.call(else_expr)})"
+end
+
 def translate_case_on_param(formula, param_captions, mmap = nil, columns_by_guid = {})
   return nil unless formula =~ /\bCASE\b/i
   # Strip newlines + collapse spaces
-  s = formula.gsub(/\s+/, ' ').strip
+  s = formula.gsub(%r{//[^\r\n]*}, '').gsub(/\s+/, ' ').strip
   m = s.match(/\bCASE\b\s+(.*?)\s+(WHEN\b.*?)\s+\bEND\b/i)
   return nil unless m
   param_ref = m[1].strip   # the value being switched, e.g. [Parameters].[X] or [X]
@@ -2350,8 +2445,15 @@ def translate_case_on_param(formula, param_captions, mmap = nil, columns_by_guid
   parts = [param_control_ref(param_caption)]
   # when_val = match literal (1, "Region", …) → keep; then_val = result column
   # ref → remap onto [Master/…].
-  pairs.each { |when_val, then_val| parts << coerce_case_literal(when_val); parts << remap_param_branch(then_val, mmap, columns_by_guid) }
-  parts << remap_param_branch(else_expr, mmap, columns_by_guid) if else_expr
+  translate_result = lambda do |expr|
+    translate_row_level_calc(expr, mmap, columns_by_guid) ||
+      remap_param_branch(expr, mmap, columns_by_guid)
+  end
+  pairs.each do |when_val, then_val|
+    parts << coerce_case_literal(when_val)
+    parts << translate_result.call(then_val)
+  end
+  parts << translate_result.call(else_expr) if else_expr
   "Switch(#{parts.join(', ')})"
 end
 
@@ -2359,7 +2461,23 @@ end
 #   IF [Param] = "A" THEN x ELSEIF [Param] = "B" THEN y ELSE z END
 # → Switch([Param], "A", x, "B", y, z)
 def translate_if_chain_on_param(formula, param_captions, mmap = nil, columns_by_guid = {})
-  s = formula.gsub(/\s+/, ' ').strip
+  s = formula.gsub(%r{//[^\r\n]*}, '').gsub(/\s+/, ' ').strip
+  if (percentile = s.match(/\APERCENTILE\s*\(\s*(IF\b.*\bEND)\s*,\s*([0-9.]+)\s*\)\s*(.*)\z/i))
+    switched = translate_nested_param_if(percentile[1], param_captions, mmap, columns_by_guid)
+    return "PercentileCont(#{switched}, #{percentile[2]}) #{percentile[3]}".strip if switched
+  end
+  if (aggregate = s.match(/\A(SUM|AVG|MIN|MAX|COUNTD|COUNT)\s*\(\s*(IF\b.*\bEND)\s*\)\s*(.*)\z/i))
+    switched = translate_nested_param_if(aggregate[2], param_captions, mmap, columns_by_guid)
+    if switched
+      function = { 'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
+                   'COUNTD' => 'CountDistinct', 'COUNT' => 'Count' }[aggregate[1].upcase]
+      return "#{function}(#{switched}) #{aggregate[3]}".strip
+    end
+  end
+  if s =~ /\AIF\b.*\bEND\z/i
+    switched = translate_nested_param_if(s, param_captions, mmap, columns_by_guid)
+    return switched if switched
+  end
   return nil unless s =~ /\bIF\b.*\bEND\b/i
   return nil unless param_captions.any? { |cap| s.include?("[#{cap}]") }
   m = s.match(/\bIF\b\s+(.+?)\s+\bEND\b/i)
@@ -2762,7 +2880,7 @@ end
 
 def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
   cap = z['caption']
-  el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+  el_id = worksheet_element_id(cap)
   rows_shelf = z['rows_shelf'] || {}
   cols_shelf = z['cols_shelf'] || {}
 
@@ -4040,7 +4158,7 @@ end
 # See beads-sigma-bw3.
 def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
   cap = z['caption']
-  el_id = "el-kpi-#{cap.downcase.gsub(/\W+/, '-')[0..38]}".sub(/-$/, '')
+  el_id = worksheet_element_id(cap, kpi: true)
 
   rows_shelf = z['rows_shelf'] || {}
   cols_shelf = z['cols_shelf'] || {}
@@ -4689,7 +4807,7 @@ layout.each do |dash|
       mm_base_hdr = mm_trunc ? dim_hdr.sub(/^(?:second|minute|hour|day|week|month|quarter|year) of /i, '') : dim_hdr
       dimm = (mm_trunc && map_column(mm_base_hdr, mmap)) || map_column(dim_hdr, mmap) ||
              { 'id' => "m-#{dim_hdr.downcase.gsub(/\W+/, '-')}", 'name' => dim_hdr }
-      el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+      el_id = worksheet_element_id(cap)
       mm_dim_formula =
         if mm_trunc == 'week'
           # Tableau weeks are Sunday-anchored (see the week note below).
@@ -4713,8 +4831,10 @@ layout.each do |dash|
       labels.each_with_index do |label, i|
         base = header_base(label)
         ws_calc = (z['calculations'] || []).find do |c|
-          n = mm_norm.call(c['name'])
-          n == mm_norm.call(base) || n == mm_norm.call(label)
+          [c['name'], c['caption']].compact.any? do |candidate|
+            n = mm_norm.call(candidate)
+            n == mm_norm.call(base) || n == mm_norm.call(label)
+          end
         end
         formula = nil
         if ws_calc
@@ -4726,7 +4846,20 @@ layout.each do |dash|
           elsif wp
             warnings << "'#{cap}' measure '#{label}' STAYS MANUAL in the multi-measure chart: #{wp['note']}"
           else
-            formula = translate_user_agg_formula(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
+            pcaps = (meta['parameters'] || []).map { |parameter| parameter['caption'] }.compact
+            pnmap = {}
+            (meta['parameters'] || []).each do |parameter|
+              pname = parameter['name'].to_s.gsub(/^\[|\]$/, '')
+              pnmap[pname] = parameter['caption'] if parameter['caption'] && !pname.empty?
+            end
+            normalized = ws_calc['formula'].to_s.gsub(
+              /(\[Parameters?\]\s*\.\s*\[)([^\]]+)(\])/i
+            ) { "#{Regexp.last_match(1)}#{pnmap[Regexp.last_match(2)] || Regexp.last_match(2)}#{Regexp.last_match(3)}" }
+            formula = translate_if_chain_on_param(
+              normalized, pcaps, mmap, meta['columns_by_guid'] || {}
+            ) || translate_user_agg_formula(
+              ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+            )
           end
         else
           mcol = map_column(base, mmap) || map_column(label, mmap)
@@ -4829,7 +4962,11 @@ layout.each do |dash|
     meas = map_column(meas_hdr, mmap)
     meas_unresolved = meas.nil?
     find_ws_calc = lambda do |hdr|
-      (z['calculations'] || []).find { |c| c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(hdr.to_s.strip) }
+      (z['calculations'] || []).find do |c|
+        [c['name'], c['caption']].compact.any? do |candidate|
+          candidate.to_s.gsub(/^\[|\]$/, '').strip.casecmp?(hdr.to_s.strip)
+        end
+      end
     end
     if dim.nil?
       wc = find_ws_calc.call(dim_hdr)
@@ -4906,7 +5043,8 @@ layout.each do |dash|
     # aggregated (typically a ratio like SUM(a)/COUNT(b)). Wrapping it in
     # Sum([Master/X]) is unresolvable when no master column carries the ratio —
     # decompose the calc formula into a direct Sigma formula instead (bead k3kk).
-    user_agg_formula = chart_pswitch_plan && chart_pswitch_plan['sibling_form']
+    user_agg_formula = nil
+    chart_pswitch_plan_used = false
     window_plan = nil
     window_calc_name = nil
     # Translate the measure's source calc when it's a Tableau User-aggregated calc
@@ -5035,9 +5173,6 @@ layout.each do |dash|
                     "Formula: #{user_calc['formula'].to_s.gsub(/\s+/, ' ')[0..140]}"
         window_plan = nil
       end
-      user_agg_formula ||= (window_plan.nil? || window_plan['mode'] != 'two-stage') && user_calc &&
-                           translate_user_agg_formula(user_calc['formula'], mmap,
-                                                      meta['columns_by_guid'] || {}) || nil
       # Parameter-driven metric/measure SWITCH (bead param-msw): the calc picks
       # which measure the chart shows via a control — SUM(CASE [Parameters].[P]
       # WHEN 0 THEN [A] WHEN 1 THEN [B] END) or IF [P]="x" THEN SUM([A]) ELSE
@@ -5057,15 +5192,29 @@ layout.each do |dash|
           psw_sibling = psw.gsub(%r{\[Master/([^\]]+)\]}) { "[#{Regexp.last_match(1)}]" }
           # Branches already aggregated (IF [P] THEN SUM(x)…) → the Switch IS the
           # measure; bare branches (SUM(CASE…THEN [col])) → wrap in the shelf agg.
-          pre_agg = psw_sibling =~ /\b(?:Sum|Avg|Min|Max|Count|CountDistinct|Median|StdDev|StdDevPop|Variance|VariancePop)\s*\(/
+          pre_agg = psw_sibling =~ /\b(?:Sum|Avg|Min|Max|Count|CountDistinct|Median|PercentileCont|PercentileDisc|StdDev|StdDevPop|Variance|VariancePop)\s*\(/
           shelf_agg = SIGMA_AGG[infer_csv_agg(meas_hdr) || 'Sum'] || 'Sum'
           user_agg_formula = pre_agg ? psw_sibling : "#{shelf_agg}(#{psw_sibling})"
           warnings << "'#{cap}' measure '#{meas_hdr}' is a parameter-driven metric switch — bound to the control-driven Switch on the yAxis: #{user_agg_formula[0..140]}"
         end
       end
+      user_agg_formula ||= (window_plan.nil? || window_plan['mode'] != 'two-stage') && user_calc &&
+                           translate_user_agg_formula(user_calc['formula'], mmap,
+                                                      meta['columns_by_guid'] || {}) || nil
+      if user_agg_formula.nil? && chart_pswitch_plan
+        user_agg_formula = chart_pswitch_plan['sibling_form']
+        chart_pswitch_plan_used = true
+      end
       if user_agg_formula && !(window_plan && window_plan['mode'] == 'inline')
         warnings << "'#{cap}' measure '#{meas['name']}' is a Tableau User-aggregated calc — emitted its decomposed Sigma formula directly: #{user_agg_formula[0..140]}"
       elsif user_agg_formula.nil? && !(window_plan && window_plan['mode'] == 'two-stage')
+        if meas_unresolved
+          warnings << "ZONE DROPPED: '#{cap}' measure '#{meas_hdr}' is a worksheet calculation with no " \
+                      'translated formula and no mapped master column — emitting a guessed ' \
+                      "Sum([Master/#{meas['name']}]) would fail the workbook POST; build the named " \
+                      'LOD/helper calculation, then re-run'
+          next
+        end
         # Fall back to the CSV-header aggregation hint ("Avg. X" → Avg), not a
         # raw column ref (which Sigma's yAxis silently Sum()s — bead z1d0).
         sigma_agg = SIGMA_AGG[infer_csv_agg(meas_hdr) || 'Sum'] || 'Sum'
@@ -5091,7 +5240,7 @@ layout.each do |dash|
       dim_trunc = hm[1].downcase
     end
 
-    el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+    el_id = worksheet_element_id(cap)
 
     # If the dim column is aliased in Tableau (raw → display mapping), wrap the
     # master ref in a Switch() so the chart displays the friendly labels.
@@ -6613,14 +6762,6 @@ layout.each do |dash|
         # rewrite the Switch to reference the sibling `[X]`. Without this the
         # Switch compiles to type "error" (branch refs unresolved).
         branch_refs = translated.scan(/\[Master\/([^\]]+)\]/).flatten.uniq
-        existing_names = (element['columns'] || []).map { |c2| c2['name'] }.compact
-        branch_refs.each do |bname|
-          next if existing_names.include?(bname)
-          bid = "swcol-#{bname.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
-          element['columns'] << { 'id' => bid, 'name' => bname,
-                                  'formula' => "[Master/#{bname}]" }
-          existing_names << bname
-        end
         switch_sibling = translated.gsub(/\[Master\/([^\]]+)\]/) { "[#{Regexp.last_match(1)}]" }
 
         # The mechanical pass emits the worksheet dimension as a passthrough
@@ -6636,8 +6777,18 @@ layout.each do |dash|
         # orphan — only append when nothing carries the Switch yet.
         already_bound = (element['columns'] || []).any? { |col| col['formula'].to_s.include?(switch_sibling) }
         if rewired.zero? && !already_bound
-          calc_id = "calc-#{calc_name.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
-          element['columns'] << { 'id' => calc_id, 'name' => calc_name, 'formula' => switch_sibling }
+          warnings << "'#{cap}' parameter-driven calc #{c['name']} is not bound to this tile's " \
+                      'axes, values, filters, or grouping — translation recorded but no orphan ' \
+                      'workbook column emitted'
+          next
+        end
+        existing_names = (element['columns'] || []).map { |c2| c2['name'] }.compact
+        branch_refs.each do |bname|
+          next if existing_names.include?(bname)
+          bid = "swcol-#{bname.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+          element['columns'] << { 'id' => bid, 'name' => bname,
+                                  'formula' => "[Master/#{bname}]" }
+          existing_names << bname
         end
         warnings << "'#{cap}' parameter-driven calc #{c['name']} → control-driven Switch over " \
                     "#{branch_refs.size} materialized branch col(s) (#{rewired} grouping rewired): #{switch_sibling[0..90]}"
@@ -6681,7 +6832,7 @@ layout.each do |dash|
     # Param measure-picker (n4pi.10): the tile measure was set to the control-
     # driven Switch (sibling form) above — materialise the hidden passthrough
     # sibling cols its branches reference, and register the control for emission.
-    if chart_pswitch_plan
+    if chart_pswitch_plan && chart_pswitch_plan_used
       add_switch_siblings!(element, chart_pswitch_plan['branch_refs'])
       $param_switch_used << chart_pswitch_plan['control_id'] unless $param_switch_used.include?(chart_pswitch_plan['control_id'])
       warnings << "'#{cap}' measure '#{meas_hdr}' is a parameter measure-picker → control-driven Switch over " \
