@@ -6119,7 +6119,12 @@ layout.each do |dash|
                 /\A(?:Sum|Avg|Min|Max|Median|Count|CountDistinct)\(\[Master\/#{Regexp.escape(meas_name)}\]\)\z/
               )
             value_formula =
-              if fagg == 'Avg' && !simple_master_measure
+              if !simple_master_measure && meas_name.include?('/')
+                # Sigma parses `/` inside a bare local ref as
+                # [element/column]. Reuse the already-qualified plotted
+                # formula instead of emitting an invalid [A/B] reference.
+                meas_col_obj['formula']
+              elsif fagg == 'Avg' && !simple_master_measure
                 # A derived/parameterized plotted measure has no same-named
                 # master column. Reference its chart column directly; the old
                 # [Master/<display name>] hard-failed readback.
