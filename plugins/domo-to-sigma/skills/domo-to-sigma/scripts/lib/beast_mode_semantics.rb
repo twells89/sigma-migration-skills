@@ -38,6 +38,7 @@ module DomoSigma
 
       rewritten = rewrite_like(sigma)
       rewritten = rewrite_between(rewritten)
+      rewritten = rewrite_string_functions(rewritten)
       rewritten = rewrite_date_functions(rewritten)
       rewritten = rewrite_mixed_if(rewritten)
       rewritten = rewrite_integer_division(rewritten) if original.include?('/')
@@ -177,6 +178,61 @@ module DomoSigma
         column = Regexp.last_match(1)
         "(#{column} >= #{Regexp.last_match(2)} and #{column} <= #{Regexp.last_match(3)})"
       end
+    end
+
+    def rewrite_string_functions(formula)
+      rewrite_named_functions(
+        formula,
+        'SUBSTRING' => 'Mid',
+        'SUBSTR' => 'Mid',
+      )
+    end
+
+    # Rename function-call identifiers without modifying the same words inside
+    # string literals or [column references].
+    def rewrite_named_functions(formula, mappings)
+      source = formula.to_s
+      output = +''
+      quote = nil
+      index = 0
+
+      while index < source.length
+        char = source[index]
+        following = source[index + 1]
+        if quote
+          output << char
+          if char == '\\' && following
+            output << following
+            index += 2
+          elsif char == quote && following == quote
+            output << following
+            index += 2
+          elsif char == quote
+            quote = nil
+            index += 1
+          else
+            index += 1
+          end
+        elsif char == "'" || char == '"'
+          quote = char
+          output << char
+          index += 1
+        elsif char == '[' && (closing = source.index(']', index + 1))
+          output << source[index..closing]
+          index = closing + 1
+        elsif char.match?(/[A-Za-z_]/)
+          finish = index + 1
+          finish += 1 while finish < source.length && source[finish].match?(/[A-Za-z0-9_]/)
+          name = source[index...finish]
+          call_follows = source[finish..].to_s.match?(/\A\s*\(/)
+          output << (call_follows ? mappings.fetch(name.upcase, name) : name)
+          index = finish
+        else
+          output << char
+          index += 1
+        end
+      end
+      output
     end
 
     def rewrite_date_functions(formula)

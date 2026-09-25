@@ -60,6 +60,10 @@
           "name": "Text_Value"
         },
         {
+          "type": "STRING",
+          "name": "Phone Number"
+        },
+        {
           "type": "LONG",
           "name": "Nullable_Value"
         },

@@ -218,7 +218,7 @@ failure when broken:
 | `LOWER(col)` | `Lower([col])` |
 | `UPPER(col)` | `Upper([col])` |
 | `REPLACE(col, 'a', 'b')` | `Replace([col], "a", "b")` |
-| `SUBSTRING(col, pos, len)` | `Mid([col], pos, len)` (1-based pos in both) |
+| `SUBSTRING(col, pos[, len])` / `SUBSTR(...)` | `Mid([col], pos[, len])` (1-based pos in both; length optional) |
 | `TRIM(col)` | `Trim([col])` |
 
 ---

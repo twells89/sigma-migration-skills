@@ -21,7 +21,7 @@ DOMO_DISCOVERY_DIR="$TMP" DOMO_RUN_DIR="$TMP" ruby "$SKILL/scripts/build-workboo
 ruby -rjson -e '
   dir = ARGV[0]
   formulas = JSON.parse(File.read(File.join(dir, "formulas.json")))
-  abort "expected 38 source-valid formulas, got #{formulas.length}" unless formulas.length == 38
+  abort "expected 39 source-valid formulas, got #{formulas.length}" unless formulas.length == 39
   blocked = formulas.reject { |formula| formula["converted"] != false }
   abort "source-valid formula blocked: #{blocked.map { |formula| formula["name"] }.inspect}" unless blocked.empty?
   by_name = formulas.to_h { |formula| [formula["name"], formula] }
@@ -38,6 +38,7 @@ ruby -rjson -e '
     "Date Curdate Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
     "Comment Block Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
     "Comment Dash Case" => "If([Inquiry Date] > Today(), \"Yes\", \"No\")",
+    "Area Code Substring" => "If(Length([Phone Number]) < 10, \"\", If(Contains([Phone Number], \"@\"), \"\", If(Left([Phone Number], 1) = \"1\", Mid([Phone Number], 2, 3), Left([Phone Number], 3))))",
     "Date Last Day" => "LastDay([Date], \"month\")",
     "Date Monthname" => "MonthName([Date])",
     "Date Weekday Legacy" => "Weekday([Date])",
@@ -63,6 +64,8 @@ ruby -rjson -e '
     abort "#{name} did not become a DM calculated column using Today()" unless
       dm_columns[name] == "If([Inquiry Date] > Today(), \"Yes\", \"No\")"
   end
+  abort "SUBSTRING did not become a DM calculated column using Mid()" unless
+    dm_columns["Area Code Substring"] == expected["Area Code Substring"]
 
   specs = JSON.parse(File.read(File.join(dir, "chart-specs.json")))
   visible = specs.fetch("pages").flat_map { |page| page.fetch("elements") }

@@ -1,8 +1,8 @@
 {
   "schema": "domo-plugin-integrity/v1",
-  "pluginVersion": "0.16.149",
+  "pluginVersion": "0.16.150",
   "files": {
-    ".claude-plugin/plugin.json": "970d51a269010507b00d490079a6545a94a461340738c96bb98302a69a90c340",
+    ".claude-plugin/plugin.json": "0e24f3208dae3e620bd9cb8d05d2518dd31a34dda4ddb86060a51c4c054ac735",
     "skills/domo-to-sigma/SKILL.md": "4222c9ba13ebd9d53437d3fcba510668fdf681ca2fa30c19c9079d0b9be029f8",
     "skills/domo-to-sigma/scripts/migrate-domo.rb": "7b150954b218fa5800c4a7fea36cf7156f36400ad76b6d2d8badeed3042982d7",
     "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "8c4b82a408ebaa34112c137c30566467642dd686dfdd94f354ce46ec85e296be",
@@ -11,7 +11,7 @@
     "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "373f518540cab87b8e8d099e13d8fda650f98257e32bb57540c66b742bc582f2",
     "skills/domo-to-sigma/scripts/check-plugin-integrity.rb": "2d8fb28c64196194f5f21b0ad0cd6fda0388ef7f3b8add2b2ef587886b3ed525",
     "skills/domo-to-sigma/scripts/lib/beast_mode_lod.rb": "90ef9fd563e0cfd2d4f5968af78cfa5954b37fde9ce36e7211f137dae31b216d",
-    "skills/domo-to-sigma/scripts/lib/beast_mode_semantics.rb": "1abda454d6799ae7ca465578d64061efb3a9d1cdf32a052edf15dc78806f187a",
+    "skills/domo-to-sigma/scripts/lib/beast_mode_semantics.rb": "472ed687d88a1ec07c266e48ff1cc6f0a7569744c6ed43b4469d41dd86b82ca8",
     "skills/domo-to-sigma/scripts/lib/plugin_integrity.rb": "45a93ec51883fd762b350d422333d3c4a89893897c99bf3b5d05d1a6baf6b64e"
   }
 }

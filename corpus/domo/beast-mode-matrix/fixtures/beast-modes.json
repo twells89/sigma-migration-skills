@@ -417,5 +417,16 @@
     "persistedOnDataSource": true,
     "sourceFormulaScope": "dataset-api",
     "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_39",
+    "name": "Area Code Substring",
+    "sql": "CASE WHEN LENGTH(`Phone Number`) < 10 THEN '' WHEN CONTAINS(`Phone Number`, '@') THEN '' ELSE CASE WHEN LEFT(`Phone Number`, 1) = '1' THEN SUBSTRING(`Phone Number`, 2, 3) ELSE LEFT(`Phone Number`, 3) END END",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
   }
 ]

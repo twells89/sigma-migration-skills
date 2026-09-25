@@ -149,6 +149,10 @@ semantic_cases = [
   ["CASE WHEN `Value` BETWEEN 10 AND 20 THEN 'Mid' ELSE 'Other' END",
    'If([Value] BETWEEN 10 AND 20, "Mid", "Other")',
    'If(([Value] >= 10 and [Value] <= 20), "Mid", "Other")'],
+  ["CASE WHEN LENGTH(`Phone Number`) < 10 THEN '' WHEN CONTAINS(`Phone Number`, '@') THEN '' ELSE CASE WHEN LEFT(`Phone Number`, 1) = '1' THEN SUBSTRING(`Phone Number`, 2, 3) ELSE LEFT(`Phone Number`, 3) END END",
+   'If(Length([Phone Number]) < 10, "", If(Contains([Phone Number], "@"), "", If(Left([Phone Number], 1) = "1", Substring([Phone Number], 2, 3), Left([Phone Number], 3))))',
+   'If(Length([Phone Number]) < 10, "", If(Contains([Phone Number], "@"), "", If(Left([Phone Number], 1) = "1", Mid([Phone Number], 2, 3), Left([Phone Number], 3))))'],
+  ['SUBSTR(`Phone Number`, 2)', 'Substr([Phone Number], 2)', 'Mid([Phone Number], 2)'],
   ["DATE_FORMAT(`Date`, '%Y-%m')", 'Date_format([Date], "%Y-%m")',
    'DateFormat([Date], "%Y-%m")'],
   ["STR_TO_DATE(`Date_Text`, '%m/%d/%Y')", 'Str_to_date([Date_Text], "%m/%d/%Y")',
@@ -191,6 +195,12 @@ ok(DomoSigma::BeastModeSemantics.translate(
      { 'originalSql' => 'FLOOR(`Value`)' }, 'Floor([Value])'
    ).nil?,
    'FLOOR keeps the live-proven row-wise generic translation')
+literal_string_result = DomoSigma::BeastModeSemantics.translate(
+  { 'originalSql' => 'CONCAT(`Text_Value`, "Substring(")' },
+  'Concat([Text_Value], "Substring(")',
+)
+ok(literal_string_result.nil?,
+   'the word Substring inside a string literal is not rewritten as a function')
 [
   'MICROSECOND(`Date`)',
   'PERCENT_RANK() OVER (ORDER BY SUM(`Sales`))',
