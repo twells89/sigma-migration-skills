@@ -92,9 +92,25 @@ z_date = {
   'filters' => [{ 'kind' => 'list', 'members' => ['true'], 'column_caption' => 'As Of Filter' }],
   'aggregations' => { '[REVENUE]' => 'Sum' }
 }
+# Z6: signal-only line with a Color shelf not present in the synthetic
+# dim+measure headers. The .twb channel must still become a Sigma series.
+z_series = {
+  'id' => '6', 'kind' => 'chart', 'caption' => 'Sales by Category', 'chart_kind' => 'line',
+  'x_pct' => 0.0, 'y_pct' => 65.0, 'w_pct' => 45.0, 'h_pct' => 25.0,
+  'rows_shelf' => { 'raw' => "#{FED}.[sum:SALES:qk]",
+                    'fields' => [{ 'guid' => 'SALES', 'role' => 'measure', 'derivation' => 'sum' }],
+                    'measure_count' => 1 },
+  'cols_shelf' => { 'raw' => "#{FED}.[none:AS_OF_DATE:nk]",
+                    'fields' => [{ 'guid' => 'AS_OF_DATE', 'role' => 'dim', 'derivation' => 'none' }],
+                    'dim_count' => 1 },
+  'channels' => { 'color' => { 'column' => "#{FED}.[none:CATEGORY:nk]" } },
+  'measures' => [{ 'column' => '[SALES]', 'derivation' => 'Sum' }],
+  'aggregations' => { '[SALES]' => 'Sum', '[AS_OF_DATE]' => 'None', '[CATEGORY]' => 'None' },
+  'filters' => []
+}
 
 layout = [{ 'dashboard' => 'Dash', 'is_story' => false, 'canvas_px' => { 'w' => 1200, 'h' => 800 },
-            'zones' => [z_pill, z_kpi, z_pie, z_donut, z_date] }]
+            'zones' => [z_pill, z_kpi, z_pie, z_donut, z_date, z_series] }]
 meta = {
   'worksheets' => {}, 'stories' => [], 'shared_filters' => [], 'column_aliases' => {},
   'parameters' => [{ 'name' => '[As of Date]', 'caption' => 'As of Date', 'datatype' => 'date',
@@ -164,6 +180,15 @@ kpi = els.find { |e| e['kind'] == 'kpi-chart' && name_of.call(e) == 'Total Order
 kcol = kpi && (kpi['columns'] || []).first
 check(kcol && kcol['formula'] == 'Sum([Master/Number of Records])',
       "row-count KPI binds Sum([Master/Number of Records]) (got #{kcol && kcol['formula']})", fails)
+
+puts 'signal-only categorical color shelf'
+series = els.find { |e| e['name'].to_s == 'Sales by Category' }
+color_id = series && series.dig('color', 'column')
+color_col = series && Array(series['columns']).find { |column| column['id'] == color_id }
+check(color_col && color_col['name'] == 'Category',
+      "Color shelf becomes a categorical Sigma series column (got #{color_col.inspect})", fails)
+check(log.include?("recovered Color shelf 'Category' from .twb signals"),
+      'signal-only color recovery is stated in the build log', fails)
 
 puts 'donut discriminator needs the stacked dual axis'
 pie = els.find { |e| e['name'].to_s == 'Category Pie' }

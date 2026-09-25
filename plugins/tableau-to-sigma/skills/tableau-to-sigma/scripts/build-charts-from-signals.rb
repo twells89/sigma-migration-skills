@@ -5308,6 +5308,14 @@ layout.each do |dash|
         color_dim = dim.dup
         warnings << "'#{cap}' uses '#{color_caption}' on both the axis and Color shelf — " \
                     'emitted a duplicate category column for Sigma color-channel exclusivity'
+      elsif !color_caption.empty? && (mapped_color = map_column(color_caption, mmap))
+        # Signal-only embedded worksheets often have no per-sheet CSV, so the
+        # synthetic two-column header cannot expose the Color shelf as a third
+        # column. The .twb channel is still authoritative: materialize it from
+        # the master so line/bar series do not collapse into one blue trace.
+        color_dim = mapped_color
+        warnings << "'#{cap}' recovered Color shelf '#{color_caption}' from .twb signals — " \
+                    'emitted a categorical Sigma color/series column'
       end
     end
 
