@@ -22,7 +22,7 @@
 #
 # And until now domo emitted NO coverage.json: grep shows the only mentions in
 # the skill are the two READERS (assert-phase6-ran.rb, lib/degradation_ledger.rb).
-# powerbi and tableau emit one; domo does not. Bead [bead] has tracked
+# powerbi and tableau emit one; domo does not. Bead beads-sigma-59mk has tracked
 # porting it since 2026-06-25.
 #
 # NET EFFECT BEFORE THIS SCRIPT: a Domo card that produced no Sigma element was
@@ -46,7 +46,7 @@
 # warning is instead carried at severity 'warning', which DegradationLedger
 # ignores (it reacts only to dropped|degraded) — recorded for the human report,
 # inert to the verdict. Real degraded-detection needs a per-card column census
-# and belongs with's full port.
+# and belongs with bead beads-sigma-59mk's full port.
 require 'json'
 require 'set'
 require 'optparse'

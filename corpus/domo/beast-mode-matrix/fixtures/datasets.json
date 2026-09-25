@@ -8,6 +8,14 @@
           "name": "Date"
         },
         {
+          "type": "DATETIME",
+          "name": "Inquiry Date"
+        },
+        {
+          "type": "DATETIME",
+          "name": "Current Date"
+        },
+        {
           "type": "STRING",
           "name": "Date_Text"
         },
@@ -54,6 +62,10 @@
         {
           "type": "STRING",
           "name": "Text_Value"
+        },
+        {
+          "type": "STRING",
+          "name": "Phone Number"
         },
         {
           "type": "LONG",

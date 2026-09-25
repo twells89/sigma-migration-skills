@@ -5,22 +5,22 @@ Shared across every migration skill (vendored identically into each plugin's
 scripts/). When the gap scout can't find a working Sigma translation for a
 source feature, the main agent offers the user the *option* to open a tracking
 issue in the appropriate repo. This script is what turns that "yes" into filed
-issues — with dedupe, repo routing, and cross-linked mirroring.
+issues — with dedupe, repo routing, converter-repo mirroring, and a cross-linked
+bead.
 
 DESIGN: opt-in, never automatic.
   - Default (no --yes): DRY RUN. Prints the drafted issue(s), the target repo(s),
-    and any existing open issues that already cover this gap. Files NOTHING.
+    and any existing open issues/beads that already cover this gap. Files NOTHING.
     This is what the agent shows the user.
   - With --yes: actually files. Skips any repo where dedupe already found a match
     (unless --force).
 
-ROUTING (category -> repos): every category files against this public repo —
-converter/builder/skill gaps are all tracked here, distinguished by the
-`category:<name>` label, so there is a single public place to look.
-  converter  -> sigmacomputing/sigma-migration-skills   (a source expression the
-                *converter* failed to translate)
-  builder    -> sigmacomputing/sigma-migration-skills   (workbook/DM spec builder gap)
-  skill      -> sigmacomputing/sigma-migration-skills   (skill-logic / discovery gap)
+ROUTING (category -> repos):
+  converter  -> twells89/sigma-data-model-manager + twells89/sigma-data-model-mcp
+               (a source expression the *converter* failed to translate — the
+                browser tool and the MCP must stay in sync, so mirror to both)
+  builder    -> twells89/sigma-migration-skills   (workbook/DM spec builder gap)
+  skill      -> twells89/sigma-migration-skills   (skill-logic / discovery gap)
 
 Usage (dry-run draft the agent shows the user):
   python3 scout/escalate-gap.py \
@@ -35,20 +35,22 @@ Usage (dry-run draft the agent shows the user):
 
 Then, only if the user says yes, the agent re-runs the same command with --yes.
 
-Requires `gh` on PATH and authed for the target repo.
+Requires `gh` on PATH and authed for the target repos. `bd` (beads) optional.
 Exit codes: 0 = ok (drafted or filed), 3 = nothing fileable / gh missing on --yes.
 """
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 
 ROUTES = {
-    "converter": ["sigmacomputing/sigma-migration-skills"],
-    "builder":   ["sigmacomputing/sigma-migration-skills"],
-    "skill":     ["sigmacomputing/sigma-migration-skills"],
+    "converter": ["twells89/sigma-data-model-manager", "twells89/sigma-data-model-mcp"],
+    "builder":   ["twells89/sigma-migration-skills"],
+    "skill":     ["twells89/sigma-migration-skills"],
 }
+BEADS_DIR = os.path.expanduser("~/.beads-sigma")
 
 
 def have(cmd):
@@ -114,6 +116,35 @@ def find_dupes(repo, feature, skill):
     return [i for i in items if feat in (i.get("title", "").lower())]
 
 
+def find_bead_dupe(feature):
+    if not (have("bd") and os.path.isdir(BEADS_DIR)):
+        return None
+    ok, out, _ = run(["bd", "list", "--json"], cwd=BEADS_DIR)
+    if not ok or not out:
+        return None
+    try:
+        items = json.loads(out)
+    except Exception:  # noqa: BLE001
+        return None
+    rows = items if isinstance(items, list) else items.get("issues", items.get("beads", []))
+    feat = feature.lower()
+    for b in rows or []:
+        if feat in (str(b.get("title", "")) + str(b.get("summary", ""))).lower():
+            return b.get("id") or b.get("bead_id")
+    return None
+
+
+def create_bead(title, body, skill, category):
+    if not (have("bd") and os.path.isdir(BEADS_DIR)):
+        return None
+    labels = f"sigma-converter,{skill},gap-scout-escalation,category:{category}"
+    ok, out, _ = run([
+        "bd", "create", title, "--priority", "2", "--labels", labels,
+        "--description", body, "--silent",
+    ], cwd=BEADS_DIR)
+    return out.strip() if ok else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--skill", required=True)
@@ -132,6 +163,7 @@ def main():
                     help="actually file. Without it: dry-run, prints the draft only.")
     ap.add_argument("--force", action="store_true",
                     help="file even if a matching open issue already exists")
+    ap.add_argument("--no-beads", action="store_true")
     a = ap.parse_args()
 
     repos = list(dict.fromkeys(ROUTES[a.category] + a.extra_repo))
@@ -141,6 +173,7 @@ def main():
     # Dedupe scan (read-only) up front so the agent can show it to the user.
     gh_ok = have("gh")
     dupes = {r: (find_dupes(r, a.feature, a.skill) if gh_ok else []) for r in repos}
+    bead_dupe = None if a.no_beads else find_bead_dupe(a.feature)
 
     if not a.yes:
         # DRY RUN — this is what the agent presents to the user.
@@ -151,6 +184,7 @@ def main():
             "title": title,
             "body": body,
             "existing_issues": {r: d for r, d in dupes.items() if d},
+            "existing_bead": bead_dupe,
             "gh_available": gh_ok,
             "next_step": "re-run with --yes to file (skips repos already covered)",
         }
@@ -162,7 +196,11 @@ def main():
         print(json.dumps({"status": "error", "error": "gh not on PATH; cannot file"}))
         return 3
 
-    issue_body = body
+    # Bead first (authoritative tracker), so its id can be embedded in issues.
+    bead_id = bead_dupe
+    if bead_id is None and not a.no_beads:
+        bead_id = create_bead(title, body, a.skill, a.category)
+    issue_body = body + (f"\n\n**Bead:** `{bead_id}`" if bead_id else "")
 
     filed, skipped = [], []
     for repo in repos:
@@ -199,10 +237,16 @@ def main():
             link_body = issue_body + "\n\n**Mirrored to:** " + ", ".join(others)
             run(["gh", "issue", "edit", num, "--repo", f["repo"], "--body", link_body])
 
+    # Cross-link the bead back to the filed issue urls.
+    if bead_id and urls and have("bd"):
+        run(["bd", "update", bead_id, "--description",
+             issue_body + "\n\nFiled issues: " + ", ".join(urls)], cwd=BEADS_DIR)
+
     print(json.dumps({
         "status": "filed",
         "filed": filed,
         "skipped_existing": skipped,
+        "bead_id": bead_id,
     }, indent=2))
     return 0
 

@@ -12,7 +12,7 @@
 # (shared/scripts/verify-warehouse.rb, byte-identical across plugins, enforced
 # by check-shared.rb on every commit). Deduping it means editing the canonical,
 # re-running sync-shared.rb, and version-bumping every affected plugin — a
-# fleet-wide change that must not ride a domo feature PR. Bead [bead]
+# fleet-wide change that must not ride a domo feature PR. Bead beads-sigma-2tkm
 # reached the same conclusion for the same reason and was right to.
 #
 # So: this copy stays domo-local until a dedicated shared-file PR moves the

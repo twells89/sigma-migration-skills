@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 #
 # build-parity-exclusions.rb — generate `parity-plan-exclusions.json` for the
-# Phase-6 census. Companion to phase6-parity-domo.rb ().
+# Phase-6 census. Companion to phase6-parity-domo.rb (bead beads-sigma-2tkm).
 #
 # WHY THIS EXISTS
 # ---------------

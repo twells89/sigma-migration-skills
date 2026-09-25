@@ -160,7 +160,7 @@ end
 # the same Tableau workbook reached 3 different recommendations). Fix:
 # fetch all DMs (cheap — one list call per 100), sort by updatedAt desc
 # (recent DMs are usually more relevant), then take the first --limit for
-# parallel spec-fetch + scoring. Stable tiebreaker by name. [bead].
+# parallel spec-fetch + scoring. Stable tiebreaker by name. beads-sigma-3kw.
 all_dms = []
 page = nil
 hard_cap = 500
@@ -284,7 +284,7 @@ threads = 5.times.map do
       r = nil
       # Retry on 429 (Cloudflare burst limit) with exponential backoff. The
       # /v2/dataModels endpoint commonly 429s at >5 concurrent on a live
-      # org — see [bead].
+      # org — see beads-sigma-cn5.
       4.times do |attempt|
         r = http_get("/v2/dataModels/#{dm_id}/spec")
         code = r.code.to_i

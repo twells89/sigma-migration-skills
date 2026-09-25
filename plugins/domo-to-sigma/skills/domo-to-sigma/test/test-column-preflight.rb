@@ -69,7 +69,7 @@ ok(s['suggested_formula'].include?('MakeDate') && s['suggested_formula'].include
    "suggested_formula references MakeDate and the candidate column's Sigma DISPLAY name, got #{s['suggested_formula'].inspect}")
 
 puts '== suggest_derivation: suggested_formula brackets the candidate\'s Sigma-auto-assigned DISPLAY name, ' \
-     'NEVER the raw all-caps warehouse identifier () =='
+     'NEVER the raw all-caps warehouse identifier (bead beads-sigma-nxft) =='
 # Sigma's server Title-Cases every underscore-separated word of a raw warehouse
 # column UNCONDITIONALLY when auto-naming it (confirmed live, 2026-08-03:
 # ORDER_DATE_KEY -> "Order Date Key") -- a formula referencing [ORDER_DATE_KEY]

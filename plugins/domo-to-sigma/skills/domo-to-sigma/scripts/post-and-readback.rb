@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # ── VENDORED (do not edit here) ──────────────────────────────────────────────
-# Source: sigmacomputing/sigma-migration-skills @ a73f833
+# Source: twells89/sigma-migration-skills @ a73f833
 #   plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/post-and-readback.rb
 # Fix upstream and re-vendor; do not diverge this copy. Vendored for the
 # standalone domo-sigma-migration repo (clone-safety) per the domo-build-pipeline plan.
@@ -102,7 +102,7 @@ end
 # Orphan-prevention pre-check: workbook POSTs are create-only. If this is a
 # second invocation in the same conversion, the previous workbook is being
 # orphaned in the customer's My Documents. WARN loudly and emit the PUT
-# alternative. Tracked at [bead] (3-workbook customer regression).
+# alternative. Tracked at beads-sigma-38a (3-workbook customer regression).
 posted_log = File.join(opts[:workdir], 'posted-workbooks.jsonl') if opts[:type] == 'workbook'
 prior_ids = []
 if posted_log && File.exist?(posted_log)
@@ -111,7 +111,7 @@ end
 # Decide POST (create) vs PUT (update existing). An explicit --update-id always
 # wins; otherwise, for a workbook retry, auto-reuse the last id we posted in this
 # conversion so a re-run UPDATES the workbook in place instead of orphaning it
-# ([bead] — the 3-workbook customer regression). DM updates require an
+# (beads-sigma-38a — the 3-workbook customer regression). DM updates require an
 # explicit --update-id (Phase 3 normally reuses a DM via the ref-dm path).
 update_id = opts[:update_id] || (prior_ids.last if opts[:type] == 'workbook' && prior_ids.any?)
 

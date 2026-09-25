@@ -42,7 +42,7 @@
   "lintErrors": [],
   "lintWarnings": [],
   "_source": "formula-override",
-  "note": "hand-authored (historical, as of 2026-07-30): at the time this fixture was pinned, convert_sql_to_sigma_formula could not translate CASE WHEN (bead jva2) -- fixed since in converter-source PR #115. This fixture is a frozen regression pin (inputs/outputs kept byte-stable on purpose), not a claim about current converter behavior."
+  "note": "hand-authored (historical, as of 2026-07-30): at the time this fixture was pinned, convert_sql_to_sigma_formula could not translate CASE WHEN (bead jva2) -- fixed since in sigma-data-model-mcp PR #115. This fixture is a frozen regression pin (inputs/outputs kept byte-stable on purpose), not a claim about current converter behavior."
  },
  {
   "id": "calculation_085bfe29-2f38-4174-bbb4-940fc6a67e90",
@@ -57,7 +57,7 @@
   "lintErrors": [],
   "lintWarnings": [],
   "_source": "formula-override",
-  "note": "hand-authored (historical, as of 2026-07-30): at the time this fixture was pinned, COUNT(DISTINCT x) rendered DISTINCT as a column (bead sqp1) -- fixed since in converter-source PR #115. This fixture is a frozen regression pin (inputs/outputs kept byte-stable on purpose), not a claim about current converter behavior."
+  "note": "hand-authored (historical, as of 2026-07-30): at the time this fixture was pinned, COUNT(DISTINCT x) rendered DISTINCT as a column (bead sqp1) -- fixed since in sigma-data-model-mcp PR #115. This fixture is a frozen regression pin (inputs/outputs kept byte-stable on purpose), not a claim about current converter behavior."
  },
  {
   "id": "calculation_17856417-2309-4dda-be65-d2bb042331b1",

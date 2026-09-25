@@ -26,13 +26,20 @@ eq(display_name('Account.BillingState'), 'Account Billing State', 'dot is a word
 eq(display_name('Account.BillingCountry'), 'Account Billing Country', 'second dotted camelCase column')
 eq(display_name('Account.Name'), 'Account Name', 'dotted single-word column loses its dot too')
 eq(display_name('IsWon'), 'Is Won', 'plain camelCase still splits (Sigma does too)')
+eq(normalize_formula_column_refs(
+     'DateDiff("minute", [Call DateTime], [ResolutionDateTime]) + [RAW_TABLE/Exact Name] & "[Call DateTime]"'
+   ),
+   'DateDiff("minute", [Call Date Time], [Resolution Date Time]) + [RAW_TABLE/Exact Name] & "[Call DateTime]"',
+   'formula refs use DM humanization; qualified refs and bracket text inside strings stay exact')
 
 puts "== build_element =="
 ds = { 'id' => 'ds-1', 'name' => 'Orders',
        'schema' => { 'columns' => [
          { 'name' => 'project_id', 'type' => 'STRING' },
          { 'name' => 'sales_amount', 'type' => 'DECIMAL' },
-         { 'name' => 'order_date', 'type' => 'DATE' } ] } }
+         { 'name' => 'order_date', 'type' => 'DATE' },
+         { 'name' => 'City', 'type' => 'STRING' },
+         { 'name' => 'State', 'type' => 'STRING' } ] } }
 map = { 'connectionId' => 'conn-1', 'database' => 'DB', 'schema' => 'SCH', 'table' => 'ORDERS' }
 proj = [{ 'name' => 'full_region', 'sigmaFormula' => 'Concat([City], ", ", [State])', 'class' => 'projection' }]
 el = build_element(ds, map, proj)
@@ -89,6 +96,76 @@ eq(outcomes.find { |item| item['id'] == 'calculation_window' }['status'], 'defer
    'window formula receives an explicit deferred outcome')
 eq(outcomes.find { |item| item['id'] == 'calculation_bad' }['status'], 'blocked',
    'converted:false formula is blocked rather than emitted')
+
+puts "== Beast Mode refs match camel-humanized physical/override column names =="
+humanized = build_element(
+  {
+    'id' => 'ds-calls',
+    'name' => 'Calls',
+    'schema' => {
+      'columns' => [
+        { 'name' => 'Call DateTime', 'type' => 'DATETIME' },
+        { 'name' => 'ResolutionDateTime', 'type' => 'DATETIME' },
+      ],
+    },
+  },
+  map.merge(
+    'columnOverrides' => {
+      'Call DateTime' => { 'formula' => '[ORDERS/Call DateTime Raw]' },
+    },
+  ),
+  [
+    {
+      'id' => 'calculation_call_age',
+      'name' => 'Call Age',
+      'class' => 'projection',
+      'scope' => 'dataset',
+      'sigmaFormula' => 'DateDiff("minute", [Call DateTime], [ResolutionDateTime])',
+      'converted' => true,
+      'lintErrors' => [],
+    },
+    {
+      'id' => 'calculation_latest_call',
+      'name' => 'Latest Call',
+      'class' => 'aggregate',
+      'scope' => 'dataset',
+      'sigmaFormula' => 'Max([Call DateTime])',
+      'converted' => true,
+      'lintErrors' => [],
+    },
+  ],
+)
+eq(humanized['columns'].find { |column| column['name'] == 'Call Date Time' }['formula'],
+   '[ORDERS/Call DateTime Raw]',
+   'derived column keeps its explicit source formula and receives the humanized display name')
+eq(humanized['columns'].find { |column| column['name'] == 'Call Age' }['formula'],
+   'DateDiff("minute", [Call Date Time], [Resolution Date Time])',
+   'projection references resolve to the humanized DM column names')
+eq(humanized['metrics'].find { |metric_item| metric_item['name'] == 'Latest Call' }['formula'],
+   'Max([Call Date Time])',
+   'aggregate metric references resolve to the same humanized DM column name')
+eq(formula_column_references(
+     'If([Call Date Time] > 0, "[Ignored Ref]", [SOURCE/Qualified])'
+   ),
+   ['Call Date Time'],
+   'symbol-table scanner ignores string content and qualified source paths')
+
+begin
+  validate_element_formula_references!(
+    {
+      'columns' => [
+        { 'id' => 'physical', 'formula' => '[CALLS/Call Date Time]' },
+        { 'id' => 'broken', 'name' => 'Broken Calc', 'formula' => '[Call DateTime] + 1' },
+      ],
+      'metrics' => [],
+    },
+    dataset_id: 'ds-calls',
+  )
+  ok(false, 'preflight rejects a raw mixed camel/spaced reference before POST')
+rescue ArgumentError => e
+  ok(e.message.include?('[Call DateTime]') && e.message.include?('Call Date Time'),
+     'preflight names the unresolved reference and emitted namespace')
+end
 
 puts "== Beast Mode name collisions are deterministic and visible =="
 collision_outcomes = []

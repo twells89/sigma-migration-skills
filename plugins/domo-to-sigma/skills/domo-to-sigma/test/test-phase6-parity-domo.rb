@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # Contract tests for scripts/phase6-parity-domo.rb — the missing PARITY FINALIZER
-# ().
+# (bead beads-sigma-2tkm).
 #
 # Root cause this covers: domo was the ONLY converter of six with no
 # phase6-parity-*.rb finalizer. migrate-domo.rb aimed verify-parity.rb's

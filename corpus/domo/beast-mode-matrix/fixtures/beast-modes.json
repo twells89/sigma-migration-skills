@@ -383,5 +383,61 @@
     "dataType": "LONG",
     "sourceFormulaScope": "card-definition",
     "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_36",
+    "name": "Date Curdate Case",
+    "sql": "CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+    "scope": "dataset",
+    "class": "projection",
+    "cardId": "bm-card-36",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_37",
+    "name": "Comment Block Case",
+    "sql": "/* Retired implementation:\nSUM(SUM(`Sales`)) OVER (ORDER BY `Date`)\n*/\nCASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_38",
+    "name": "Comment Dash Case",
+    "sql": "CASE\n  -- WHEN `Inquiry Date` IS NULL THEN 'Unknown'\n  WHEN `Inquiry Date` > CURDATE() THEN 'Yes'\n  ELSE 'No'\nEND",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_39",
+    "name": "Area Code Substring",
+    "sql": "CASE WHEN LENGTH(`Phone Number`) < 10 THEN '' WHEN CONTAINS(`Phone Number`, '@') THEN '' ELSE CASE WHEN LEFT(`Phone Number`, 1) = '1' THEN SUBSTRING(`Phone Number`, 2, 3) ELSE LEFT(`Phone Number`, 3) END END",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
+  },
+  {
+    "id": "calculation_matrix_40",
+    "name": "Month Split Curdate",
+    "sql": "CASE WHEN DAY(`Current Date`) < DAY(CURDATE()) THEN CONCAT('Days 1-', (DAY(CURDATE()) - 1)) ELSE CONCAT('Days ', DAY(CURDATE()), '-EOM') END",
+    "scope": "dataset",
+    "class": "projection",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api",
+    "dataSourceId": "ds-bm-matrix"
   }
 ]

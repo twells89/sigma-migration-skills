@@ -66,7 +66,7 @@ like Power BI's DAX.
 > measurement on 81 real Beast Modes originally found 74% translating to
 > invalid Sigma: `CASE WHEN` (71% of formulas) wasn't converted to `If()` at
 > all, and `COUNT(DISTINCT x)` rendered `DISTINCT` as a column reference. Both
-> are fixed upstream (converter-source PR #115), and a third defect this
+> are fixed upstream (sigma-data-model-mcp PR #115), and a third defect this
 > fix surfaced — Domo's real ALL-CAPS backtick-quoted columns coming back
 > double-bracketed (`[[Net Revenue]]`) — is also fixed (PR #116). Re-measured
 > on the deduplicated **74-distinct-formula** corpus. Both columns below were
@@ -94,7 +94,7 @@ like Power BI's DAX.
 > untranslatable construct still needs the `formula-overrides.json` sidecar —
 > that mechanism is unchanged and still the right escape hatch, it is just no
 > longer load-bearing for CASE WHEN or COUNT(DISTINCT). One more thing to
-> budget for, now FIXED (2026-08-03):
+> budget for, now FIXED (2026-08-03, bead beads-sigma-nrml):
 > `convert-beast-modes.rb` used to rewrite `WEEKDAY(...)` to `DAYOFWEEK(...)`
 > "for parity," which was *counterproductive* — `WEEKDAY(...)` converts
 > cleanly on its own (Sigma has `Weekday()` by that exact name), but
@@ -361,7 +361,7 @@ ruby scripts/convert-beast-modes.rb --convert  # vendored converter/sql.mjs fill
 ruby scripts/convert-beast-modes.rb --lint     # validate → discovery/formulas.json
 ```
 `--convert` resolves the converter via a 3-tier ladder: the vendored bundle
-(default, no MCP/network), a local `converter-source` build via
+(default, no MCP/network), a local `sigma-data-model-mcp` build via
 `--mcp-dir`/`DOMO_MCP_DIR` (explicit dev opt-in only), or — last resort, bundle
 or `node` absent — exit 10 with the manual `convert_sql_to_sigma_formula`
 + `--converter-out` fallback instructions. Applies the normalizations in

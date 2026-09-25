@@ -40,7 +40,7 @@ FIXTURES = [
   { id: 'D-8', sql: 'ROUND([Margin Pct], 2)',                     expect: 'Round([Margin Pct], 2)' },
   { id: 'D-9', sql: "DATEDIFF('day', [Order Date], [Ship Date])", expect: 'DateDiff("day", [Order Date], [Ship Date])' },
   { id: 'D-10', sql: 'COALESCE([Discount], 0)',                   expect: 'Coalesce([Discount], 0)' },
-  # D-11..D-14 — MySQL 2-arg DATEDIFF/TIMEDIFF (, upstream
+  # D-11..D-14 — MySQL 2-arg DATEDIFF/TIMEDIFF (bead beads-sigma-znvg, upstream
   # PR #122, vendored at source 0641a62). D-9 above only ever covered the 3-arg
   # form; the 2-arg form is what Domo Beast Modes actually emit, and it produced
   # `DateDiff(Today(),[Date])` — wrong arity AND wrong operand order — which is

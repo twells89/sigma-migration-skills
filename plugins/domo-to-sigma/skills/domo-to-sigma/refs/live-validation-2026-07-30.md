@@ -499,7 +499,7 @@ Notes for a real engagement:
 
 ## ⛔ The formula layer is NOT "nearly free" — 74% of real Beast Modes fail — ✅ RESOLVED (PR #115, #116)
 
-> ## ✅ RESOLVED 2026-07-30 — all three bugs fixed upstream (converter-source PR #115, then PR #116)
+> ## ✅ RESOLVED 2026-07-30 — all three bugs fixed upstream (sigma-data-model-mcp PR #115, then PR #116)
 >
 > This section is kept as the **measured historical baseline** — it was true, and it
 > is the reason this fix work happened. It is no longer the current state.
@@ -594,7 +594,7 @@ Real Beast Modes nest this heavily — e.g. a `COUNT(CASE WHEN … THEN … END)
 an outer `CASE WHEN … = 0 THEN … ELSE … END` guard — so a naive regex fix is not
 enough; this needs real conditional-expression handling.
 
-**Fixed 2026-07-30** (converter-source PR #115 / bead `jva2`). Root cause was
+**Fixed 2026-07-30** (sigma-data-model-mcp PR #115 / bead `jva2`). Root cause was
 narrower than it looked: `lookConvertCase` already existed and was correct — the
 bug was that `lookSqlToSigmaRules`'s CASE branch anchors on `/^CASE\b/i`, and Domo
 wraps every Beast Mode in outer parentheses, so `(CASE WHEN …)` always missed the
@@ -613,7 +613,7 @@ out: (Sum([Net Revenue]) / Count([Distinct] [Order Id]))
 `DISTINCT` becomes a bracketed **column reference**. Sigma's form is
 `CountDistinct([Order Id])`.
 
-**Fixed 2026-07-30** (converter-source PR #115 / bead `sqp1`) — the converter
+**Fixed 2026-07-30** (sigma-data-model-mcp PR #115 / bead `sqp1`) — the converter
 now scans to the matching `)`, masks the whole `COUNT(DISTINCT …)` call out (the
 live corpus nests a whole CASE inside one, so a regex on the argument alone was not
 enough), converts the argument recursively, and splices back
@@ -657,7 +657,7 @@ Modes still failed: the corpus's identifier casing convention never exercised Bu
 Snowflake-backed Domo instance's actual naming convention, it was an artifact of
 this corpus's own (mixed-case) sample data.**
 
-**Fixed 2026-07-30** (converter-source PR #116 / bead `qorq`) — the
+**Fixed 2026-07-30** (sigma-data-model-mcp PR #116 / bead `qorq`) — the
 bracket-wrapping pass now masks `[…]` spans before its bare-ALL-CAPS-identifier
 regex runs, so an already-bracketed ref (whatever its case) passes through once,
 not twice. Re-verified live against PR #116: all four Beast Modes above now

@@ -160,7 +160,7 @@ DomoRunState.record(
 )
 
 def rebuild_workbook_artifacts?(opts)
-  opts[:force] || PLUGIN_VERSION_CHANGED
+  opts[:force] || PLUGIN_VERSION_CHANGED || opts[:formulas_rebuilt]
 end
 
 def pop_discovery_refresh_needed?(cards_path)
@@ -672,7 +672,7 @@ def phase_convert_beast_modes!(opts)
   beast_path = File.join(DISCOVERY, 'beast-modes.json')
   unless File.exist?(beast_path)
     skip_phase!('convert-beast-modes', 'no discovery/beast-modes.json present — nothing to translate')
-    return
+    return false
   end
   beast = begin
     JSON.parse(File.read(beast_path))
@@ -686,10 +686,13 @@ def phase_convert_beast_modes!(opts)
   meta_path = File.join(DISCOVERY, 'formulas.meta.json')
   meta = JSON.parse(File.read(meta_path)) rescue {}
   current_sha = Digest::SHA256.file(beast_path).hexdigest
-  if !opts[:force] && File.exist?(formulas_path) && meta['sourceSha256'] == current_sha
+  if !opts[:force] && !PLUGIN_VERSION_CHANGED &&
+     File.exist?(formulas_path) &&
+     meta['sourceSha256'] == current_sha &&
+     meta['pluginVersion'].to_s == PLUGIN_MANIFEST['version'].to_s
     log 'discovery/formulas.json already present — skip (idempotent; pass --force to retranslate)'
     skip_phase!('convert-beast-modes', 'already translated (idempotent skip)')
-    return
+    return false
   elsif !opts[:force] && File.exist?(formulas_path)
     log 'discovery/formulas.json is stale or lacks source provenance — rebuilding from beast-modes.json'
   end
@@ -728,6 +731,10 @@ def phase_convert_beast_modes!(opts)
 
   ok, code, _out = run_script!('convert-beast-modes.rb', '--lint')
   fail_phase!('convert-beast-modes', "--lint step exited #{code}") unless ok
+  final_meta = JSON.parse(File.read(meta_path)) rescue {}
+  File.write(meta_path, JSON.pretty_generate(
+    final_meta.merge('pluginVersion' => PLUGIN_MANIFEST['version'])
+  ))
 
   if unresolved.positive? || unreliable.positive?
     done_phase!('convert-beast-modes',
@@ -737,6 +744,7 @@ def phase_convert_beast_modes!(opts)
     done_phase!('convert-beast-modes',
                 'no residual CASE/infix syntax detected — not a full validity guarantee')
   end
+  true
 end
 
 def phase_build_workbook!(opts)
@@ -978,7 +986,7 @@ def run_offline!(opts)
   hr('capture-visuals')
   skip_phase!('capture-visuals', 'offline: PNG assets (if any) are pre-seeded by the fixture at png/cards/*.png; no live render')
 
-  phase_convert_beast_modes!(opts)
+  opts[:formulas_rebuilt] = phase_convert_beast_modes!(opts)
   phase_derive_presentation!(opts, collect_expected: false)
   phase_build_workbook!(opts)
   control_note = assert_live_control_coverage!(OUT)
@@ -1046,8 +1054,8 @@ def run_live!(opts)
   ) if opts[:folder_id].to_s.empty?
   DomoRunState.record(OUT, 'destination_folder_id' => opts[:folder_id])
   if PLUGIN_VERSION_CHANGED
-    log "plugin updated #{PRIOR_PLUGIN_VERSION} -> #{PLUGIN_MANIFEST['version']}: rebuilding " \
-        'presentation/workbook/layout artifacts while reusing the posted data model'
+    log "plugin updated #{PRIOR_PLUGIN_VERSION} -> #{PLUGIN_MANIFEST['version']}: retranslating formulas " \
+        'and rebuilding dependent data-model/workbook/layout artifacts while updating existing objects'
   end
 
   tier_b = ENV['DOMO_DEV_TOKEN'].to_s.strip.empty?
@@ -1091,16 +1099,19 @@ def run_live!(opts)
 
   require_observed_layout!(opts[:source_dashboard_png])
 
-  phase_convert_beast_modes!(opts)
+  opts[:formulas_rebuilt] = phase_convert_beast_modes!(opts)
 
   # ---- build-dm + its post-and-readback: NOT in the task's phase list, but a
   # hard prerequisite of build-workbook-spec.rb's --dm-ids — see header note.
   hr('build-dm (implicit prerequisite of build-workbook-spec)')
   dm_spec_path = File.join(DISCOVERY, 'dm-spec.json')
-  if !opts[:force] && File.exist?(dm_spec_path)
+  rebuild_dm = opts[:force] || opts[:formulas_rebuilt]
+  if !rebuild_dm && File.exist?(dm_spec_path)
     log 'discovery/dm-spec.json already present — skip (idempotent; pass --force to rebuild)'
     skip_phase!('build-dm', 'already built (idempotent skip)')
   else
+    log 'formula translations changed — rebuilding their dependent data-model spec' if
+      opts[:formulas_rebuilt] && File.exist?(dm_spec_path)
     # Column pre-flight (bead m655): only meaningful once dataset-map.json is
     # human-resolved — the FIRST build-dm.rb attempt below (no dataset-map.json
     # yet) writes dataset-map.template.json and fails, same as before this
@@ -1163,7 +1174,8 @@ def run_live!(opts)
 
   hr('post-and-readback (data-model)')
   dm_ids_path = File.join(OUT, 'dm-ids.json')
-  if !opts[:force] && File.exist?(dm_ids_path)
+  repost_dm = opts[:force] || opts[:formulas_rebuilt]
+  if !repost_dm && File.exist?(dm_ids_path)
     log 'dm-ids.json already present — skip (idempotent; pass --force to re-post)'
     skip_phase!('post-and-readback-dm', 'already posted (idempotent skip)')
   else
@@ -1177,8 +1189,13 @@ def run_live!(opts)
     modes = grounding[:connection_modes].map { |id, friendly| "#{id}=#{friendly ? 'friendly' : 'physical'}" }.join(', ')
     log "connection naming: #{modes}; grounded #{grounding[:rewritten]} formula(s), " \
         "re-keyed #{grounding[:rekeyed]} id(s), re-prefixed #{grounding[:reprefixed]} ref(s)"
-    ok, code, _out = run_script!('post-and-readback.rb', '--type', 'datamodel', '--spec', dm_spec_path,
-                                  '--out', dm_ids_path, '--workdir', OUT)
+    dm_post_args = ['post-and-readback.rb', '--type', 'datamodel', '--spec', dm_spec_path,
+                    '--out', dm_ids_path, '--workdir', OUT]
+    if File.exist?(dm_ids_path)
+      existing_dm_id = (JSON.parse(File.read(dm_ids_path))['dataModelId'] rescue nil)
+      dm_post_args += ['--update-id', existing_dm_id] if existing_dm_id
+    end
+    ok, code, _out = run_script!(*dm_post_args)
     fail_phase!('post-and-readback-dm', "post-and-readback.rb --type datamodel exited #{code}") unless ok
     done_phase!('post-and-readback-dm')
   end

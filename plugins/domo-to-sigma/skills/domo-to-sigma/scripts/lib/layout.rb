@@ -1,5 +1,5 @@
 # ── VENDORED (do not edit here) ──────────────────────────────────────────────
-# Source: sigmacomputing/sigma-migration-skills @ a73f833
+# Source: twells89/sigma-migration-skills @ a73f833
 #   plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/layout.rb
 # Fix upstream and re-vendor; do not diverge this copy. Vendored for the
 # standalone domo-sigma-migration repo (clone-safety) per the domo-build-pipeline plan.

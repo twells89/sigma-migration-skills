@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 # ── VENDORED (do not edit here) ──────────────────────────────────────────────
-# Source: sigmacomputing/sigma-migration-skills @ de9a840
+# Source: twells89/sigma-migration-skills @ de9a840
 #   plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/assert-doctor-ran.rb
 # Fix upstream and re-vendor; do not diverge this copy. Vendored for the
 # standalone domo-sigma-migration repo (clone-safety) per the domo-build-pipeline plan.

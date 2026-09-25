@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 #
 # phase6-parity-domo.rb — the Phase-6 parity FINALIZER for domo-to-sigma.
-# Bead [bead].
+# Bead beads-sigma-2tkm.
 #
 # WHY THIS EXISTS
 # ---------------

@@ -129,7 +129,7 @@ scenario('parity-final.json status=FAIL -> exit 2', 2) do |dir|
   write_json(dir, 'parity-final.json', 'charts_total' => 3, 'charts_pass' => 2, 'status' => 'FAIL', 'mode' => 'live')
 end
 
-puts '== gate 2 (orphan workbooks, [bead]) =='
+puts '== gate 2 (orphan workbooks, beads-sigma-38a) =='
 scenario('2 workbooks POSTed, no cleanup-marker.json -> exit 4', 4) do |dir|
   File.write(File.join(dir, 'posted-workbooks.jsonl'),
              [{ 'id' => 'wb-1' }, { 'id' => 'wb-2' }].map { |h| JSON.generate(h) }.join("\n") + "\n")
