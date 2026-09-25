@@ -1830,7 +1830,8 @@ def detect_trellis_groups(zones)
       end
       next if members.size < 3
       panel_numbers = members.map do |member|
-        member['z']['caption'].to_s[/\A\s*(\d+(?:\.\d+)*)[\s.)]/, 1]
+        title = member['z']['display_title'] || member['z']['caption']
+        title.to_s[/\A\s*(\d+(?:\.\d+)*)[\s.)]/, 1]
       end.compact.uniq
       # Numbered dashboard panels are independently authored sections even
       # when they happen to share one filtered measure template. Collapsing
