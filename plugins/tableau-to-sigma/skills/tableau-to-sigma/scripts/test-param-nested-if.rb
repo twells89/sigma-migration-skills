@@ -24,7 +24,8 @@ master_map = {
   '(?i)^Verification Date$' => { 'id' => 'm-date', 'name' => 'Verification Date' },
   '(?i)^UPLOADED_TS_EST$' => { 'id' => 'm-uploaded', 'name' => 'UPLOADED_TS_EST' },
   '(?i)^DOC_PK$' => { 'id' => 'm-doc', 'name' => 'DOC_PK' },
-  '(?i)^TAT_SETTING$' => { 'id' => 'm-setting', 'name' => 'TAT_SETTING' }
+  '(?i)^TAT_SETTING$' => { 'id' => 'm-setting', 'name' => 'TAT_SETTING' },
+  '(?i)^VERIFIED_PAGES$' => { 'id' => 'm-verified', 'name' => 'VERIFIED_PAGES' }
 }
 formula = <<~TABLEAU
   PERCENTILE(
@@ -115,6 +116,13 @@ columns_by_guid = {
   'Nth Param (copy)_456' => {
     'caption' => 'Nth Percentile - TAT Tierwise',
     'formula' => '0.95'
+  },
+  'Calculation_744219879042306048' => {
+    'caption' => 'No. of uploaded pages',
+    'formula' => <<~TABLEAU
+      IF [Measure Name] = 'UPLOADED_PAGES' THEN [Measure Value] ELSE NULL END
+      // retired source-specific page-count branch
+    TABLEAU
   }
 }
 nth = translate_user_agg_formula(
@@ -151,6 +159,20 @@ caption_matched_calc = worksheet_calculation_for(
 check.call(
   caption_matched_calc && caption_matched_calc['name'] == '[Calculation_75th_TAT]',
   'pivot measures resolve worksheet calculations by display caption'
+)
+Object.const_set(:USER_AGG_FN, {
+  'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
+  'MEDIAN' => 'Median'
+}.freeze) unless Object.const_defined?(:USER_AGG_FN)
+nested_ratio = translate_user_agg_formula(
+  'SUM([VERIFIED_PAGES]) / SUM([Calculation_744219879042306048])',
+  master_map,
+  columns_by_guid
+)
+check.call(
+  nested_ratio ==
+    'Sum([Master/VERIFIED_PAGES]) / Sum(If([Master/Measure Name] = "UPLOADED_PAGES", [Master/Measure Value], NULL))',
+  "aggregates recursively expand referenced row-level calculations (got #{nested_ratio.inspect})"
 )
 
 if failures.empty?

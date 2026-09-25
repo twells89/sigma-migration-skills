@@ -874,7 +874,12 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
     agg = Regexp.last_match(1).upcase
     col = Regexp.last_match(2)
     m   = map_column(col, mmap)
-    ref = "[Master/#{m ? m['name'] : col}]"
+    ref = if m
+            "[Master/#{m['name']}]"
+          else
+            translated_calc_reference(col, mmap, columns_by_guid) ||
+              "[Master/#{col}]"
+          end
     case agg
     when 'COUNT'  then "CountIf(IsNotNull(#{ref}))"
     when 'COUNTD' then "CountDistinct(#{ref})"
@@ -2932,6 +2937,9 @@ def measure_names_members(z, meta)
       # 'usr' routes calc members to the User-derivation resolver (window/ratio
       # translation); plain measures keep their own warehouse aggregation.
       'derivation' => is_calc ? 'usr' : deriv.downcase,
+      # Preserve the shelf aggregation for row-level calculated measures. The
+      # usr route resolves the calc formula, then reapplies this aggregation.
+      'source_derivation' => deriv,
       'raw'        => col_ref,
       'guid'       => guid
     }
@@ -3107,7 +3115,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     # (the Calculation_NNN→caption bridge — n4pi.10).
     user_vals << { 'col' => col_obj, 'name' => m['name'].to_s.strip,
                    'raw' => (field['column'] || field['raw']).to_s,
-                   'shelf' => shelf } if target == :value && %w[usr user].include?(deriv)
+                   'shelf' => shelf,
+                   'source_derivation' => field['source_derivation'] } if target == :value && %w[usr user].include?(deriv)
     case target
     when :row   then rows_by    << { 'columnId' => col_id }
     when :col   then cols_by    << { 'columnId' => col_id }
@@ -3239,6 +3248,15 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
         next
       end
       f = translate_user_agg_formula(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
+      if f.nil? && uv['source_derivation']
+        row_formula = translate_dim_calc(
+          ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+        ) || translate_row_level_calc(
+          ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+        )
+        aggregate = SHELF_AGG_FOR_PREFIX[uv['source_derivation'].to_s.downcase]
+        f = render_agg(aggregate, row_formula) if aggregate && row_formula
+      end
       if f
         uv['col']['formula'] = f
         # Attainment/share ratios (a measure ÷ a goal/target/budget/quota) are
