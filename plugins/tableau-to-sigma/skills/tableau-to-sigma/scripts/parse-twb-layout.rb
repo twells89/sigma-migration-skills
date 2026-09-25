@@ -1829,6 +1829,13 @@ def detect_trellis_groups(zones)
         seen[m] ? false : (seen[m] = true) # distinct members only
       end
       next if members.size < 3
+      panel_numbers = members.map do |member|
+        member['z']['caption'].to_s[/\A\s*(\d+(?:\.\d+)*)[\s.)]/, 1]
+      end.compact.uniq
+      # Numbered dashboard panels are independently authored sections even
+      # when they happen to share one filtered measure template. Collapsing
+      # "21. BS", "22. FORM", "23. PS" removes source titles and positions.
+      next if panel_numbers.size > 1
       orientation = trellis_arrangement(members.map { |a| a['z'] })
       next if orientation.nil? # not a tiled small-multiples layout
       ordered = members.sort_by { |a| a['facets'][fk]['member'].to_s.downcase }

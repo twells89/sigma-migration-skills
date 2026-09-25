@@ -271,6 +271,20 @@ check(sdash && !sdash.key?('trellis'),
 check(chart_elements(sels).size == MEMBERS.size,
       'all sparse source panels remain independent chart elements', fails)
 
+# ---- Numbered dashboard panels are independent authored sections -----------
+puts "\n== NUMBERED repeated worksheets: preserve independent panels =="
+numbered_twb = trellis_twb(:horz)
+MEMBERS.each_with_index do |member, index|
+  numbered_twb = numbered_twb.gsub(
+    "Revenue - #{member}", "#{21 + index}. Revenue - #{member}"
+  )
+end
+ndash, nels, = run_pipeline(numbered_twb, DASH)
+check(ndash && !ndash.key?('trellis'),
+      'distinct numbered panel titles carry NO trellis group', fails)
+check(chart_elements(nels).size == MEMBERS.size,
+      'all numbered source panels remain independent chart elements', fails)
+
 # ---- Non-trellis dashboard is UNCHANGED ------------------------------------
 puts "\n== NON-trellis dashboard: no trellis key, one flat chart =="
 fdash, fels, fxml = run_pipeline(FLAT_TWB, 'One Method')
