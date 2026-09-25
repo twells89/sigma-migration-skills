@@ -299,16 +299,19 @@ def guid_from_param(param)
   # Sourced/Influenced:nk]` resolve instead of returning nil (which dropped
   # those quick-filters entirely). `:` stays excluded — it's the structural
   # `<deriv>:<name>:<qual>` delimiter.
-  m = param.match(%r{\.\[(?:[a-z\-]+:)?([0-9a-f\-]{36}|Calculation_\d+|[A-Za-z_][\w. ()/&-]*)(?::[a-z]+)?\]$}i)
-  return m[1] if m
+  token = '([0-9a-f\\-]{36}|Calculation_\\d+|[^:\\[\\]]+)'
+  m = param.match(%r{\.\[(?:[a-z\-]+:)+#{token}:[a-z]+(?::\d+)?\]$}i) ||
+      param.match(%r{\.\[#{token}\]$}i)
+  return m[1].strip if m
   # DATASOURCE-LEVEL filters (a <filter> child of <datasource> or its <extract>)
   # reference their column WITHOUT the `[federated.X].` prefix — a bare
   # `[Segment]` / `[none:Segment:nk]`. Accept a single bracket group ONLY when
   # the ref carries no `].[` datasource-qualified segment (so worksheet-level
   # refs, which always carry the prefix, are byte-identical to before).
   unless param.include?('].[')
-    m = param.match(%r{\A\[(?:[a-z\-]+:)?([0-9a-f\-]{36}|Calculation_\d+|[A-Za-z_][\w. ()/&-]*)(?::[a-z]+)?\]\z}i)
-    return m[1] if m
+    m = param.match(%r{\A\[(?:[a-z\-]+:)+#{token}:[a-z]+(?::\d+)?\]\z}i) ||
+        param.match(%r{\A\[#{token}\]\z}i)
+    return m[1].strip if m
   end
   nil
 end
@@ -593,6 +596,24 @@ def classify_shelf_field(field_str)
 end
 
 # Parse a `<rows>` or `<cols>` shelf string into a structured summary.
+def split_shelf_fields(shelf_str)
+  fields = []
+  buffer = +''
+  bracket_depth = 0
+  shelf_str.to_s.each_char do |char|
+    bracket_depth += 1 if char == '['
+    bracket_depth -= 1 if char == ']' && bracket_depth.positive?
+    if char == '/' && bracket_depth.zero?
+      fields << buffer
+      buffer = +''
+    else
+      buffer << char
+    end
+  end
+  fields << buffer
+  fields
+end
+
 def parse_shelf(shelf_str)
   out = { 'raw' => shelf_str, 'fields' => [], 'dim_count' => 0,
           'measure_count' => 0, 'cont_measure_count' => 0,
@@ -605,7 +626,7 @@ def parse_shelf(shelf_str)
   # (`([Multiple Values] + [usr:Calc:qk])`), and classifying the whole field as
   # measure-values would drop that real measure and break line/bar inference.
   out['has_measure_values'] = true if shelf_str =~ /\[(?:Multiple|Measure)\s+Values\]/i
-  shelf_str.split('/').each do |f|
+  split_shelf_fields(shelf_str).each do |f|
     # Nested shelves wrap the field list in parens —
     #   `([ds].[none:A:nk] / [ds].[none:B:nk])`
     # — so split('/') leaves a leading '(' on the first field and a trailing
@@ -954,6 +975,20 @@ xml.elements.each('//worksheet') do |ws|
     next unless %w[color size shape detail label tooltip text].include?(ch)
     next if channels.key?(ch) # newer form already captured this channel
     channels[ch] = { column: e.attributes['column'], field: e.attributes['field'] }
+  end
+  # A text-mark KPI can carry its only aggregate on the Text/Label marks card
+  # with empty Rows/Columns shelves (for example MAX([Verification Date])).
+  # Recover that measure so the zero-dimension worksheet is classified as a
+  # KPI instead of a signal-less bar and silently dropped downstream.
+  if measures.empty?
+    %w[text label].each do |channel_name|
+      ref = channels.dig(channel_name, :column) || channels.dig(channel_name, 'column')
+      role, derivation, = classify_shelf_field(ref)
+      guid = guid_from_param(ref)
+      next unless role == :measure && guid
+      measures << { 'column' => "[#{guid}]", 'derivation' => derivation.to_s.capitalize }
+      break
+    end
   end
 
   # Per-worksheet calculated fields. Tableau emits these as

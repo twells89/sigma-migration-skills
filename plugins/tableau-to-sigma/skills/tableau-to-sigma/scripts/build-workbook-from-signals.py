@@ -79,6 +79,7 @@ AGGREGATIONS = {
 }
 USER_DERIVATIONS = {"user", "usr"}
 TRANSLATED_FORMULA_STATUSES = {"spec", "verify", "chart_only"}
+TABLEAU_PSEUDO_FIELDS = {"Multiple Values", "Measure Values"}
 
 
 def read_json(path: Path) -> Any:
@@ -785,7 +786,12 @@ class WorkbookBuilder:
             for item in (zone.get(shelf) or {}).get("fields") or []
             if isinstance(item, dict)
         ]
-        dimensions = [item for item in fields if item.get("role") == "dim"]
+        dimensions = [
+            item
+            for item in fields
+            if item.get("role") == "dim"
+            and str(item.get("guid") or "") not in TABLEAU_PSEUDO_FIELDS
+        ]
         measures = [item for item in fields if item.get("role") == "measure"]
         if not measures:
             measures = [

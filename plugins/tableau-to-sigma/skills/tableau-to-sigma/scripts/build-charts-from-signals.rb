@@ -411,6 +411,7 @@ def synthesize_view_from_signals(z, meta)
   end
   fields = ((z.dig('cols_shelf', 'fields') || []) + (z.dig('rows_shelf', 'fields') || []))
   dims = fields.select { |f| f['role'] == 'dim' }
+               .reject { |f| TABLEAU_PSEUDO_FIELDS.include?(f['guid'].to_s) }
   # v5.4: skip axis-anchor PLACEHOLDER measures (AVG(0) / min(-1.0) — the
   # dummy-axis idiom; on pie marks it's the dual-axis donut-hole hack). They
   # carry no data, and picking one as the synthesized measure header binds the
@@ -418,6 +419,17 @@ def synthesize_view_from_signals(z, meta)
   meas = fields.select do |f|
     next false unless f['role'] == 'measure'
     !placeholder_calc?((cbg[f['guid'].to_s] || {})['formula'])
+  end
+  has_measure_values = z.dig('rows_shelf', 'has_measure_values') ||
+                       z.dig('cols_shelf', 'has_measure_values')
+  if meas.empty? && has_measure_values
+    Array(z['measures']).each do |measure|
+      column = measure['column'].to_s
+      guid = name_or_guid_from_text(column) || column.gsub(/\A\[|\]\z/, '')
+      next if guid.empty? || TABLEAU_PSEUDO_FIELDS.include?(guid)
+      meas << { 'guid' => guid, 'role' => 'measure',
+                'derivation' => measure['derivation'].to_s.downcase }
+    end
   end
   # Include a color-channel dimension if the encoding names one not on a shelf.
   if (cc = z.dig('channels', 'color', 'column'))
@@ -444,6 +456,13 @@ def synthesize_view_from_signals(z, meta)
     meas << { 'guid' => recovered, 'role' => 'measure', 'derivation' => 'none' } if recovered && !recovered.empty?
   end
   headers = (dims.map(&field_header) + meas.map(&field_header)).compact
+  if has_measure_values && dims.any? && meas.any?
+    labels = meas.map(&field_header).compact
+    return {
+      headers: ['Measure Names', field_header.call(dims.first), 'Measure Values'],
+      measure_labels: labels
+    } if labels.any?
+  end
   # Fallback for pie/detail marks: the dimension sits on the color/detail
   # encoding (not rows/cols shelves, and `channels` may be empty), so the only
   # signal is the zone's `aggregations` map — a "None"-aggregated column is the
@@ -510,6 +529,26 @@ def synthesize_view_from_signals(z, meta)
     headers = d2 + m2 if d2.any? && m2.any?
   end
   headers.length >= 2 ? { headers: headers } : nil
+end
+
+def typed_filter_members(filter)
+  members = Array(filter['members'])
+  case filter['datatype'].to_s.downcase
+  when 'boolean'
+    members.map do |member|
+      case member.to_s.strip.downcase
+      when 'true', '1' then true
+      when 'false', '0' then false
+      else member
+      end
+    end
+  when 'integer'
+    members.map { |member| Integer(member, 10) rescue member }
+  when 'real', 'float', 'number'
+    members.map { |member| Float(member) rescue member }
+  else
+    members
+  end
 end
 
 # Tableau reserved placeholder captions that the shelf parser can surface as
@@ -4610,6 +4649,7 @@ layout.each do |dash|
                     "headers=#{synth[:headers].inspect}. Sigma sources the same warehouse so the chart will populate; " \
                     "DATA PARITY for this one tile must be verified manually (no exportable actuals)."
         rows = [synth[:headers]]   # header row only — body stays empty
+        z['_signal_measure_labels'] = synth[:measure_labels] if synth[:measure_labels]
         z['_parity_manual'] = true
         signal_built_tiles << { 'worksheet' => cap, 'view_id' => (view && view['id']) }
       else
@@ -4640,6 +4680,7 @@ layout.each do |dash|
       dim_i   = ([0, 1, 2] - [mn_i, mv_i]).first
       dim_hdr = headers[dim_i].to_s.strip
       labels  = rows.map { |r| r[mn_i] }.compact.map(&:strip).reject(&:empty?).uniq
+      labels = Array(z['_signal_measure_labels']) if labels.empty? && z['_signal_measure_labels']
       mm_trunc = (hm = dim_hdr.match(/^(second|minute|hour|day|week|month|quarter|year) of /i)) && hm[1].downcase
       # For a date-grain header the DateTrunc below must wrap the BASE date column
       # ([Master/Order Date]); resolve the grain-stripped name FIRST so we don't
@@ -6383,7 +6424,7 @@ layout.each do |dash|
           'columnId' => fcol,
           'kind' => 'list', 'mode' => (f['exclude'] ? 'exclude' : 'include'),
           'selectionMode' => 'multiple',
-          'values' => f['members'], 'includeNulls' => 'never'
+          'values' => typed_filter_members(f), 'includeNulls' => 'never'
         }
         if f['exclude']
           warnings << "'#{cap}' EXCLUDE quick filter on '#{fcap}' → Sigma list filter mode:exclude " \
@@ -9774,13 +9815,22 @@ end
 built_n = (defined?(elements) && elements.respond_to?(:size)) ? elements.size : 0
 dropped_n = coverage_unresolved.select { |u| u['severity'] == 'dropped' }.map { |u| u['visual'] }.uniq.size
 by_sev = coverage_unresolved.group_by { |u| u['severity'] }.transform_values(&:size)
+source_chart_zones = Array(layout).sum do |dashboard|
+  Array(dashboard['zones']).count { |zone| zone['kind'].to_s == 'chart' }
+end
+built_chart_elements = Array(elements).count do |element|
+  kind = element['kind'].to_s
+  kind.end_with?('-chart') || %w[table pivot-table region-map point-map].include?(kind)
+end
 coverage_path = opts[:coverage_out] ||
                 File.join(File.dirname(File.expand_path(opts[:out])), 'coverage.json')
 File.write(coverage_path, JSON.pretty_generate(
              { 'version' => 1, 'source' => 'tableau',
                'summary' => {
-                 'sourceVisuals' => built_n + dropped_n,
+                 'sourceVisuals' => source_chart_zones.positive? ? source_chart_zones : built_n + dropped_n,
                  'builtElements' => built_n,
+                 'builtChartElements' => built_chart_elements,
+                 'sourceChartZones' => source_chart_zones,
                  'dropped' => by_sev['dropped'] || 0,
                  'degraded' => by_sev['degraded'] || 0,
                  'approximated' => by_sev['approximated'] || 0,
