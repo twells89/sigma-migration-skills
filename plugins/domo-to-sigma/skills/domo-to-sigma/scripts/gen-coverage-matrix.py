@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gen-coverage-matrix.py — generate refs/<skill>-coverage.md FROM the JSON
 catalogs (refs/catalogs/*.json), so the human-readable coverage matrix can never
-drift from the machine-loaded single source of truth (beads-sigma-kvza).
+drift from the machine-loaded single source of truth ([bead]).
 
   python3 scripts/gen-coverage-matrix.py --catalogs refs/catalogs --skill looker \
       --out refs/looker-coverage.md
@@ -76,7 +76,7 @@ def render(catalogs, skill):
     out.append("")
     out.append("Every documented source construct maps to a real, current Sigma target "
                "or a loud fallback — no silent wrong-defaults, no name-substring "
-               "guessing (beads-sigma-kvza).")
+               "guessing ([bead]).")
     out.append("")
     out.append("**`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at "
                "**query time** in a live migration (no `type=error` column) on the date "

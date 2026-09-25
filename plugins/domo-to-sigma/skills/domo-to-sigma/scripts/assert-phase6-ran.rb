@@ -10,20 +10,20 @@
 #      blank-risk-elements.json. No local candidate → stated SKIP so legacy
 #      live-only runs remain valid.
 #   1. Phase 6 ran (parity-final.json exists, status=PASS, pass-rate met)
-#      → beads-sigma-4pm. Raw-mode: when the source tool is unreachable,
+#      → [bead]. Raw-mode: when the source tool is unreachable,
 #      verify-warehouse.rb writes parity-final.json with
 #      verified_against=warehouse — accepted as PASS but flagged with a loud
 #      banner ("verified vs warehouse, NOT source"). intake.json input_mode=file
 #      without a warehouse-verified parity triggers an advisory WARN.
 #   2. No orphan workbooks left in the customer's My Documents
 #      (posted-workbooks.jsonl has ≤1 entry OR cleanup-marker.json shows
-#      cleanup ran with no failed deletes)  → beads-sigma-38a
+#      cleanup ran with no failed deletes)  → [bead]
 #   3. The live workbook's /columns endpoint shows no column with
 #      type=error (catches circular refs / runtime errors introduced
-#      AFTER the initial POST's column-type guard ran)  → beads-sigma-38a
+#      AFTER the initial POST's column-type guard ran)  → [bead]
 #   4. The workbook has a non-empty layout XML applied (catches the
 #      "elements just listed in a single column" regression where the
-#      agent forgot to PUT a layout)  → beads-sigma-bw3
+#      agent forgot to PUT a layout)  → [bead]
 #   5. Tile census — parity-final.json's `tile_census` field (emitted by the
 #      converter's phase6 finalize when a dashboard zone tree is available)
 #      shows no unexplained dashboard zones without a matching chart in the
@@ -127,10 +127,10 @@
 #   2  parity-final.json exists but status=FAIL / pass-rate below min /
 #      extract-mode without --allow-extract / charts_total==0
 #   3  parity-final.json malformed
-#   4  orphan workbooks left uncleaned (beads-sigma-38a)
-#   5  live workbook has column(s) with type=error (beads-sigma-38a)
+#   4  orphan workbooks left uncleaned ([bead])
+#   5  live workbook has column(s) with type=error ([bead])
 #   6  live workbook has no layout applied — single-column fallback
-#      (beads-sigma-bw3)
+#      ([bead])
 #   7  tile census shows unexplained unmatched dashboard zones beyond
 #      --allow-missing-tiles (bead gjhe)
 #   8  layout lint violations — raw-id display names / orphan controls /
@@ -1167,7 +1167,7 @@ else
     warn "[FAIL] Phase 6 skipped — #{summary_path} does not exist."
     warn "       Run: ruby scripts/phase6-parity.rb --tableau #{opts[:tab]} --workbook-id <id>"
     warn "       then collect actuals via mcp__sigma-mcp-v2__query and re-run with --finalize."
-    warn "       See SKILL.md Phase 6. This is the hard gate (beads-sigma-4pm)."
+    warn "       See SKILL.md Phase 6. This is the hard gate ([bead])."
     warn "       If source parity is genuinely unavailable (no workspace/dataset/warehouse access), waive"
     warn "       with --skip-parity-gate \"<reason>\" and name it in the report — but note the waiver is"
     warn "       CONDITIONAL: it is rejected (exit 18) unless anchors-verdict.json exists and passes"
@@ -1379,7 +1379,7 @@ else
 end
 
 # ---------------------------------------------------------------------------
-# Gate 2 — orphan workbooks (beads-sigma-38a)
+# Gate 2 — orphan workbooks ([bead])
 # ---------------------------------------------------------------------------
 unless opts[:skip_orphan]
   log = File.join(opts[:tab], 'posted-workbooks.jsonl')
@@ -1414,7 +1414,7 @@ unless opts[:skip_orphan]
         end
         warn "       Review: ruby scripts/cleanup-orphan-workbooks.rb --workdir #{opts[:tab]} --keep #{live_id || '<live-workbook-id>'} --dry-run"
         warn '       Then run without --dry-run in an interactive terminal and confirm each deletion.'
-        warn "       See beads-sigma-38a."
+        warn "       See [bead]."
         exit 4
       end
       marker = JSON.parse(File.read(marker_path)) rescue {}
@@ -1478,7 +1478,7 @@ else
 end
 
 # ---------------------------------------------------------------------------
-# Gate 3 — live /columns type=error scan (beads-sigma-38a)
+# Gate 3 — live /columns type=error scan ([bead])
 # Catches circular references and runtime errors that the initial post-and-
 # readback column-type guard missed because they were introduced by later
 # PUTs (layout updates, spec edits during error recovery).
@@ -1570,7 +1570,7 @@ unless opts[:skip_column]
           warn "         element=#{c['elementId']} col=#{c['columnId']} label=#{c['label'].inspect}"
           warn "           formula: #{c['formula']}"
         end
-        warn "       See beads-sigma-38a."
+        warn "       See [bead]."
         exit 5
       elsif !complete
         warn "[SKIP] gate 3/7: the live column scan of #{wb_id} did NOT complete " \
@@ -1658,7 +1658,7 @@ fetch_live_spec = lambda do |wb_id, base, tok|
 end
 
 # ---------------------------------------------------------------------------
-# Gate 4 — layout applied (beads-sigma-bw3)
+# Gate 4 — layout applied ([bead])
 # Fetches the live workbook spec and confirms a non-empty top-level `layout`
 # XML is set, with at least --min-layout-elements canonical <Element> tags.
 # Catches the "agent forgot to PUT a layout" regression where elements
@@ -1729,7 +1729,7 @@ unless opts[:skip_layout]
           warn "       then PUT it:"
           warn "         ruby scripts/put-layout.rb --workbook #{wb_id} \\"
           warn "           --layout #{opts[:tab]}/layout.xml"
-          warn "       See beads-sigma-bw3."
+          warn "       See [bead]."
           exit 6
         elsif legacy_tag_count.positive?
           warn "[FAIL] gate 4/7: layout XML contains #{legacy_tag_count} rejected legacy layout tag(s)."
@@ -1751,7 +1751,7 @@ unless opts[:skip_layout]
           warn "       Rebuild the layout with this skill's layout builder (see SKILL.md —"
           warn "       layout phase) into #{opts[:tab]}/layout.xml, then PUT it:"
           warn "         ruby scripts/put-layout.rb --workbook #{wb_id} --layout #{opts[:tab]}/layout.xml"
-          warn "       See beads-sigma-bw3."
+          warn "       See [bead]."
           exit 6
         else
           puts "[OK] gate 4/7: layout XML applied with #{elem_count} positioned element(s)"

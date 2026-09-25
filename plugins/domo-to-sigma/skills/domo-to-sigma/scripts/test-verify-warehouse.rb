@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # test-verify-warehouse.rb — unit test for raw-mode warehouse verification
 # (verify-warehouse.rb). Offline: element CSVs come from the --fixture seam, never
-# the export API. Canonical in shared/scripts (epic beads-sigma-p5y2).
+# the export API. Canonical in shared/scripts (epic [bead]).
 # Run: ruby scripts/test-verify-warehouse.rb
 require 'json'
 require 'tmpdir'

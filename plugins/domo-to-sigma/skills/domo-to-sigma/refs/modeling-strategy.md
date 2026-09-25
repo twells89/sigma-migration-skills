@@ -93,7 +93,7 @@ moment the model is built, so the user can decide whether a hot dashboard warran
 
 ## Provenance
 
-Benchmark harness, raw results, and per-query numbers: tracked in beads-sigma-o175. Background
+Benchmark harness, raw results, and per-query numbers: tracked in [bead]. Background
 (SQLBI found star schemas superior for VertiPaq; Fivetran found OBTs superior on CDWs) framed the
 question; the numbers above are our own measurement and supersede any general claim for the specific
 purpose of Sigma modeling guidance. Re-run the harness if Sigma's query generation or warehouse
