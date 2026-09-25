@@ -1265,6 +1265,18 @@ def map_column(header, mmap)
   nil
 end
 
+# Master-map formulas are authored on the hidden master table, where bare
+# sibling references such as [UPLOAD_DATE] are valid. Reusing those formulas
+# on a chart/KPI element requires explicit [Master/...] qualification.
+def qualify_master_formula(formula, mmap)
+  formula.to_s.gsub(/\[([^\]]+)\]/) do
+    reference = Regexp.last_match(1).strip
+    next Regexp.last_match(0) if reference.start_with?('Master/', 'Metrics/', 'ctl-')
+    mapped = map_column(reference, mmap)
+    mapped ? "[Master/#{mapped['name']}]" : Regexp.last_match(0)
+  end
+end
+
 # Resolve a calc-bound quick-filter to an ALREADY-materialized master column by
 # the calc's IDENTITY, not a naive caption match (bead: calc-bound-filter wiring
 # / #259). A quick-filter on a calculated field maps to no raw column, so
@@ -1414,6 +1426,10 @@ if (opts[:dashboards] && !opts[:dashboards].empty?) || (opts[:pages] && !opts[:p
   abort("--dashboard/--page matched no dashboard in #{opts[:layout]}") if layout.empty?
 end
 mmap   = JSON.parse(File.read(opts[:mmap]))
+mmap.each_value do |column|
+  next unless column.is_a?(Hash) && column['formula']
+  column['formula'] = qualify_master_formula(column['formula'], mmap)
+end
 meta   = opts[:meta] ? JSON.parse(File.read(opts[:meta])) : { 'worksheets' => {}, 'shared_filters' => [] }
 # Caption → Tableau formula for every calculated field the workbook defines
 # (deduped across worksheets; first definition wins). Lets the shared-filter

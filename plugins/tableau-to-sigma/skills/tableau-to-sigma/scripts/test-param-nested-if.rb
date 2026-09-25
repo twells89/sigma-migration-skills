@@ -3,7 +3,7 @@
 
 source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
 %w[
-  map_column strip_tableau_comments worksheet_calculation_for
+  map_column qualify_master_formula strip_tableau_comments worksheet_calculation_for
   translate_row_level_calc translate_dim_calc
   translated_calc_reference translate_sla_ratio canonical_switch_value
   split_top_level_args parse_tableau_function_call
@@ -194,6 +194,15 @@ check.call(
     requeue_ratio.include?('[Master/Instant/Complete/Requeue]') &&
     requeue_ratio.include?('[Master/VERIFICATION_FLOW_TYPE]'),
   "nested conditional ratio preserves boolean predicates (got #{requeue_ratio.inspect})"
+)
+qualified_master_formula = qualify_master_formula(
+  'If([VERIFICATION_FLOW_TYPE] = "UNKNOWN", Null, [Measure Value])',
+  master_map
+)
+check.call(
+  qualified_master_formula ==
+    'If([Master/VERIFICATION_FLOW_TYPE] = "UNKNOWN", Null, [Master/Measure Value])',
+  "master-derived formulas are qualified for chart reuse (got #{qualified_master_formula.inspect})"
 )
 
 if failures.empty?
