@@ -262,6 +262,15 @@ else
   puts "  SKIP  synthetic pie parsed as #{pgrp['chart_kind'].inspect}, not 'pie' — pie→donut gate covered in build-charts"
 end
 
+# ---- Sparse matches across unrelated sections must NOT collapse ------------
+puts "\n== SPARSE repeated worksheets: no cross-section trellis collapse =="
+sparse_twb = trellis_twb(:vert).gsub("h='18000'", "h='5000'")
+sdash, sels, = run_pipeline(sparse_twb, DASH)
+check(sdash && !sdash.key?('trellis'),
+      'widely separated matching worksheets carry NO trellis group', fails)
+check(chart_elements(sels).size == MEMBERS.size,
+      'all sparse source panels remain independent chart elements', fails)
+
 # ---- Non-trellis dashboard is UNCHANGED ------------------------------------
 puts "\n== NON-trellis dashboard: no trellis key, one flat chart =="
 fdash, fels, fxml = run_pipeline(FLAT_TWB, 'One Method')

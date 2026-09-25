@@ -1782,6 +1782,14 @@ def trellis_arrangement(zs)
   end
   x_spans = zs.map { |z| [z['x_pct'].to_f, z['x_pct'].to_f + z['w_pct'].to_f] }
   y_spans = zs.map { |z| [z['y_pct'].to_f, z['y_pct'].to_f + z['h_pct'].to_f] }
+  bbox_width = x_spans.map(&:last).max - x_spans.map(&:first).min
+  bbox_height = y_spans.map(&:last).max - y_spans.map(&:first).min
+  bbox_area = bbox_width * bbox_height
+  occupied_area = zs.sum { |z| z['w_pct'].to_f * z['h_pct'].to_f }
+  # True small multiples form a compact strip/grid. Matching worksheets spread
+  # across unrelated dashboard sections can share kind/measure/facet filters,
+  # but collapsing them creates one enormous trellis and vacates their panels.
+  return nil unless bbox_area.positive? && occupied_area / bbox_area >= 0.5
   if y_aligned && !x_aligned
     disjoint.call(x_spans) ? 'cols' : nil
   elsif x_aligned && !y_aligned
