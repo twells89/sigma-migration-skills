@@ -3037,8 +3037,8 @@ def measure_names_members(z, meta)
 end
 
 def pivot_hidden_sort_pill?(field)
-  field['role'] == 'measure' &&
-    (field['column'] || field['raw']).to_s.include?(':ok')
+  raw = (field['column'] || field['raw']).to_s
+  field['role'] == 'measure' && raw.include?(':ok') && !raw.include?(':qk')
 end
 
 # ---- Pivot-table emission --------------------------------------------------

@@ -258,6 +258,13 @@ check.call(
   ),
   'measure-shaped :ok pills remain hidden pivot sort keys'
 )
+check.call(
+  !pivot_hidden_sort_pill?(
+    'role' => 'measure',
+    'raw' => '([none:TAT_TIER:ok] * [usr:SLA_RATE:qk])'
+  ),
+  'combined discrete-axis and quantitative-value expressions retain the value pill'
+)
 dynamic_title = rewrite_page_control_text(
   'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}} for <[sqlproxy.x].[none:ORG:nk]>',
   { 'ctl-period' => 'ctl-period-page' },
