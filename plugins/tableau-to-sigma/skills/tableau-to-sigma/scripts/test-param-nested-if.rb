@@ -6,7 +6,7 @@ source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
   map_column qualify_master_formula normalize_mapped_formula
   rewrite_page_control_text
   render_agg aggregate_mapped_measure_formula strip_tableau_comments
-  worksheet_calculation_for translate_boolean_filter_calc
+  worksheet_calculation_for translate_boolean_filter_calc pivot_hidden_sort_pill?
   translate_row_level_calc translate_dim_calc
   translated_calc_reference translate_sla_ratio canonical_switch_value
   split_top_level_args parse_tableau_function_call
@@ -245,6 +245,18 @@ check.call(
     'Date(Coalesce([Master/VERIFICATION_DATE], [Master/UPLOAD_DATE])) >= [ctl-param-start-date] AND ' \
     'Date(Coalesce([Master/VERIFICATION_DATE], [Master/UPLOAD_DATE])) <= [ctl-param-end-date]',
   "parameter-driven date filters become local Sigma formulas (got #{date_filter.inspect})"
+)
+check.call(
+  !pivot_hidden_sort_pill?(
+    'role' => 'dim', 'raw' => '[none:TAT_TIER:ok]'
+  ),
+  'discrete :ok pivot dimensions remain visible grouping axes'
+)
+check.call(
+  pivot_hidden_sort_pill?(
+    'role' => 'measure', 'raw' => '[sum:Rank Key:ok]'
+  ),
+  'measure-shaped :ok pills remain hidden pivot sort keys'
 )
 dynamic_title = rewrite_page_control_text(
   'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}} for <[sqlproxy.x].[none:ORG:nk]>',

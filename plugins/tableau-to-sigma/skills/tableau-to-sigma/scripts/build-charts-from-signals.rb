@@ -3036,6 +3036,11 @@ def measure_names_members(z, meta)
   end
 end
 
+def pivot_hidden_sort_pill?(field)
+  field['role'] == 'measure' &&
+    (field['column'] || field['raw']).to_s.include?(':ok')
+end
+
 # ---- Pivot-table emission --------------------------------------------------
 # Tableau crosstab worksheets (mark=Text or mark=Square with dims on both
 # Rows AND Cols shelves, OR the Measure Names crosstab pattern) translate to
@@ -3217,14 +3222,13 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
   # v5.1 (D4): `:ok` qualified pills are Tableau's HIDDEN SORT KEYS, never
   # displayed values — enrolling them as pivot values shipped ghost columns
   # ("Rank N (copy)_…:ok:9"). Skip them; the shelf-sort path carries ordering.
-  hidden_sort_pill = ->(f) { (f['column'] || f['raw']).to_s.include?(':ok') }
   (rows_shelf['fields'] || []).each do |f|
-    next if hidden_sort_pill.call(f)
+    next if pivot_hidden_sort_pill?(f)
     add_col.call(f, :row, :rows)   if f['role'] == 'dim'
     add_col.call(f, :value, :rows) if f['role'] == 'measure'
   end
   (cols_shelf['fields'] || []).each do |f|
-    next if hidden_sort_pill.call(f)
+    next if pivot_hidden_sort_pill?(f)
     add_col.call(f, :col, :cols)   if f['role'] == 'dim'
     add_col.call(f, :value, :cols) if f['role'] == 'measure'
   end
