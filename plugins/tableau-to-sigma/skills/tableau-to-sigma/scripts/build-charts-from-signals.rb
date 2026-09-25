@@ -6066,6 +6066,10 @@ layout.each do |dash|
     [[dim_csv_idx, dim_col_obj], [color_csv_idx, color_col_obj]].each do |(ci, cobj)|
       next unless null_excl_kinds.include?(kind)
       next if ci.nil? || cobj.nil?
+      # A signal-only worksheet has no exported rows from which to infer
+      # Tableau's null-bucket behavior. Adding Text(IsNotNull(...)) anyway can
+      # filter every row at runtime (case/value coercion differs by backend).
+      next if rows.empty?
       next if rows.any? { |r| r[ci].nil? || r[ci].to_s.strip.empty? } # Tableau kept nulls
       nn_id = "nn-#{cobj['id']}"
       element['columns'] << { 'id' => nn_id, 'name' => "#{cobj['name']} Not Null",
