@@ -6333,11 +6333,21 @@ layout.each do |dash|
       if headers.length > 2 && chart_source_eid == opts[:master_id]
         headers.drop(2).each_with_index do |header, offset|
           header = header.to_s.strip
-          mapped = map_column(header, mmap) ||
-                   { 'id' => "m-#{header.downcase.gsub(/\W+/, '-')}", 'name' => header }
+          mapped = map_column(header, mmap)
+          ws_calc = worksheet_calculation_for(z['calculations'], header, header_base(header))
+          translated_calc = ws_calc && (
+            translate_user_agg_formula(
+              ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+            ) || translate_row_level_calc(
+              ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+            )
+          )
+          mapped ||= { 'id' => "m-#{header.downcase.gsub(/\W+/, '-')}", 'name' => header }
           aliases = (meta['column_aliases'] || {})[mapped['name']] ||
                     (meta['column_aliases'] || {})[header]
-          formula = if mapped['formula']
+          formula = if translated_calc
+                      translated_calc
+                    elsif mapped['formula']
                       mapped['formula']
                     elsif aliases && !aliases.empty?
                       parts = ["[Master/#{mapped['name']}]"]
@@ -6375,6 +6385,11 @@ layout.each do |dash|
       element['columns'].each_with_index do |column, index|
         agg = aggregation_for.call(headers[index], column)
         if agg.nil? || agg == 'None' || DATE_TRUNC.key?(agg)
+          if column['formula'].to_s =~ /\A(?:Sum|Avg|Min|Max|Median|Count|CountDistinct)\(/
+            raw_mapping = map_column(column['name'], mmap)
+            column['formula'] =
+              (raw_mapping && raw_mapping['formula']) || "[Master/#{column['name']}]"
+          end
           column.delete('format') unless column['format'].is_a?(Hash) && column['format']['kind'] == 'datetime'
           group_by << column['id']
         else
