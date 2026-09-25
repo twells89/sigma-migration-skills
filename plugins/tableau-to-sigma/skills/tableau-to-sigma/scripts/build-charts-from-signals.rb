@@ -2446,7 +2446,9 @@ def translate_case_on_param(formula, param_captions, mmap = nil, columns_by_guid
   # when_val = match literal (1, "Region", …) → keep; then_val = result column
   # ref → remap onto [Master/…].
   translate_result = lambda do |expr|
-    translate_row_level_calc(expr, mmap, columns_by_guid) ||
+    row_formula = respond_to?(:translate_row_level_calc, true) ?
+                    translate_row_level_calc(expr, mmap, columns_by_guid) : nil
+    row_formula ||
       remap_param_branch(expr, mmap, columns_by_guid)
   end
   pairs.each do |when_val, then_val|
