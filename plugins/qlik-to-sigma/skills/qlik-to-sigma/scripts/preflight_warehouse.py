@@ -58,25 +58,39 @@ def path_for_table(
     return None, f"table {expected[-1]} is ambiguous on the connection: {rendered}"
 
 
-def list_entries(path: str) -> list[dict[str, Any]]:
+def list_entries(
+    path: str,
+    *,
+    stop_when: Callable[[list[dict[str, Any]]], bool] | None = None,
+) -> list[dict[str, Any]]:
     """Read every page from token- or page-based Sigma list endpoints."""
     rows: list[dict[str, Any]] = []
     next_value: Any = None
     next_key: str | None = None
+    seen_cursors: set[tuple[str, str]] = set()
     while True:
         separator = "&" if "?" in path else "?"
         current = path
         if next_key and next_value is not None:
-            current += separator + urllib.parse.urlencode({next_key: next_value})
+            # Sigma's nextPage can already be URL-encoded. Normalize before
+            # urlencode so `%7B...%7D` does not become `%257B...%257D`.
+            cursor_value = urllib.parse.unquote(str(next_value))
+            current += separator + urllib.parse.urlencode({next_key: cursor_value})
         data = sigma_rest.request("get", current) or {}
         page_rows = data.get("entries") or data.get("data") or []
         rows.extend(row for row in page_rows if isinstance(row, dict))
+        if stop_when and stop_when(rows):
+            break
         if data.get("nextPageToken"):
             next_key, next_value = "pageToken", data["nextPageToken"]
         elif data.get("nextPage"):
             next_key, next_value = "page", data["nextPage"]
         else:
             break
+        cursor = (next_key, str(next_value))
+        if cursor in seen_cursors:
+            raise RuntimeError(f"{path}: repeated pagination cursor {next_key}")
+        seen_cursors.add(cursor)
     return rows
 
 
@@ -204,7 +218,33 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     reconcile = json.loads(Path(args.reconcile).read_text(encoding="utf-8-sig"))
     try:
-        catalog_paths = list_entries("/v2/connections/paths")
+        wanted_paths = {
+            tuple(
+                clean_part(part).casefold()
+                for part in expected_path(
+                    table.get("sourceTable"), args.database, args.schema
+                )
+            )
+            for table in reconcile
+            if table.get("sourceTable")
+            and not str(table["sourceTable"]).upper().startswith(
+                ("RESIDENT ", "INLINE", "AUTOGENERATE", "?")
+            )
+        }
+
+        def found_all_expected_paths(rows: list[dict[str, Any]]) -> bool:
+            found = {
+                tuple(clean_part(part).casefold() for part in row.get("path") or [])
+                for row in rows
+                if str(row.get("connectionId")) == str(args.connection)
+            }
+            return bool(wanted_paths) and wanted_paths <= found
+
+        query = urllib.parse.urlencode({"connectionId": args.connection})
+        catalog_paths = list_entries(
+            f"/v2/connections/paths?{query}",
+            stop_when=found_all_expected_paths,
+        )
     except sigma_rest.SigmaError as exc:
         print(
             "warehouse preflight: connection-path browse unavailable "

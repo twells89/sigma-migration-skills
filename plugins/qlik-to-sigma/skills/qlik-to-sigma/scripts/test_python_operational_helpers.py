@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import tempfile
@@ -34,6 +35,80 @@ def workbook(elements: list[dict], layout: str) -> dict:
 
 
 class WarehousePreflightTests(unittest.TestCase):
+    def test_list_entries_does_not_double_encode_cursor(self) -> None:
+        calls = []
+        responses = [
+            {
+                "entries": [{"id": 1}],
+                "nextPage": "%7B%22path%22%3A%22SALES%22%7D",
+            },
+            {"entries": [{"id": 2}]},
+        ]
+        original = preflight_warehouse.sigma_rest.request
+
+        def request(_method: str, path: str) -> dict:
+            calls.append(path)
+            return responses.pop(0)
+
+        preflight_warehouse.sigma_rest.request = request
+        try:
+            rows = preflight_warehouse.list_entries(
+                "/v2/connections/paths?connectionId=conn"
+            )
+        finally:
+            preflight_warehouse.sigma_rest.request = original
+
+        self.assertEqual([1, 2], [row["id"] for row in rows])
+        self.assertIn(
+            "page=%7B%22path%22%3A%22SALES%22%7D",
+            calls[1],
+        )
+        self.assertNotIn("%257B", calls[1])
+
+    def test_list_entries_rejects_repeated_cursor(self) -> None:
+        original = preflight_warehouse.sigma_rest.request
+
+        def request(_method: str, _path: str) -> dict:
+            return {"entries": [], "nextPageToken": "same"}
+
+        preflight_warehouse.sigma_rest.request = request
+        try:
+            with self.assertRaisesRegex(RuntimeError, "repeated pagination cursor"):
+                preflight_warehouse.list_entries("/v2/workbooks/w/columns")
+        finally:
+            preflight_warehouse.sigma_rest.request = original
+
+    def test_list_entries_stops_when_required_paths_are_present(self) -> None:
+        calls = []
+        original = preflight_warehouse.sigma_rest.request
+
+        def request(_method: str, path: str) -> dict:
+            calls.append(path)
+            return {
+                "entries": [
+                    {
+                        "connectionId": "conn",
+                        "path": ["DB", "SCHEMA", "SALES"],
+                    }
+                ],
+                "nextPage": "unneeded",
+            }
+
+        preflight_warehouse.sigma_rest.request = request
+        try:
+            rows = preflight_warehouse.list_entries(
+                "/v2/connections/paths?connectionId=conn",
+                stop_when=lambda entries: any(
+                    row.get("path") == ["DB", "SCHEMA", "SALES"]
+                    for row in entries
+                ),
+            )
+        finally:
+            preflight_warehouse.sigma_rest.request = original
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual(1, len(calls))
+
     def test_resolves_catalog_case_aliases_and_expression_inputs(self) -> None:
         reconcile = [
             {
@@ -92,7 +167,117 @@ class WarehousePreflightTests(unittest.TestCase):
         self.assertIn("ambiguous", error or "")
 
 
+class QlikSnapshotTests(unittest.TestCase):
+    def load_discovery(self):
+        path = Path(__file__).with_name("qlik-discover.py")
+        spec = importlib.util.spec_from_file_location("qlik_discover_test", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader
+        spec.loader.exec_module(module)
+        return module
+
+    def test_parses_qlik_cli_tabular_chart_data(self) -> None:
+        module = self.load_discovery()
+        result = module.parse_tabular_chart_rows(
+            "MonthYear     Revenue\n"
+            "2024-01       14682555.21\n"
+            "2024-02       17394702.24\n",
+            1,
+        )
+        self.assertEqual(
+            [["2024-01", 14682555.21], ["2024-02", 17394702.24]],
+            result["rows"],
+        )
+        self.assertTrue(result["complete"])
+        self.assertEqual(2, result["expectedRows"])
+
+    def test_snapshot_captures_dimension_only_visual_rows(self) -> None:
+        module = self.load_discovery()
+        calls = []
+        original_run = module.qlik_run
+        original_eval = module.qlik_eval
+
+        def run(args, attempts=4):
+            del attempts
+            calls.append(args)
+            if args[:3] == ["app", "object", "data"]:
+                return type(
+                    "Result",
+                    (),
+                    {
+                        "returncode": 1,
+                        "stdout": "object map-1 contains no data\n",
+                        "stderr": "",
+                    },
+                )()
+            return type(
+                "Result",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": "Boston\nNew York\n",
+                    "stderr": "",
+                },
+            )()
+
+        module.qlik_run = run
+        module.qlik_eval = lambda *_args: "2"
+        try:
+            snapshot = module.compute_snapshot(
+                "app",
+                [],
+                [
+                    {
+                        "id": "map-1",
+                        "title": "Stores",
+                        "sheet": "sheet-1",
+                        "dimensions": [["City"]],
+                        "measures": [],
+                    }
+                ],
+                [],
+                {},
+                1,
+                False,
+            )
+        finally:
+            module.qlik_run = original_run
+            module.qlik_eval = original_eval
+
+        self.assertTrue(any(call[:2] == ["app", "values"] for call in calls))
+        self.assertEqual([["Boston"], ["New York"]], snapshot["chartData"][0]["rows"])
+        self.assertTrue(snapshot["chartData"][0]["complete"])
+        self.assertIn(
+            {"expr": "Count(distinct [City])", "value": "2"},
+            snapshot["buckets"],
+        )
+
+
 class WorkbookLintTests(unittest.TestCase):
+    def test_layout_comparison_ignores_api_pretty_printing(self) -> None:
+        submitted = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<Page id="page-1">\n'
+            '  <Element elementId="chart-1" gridColumn="1 / 25"/>\n'
+            "</Page>"
+        )
+        readback = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<Page id="page-1">\n'
+            '    <Element elementId="chart-1" gridColumn="1 / 25"/>\n'
+            "</Page>\n"
+        )
+        changed = readback.replace('gridColumn="1 / 25"', 'gridColumn="1 / 13"')
+
+        self.assertEqual(
+            put_layout.comparable_layout(submitted),
+            put_layout.comparable_layout(readback),
+        )
+        self.assertNotEqual(
+            put_layout.comparable_layout(submitted),
+            put_layout.comparable_layout(changed),
+        )
+
     def test_render_integrity_requires_a_chart_value_binding(self) -> None:
         bad = workbook(
             [

@@ -820,7 +820,15 @@ def main(argv=None):
             "app_meta": (args.app_meta, ("app-meta.json",), False),
             "formula_mapping": (args.formula_mapping, ("formula-mapping.json",), False),
             "dm_spec": (args.dm_spec, ("dm-spec.json",), False),
-            "dm_readback": (args.dm_readback, ("dm-readback.json", "data-model-readback.json"), False),
+            "dm_readback": (
+                args.dm_readback,
+                (
+                    "dm-readback.json",
+                    "data-model-readback.json",
+                    "datamodel-readback.json",
+                ),
+                False,
+            ),
             "wb_spec": (args.wb_spec, ("wb-spec.json",), False),
             "wb_readback": (args.wb_readback, ("wb-readback.json", "workbook-readback.json"), False),
             "workbook_coverage": (args.workbook_coverage, ("workbook-coverage.json",), False),

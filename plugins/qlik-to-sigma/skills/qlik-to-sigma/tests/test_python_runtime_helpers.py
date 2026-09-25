@@ -160,6 +160,18 @@ class WorkbookPreflightTest(unittest.TestCase):
 
 
 class RenderAndLayoutTest(unittest.TestCase):
+    def test_text_elements_do_not_require_readback_display_names(self):
+        self.assertFalse(
+            PHASE_GATE.requires_display_name(
+                {"id": "header-text", "kind": "text", "body": "# Sales"}
+            )
+        )
+        self.assertTrue(
+            PHASE_GATE.requires_display_name(
+                {"id": "chart-1", "kind": "bar-chart", "name": "Sales"}
+            )
+        )
+
     def test_blind_grade_maps_supported_chart_families(self):
         self.assertEqual("kpi", blind_grade_lib.family("progress"))
         self.assertEqual("other", blind_grade_lib.family("box-chart"))

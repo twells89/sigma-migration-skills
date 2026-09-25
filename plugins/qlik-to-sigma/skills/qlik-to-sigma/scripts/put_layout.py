@@ -14,6 +14,12 @@ from lib import sigma_rest
 from lib.code_rep import canonicalize_layout, document, metadata, wrap
 
 
+def comparable_layout(xml: str) -> str:
+    """Normalize API-only formatting without weakening structural equality."""
+    canonical = canonicalize_layout(xml).strip()
+    return re.sub(r">\s+<", "><", canonical)
+
+
 def apply_layout(
     raw_spec: dict[str, Any],
     xml: str,
@@ -83,8 +89,8 @@ def main(argv: list[str] | None = None) -> int:
             accept="*/*",
         )
         check = sigma_rest.request("get", f"/v2/workbooks/{args.workbook}/spec")
-        expected_layout = canonicalize_layout(xml)
-        if document(check).get("layout") != expected_layout:
+        expected_layout = comparable_layout(xml)
+        if comparable_layout(document(check).get("layout") or "") != expected_layout:
             raise ValueError("layout PUT did not survive workbook spec readback")
     except (OSError, ValueError, json.JSONDecodeError, sigma_rest.SigmaError) as exc:
         print(f"put-layout: {exc}", file=sys.stderr)
