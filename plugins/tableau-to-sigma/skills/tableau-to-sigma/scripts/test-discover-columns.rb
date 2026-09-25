@@ -76,7 +76,8 @@ end
 Thread.new { server.start }
 sleep 0.2
 base = "http://127.0.0.1:#{server.config[:Port]}"
-env  = { 'SIGMA_BASE_URL' => base, 'SIGMA_API_TOKEN' => 'offline-test' }
+# Local stub server (http://127.0.0.1): opt out of the A2 host allowlist.
+env  = { 'SIGMA_BASE_URL' => base, 'SIGMA_API_TOKEN' => 'offline-test', 'SIGMA_ALLOW_INSECURE_BASE_URL' => '1' }
 args = ['ruby', SCRIPT, '--connection-id', 'conn-1', '--table-path', 'BENCHDB.PUBLIC.WIDE_FACT']
 
 begin

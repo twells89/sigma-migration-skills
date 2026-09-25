@@ -423,9 +423,10 @@ inconsistent handling of the two filter levels — port **both**, every time:
    `*_OR_EQUAL` spellings both mean inclusive comparison. Lists use Sigma
    `kind: list`; numeric comparisons use a hidden boolean column plus list
    filter. Warn and drop unknown operators; never guess.
-3. **Analyzer Quick Filters** (`slicers[]` / `quickFilters[]`) → card-scoped
-   controls. Charts/tables/pivots use a hidden table source for picker values
-   and filtering; they are not permanent `main.filters`.
+3. **Analyzer Quick Filters** (`definition.slicers[]`; public `quickFilters[]`)
+   → card-scoped Sigma controls. They are not permanent `main.filters`.
+   Charts, tables, and pivots use a hidden table source so the picker populates
+   and filters the visible element without a source cycle.
 
 Domo serializes list-filter values as strings even for numeric columns. Type
 them from `datasets.json`: `LONG`/`DECIMAL`/`DOUBLE` values become JSON numbers

@@ -11,7 +11,7 @@ main() is a ~250-line orchestrator (argparse + control-scope + coverage
 bookkeeping around this POST, so it can't be isolated into a runnable unit
 offline) — source-level assertions, mirroring the same "can't isolate a
 god-function" approach used for migrate-looker.py / migrate-powerbi.rb /
-migrate-qlik.rb in this same task.
+the Qlik migration entrypoints in this same task.
 
 Usage: python3 scripts/test_build_sigma_workbook_coderep.py
 """

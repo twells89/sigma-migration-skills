@@ -74,6 +74,7 @@ puts 'test-column-read-pagination.rb — exhaustive columns reads'
 #    before the fix the caller saw 50 of 120 with no warning.
 reset_state!
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1' # fake host: bypass the A2 allowlist
 ENV['SIGMA_API_TOKEN'] = 'tok'
 http = FakeHttp.new(wide_table_pages)
 entries = Sigma.list_entries('/v2/connections/tables/inode-1/columns', http: http)
@@ -88,6 +89,7 @@ check(http.reqs.size == 3 && http.reqs.all? { |r| r.path.include?('limit=1000') 
 #    relationship-wiring failure this bug produces.
 reset_state!
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1' # fake host: bypass the A2 allowlist
 ENV['SIGMA_API_TOKEN'] = 'tok'
 entries = Sigma.list_entries('/v2/connections/tables/inode-1/columns',
                              http: FakeHttp.new(wide_table_pages))
@@ -149,6 +151,7 @@ end
 
 reset_state!
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1' # fake host: bypass the A2 allowlist
 ENV['SIGMA_API_TOKEN'] = 'tok'
 entries = WarehouseColumnsPagination.list('/v2/connections/tables/inode-1/columns',
                                           http: FakeHttp.new(token_paged_table))
@@ -163,6 +166,7 @@ check(entries.first['name'] == 'COL_1' && entries.last['name'] == 'COL_64',
 # before the repeated cursor would make a corrupt/truncated catalog look valid.
 reset_state!
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1' # fake host: bypass the A2 allowlist
 ENV['SIGMA_API_TOKEN'] = 'tok'
 repeat_http = FakeHttp.new([
   http_res(Net::HTTPOK, 200, JSON.generate('entries' => [{ 'name' => 'A' }], 'nextPageToken' => 'same')),
@@ -179,6 +183,7 @@ check(repeat_error && repeat_error.message.include?('refusing a partial column l
 
 reset_state!
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
+ENV['SIGMA_ALLOW_INSECURE_BASE_URL'] = '1' # fake host: bypass the A2 allowlist
 ENV['SIGMA_API_TOKEN'] = 'tok'
 malformed_error = begin
   WarehouseColumnsPagination.list(

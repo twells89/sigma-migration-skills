@@ -2328,6 +2328,116 @@ def beast_mode_value_format(column, bm)
   }
 end
 
+def lod_fixed_percent_mode(card, plan)
+  fixed = Array(plan['fixedBy']).first
+  return 'grand_total' if fixed.to_s.empty?
+
+  same_field = lambda do |value|
+    DomoSigma::BeastModeLod.normalized_name(value) ==
+      DomoSigma::BeastModeLod.normalized_name(fixed)
+  end
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  date_grain_is_fixed = same_field.call(card.dig('dateGrain', 'column'))
+  fixed_is_x = (xcol && same_field.call(xcol['column'])) || date_grain_is_fixed
+  fixed_is_series = series && same_field.call(series['column'])
+
+  return 'x_axis' if fixed_is_x && series
+  return 'color' if fixed_is_series && xcol
+  return 'fixed-only' if fixed_is_x || fixed_is_series
+
+  # The FIXED key is not a visible chart dimension (commonly a card/page date
+  # filter). Once that predicate is applied, the denominator is the grand total
+  # across the displayed subgroup dimension(s).
+  'grand_total'
+end
+
+def lod_workbook_formula(card, bm)
+  return nil unless bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+  if bm['_source'] == 'formula-override'
+    return masterize_formula(bm['sigmaFormula'])
+  end
+
+  plan = bm['lodPlacement']
+  plan = DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']) unless plan.is_a?(Hash)
+  return nil unless plan
+  return lod_fixed_aggregate_formula(card, plan) if plan['kind'] == 'fixed-aggregate'
+
+  mode = lod_fixed_percent_mode(card, plan)
+  if mode == 'fixed-only'
+    scale = plan['scale'].to_f
+    return scale == scale.to_i ? scale.to_i.to_s : scale.to_s
+  end
+  DomoSigma::BeastModeLod.fixed_percent_formula(
+    plan,
+    mode: mode,
+    qualify: ->(field) { "Master/#{display_name(field)}" },
+  )
+end
+
+def lod_fixed_aggregate_formula(card, plan)
+  return nil if plan['filterMode'] || plan['mode'] == 'add'
+
+  inner = "#{plan['innerAggregate']}(#{mref(display_name(plan['field']))})"
+  return "GrandTotal(#{inner})" if plan['mode'] == 'all'
+
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  role_for = lambda do |name|
+    normalized = DomoSigma::BeastModeLod.normalized_name(name)
+    date_matches =
+      DomoSigma::BeastModeLod.normalized_name(card.dig('dateGrain', 'column')) == normalized
+    next 'x_axis' if (xcol &&
+      DomoSigma::BeastModeLod.normalized_name(xcol['column']) == normalized) || date_matches
+    next 'color' if series &&
+      DomoSigma::BeastModeLod.normalized_name(series['column']) == normalized
+    nil
+  end
+
+  current_roles = [xcol && 'x_axis', series && 'color'].compact
+  fixed_roles =
+    case plan['mode']
+    when 'by'
+      roles = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }
+      return nil if roles.any?(&:nil?)
+      roles.uniq
+    when 'remove'
+      removed = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }.compact
+      current_roles - removed
+    else
+      return nil
+    end
+
+  return "GrandTotal(#{inner})" if fixed_roles.empty?
+  return inner if fixed_roles.sort == current_roles.sort
+  return "Subtotal(#{inner}, \"#{fixed_roles.first}\")" if fixed_roles.length == 1
+  nil
+end
+
+def beast_mode_value_format(column, bm)
+  format = sigma_format(column['format'], col_label(column))
+  source_formula = bm['originalSql'].to_s.empty? ? bm['sigmaFormula'] : bm['originalSql']
+  return format unless format.is_a?(Hash) &&
+                       format['formatString'].to_s.end_with?('%') &&
+                       source_formula.to_s.match?(/\A\s*\(?\s*100(?:\.0+)?\s*\*/i)
+
+  source_format = column['format'].is_a?(Hash) ? column['format'] : {}
+  raw_pattern = source_format['format'].to_s
+  explicit_precision = source_format['precision'] || source_format['decimals']
+  decimals = (explicit_precision || raw_pattern[/\.(0+)/, 1]&.length || 1).to_i
+  {
+    'kind' => 'number',
+    'formatString' => ",.#{decimals}f",
+    'suffix' => '%',
+  }
+end
+
 # An AGGREGATE (or window) Beast Mode cannot be a data-model column — build-dm
 # only promotes PROJECTION (row-level) Beast Modes to DM calc columns, because an
 # aggregate expression has no row-level value. So for an aggregate Beast Mode the

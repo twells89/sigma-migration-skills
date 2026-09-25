@@ -190,6 +190,20 @@ def validate_base_url(base):
         raise SystemExit(f"FATAL: SIGMA_BASE_URL host '{host}' is not a sigmacomputing.com host — refusing to send Sigma credentials. Set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override (self-hosted/dev).")
 
 
+_validated_bases = set()
+
+
+def _validate_once(base):
+    """A2 on the REQUEST path, not just the token exchange: a pre-minted
+    SIGMA_API_TOKEN skips refresh_token(), so without this a poisoned
+    SIGMA_BASE_URL would receive the bearer token unchecked. Once per base URL
+    so the insecure-override warning isn't repeated on every call."""
+    key = (base, os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") == "1")
+    if key not in _validated_bases:
+        validate_base_url(base)
+        _validated_bases.add(key)
+
+
 def token_minted_at():
     """Epoch seconds when the current token was minted, if known. The in-memory
     stamp (set by refresh_token in this process) wins; else SIGMA_TOKEN_MINTED_AT
@@ -264,15 +278,33 @@ def _ssl_context():
     return ssl.create_default_context()
 
 
+def _http_opener():
+    """An opener with ONLY http(s) handlers. urllib's default opener also installs
+    File/FTP/Data handlers, so a poisoned URL like file:///etc/passwd would read a
+    local file; this one cannot, whatever URL it is handed."""
+    op = urllib.request.OpenerDirector()
+    for h in (urllib.request.HTTPSHandler(context=_ssl_context()),
+              urllib.request.HTTPHandler(),
+              urllib.request.HTTPDefaultErrorHandler(),
+              urllib.request.HTTPRedirectHandler(),
+              urllib.request.HTTPErrorProcessor()):
+        op.add_handler(h)
+    return op
+
+
 def _send(method, url, headers, body, timeout):
     """Low-level HTTP seam (tests monkeypatch this). Returns _Resp with a numeric
     status even for 4xx/5xx (urllib raises HTTPError on those — we normalise)."""
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    insecure = os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") == "1"
+    if scheme != "https" and not (scheme == "http" and insecure):
+        raise SystemExit(f"FATAL: refusing non-https request URL (scheme '{scheme}') — only https:// Sigma API URLs are sent.")
     data = body.encode() if isinstance(body, str) else body
     req = urllib.request.Request(url, data=data, method=method.upper())
     for k, v in headers.items():
         req.add_header(k, v)
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
+        with _http_opener().open(req, timeout=timeout) as resp:
             return _Resp(resp.status, resp.read(), getattr(resp, "reason", ""))
     except urllib.error.HTTPError as e:
         return _Resp(e.code, e.read(), e.reason)
@@ -327,7 +359,9 @@ def refresh_token():
 
 def request(method, path, body=None, content_type="application/json",
             accept="application/json", binary=False):
-    url = f"{base_url()}{path}"
+    base = base_url()
+    _validate_once(base)
+    url = f"{base}{path}"
     if method.lower() not in ("get", "post", "put", "patch", "delete"):
         raise ValueError(f"unsupported method {method}")
     attempts = 0
