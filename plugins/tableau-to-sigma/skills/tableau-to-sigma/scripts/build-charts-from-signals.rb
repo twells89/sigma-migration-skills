@@ -3170,6 +3170,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
         else
           "#{agg}([Master/#{m['name']}])"
         end
+      elsif field['role'] == 'dim' && m['formula']
+        m['formula']
       elsif field['role'] == 'dim' && SHELF_TRUNC_FOR_PREFIX[deriv] == 'week'
         # Tableau weeks are Sunday-anchored; Sigma DateTrunc("week") follows
         # the warehouse week start (Monday on Snowflake) — use the verified
