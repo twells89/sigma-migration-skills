@@ -183,6 +183,13 @@
       "description": "Metabase models, questions, and dashboards → Sigma data models + workbooks, with MBQL/pMBQL translation, native-SQL remodeling, controls, exact-grid layout, and parity verification. Bundles metabase-to-sigma + the read-only metabase-assessment.",
       "category": "migration",
       "keywords": ["metabase", "mbql", "migration", "bi"]
+    },
+    {
+      "name": "omni-to-sigma",
+      "source": "./plugins/omni-to-sigma",
+          "description": "Omni → Sigma. Topic YAML + dashboard export to a Sigma data model and workbook, plus a read-only assessment. Foundation — query views and custom charts are skipped, not guessed.",
+      "category": "migration",
+      "keywords": ["omni", "migration", "bi"]
     }
   ]
 }

@@ -89,7 +89,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/sigma_rest.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/sigma_rest.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/sigma_rest.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/sigma_rest.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/sigma_rest.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/lib/sigma_rest.rb"
       ]
     },
     {
@@ -112,7 +113,8 @@
         "plugins/sigma-authoring/skills/custom-sql-to-data-model/scripts/lib/code_rep.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/code_rep.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/code_rep.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/code_rep.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/code_rep.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/lib/code_rep.rb"
       ]
     },
     {
@@ -171,7 +173,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/preflight_lint.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/preflight_lint.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/preflight_lint.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/preflight_lint.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/preflight_lint.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/lib/preflight_lint.rb"
       ]
     },
     {
@@ -191,7 +194,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/layout_lint.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/layout_lint.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/layout_lint.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/layout_lint.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/layout_lint.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/lib/layout_lint.rb"
       ]
     },
     {
@@ -243,7 +247,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/control_lint.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/control_lint.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/control_lint.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/control_lint.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/control_lint.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/lib/control_lint.rb"
       ]
     },
     {
@@ -478,7 +483,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/escalate-gap.py",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/escalate-gap.py",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/escalate-gap.py",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/escalate-gap.py"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/escalate-gap.py",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/escalate-gap.py"
       ]
     },
     {
@@ -496,7 +502,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/probe-controls.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/probe-controls.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/probe-controls.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/probe-controls.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/probe-controls.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/probe-controls.rb"
       ]
     },
     {
@@ -514,7 +521,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/sigma-export-png.py",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/sigma-export-png.py",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/sigma-export-png.py",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/sigma-export-png.py"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/sigma-export-png.py",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/sigma-export-png.py"
       ]
     },
     {
@@ -534,7 +542,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/find-or-pick-dm.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/find-or-pick-dm.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/find-or-pick-dm.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/find-or-pick-dm.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/find-or-pick-dm.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/find-or-pick-dm.rb"
       ]
     },
     {
@@ -551,7 +560,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/assert-phase6-ran.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/assert-phase6-ran.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/assert-phase6-ran.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/assert-phase6-ran.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/assert-phase6-ran.rb",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/assert-phase6-ran.rb"
       ]
     },
     {
@@ -624,7 +634,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/get-token.sh",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/get-token.sh",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/get-token.sh",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/get-token.sh"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/get-token.sh",
+        "plugins/omni-to-sigma/skills/omni-to-sigma/scripts/get-token.sh"
       ]
     },
     {
@@ -726,7 +737,8 @@
         "plugins/domo-to-sigma/skills/domo-assessment/scripts/dup-dashboards.py",
         "plugins/mode-to-sigma/skills/mode-assessment/scripts/dup-dashboards.py",
         "plugins/streamlit-to-sigma/skills/streamlit-assessment/scripts/dup-dashboards.py",
-        "plugins/metabase-to-sigma/skills/metabase-assessment/scripts/dup-dashboards.py"
+        "plugins/metabase-to-sigma/skills/metabase-assessment/scripts/dup-dashboards.py",
+        "plugins/omni-to-sigma/skills/omni-assessment/scripts/dup-dashboards.py"
       ]
     },
     {

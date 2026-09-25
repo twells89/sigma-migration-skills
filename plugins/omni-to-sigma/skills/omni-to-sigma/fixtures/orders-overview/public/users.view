@@ -1,0 +1,24 @@
+schema: public
+table_name: users
+
+dimensions:
+  id:
+    primary_key: true
+    sql: '"ID"'
+  first_name:
+    sql: '"FIRST_NAME"'
+  last_name:
+    sql: '"LAST_NAME"'
+  full_name:
+    label: Full Name
+    sql: CONCAT(${users.first_name}, ' ', ${users.last_name})
+  region:
+    sql: '"REGION"'
+  region_gate:
+    hidden: true
+    sql: CASE WHEN {{ omni_attributes.region }} = 'all' THEN ${users.region} ELSE 'redacted' END
+
+measures:
+  count:
+    aggregate_type: count
+    label: User Count

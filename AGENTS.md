@@ -67,6 +67,8 @@ Maturity labels (`gold` / `live` / `foundation` / `scaffold`) are defined in
 | Scope/assess a Streamlit instance | `streamlit-assessment` | scaffold | `plugins/streamlit-to-sigma/skills/streamlit-assessment/` |
 | Convert Metabase models/questions/dashboards → Sigma | `metabase-to-sigma` | live | `plugins/metabase-to-sigma/skills/metabase-to-sigma/` |
 | Scope/assess a Metabase instance | `metabase-assessment` | live | `plugins/metabase-to-sigma/skills/metabase-assessment/` |
+| Convert an Omni model + dashboards → Sigma | `omni-to-sigma` | foundation | `plugins/omni-to-sigma/skills/omni-to-sigma/` |
+| Scope/assess an Omni instance | `omni-assessment` | foundation | `plugins/omni-to-sigma/skills/omni-assessment/` |
 
 Assessments are read-only (never write to the source or post to Sigma); run one
 to pick what to convert, then hand off to the matching converter.

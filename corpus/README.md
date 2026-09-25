@@ -46,6 +46,7 @@ corpus/
 | streamlit/simple-retail | synthetic Streamlit-in-Workspaces Python project | static IR conversion → DM + wrapped workbook, byte-stable reconversion |
 | streamlit/retail-fulfillment-control-tower | synthetic four-page Streamlit-in-Workspaces project | deferred filters/actions, navigation, KPI/chart/table semantics, and byte-stable DM/workbook |
 | metabase/orders-overview | synthetic Metabase model + dashboard REST JSON | MBQL model + wrapped workbook with controls, native funnel, and authoritative layout |
+| omni/orders-overview | synthetic Omni views + topic + dashboard export | DM (orders/users join, 3 metrics) + workbook (line, KPI, date control) |
 
 ## Runner
 
