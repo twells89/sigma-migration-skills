@@ -186,6 +186,44 @@ tbl2 = build_element({ 'id' => 'c5', 'title' => 'T', 'chartType' => 'badge_table
                        'conditionalFormats' => [{ 'format' => { 'dataBar' => true } }] }, {})
 eq(tbl2['conditionalFormats'].first['type'], 'dataBars', 'dataBars kept when the Domo table declared them')
 
+puts "== detail table VALUE mappings remain row-level passthrough columns =="
+detail = build_table({
+  'id' => 'detail-table', 'title' => 'AI Call Detail',
+  'chartType' => 'badge_basic_table', 'groupBy' => [],
+  'columns' => [
+    { 'column' => 'ContactId', 'mapping' => 'VALUE' },
+    { 'column' => 'During Business Hours', 'mapping' => 'VALUE' },
+    { 'column' => 'Call Start Time', 'mapping' => 'VALUE' },
+  ],
+})
+eq(detail['columns'].map { |column| column['formula'] },
+   ['[Master/Contact Id]', '[Master/During Business Hours]', '[Master/Call Start Time]'],
+   'ungrouped table text/timestamp columns are not wrapped in Sum()')
+ok(!detail.key?('groupings'), 'detail table remains ungrouped so every source row survives')
+
+puts "== badge_textbox with a date column becomes a latest-value KPI =="
+$dataset_schema_by_id = {
+  'ds-textbox' => {
+    'schema' => { 'columns' => [{ 'name' => 'Call Date', 'type' => 'DATE' }] },
+  },
+}
+textbox_card = {
+  'id' => 'last-refresh', 'title' => 'Last Refresh:',
+  'datasetId' => 'ds-textbox', 'chartType' => 'badge_textbox',
+  'columns' => [{ 'column' => 'Call Date', 'mapping' => 'ITEM' }],
+}
+textbox = build_textbox(textbox_card)
+eq(textbox['kind'], 'kpi-chart', 'data-backed textbox maps to KPI, not a skipped bar')
+eq(textbox['columns'].first['formula'], 'Max([Master/Call Date])',
+   'textbox displays the latest source date')
+eq(textbox['columns'].first['format'],
+   { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d' },
+   'latest date uses the source-visible ISO format')
+routed_textbox = build_element(textbox_card, {})
+eq(routed_textbox['kind'], 'kpi-chart',
+   'stale discovery without sigmaKindHint still routes badge_textbox to its KPI builder')
+$dataset_schema_by_id = nil
+
 puts "== Rule 0: single-value summary card → KPI even if chartType is table =="
 $warnings = []
 r0 = build_element({ 'id' => 'c6', 'title' => 'One Number', 'chartType' => 'badge_table',
@@ -236,6 +274,34 @@ eq(quick_control && quick_control.dig('filters', 0, 'columnId'), 'f-category_nam
    'the control targets the helper column resolved from the Domo slicer')
 eq($control_scope_entries.last && $control_scope_entries.last['scope'], [quick_table['id']],
    'the control-scope ledger records the intentionally card-local reach')
+
+puts "== chart Quick Filter uses a hidden table source and remains card-scoped =="
+$card_controls = []
+$control_scope_entries = []
+$chart_helpers = []
+quick_chart = build_element({
+  'id' => 'chart-quick', 'title' => 'AI Calls by Day',
+  'chartType' => 'badge_two_trendline', 'sigmaKindHint' => 'line-chart',
+  'datasetId' => 'ds-quick',
+  'columns' => [
+    { 'column' => 'Date', 'mapping' => 'ITEM' },
+    { 'column' => 'Calls', 'aggregation' => 'SUM', 'mapping' => 'VALUE' },
+  ],
+  'quickFilters' => [{
+    'type' => 'string', 'displayType' => 'multiple_select',
+    'name' => 'During Business Hours', 'column' => 'During Business Hours',
+    'operator' => 'NOT_IN', 'values' => [],
+  }],
+}, {})
+quick_chart_helper = $chart_helpers.find { |helper| helper['id'] == 'src-el-chart-quick-filters' }
+quick_chart_control = $card_controls.last
+eq(quick_chart.dig('source', 'elementId'), quick_chart_helper && quick_chart_helper['id'],
+   'visible chart is rebound to its Quick Filter table source')
+eq(quick_chart_control && quick_chart_control.dig('source', 'source', 'elementId'),
+   quick_chart_helper && quick_chart_helper['id'],
+   'chart picker values come from the hidden table helper')
+eq($control_scope_entries.last && $control_scope_entries.last['scope'], [quick_chart['id']],
+   'chart Quick Filter reaches only its source chart')
 
 puts "== card control IDs remain unique and within Sigma's 64-character limit =="
 $card_controls = []
@@ -823,6 +889,37 @@ retarget_to_submaster!(chart_el, sm_fixture)
 eq(chart_el['source'], { 'kind' => 'table', 'elementId' => 'master-ds-dim' },
    'an element that DOES carry a source key still gets retargeted normally (unchanged behavior)')
 
+helper_bound = {
+  'id' => 'el-helper-bound',
+  'kind' => 'kpi-chart',
+  'source' => { 'kind' => 'table', 'elementId' => 'filter-helper' },
+  'columns' => [{ 'id' => 'm-value', 'formula' => 'Sum([Master/Segment])' }],
+}
+retarget_to_submaster!(helper_bound, sm_fixture, retarget_source: false)
+eq(helper_bound['source'], { 'kind' => 'table', 'elementId' => 'filter-helper' },
+   'helper-bound verification elements can preserve their helper source')
+eq(helper_bound['columns'].first['formula'], 'Sum([Master (Customer Dim)/Segment])',
+   'preserving a helper source still rewrites any residual Master references')
+
+begin
+  validate_routed_verification_affinity!(
+    { 'id' => 'c-affinity', 'datasetId' => 'ds-dim' },
+    [{
+      'id' => 'el-c-affinity-summary-verify',
+      'source' => { 'kind' => 'table', 'elementId' => 'master' },
+      'columns' => [{ 'formula' => 'Sum([Master/Segment])' }],
+    }],
+    sm_fixture,
+    [],
+  )
+  ok(false, 'source-affinity gate rejects an unretargeted parity twin')
+rescue RuntimeError => e
+  ok(e.message.include?('source-affinity') &&
+     e.message.include?('source="master"') &&
+     e.message.include?('[Master/...]'),
+     'source-affinity failure names both stale source and formula namespace')
+end
+
 puts "== live-found 2026-07-31: retarget_to_submaster! must not raise FrozenError on a " \
      'shared frozen constant (AXIS_OFF) nested inside an axis-chart element =='
 axis_el = { 'id' => 'el-axis1', 'kind' => 'bar-chart',
@@ -860,6 +957,66 @@ Dir.mktmpdir do |dir|
       eq(routed['columns'].first['formula'], '[Master (Customer Dim)/Region]', 'formula re-qualified to the sub-master\'s namespace')
       ok($warnings.any? { |w| w['warning'].include?('routed to sub-master') }, 'routing is reported, not silent')
       ok($sub_masters.key?('ds-dim'), 'the sub-master was registered for the main block to emit under data_elements')
+    end
+  end
+end
+
+puts "== multi-dataset card-header parity twin routes to the card sub-master =="
+Dir.mktmpdir do |dir|
+  dm_spec_path = File.join(dir, 'dm-spec.json')
+  dm_ids_path  = File.join(dir, 'dm-ids.json')
+  File.write(dm_spec_path, JSON.generate('pages' => [{ 'elements' => [
+    { 'id' => 'el-dim-1', 'name' => 'Customer Dim', '_datasetId' => 'ds-dim' },
+  ] }]))
+  File.write(dm_ids_path, JSON.generate('dataModelId' => 'dm-live-1', 'pages' => [{ 'elements' => [
+    { 'id' => 'el-dim-1', 'name' => 'Customer Dim', 'columnLabels' => ['Region', 'Segment'] },
+  ] }]))
+  File.write(File.join(dir, 'card-header-overrides.json'), JSON.generate(
+    'c25-header' => {
+      'body' => '**Customers by Region**\n{{Count([Master/Segment])}}',
+    },
+  ))
+  stub_const('OUT', dir) do
+    stub_const('DM_SPEC_PATH', dm_spec_path) do
+      stub_const('DM_IDS_PATH', dm_ids_path) do
+        $ds_element_map = nil
+        $sub_masters = {}
+        $warnings = []
+        $companion_elements = []
+        $kpi_verification_elements = []
+        $chart_verification_elements = []
+        $table_verification_elements = []
+        routed = build_element(
+          {
+            'id' => 'c25-header',
+            'title' => 'Customers by Region',
+            'chartType' => 'badge_vert_bar',
+            'datasetId' => 'ds-dim',
+            'groupBy' => ['region'],
+            'columns' => [
+              { 'column' => 'region', 'mapping' => 'ITEM' },
+              { 'column' => 'segment', 'aggregation' => 'COUNT', 'mapping' => 'VALUE' },
+            ],
+            'summaryNumber' => {
+              'column' => 'segment',
+              'aggregation' => 'COUNT',
+              'label' => 'Customer Count',
+            },
+          },
+          {},
+          'ds-fact',
+        )
+        ok(!routed.nil?, 'operator-authored header card still builds on its non-dominant dataset')
+        twin = $kpi_verification_elements.find { |element| element['id'] == 'el-c25-header-summary-verify' }
+        ok(!twin.nil?, 'the Summary parity twin is retained for source verification')
+        eq(twin['source'], { 'kind' => 'table', 'elementId' => 'master-ds-dim' },
+           'the parity twin targets the card sub-master, never the dominant Master')
+        eq(twin['columns'].first['formula'], 'Count([Master (Customer Dim)/Segment])',
+           'the parity twin formula is re-qualified to the same sub-master')
+        header = $companion_elements.find { |element| element['id'] == 'header-c25-header' }
+        ok(header['body'].include?('[Master (Customer Dim)/Segment]'),
+           'the operator-authored text header follows the same sub-master routing')
+      end
     end
   end
 end
@@ -1015,6 +1172,38 @@ override_kpi = build_kpi({ 'id' => 'c34', 'title' => 'Margin % by Channel',
                                                 '_isCalc' => true } },
                          { 'c34' => { 'column' => 'net_revenue', 'aggregation' => 'SUM' } })
 eq(override_kpi['columns'][0]['formula'], 'Sum([Master/Net Revenue])', 'override still wins over the calc inlining')
+
+puts "== clean converter output with bare aggregate identifiers is grounded to Master =="
+$dataset_schema_by_id = {
+  'ds-hr' => {
+    'schema' => { 'columns' => [
+      { 'name' => 'terminated_flag', 'type' => 'LONG' },
+      { 'name' => 'beginning_active_flag', 'type' => 'LONG' },
+      { 'name' => 'ending_active_flag', 'type' => 'LONG' },
+    ] },
+  },
+}
+$translated_bms = {
+  'calc-turnover' => {
+    'id' => 'calc-turnover', 'name' => 'Turnover Rate',
+    'class' => 'aggregate', 'scope' => 'dataset',
+    'sigmaFormula' => '100 * (Sum(terminated_flag) / ((Sum(beginning_active_flag) + Sum(ending_active_flag)) / 2))',
+  },
+}
+turnover_measure = inline_beast_mode_measure(
+  { 'id' => 'turnover-card', 'datasetId' => 'ds-hr' },
+  {
+    'column' => 'Turnover Rate', 'beastModeId' => 'calc-turnover',
+    '_isCalc' => true, 'mapping' => 'VALUE',
+  },
+)
+eq(
+  turnover_measure['formula'],
+  '100 * (Sum([Master/Terminated Flag]) / ((Sum([Master/Beginning Active Flag]) + Sum([Master/Ending Active Flag])) / 2))',
+  'bare snake_case metric refs receive Master qualification and display-name normalization',
+)
+$translated_bms = nil
+$dataset_schema_by_id = nil
 
 puts "== Domo FIXED percent-of-total Beast Mode receives a real workbook placement =="
 $beast_mode_usage = []

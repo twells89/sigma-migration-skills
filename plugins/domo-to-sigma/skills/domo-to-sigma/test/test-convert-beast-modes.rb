@@ -25,6 +25,39 @@ ok(n == "CONCAT([StringColumnCity], ', ', [StringColumnState])", 'backticks → 
 n, _ = normalize_bm("SUM(`Operating Budget`)")
 ok(n == 'SUM([Operating Budget])', 'spaced identifier preserved in brackets')
 
+puts '== normalize_bm: MySQL comments are removed without touching quoted text =='
+commented_sql = <<~SQL
+  /* retired branch:
+  CASE WHEN `Inquiry Date` IS NULL THEN 'Unknown' END
+  */
+  CASE
+    -- an older future-date label
+    WHEN `Inquiry Date` > CURDATE() THEN 'Yes'
+    # current and past rows
+    ELSE 'No'
+  END
+SQL
+n, w = normalize_bm(commented_sql)
+ok(!n.match?(%r{/\*|\*/|--|#}) &&
+   n.include?("WHEN [Inquiry Date] > CURDATE() THEN 'Yes'"),
+   'block, dash-line, and hash-line comments are removed before translation')
+ok(w.any? { |warning| warning.include?('Removed 3 MySQL comments') },
+   'comment removal is recorded in formula provenance')
+
+literal_sql = "CONCAT('https://example.test/#anchor', '-- literal', '/* literal */', `Order #`) + (5--1)"
+n, w = normalize_bm(literal_sql)
+ok(n.include?("'https://example.test/#anchor'") &&
+   n.include?("'-- literal'") &&
+   n.include?("'/* literal */'") &&
+   n.include?('[Order #]') &&
+   n.include?('5--1'),
+   'comment markers inside strings/backticks and minus-negative arithmetic survive')
+ok(w.none? { |warning| warning.include?('Removed') },
+   'literal comment markers do not produce a false removal warning')
+
+ok(effective_formula_class("`Value` /* SUM(`Value`) OVER (ORDER BY `Date`) */") == 'projection',
+   'commented aggregate/window code cannot misclassify a projection')
+
 puts "== normalize_bm: Domo legacy WEEKDAY normalizes to live-equivalent DAYOFWEEK =="
 n, w = normalize_bm('WEEKDAY(`d`)')
 ok(n == 'DAYOFWEEK([d])', 'WEEKDAY rewrites to Domo DAYOFWEEK before generic conversion')
@@ -116,10 +149,28 @@ semantic_cases = [
   ["CASE WHEN `Value` BETWEEN 10 AND 20 THEN 'Mid' ELSE 'Other' END",
    'If([Value] BETWEEN 10 AND 20, "Mid", "Other")',
    'If(([Value] >= 10 and [Value] <= 20), "Mid", "Other")'],
+  ["CASE WHEN LENGTH(`Phone Number`) < 10 THEN '' WHEN CONTAINS(`Phone Number`, '@') THEN '' ELSE CASE WHEN LEFT(`Phone Number`, 1) = '1' THEN SUBSTRING(`Phone Number`, 2, 3) ELSE LEFT(`Phone Number`, 3) END END",
+   'If(Length([Phone Number]) < 10, "", If(Contains([Phone Number], "@"), "", If(Left([Phone Number], 1) = "1", Substring([Phone Number], 2, 3), Left([Phone Number], 3))))',
+   'If(Len([Phone Number]) < 10, "", If(Contains([Phone Number], "@"), "", If(Left([Phone Number], 1) = "1", Mid([Phone Number], 2, 3), Left([Phone Number], 3))))'],
+  ['SUBSTR(`Phone Number`, 2)', 'Substr([Phone Number], 2)', 'Mid([Phone Number], 2)'],
+  ["CONCAT(`First Name`, ' ', `Last Name`)",
+   'Concat([First Name], " ", [Last Name])',
+   'Concat(Text([First Name]), " ", Text([Last Name]))'],
+  ["CASE WHEN DAY(`Current Date`) < DAY(CURDATE()) THEN CONCAT('Days 1-', (DAY(CURDATE()) - 1)) ELSE CONCAT('Days ', DAY(CURDATE()), '-EOM') END",
+   'If(Day([Current Date]) < Day(Curdate()), Concat("Days 1-", (Day(Curdate()) - 1)), Concat("Days ", Day(Curdate()), "-EOM"))',
+   'If(Day([Current Date]) < Day(Today()), Concat("Days 1-", Text((Day(Today()) - 1))), Concat("Days ", Text(Day(Today())), "-EOM"))'],
   ["DATE_FORMAT(`Date`, '%Y-%m')", 'Date_format([Date], "%Y-%m")',
    'DateFormat([Date], "%Y-%m")'],
   ["STR_TO_DATE(`Date_Text`, '%m/%d/%Y')", 'Str_to_date([Date_Text], "%m/%d/%Y")',
    'DateParse([Date_Text], "%m/%d/%Y")'],
+  ["CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+   'If([Inquiry Date] > Curdate(), "Yes", "No")',
+   'If([Inquiry Date] > Today(), "Yes", "No")'],
+  ['CURRENT_DATE()', 'Current_date()', 'Today()'],
+  ['CURTIME()', 'Curtime()', 'Now()'],
+  ['CURRENT_TIME()', 'Current_time()', 'Now()'],
+  ['CURRENT_TIMESTAMP()', 'Current_timestamp()', 'Now()'],
+  ['SYSDATE()', 'Sysdate()', 'Now()'],
   ['LAST_DAY(`Date`)', 'Last_day([Date])', 'LastDay([Date], "month")'],
   ['MONTHNAME(`Date`)', 'Monthname([Date])', 'MonthName([Date])'],
   ['DAYOFWEEK(`Date`)', 'Dayofweek([Date])', 'Weekday([Date])'],
@@ -127,6 +178,9 @@ semantic_cases = [
   ["CONVERT_TZ(`Date`, 'UTC', 'America/Denver')",
    'Convert_tz([Date], "UTC", "America/Denver")',
    'ConvertTimezone([Date], "America/Denver", "UTC")'],
+  ['100*(SUM(terminated_flag) / ((SUM(beginning_active_flag) + SUM(ending_active_flag)) / 2))',
+   '100*(Sum(terminated_flag) / ((Sum(beginning_active_flag) + Sum(ending_active_flag)) / 2))',
+   '100*((1.0 * Sum(terminated_flag)) / ((Sum(beginning_active_flag) + Sum(ending_active_flag)) / 2))'],
 ]
 semantic_cases.each do |source, generic, expected|
   result = DomoSigma::BeastModeSemantics.translate({ 'originalSql' => source }, generic)
@@ -147,6 +201,13 @@ ok(DomoSigma::BeastModeSemantics.translate(
      { 'originalSql' => 'FLOOR(`Value`)' }, 'Floor([Value])'
    ).nil?,
    'FLOOR keeps the live-proven row-wise generic translation')
+literal_string_result = DomoSigma::BeastModeSemantics.translate(
+  { 'originalSql' => 'CONCAT(`Text_Value`, "Substring(")' },
+  'Concat([Text_Value], "Substring(")',
+)
+ok(literal_string_result &&
+   literal_string_result['formula'] == 'Concat(Text([Text_Value]), "Substring(")',
+   'Concat arguments are typed without rewriting Substring text inside a literal')
 [
   'MICROSECOND(`Date`)',
   'PERCENT_RANK() OVER (ORDER BY SUM(`Sales`))',
@@ -419,6 +480,20 @@ ok(!resolved_true.key?('_source'), 'no formula-override attribution when convert
 ok(warns_true.any? { |w| w.include?('NOT applied') && w.include?('converted:true') },
    'the NOT-applied warning names converted:true as the reason (widened-rule wording)')
 
+puts '== resolve_entry: force override supersedes a converted:true formula disproven by live compile =='
+forced_override = {
+  'calculation_true-1' => {
+    'sigmaFormula' => 'Sum([Terminated Flag])',
+    'force' => true,
+    'note' => 'live Sigma compile proved the automated bare identifier invalid',
+  },
+}
+resolved_forced, = resolve_entry(pending_true, forced_override)
+ok(resolved_forced['sigmaFormula'] == 'Sum([Terminated Flag])',
+   'force:true replaces the clean-but-invalid automated formula')
+ok(resolved_forced['_source'] == 'formula-override',
+   'forced replacement remains visibly operator-authored')
+
 # ---------------------------------------------------------------------------
 # Fix 2 (final review): widen override eligibility to also supersede a
 # converted:false formula, not just a blank one — --convert's
@@ -454,6 +529,107 @@ ok(resolved_no_ov['_source'] == 'domo-semantic-synthesis',
    'automatic recovery is attributed separately from a human override')
 ok(warns_no_ov.any? { |w| w.include?('semantic rewrite') },
    'automatic recovery remains visible in conversion output')
+
+puts '== resolve_entry: supplied CURDATE failure maps to Today and clears the unknown-function hazard =='
+curdate_entry = {
+  'id' => 'calculation_future-inquiry',
+  'name' => 'Is Future Inquiry',
+  'class' => 'projection',
+  'originalSql' => "CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+  'sigmaFormula' => 'If([Inquiry Date] > Curdate(), "Yes", "No")',
+  'converted' => true,
+  'warnings' => ['CURDATE() has no Sigma mapping — emitted as-is; verify it exists in Sigma.'],
+}
+resolved_curdate, = resolve_entry(curdate_entry, {})
+ok(resolved_curdate['sigmaFormula'] == 'If([Inquiry Date] > Today(), "Yes", "No")',
+   'CURDATE becomes Sigma Today in the exact field-reported CASE formula')
+ok(resolved_curdate['converted'] == true &&
+   resolved_curdate['_source'] == 'domo-semantic-synthesis',
+   'the deterministic rewrite remains eligible for automatic placement')
+ok(unresolved_unknown_functions(resolved_curdate, resolved_curdate['sigmaFormula']).empty?,
+   'the stale generic CURDATE warning no longer represents a residual function')
+
+puts '== resolve_entry: explicitly mapped same-name functions are not false-blocked =='
+[
+  ['MONTHNAME(`Date`)', 'Monthname([Date])',
+   'MONTHNAME() has no Sigma mapping — emitted as-is; verify it exists in Sigma.',
+   'MonthName([Date])'],
+  ['NTILE(4) OVER (ORDER BY SUM(`Sales`))', 'Ntile(4) OVER ([Order] BY Sum([Sales]))',
+   'NTILE() has no Sigma mapping — emitted as-is; verify it exists in Sigma.',
+   'Ntile(4, Sum([Sales]), "asc")'],
+].each do |source, generic, warning, expected|
+  mapped, = resolve_entry(
+    {
+      'id' => "calculation-#{source.split('(').first.downcase}",
+      'name' => source.split('(').first,
+      'class' => effective_formula_class(source),
+      'originalSql' => source,
+      'sigmaFormula' => generic,
+      'converted' => true,
+      'warnings' => [warning],
+    },
+    {},
+  )
+  ok(mapped['converted'] == true && mapped['sigmaFormula'] == expected,
+     "#{source.split('(').first} semantic mapping is trusted despite the generic warning")
+end
+
+puts '== resolve_entry: an actually unmapped warned function fails closed =='
+unknown_entry = {
+  'id' => 'calculation-unknown',
+  'name' => 'Unknown Function',
+  'class' => 'projection',
+  'originalSql' => 'MYSTERY_FUNC(`Value`)',
+  'sigmaFormula' => 'Mystery_func([Value])',
+  'converted' => true,
+  'warnings' => ['MYSTERY_FUNC() has no Sigma mapping — emitted as-is; verify it exists in Sigma.'],
+}
+resolved_unknown, unknown_warnings = resolve_entry(unknown_entry, {})
+ok(resolved_unknown['converted'] == false &&
+   resolved_unknown['_source'] == 'domo-semantic-block',
+   'generic converted:true cannot ship while its unmapped function remains')
+ok(resolved_unknown['note'].include?('MYSTERY_FUNC()') &&
+   unknown_warnings.any? { |warning| warning.include?('blocked from automatic placement') },
+   'the blocked disposition names the exact unresolved function')
+
+puts '== resolve_entry: comments are gone before Domo semantic matching =='
+commented_curdate_entry = {
+  'id' => 'calculation-commented-curdate',
+  'name' => 'Commented Future Inquiry',
+  'class' => 'projection',
+  'originalSql' => "/* retired CASE branch */\nCASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' -- future\nELSE 'No' END",
+  'sigmaFormula' => 'If([Inquiry Date] > Curdate(), "Yes", "No")',
+  'converted' => true,
+  'warnings' => ['CURDATE() has no Sigma mapping — emitted as-is; verify it exists in Sigma.'],
+  'preWarnings' => ['Removed 2 MySQL comments before formula translation.'],
+}
+resolved_commented, = resolve_entry(commented_curdate_entry, {})
+ok(resolved_commented['sigmaFormula'] == 'If([Inquiry Date] > Today(), "Yes", "No")' &&
+   resolved_commented['converted'] == true,
+   'commented CURDATE CASE still receives the deterministic Today rewrite')
+
+puts '== resolve_entry: malformed or comment-only formulas fail closed =='
+[
+  ['unterminated /* ... */ block comment.', 'Sum([Value])'],
+  ['comment removal left no executable formula.', 'null'],
+].each_with_index do |(reason, sigma_formula), index|
+  blocked_comment, = resolve_entry(
+    {
+      'id' => "calculation-comment-block-#{index}",
+      'name' => 'Malformed Comment Formula',
+      'class' => 'projection',
+      'originalSql' => '/* comment',
+      'sigmaFormula' => sigma_formula,
+      'converted' => true,
+      'preWarnings' => ["#{COMMENT_BLOCK_PREFIX} #{reason}"],
+    },
+    {},
+  )
+  ok(blocked_comment['converted'] == false &&
+     blocked_comment['_source'] == 'domo-semantic-block' &&
+     blocked_comment['note'].include?(reason),
+     "#{reason} is blocked instead of shipping plausible output")
+end
 
 puts '== resolve_entry: no override + no sigmaFormula → still dropped (unchanged honest-drop behaviour) =='
 pending_none = { 'id' => 'calculation_none-1', 'name' => 'Untranslatable', 'class' => nil, 'sigmaFormula' => nil }

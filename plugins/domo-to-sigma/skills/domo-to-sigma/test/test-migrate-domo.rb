@@ -293,7 +293,17 @@ ok(migrate_src.include?("File.join(OUT, 'workbook-post-spec.json')"),
 ok(migrate_src.include?('PRIOR_PLUGIN_VERSION') &&
    migrate_src.include?('PLUGIN_VERSION_CHANGED') &&
    migrate_src.include?('rebuild_workbook_artifacts?(opts)'),
-   'plugin-version changes invalidate workbook/presentation artifacts without forcing data-model rebuild')
+   'plugin-version changes invalidate workbook/presentation artifacts')
+ok(migrate_src.include?("meta['pluginVersion'].to_s == PLUGIN_MANIFEST['version'].to_s") &&
+   migrate_src.include?("final_meta.merge('pluginVersion' => PLUGIN_MANIFEST['version'])"),
+   'formula artifacts are version-stamped and retranslated after plugin upgrades')
+ok(migrate_src.include?('opts[:force] || PLUGIN_VERSION_CHANGED || opts[:formulas_rebuilt]') &&
+   migrate_src.include?('opts[:formulas_rebuilt] = phase_convert_beast_modes!(opts)'),
+   'a formula rebuild invalidates dependent workbook artifacts in the same run')
+ok(migrate_src.include?('rebuild_dm = opts[:force] || opts[:formulas_rebuilt]') &&
+   migrate_src.include?('repost_dm = opts[:force] || opts[:formulas_rebuilt]') &&
+   migrate_src.include?("dm_post_args += ['--update-id', existing_dm_id]"),
+   'a formula rebuild regenerates and PUT-updates the dependent data model instead of reusing stale formulas')
 ok(migrate_src.include?("update_wb_id = prior_ids['workbookId']"),
    'plugin-update rebuild reuses an existing workbook id instead of orphaning a new workbook')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&

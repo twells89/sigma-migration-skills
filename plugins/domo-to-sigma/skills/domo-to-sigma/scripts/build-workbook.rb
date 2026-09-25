@@ -260,8 +260,10 @@ CHART_TYPE_MAP = {
   'badge_pie'                 => 'pie-chart',
   'badge_donut'               => 'donut-chart',
   'badge_singlevalue'         => 'kpi-chart',
+  'badge_textbox'             => 'kpi-chart',
   'badge_filledgauge'         => 'progress',    # native only with grounded CURRENT + TARGET range
   'badge_table'               => 'table',
+  'badge_basic_table'         => 'table',
   'badge_word_cloud'          => 'table',       # NO_NATIVE_EQUIVALENT — term + frequency table
   'badge_calendar'            => 'table',       # NO_NATIVE_EQUIVALENT — flat date + value table
   'badge_map'                 => 'region-map',  # default; build_map falls back to a table when the
@@ -548,7 +550,7 @@ def inline_beast_mode_dimension(card, c)
   formula =
     if %w[aggregate window].include?(bm['class'].to_s) ||
        (bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card')
-      masterize_formula(bm['sigmaFormula'])
+      masterize_formula(bm['sigmaFormula'], card)
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
       mref(bm['sigmaName'] || bm['name'] || c['column'])
     end
@@ -591,6 +593,36 @@ AXIS_OFF = { 'marks' => 'none' }.freeze # gridlines off (bug #8); labels left to
 def eid(card, suffix = '') "el-#{(card['id'] || rand_id).to_s.gsub(/\W+/, '-')}#{suffix}" end
 
 # ---- per-kind builders -----------------------------------------------------
+
+def build_textbox(card)
+  source = Array(card['columns']).first
+  unless source
+    return {
+      'id' => eid(card), 'kind' => 'text', 'name' => card['title'],
+      'body' => card['title'].to_s,
+    }
+  end
+  inlined = source['_isCalc'] ? inline_beast_mode_dimension(card, source) : nil
+  base_formula = inlined && inlined['formula'] || mref(display_name(source['column']))
+  value = {
+    'id' => "v-textbox-#{card['id']}",
+    'name' => col_label(source),
+    'formula' => "Max(#{base_formula})",
+  }
+  source_type = domo_filter_column_type(card, source['column'], source['beastModeId'])
+  value['format'] =
+    case source_type
+    when 'DATE' then { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d' }
+    when 'DATETIME', 'TIMESTAMP'
+      { 'kind' => 'datetime', 'formatString' => '%Y-%m-%d %H:%M:%S' }
+    end
+  {
+    'id' => eid(card), 'kind' => 'kpi-chart', 'name' => card['title'],
+    'source' => { 'kind' => 'table', 'elementId' => 'master' },
+    'columns' => [value.compact],
+    'value' => { 'columnId' => value['id'], 'fontSize' => 48 },
+  }
+end
 
 def build_kpi(card, overrides)
   sn = card['summaryNumber'] || {}
@@ -1658,9 +1690,23 @@ def build_map(card)
 end
 
 def build_table(card)
-  dims, meas = split_cols(card)
-  mcols = meas.map { |m| measure_col(m, card) }
-  cols = dims.map { |d| dim_col(d, card).merge('style' => { 'textWrap' => 'wrap' }) } + mcols
+  source_columns = Array(card['columns'])
+  detail_mode = Array(card['groupBy']).empty? &&
+    source_columns.all? { |column| column['aggregation'].to_s.empty? }
+  if detail_mode
+    # Domo basic/detail tables frequently label every visible field as VALUE
+    # even though there is no grouping or aggregation. Mapping role alone must
+    # not turn text/timestamps into Sum(...): these are row-level passthrough
+    # columns, exactly as shown in the source table.
+    dims = source_columns
+    meas = []
+    mcols = []
+    cols = dims.map { |column| dim_col(column, card).merge('style' => { 'textWrap' => 'wrap' }) }
+  else
+    dims, meas = split_cols(card)
+    mcols = meas.map { |m| measure_col(m, card) }
+    cols = dims.map { |d| dim_col(d, card).merge('style' => { 'textWrap' => 'wrap' }) } + mcols
+  end
   cols = (card['columns'] || []).map { |c| dim_col(c, card).merge('style' => { 'textWrap' => 'wrap' }) } if cols.empty?
   el = {
     'id' => eid(card), 'kind' => 'table', 'name' => card['title'],
@@ -2139,7 +2185,11 @@ end
 # but every element here sources the hidden `master` table, so its formulas must
 # read [Master/Net Revenue]. Already-qualified refs (any "<something>/") are left
 # alone so this is idempotent.
-def masterize_formula(formula)
+GROUNDABLE_AGGREGATES = %w[
+  Sum Count Avg Min Max Median StdDev Variance VariancePop CountDistinct
+].freeze
+
+def masterize_formula(formula, card = nil)
   # Re-point a converted Beast Mode's bare column refs at the master element,
   # AND normalize the column name the same way the master's columns are named.
   # A Beast Mode's SQL carries the RAW Domo column name (e.g. Account.BillingState
@@ -2147,7 +2197,135 @@ def masterize_formula(formula)
   # display_name ("Account Billing State"), so a bare re-point dangles:
   #   'Dependency not found: master (pdp_example_dataset)/account.billingstate'
   # display_name is idempotent, so a ref already in display form is unchanged.
-  formula.to_s.gsub(/\[([^\[\]\/]+)\]/) { "[Master/#{display_name(Regexp.last_match(1))}]" }
+  grounded = formula.to_s.gsub(/\[([^\[\]\/]+)\]/) {
+    "[Master/#{display_name(Regexp.last_match(1))}]"
+  }
+  return grounded unless card
+
+  dataset = dataset_schema_by_id[card['datasetId'].to_s]
+  known = Array(dataset&.dig('schema', 'columns')).each_with_object({}) do |column, out|
+    raw = column['name'] || column['id']
+    next if raw.to_s.empty?
+    out[DomoSigma::BeastModeLod.normalized_name(raw)] = display_name(raw)
+  end
+  functions = GROUNDABLE_AGGREGATES.join('|')
+  grounded.gsub(/\b(#{functions})\s*\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\)/i) do
+    function = Regexp.last_match(1)
+    raw = Regexp.last_match(2)
+    display = known[DomoSigma::BeastModeLod.normalized_name(raw)]
+    display ||= display_name(raw) if raw.include?('_')
+    display ? "#{function}([Master/#{display}])" : Regexp.last_match(0)
+  end
+end
+
+def lod_fixed_percent_mode(card, plan)
+  fixed = Array(plan['fixedBy']).first
+  return 'grand_total' if fixed.to_s.empty?
+
+  same_field = lambda do |value|
+    DomoSigma::BeastModeLod.normalized_name(value) ==
+      DomoSigma::BeastModeLod.normalized_name(fixed)
+  end
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  date_grain_is_fixed = same_field.call(card.dig('dateGrain', 'column'))
+  fixed_is_x = (xcol && same_field.call(xcol['column'])) || date_grain_is_fixed
+  fixed_is_series = series && same_field.call(series['column'])
+
+  return 'x_axis' if fixed_is_x && series
+  return 'color' if fixed_is_series && xcol
+  return 'fixed-only' if fixed_is_x || fixed_is_series
+
+  # The FIXED key is not a visible chart dimension (commonly a card/page date
+  # filter). Once that predicate is applied, the denominator is the grand total
+  # across the displayed subgroup dimension(s).
+  'grand_total'
+end
+
+def lod_workbook_formula(card, bm)
+  return nil unless bm.is_a?(Hash) && bm['class'].to_s == 'lod'
+  if bm['_source'] == 'formula-override'
+    return masterize_formula(bm['sigmaFormula'], card)
+  end
+
+  plan = bm['lodPlacement']
+  plan = DomoSigma::BeastModeLod.fixed_percent_of_total_plan(bm['originalSql']) unless plan.is_a?(Hash)
+  return nil unless plan
+  return lod_fixed_aggregate_formula(card, plan) if plan['kind'] == 'fixed-aggregate'
+
+  mode = lod_fixed_percent_mode(card, plan)
+  if mode == 'fixed-only'
+    scale = plan['scale'].to_f
+    return scale == scale.to_i ? scale.to_i.to_s : scale.to_s
+  end
+  DomoSigma::BeastModeLod.fixed_percent_formula(
+    plan,
+    mode: mode,
+    qualify: ->(field) { "Master/#{display_name(field)}" },
+  )
+end
+
+def lod_fixed_aggregate_formula(card, plan)
+  return nil if plan['filterMode'] || plan['mode'] == 'add'
+
+  inner = "#{plan['innerAggregate']}(#{mref(display_name(plan['field']))})"
+  return "GrandTotal(#{inner})" if plan['mode'] == 'all'
+
+  dims, = split_cols(card)
+  xcol = dims.find { |column| %w[ITEM XTIME].include?(column['mapping'].to_s.upcase) } || dims.first
+  series = dims.find do |column|
+    column != xcol && column['mapping'].to_s.upcase == SERIES_MAPPING
+  end
+  role_for = lambda do |name|
+    normalized = DomoSigma::BeastModeLod.normalized_name(name)
+    date_matches =
+      DomoSigma::BeastModeLod.normalized_name(card.dig('dateGrain', 'column')) == normalized
+    next 'x_axis' if (xcol &&
+      DomoSigma::BeastModeLod.normalized_name(xcol['column']) == normalized) || date_matches
+    next 'color' if series &&
+      DomoSigma::BeastModeLod.normalized_name(series['column']) == normalized
+    nil
+  end
+
+  current_roles = [xcol && 'x_axis', series && 'color'].compact
+  fixed_roles =
+    case plan['mode']
+    when 'by'
+      roles = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }
+      return nil if roles.any?(&:nil?)
+      roles.uniq
+    when 'remove'
+      removed = Array(plan['dimensions']).map { |dimension| role_for.call(dimension) }.compact
+      current_roles - removed
+    else
+      return nil
+    end
+
+  return "GrandTotal(#{inner})" if fixed_roles.empty?
+  return inner if fixed_roles.sort == current_roles.sort
+  return "Subtotal(#{inner}, \"#{fixed_roles.first}\")" if fixed_roles.length == 1
+  nil
+end
+
+def beast_mode_value_format(column, bm)
+  format = sigma_format(column['format'], col_label(column))
+  source_formula = bm['originalSql'].to_s.empty? ? bm['sigmaFormula'] : bm['originalSql']
+  return format unless format.is_a?(Hash) &&
+                       format['formatString'].to_s.end_with?('%') &&
+                       source_formula.to_s.match?(/\A\s*\(?\s*100(?:\.0+)?\s*\*/i)
+
+  source_format = column['format'].is_a?(Hash) ? column['format'] : {}
+  raw_pattern = source_format['format'].to_s
+  explicit_precision = source_format['precision'] || source_format['decimals']
+  decimals = (explicit_precision || raw_pattern[/\.(0+)/, 1]&.length || 1).to_i
+  {
+    'kind' => 'number',
+    'formatString' => ",.#{decimals}f",
+    'suffix' => '%',
+  }
 end
 
 def lod_fixed_percent_mode(card, plan)
@@ -2284,9 +2462,9 @@ def inline_beast_mode_measure(card, c, record: true)
     if bm['class'].to_s == 'lod'
       lod_workbook_formula(card, bm)
     elsif %w[aggregate window].include?(bm['class'].to_s)
-      masterize_formula(bm['sigmaFormula'])
+      masterize_formula(bm['sigmaFormula'], card)
     elsif bm['class'].to_s == 'projection' && bm['scope'].to_s == 'card'
-      row_formula = masterize_formula(bm['sigmaFormula'])
+      row_formula = masterize_formula(bm['sigmaFormula'], card)
       if c['aggregation'].to_s.empty? &&
          bm['originalSql'].to_s.match?(/\A\s*(?:CEILING|FLOOR)\s*\(/i)
         # Live Domo card-data groups unaggregated CEILING/FLOOR VALUE bindings
@@ -2494,7 +2672,7 @@ def resolve_filter_column(col, beast_mode_id: nil, card: nil)
     formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
                 mref(bm['sigmaName'] || disp)
               else
-                masterize_formula(bm['sigmaFormula'])
+                masterize_formula(bm['sigmaFormula'], card)
               end
     record_beast_mode_usage(card, bm, 'workbook-filter-formula')
     [disp, formula]
@@ -2518,7 +2696,7 @@ def resolve_filter_column(col, beast_mode_id: nil, card: nil)
       formula = if bm['class'].to_s == 'projection' && bm['scope'].to_s == 'dataset'
                   mref(bm['sigmaName'] || disp)
                 else
-                  masterize_formula(bm['sigmaFormula'])
+                  masterize_formula(bm['sigmaFormula'], card)
                 end
       record_beast_mode_usage(card, bm, 'workbook-filter-formula')
       [disp, formula]
@@ -3108,8 +3286,10 @@ end
 # would fabricate a bogus source binding on an image element that never had
 # one. Every other element kind here (chart/table/kpi/pivot/map) always
 # carries `source`, so this only ever actually skips for an image.
-def retarget_to_submaster!(el, sm)
-  el['source'] = { 'kind' => 'table', 'elementId' => sm['id'] } if el.key?('source')
+def retarget_to_submaster!(el, sm, retarget_source: true)
+  if retarget_source && el.key?('source')
+    el['source'] = { 'kind' => 'table', 'elementId' => sm['id'] }
+  end
   walk = lambda do |n|
     case n
     # LIVE-VALIDATED FIX (2026-07-31): AXIS_OFF ({'marks'=>'none'}.freeze) is a
@@ -3127,6 +3307,38 @@ def retarget_to_submaster!(el, sm)
   end
   walk.call(el)
   el
+end
+
+def contains_primary_master_ref?(node)
+  case node
+  when Hash
+    node.any? { |_, value| contains_primary_master_ref?(value) }
+  when Array
+    node.any? { |value| contains_primary_master_ref?(value) }
+  when String
+    node.include?('[Master/')
+  else
+    false
+  end
+end
+
+def validate_routed_verification_affinity!(card, elements, sub_master, helper_ids)
+  allowed_sources = [sub_master['id'], *helper_ids].compact
+  failures = Array(elements).each_with_object([]) do |element, out|
+    source_id = element.dig('source', 'elementId')
+    wrong_source = !allowed_sources.include?(source_id)
+    stale_formula = contains_primary_master_ref?(element)
+    next unless wrong_source || stale_formula
+
+    reasons = []
+    reasons << "source=#{source_id.inspect}" if wrong_source
+    reasons << 'contains [Master/...]' if stale_formula
+    out << "#{element['id']}: #{reasons.join(', ')}"
+  end
+  return if failures.empty?
+
+  raise "INTERNAL: routed verification source-affinity failed for card " \
+        "#{card['id']} (DataSet #{card['datasetId']}): #{failures.join('; ')}"
 end
 
 # Sigma rejects a workbook whose element repeats a column id
@@ -3243,6 +3455,11 @@ def build_element(card, overrides, master_ds = nil)
   end
 
   before = $companion_elements.length
+  verification_offsets = [
+    [$kpi_verification_elements, $kpi_verification_elements.length],
+    [$chart_verification_elements, $chart_verification_elements.length],
+    [$table_verification_elements, $table_verification_elements.length],
+  ]
   usage_before = $beast_mode_usage.length
   el = build_element_body(card, overrides)
   filter_helper = el && el['_filterHelper']
@@ -3265,6 +3482,9 @@ def build_element(card, overrides, master_ds = nil)
     # instead of the sub-master's — reintroducing the exact "Dependency not
     # found" whole-workbook-POST failure bead ziht exists to prevent.
     $companion_elements.slice!(before..-1)
+    verification_offsets.each do |elements, offset|
+      elements.slice!(offset..-1)
+    end
     $beast_mode_usage.slice!(usage_before..-1)
     return nil
   end
@@ -3295,6 +3515,29 @@ def build_element(card, overrides, master_ds = nil)
       next if filter_helper && companion.dig('source', 'elementId') == filter_helper['id']
       retarget_to_submaster!(companion, sm)
     end
+    helper_ids = [
+      scatter_helper,
+      filter_helper,
+      *data_helpers,
+      *plugin_sources,
+    ].compact.map { |helper| helper['id'] }
+    new_verification_elements = verification_offsets.flat_map do |elements, offset|
+      Array(elements[offset..-1])
+    end
+    new_verification_elements.each do |verification_element|
+      source_id = verification_element.dig('source', 'elementId')
+      retarget_to_submaster!(
+        verification_element,
+        sm,
+        retarget_source: !helper_ids.include?(source_id),
+      )
+    end
+    validate_routed_verification_affinity!(
+      card,
+      new_verification_elements,
+      sm,
+      helper_ids,
+    )
     warn_card(card, "routed to sub-master '#{sm['name']}' for DataSet #{ds} (bead ziht) — " \
                     'verify column coverage against the card PNG; the sub-master passes through ' \
                     "every column of #{sm['name']}, not just the ones this card uses.")
@@ -3356,7 +3599,9 @@ def build_element_body(card, overrides)
   is_kpi = kind == 'kpi-chart' ||
            (card['summaryNumber'] && Array(card['groupBy']).empty? && (card['columns'] || []).size <= 1)
   if is_kpi
-    kpi = apply_card_filters!(card, build_kpi(card, overrides))
+    base_kpi = card['chartType'].to_s.downcase == 'badge_textbox' ?
+      build_textbox(card) : build_kpi(card, overrides)
+    kpi = apply_card_filters!(card, base_kpi)
     kpi = apply_kpi_display_override!(card, apply_card_date_window!(card, kpi))
     header_rule = optional_card_rule(card, 'kpi-card-header-overrides.json')
     if kpi && header_rule && !header_rule['body'].to_s.empty?
@@ -3430,13 +3675,17 @@ def build_element_body(card, overrides)
          when 'progress'
            build_progress(card) || build_kpi(card, overrides) || build_table(card)
          when 'kpi-chart'
+           if card['chartType'].to_s.downcase == 'badge_textbox'
+             build_textbox(card)
+           else
            # badge_filledgauge (and any other kpi-mapped chartType) may reach
            # here without a summaryNumber — never silently drop the card;
            # degrade to a table + warn rather than emit nil.
-           build_kpi(card, overrides) || begin
-             warn_card(card, "kpi-chart: chartType '#{card['chartType']}' has no summaryNumber to build a " \
-                             'value from — emitted a table instead so the card is not silently dropped.')
-             build_table(card)
+             build_kpi(card, overrides) || begin
+               warn_card(card, "kpi-chart: chartType '#{card['chartType']}' has no summaryNumber to build a " \
+                               'value from — emitted a table instead so the card is not silently dropped.')
+               build_table(card)
+             end
            end
          else
            warn_card(card, "unknown chartType '#{card['chartType']}' → emitted bar-chart; verify against the PNG.")
@@ -3461,9 +3710,10 @@ def build_element_body(card, overrides)
     # Card predicates still apply to every helper before the union; applying
     # the ordinary one-window filter would discard the comparison periods.
     el['_dataHelpers'] = Array(el['_dataHelpers']).map { |helper| apply_card_filters!(card, helper) }
-  elsif el && %w[table pivot-table].include?(el['kind']) &&
-        (Array(card['quickFilters']).any? || card['dateRangeFilter'].is_a?(Hash) ||
-         el['kind'] == 'pivot-table') && !plugin_enabled_for_card?(card)
+  elsif el && el['kind'] != 'image' && !plugin_enabled_for_card?(card) &&
+        (Array(card['quickFilters']).any? ||
+         (%w[table pivot-table].include?(el['kind']) &&
+          (card['dateRangeFilter'].is_a?(Hash) || el['kind'] == 'pivot-table')))
     helper = card_filter_source(card, el, extra_elements: [companion].compact)
     if helper
       el = rebind_to_filter_source!(el, helper)
