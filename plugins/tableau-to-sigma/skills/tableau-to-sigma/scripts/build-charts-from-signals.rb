@@ -5208,7 +5208,10 @@ layout.each do |dash|
       if user_agg_formula && !(window_plan && window_plan['mode'] == 'inline')
         warnings << "'#{cap}' measure '#{meas['name']}' is a Tableau User-aggregated calc — emitted its decomposed Sigma formula directly: #{user_agg_formula[0..140]}"
       elsif user_agg_formula.nil? && !(window_plan && window_plan['mode'] == 'two-stage')
-        if meas_unresolved
+        multi_instance_trend = %w[line area].include?(z['chart_kind'].to_s) &&
+                               [z.dig('rows_shelf', 'raw'), z.dig('cols_shelf', 'raw')]
+                                 .compact.any? { |raw| raw.to_s.include?('+') && raw.to_s.include?(':qk') }
+        if meas_unresolved && !multi_instance_trend
           warnings << "ZONE DROPPED: '#{cap}' measure '#{meas_hdr}' is a worksheet calculation with no " \
                       'translated formula and no mapped master column — emitting a guessed ' \
                       "Sum([Master/#{meas['name']}]) would fail the workbook POST; build the named " \
