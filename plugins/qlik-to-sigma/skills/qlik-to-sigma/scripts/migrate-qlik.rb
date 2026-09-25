@@ -251,7 +251,9 @@ def run!(cmd, env: {})
 end
 
 def qlik_eval(app, ctx, expr)
-  out, st = Open3.capture2('qlik', 'app', 'eval', expr, '-a', app, '--context', ctx)
+  # qlik-cli echoes the expression before the value: a multi-line expression
+  # would push the value off line 2. Whitespace is insignificant in Qlik exprs.
+  out, st = Open3.capture2('qlik', 'app', 'eval', expr.to_s.gsub(/\s*[\r\n]+\s*/, ' '), '-a', app, '--context', ctx)
   return nil unless st.success?
   lines = out.split("\n").reject { |l| l.strip.empty? }
   lines[1]&.strip
@@ -261,6 +263,18 @@ def numish(s)
   return nil if s.nil?
   t = s.to_s.gsub(/[$,%\s]/, '')
   t =~ /\A-?\d+(\.\d+)?\z/ ? t.to_f : nil
+end
+
+# A Qlik display value ("$529.2M", "$837.0") equals a warehouse number when the
+# number rounds to it at the precision and unit scale Qlik printed.
+QLIK_SCALE = { 'K' => 1e3, 'M' => 1e6, 'B' => 1e9, 'G' => 1e9, 'T' => 1e12 }.freeze
+def display_match?(shown, number)
+  return false if shown.nil? || number.nil?
+  m = shown.to_s.gsub(/[$,\s]/, '').match(/\A(-?\d+(?:\.(\d+))?)([KMBGT])?\z/i)
+  return false unless m
+  scale = m[3] ? QLIK_SCALE[m[3].upcase] : 1.0
+  tol = 0.5 * (10.0**-(m[2] ? m[2].length : 0)) * scale
+  (m[1].to_f * scale - number).abs <= tol + 1e-9
 end
 
 TOTAL = 6
@@ -985,8 +999,10 @@ emap.select { |e| e['kind'] == 'kpi-chart' }.each do |e|
   # the CSV export prints a format-rounded value (e.g. percent KPIs at 5
   # decimals): a Qlik value that rounds to EXACTLY the printed Sigma value is a
   # MATCH, not a divergence -- compare at the precision the export carries
-  printed_dp = sval.to_s[/\A-?\d+\.(\d+)\z/, 1]&.length
-  rounded_match = qn && sn && printed_dp && (qn.round(printed_dp) - sn).abs <= 1e-9
+  printed_dp = sval.to_s.gsub(/[$,%\s]/, '')[/\A-?\d+\.(\d+)\z/, 1]&.length
+  rounded_match = (qn && sn && printed_dp && (qn.round(printed_dp) - sn).abs <= 1e-9) ||
+                  display_match?(qval, sn)
+  qn ||= sn if display_match?(qval, sn)
   status = if qn && sn && ((qn - sn).abs <= [qn.abs, sn.abs].max * 1e-6 + 1e-9 || rounded_match)
              'MATCH'
            elsif qn && sn && stale_days && stale_days >= 1

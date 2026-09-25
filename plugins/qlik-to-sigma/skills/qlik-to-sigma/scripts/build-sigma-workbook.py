@@ -143,8 +143,58 @@ class Resolver:
             self.raw_to_disp[dn.upper().replace(" ", "_")] = dn
     def __call__(self, qlik_name):
         if not qlik_name: return None
-        k = str(qlik_name).upper()
+        k = str(qlik_name).strip()
+        # `=Field` / `=[Field]` is a calculated dimension that only evaluates a
+        # field (common in drill-down groups) — resolve it as that field.
+        bare = re.fullmatch(r"=\s*\[?([^\[\]()=]+?)\]?\s*", k)
+        if bare:
+            k = bare.group(1)
+        k = k.upper()
         return self.raw_to_disp.get(k) or self.raw_to_disp.get(k.replace(" ", "_"))
+
+def _region_type(dim):
+    """Sigma region-map grain for a Qlik map-layer dim, or None (never guessed)."""
+    name = str(dim or "").upper()
+    return "us-state" if "STATE" in name else ("country" if "COUNTRY" in name else None)
+
+
+TRANSLATION_NOTES = []  # approximations recorded by translate_measure; drained into warnings
+
+CURRENCY_PREFIX = []  # the literal immediately before "&Num(" in a display-formatting wrapper
+                       # (only "$" is recognized); drained into the AUTO NUMBER FORMAT prefix
+                       # per measure in build_element, same single-slot pattern as TRANSLATION_NOTES
+
+
+def _display_wrapper_aggregate(e):
+    """A text-formatting wrapper around ONE aggregate -> that aggregate.
+
+    Qlik authors often hand-roll unit abbreviation, e.g.
+    If(Sum(X)>=1e9, '$'&Num(Sum(X)/1e9,'#,##0.0')&'B', If(..., ...)): every
+    branch displays the same number, so its value is Sum(X). Fail-closed: only
+    If/Num, a single distinct aggregate call, numeric literals, comparison and
+    arithmetic operators, and string literals may appear; anything else is left
+    untouched (and stays untranslated). The literal directly in front of the
+    first "&Num(" (e.g. '$') is recorded in CURRENCY_PREFIX so a caller that
+    falls back to an auto d3 format can still show a currency prefix."""
+    if not re.search(r"\bNum\s*\(", e, re.I) or "&" not in e:
+        return e
+    aggs = {re.sub(r"\s+", "", m.group(0)) for m in re.finditer(
+        r"\b(?:" + _AGG_ALT + r")\s*\([^()]*\)", e, flags=re.I)}
+    if len(aggs) != 1:
+        return e
+    agg = aggs.pop()
+    rest = re.sub(r"'[^']*'", "", e)
+    rest = re.sub(r"\b(?:" + _AGG_ALT + r")\s*\([^()]*\)", "", rest, flags=re.I)
+    rest = re.sub(r"\b(?:If|Num)\b", "", rest, flags=re.I)
+    if not re.fullmatch(r"[\s\d.,()&/*+\-<>=]*", rest):
+        return e
+    prefix = re.search(r"'([^']*)'\s*&\s*Num\s*\(", e, re.I)
+    CURRENCY_PREFIX.append(prefix.group(1) if prefix and prefix.group(1) == "$" else "")
+    TRANSLATION_NOTES.append(
+        f"display-formatting wrapper (If/Num unit abbreviation) reduced to its value {agg}; "
+        "apply a Sigma number format for the abbreviated display")
+    return agg
+
 
 def translate_measure(expr, resolve):
     """Qlik measure expression -> Sigma formula over the master, or None.
@@ -152,6 +202,7 @@ def translate_measure(expr, resolve):
     arithmetic combinations of those (Sum(a)/Sum(b), Sum(a)/Count(DISTINCT b))."""
     e = str(expr or "").strip().lstrip("=").strip()
     if not e: return None
+    e = _display_wrapper_aggregate(e)
     unresolved = []
     def ref(f):
         d = resolve(f)
@@ -177,6 +228,21 @@ def translate_measure(expr, resolve):
             else f"{agg}({inner})"
     # aggregation function names + Sigma targets come from refs/catalogs/aggregation.json
     _cd = _AGG_TO_SIGMA.get("count_distinct", "CountDistinct")
+    # 0) clear-only set  Agg({<F1=, F2=>} X): "ignore selections on F1, F2". Sigma
+    #    controls filter the shared master globally (no per-chart opt-out), so the
+    #    plain aggregate is emitted and the approximation is recorded loudly —
+    #    exact whenever no control filters those fields.
+    def clear_only(m):
+        fields = [f.strip() for f in m.group(1).split(",")]
+        if not all(re.fullmatch(r"\[?[A-Za-z0-9_ ]+\]?\s*=\s*", f) for f in fields):
+            return m.group(0)
+        names = [re.sub(r"[\[\]=\s]", "", f) for f in fields]
+        TRANSLATION_NOTES.append(
+            f"set modifier {{<{', '.join(n + '=' for n in names)}>}} (ignore selections on "
+            f"{', '.join(names)}) emitted as the plain aggregate — Sigma controls cannot "
+            "exempt one chart; exact unless a control filters " + ", ".join(names))
+        return ""
+    e = re.sub(r"\{\s*<([^{}<>]*)>\s*\}\s*", clear_only, e)
     # 1) simple Set Analysis  Agg({<F={v,...}>} [DISTINCT] X)  (also F-={...} exclusion)
     e = re.sub(r"\b(" + _AGG_ALT + r")\s*\(\s*\{\s*<\s*([A-Za-z0-9_]+)\s*(-?=)\s*\{([^}]*)\}\s*>\s*\}\s*(?:DISTINCT\s+)?([A-Za-z0-9_]+)\s*\)",
                set_analysis, e, flags=re.I)
@@ -200,7 +266,7 @@ def date_field(info, raw):
     target (estate-repair gotcha) — date fields need date-range controls."""
     tags = [str(t).lower() for t in (info.get("tags") or [])]
     if "$date" in tags or "$timestamp" in tags: return True
-    if "$text" in tags: return False              # tagged, and tagged non-date
+    if tags: return False                         # tagged, and tagged non-date ($text, $numeric, ...)
     fmt = (info.get("numFmt") or "").upper()
     if re.search(r"[DMY]{2,}[-./ ]", fmt): return True
     return bool(re.search(r"(^|_)(DATE|DT|TIMESTAMP)(_|$)", str(raw or "").upper()))
@@ -410,6 +476,12 @@ def apply_presentation(el, c):
             # The live API accepts "none" only when there are multiple series;
             # single-series grouped bars are represented by omitting stacking.
             el["stacking"] = "none"
+        if presentation.get("orientation") == "horizontal":
+            # Verified live (2026-09): bar-chart.orientation="horizontal" POSTs
+            # and PERSISTS on readback; "vertical" 400s, so it's just omitted
+            # (the released default). Only bar-chart — line charts also carry
+            # a Qlik orientation flag but have no Sigma equivalent.
+            el["orientation"] = "horizontal"
     if presentation.get("showLabels") is not None and el.get("kind", "").endswith("-chart"):
         el["dataLabel"] = {
             "labels": "shown" if presentation.get("showLabels") else "hidden"
@@ -526,7 +598,9 @@ def build_element(c, resolve, warnings, metrics=None):
     """One Qlik chart object -> one Sigma element (or None + warning). `metrics`
     (DM metrics referenceable on the master) lets a measure bind to a governed
     [Metrics/<name>] reference; None/empty keeps every measure inline."""
-    title = c.get("title") or c.get("vizType")
+    # An untitled Qlik KPI displays its measure label; use that before the viz type.
+    title = c.get("title") or next((l for l in (c.get("measureLabels") or []) if l), None) \
+        or c.get("vizType")
     dims_raw = [(d[0] if isinstance(d, list) else d) for d in (c.get("dimensions") or [])]
     dim_disp = [resolve(d) for d in dims_raw]
     labels = c.get("dimLabels") or [None] * len(dims_raw)
@@ -539,6 +613,9 @@ def build_element(c, resolve, warnings, metrics=None):
         mexprs = [f"Count({dims_raw[0]})"]
     mlabels = c.get("measureLabels") or [None] * len(mexprs)
     mfmts = c.get("measureFmts") or [None] * len(mexprs)
+    # qType "U" (discovery's measureFmtTypes) == Qlik's "Auto" format. Absent on
+    # older discovery output / fixtures -> every entry None -> no behavior change.
+    mfmt_types = c.get("measureFmtTypes") or [None] * len(mexprs)
     for drill in (c.get("drillGroups") or []):
         fields = drill.get("fields") or []
         if len(fields) > 1:
@@ -576,10 +653,11 @@ def build_element(c, resolve, warnings, metrics=None):
         kind = "bar-chart"
     elif vt == "combochart" and c.get("seriesTypes") and set(c["seriesTypes"]) == {"line"}:
         kind = "line-chart"
-    if kind == "bar-chart" and presentation.get("orientation") == "horizontal":
-        warnings.append(
-            f"'{title}' (barchart) HORIZONTAL ORIENTATION GAP: current Sigma workbook "
-            "spec rejects bar-chart.orientation; emitted the valid default vertical orientation")
+    # Horizontal bar orientation is applied later in apply_presentation (the
+    # live Sigma spec DOES accept bar-chart.orientation="horizontal" and it
+    # survives readback — verified 2026-09; "vertical" is the one 400 case,
+    # so it's simply omitted). Line charts also carry a Qlik orientation but
+    # have no Sigma equivalent and are deliberately ignored there.
 
     if dims_raw and any(d is None for d in dim_disp):
         warnings.append(f"skip '{title}': dim(s) {dims_raw} not on the denorm element"); return None
@@ -587,20 +665,57 @@ def build_element(c, resolve, warnings, metrics=None):
     cols, mids, mnames = [], [], []
     for i, mexpr in enumerate(mexprs):
         f = translate_measure(mexpr, resolve)
+        warnings.extend(f"'{title}' APPROXIMATION: {note}" for note in TRANSLATION_NOTES)
+        TRANSLATION_NOTES.clear()
+        _prefix = CURRENCY_PREFIX[0] if CURRENCY_PREFIX else ""
+        CURRENCY_PREFIX.clear()
         if f is None:
             warnings.append(f"'{title}': measure not translated: {mexpr}")
             continue
         # Prefer a governed [Metrics/<name>] ref when this inline aggregate matches a
         # DM metric by formula equivalence; safe no-op (inline) otherwise.
-        f = _mb.metric_ref_or_inline(f, MASTER, metrics)
+        # KPI values stay inline: preflight K1 rejects a bare ref as a kpi-chart
+        # value (bare sibling refs render null), and [Metrics/..] is bare.
+        if kind != "kpi-chart":
+            f = _mb.metric_ref_or_inline(f, MASTER, metrics)
         mname = mlabels[i] or (title if kind == "kpi-chart" else f"Measure {i+1}")
         cid = nid("y")
         _mcol = {"id": cid, "formula": f, "name": mname}
-        _fmt = sigma_fmt(mfmts[i], mname, warnings)
+        # AUTO NUMBER FORMAT: no Qlik qFmt but the engine reports Qlik's "Auto"
+        # format (qType "U") -> ship the d3 equivalent (",.4s": 632313 -> "632.3k",
+        # matching Qlik's own abbreviation) instead of the unformatted-number
+        # warning, which no longer applies. Tables/pivots keep full precision —
+        # "Auto" in a Qlik table cell shows the raw number, not an abbreviation.
+        _auto = not mfmts[i] and mfmt_types[i] == "U" and kind not in ("table", "pivot-table")
+        _fmt = sigma_fmt(mfmts[i], mname, None if _auto else warnings)
+        if _fmt is None and _auto:
+            # KPIs keep the fixed ",.4s" ("632.3k"); chart axes/labels trim zeros
+            # (",.4~s") or the axis ticks read "5.000M" / "0.000".
+            _fmt = {"kind": "number",
+                    "formatString": _prefix + (",.4s" if kind == "kpi-chart" else ",.4~s")}
         if _fmt: _mcol["format"] = _fmt
         cols.append(_mcol)
         mids.append(cid); mnames.append(mname)
-    if not mids:
+    if kind == "region-map" and dims_raw and _region_type(dims_raw[0]) is None:
+        # No Sigma region grain for this location dim (e.g. City, which needs
+        # coordinates): rebuild the layer as a table of its locations rather
+        # than guessing a regionType or dropping the visual.
+        warnings.append(f"'{title}' (map) EXPLICIT APPROXIMATION: region grain '{dims_raw[0]}' "
+                        "is not a Sigma region type (us-state/country) and the source carries "
+                        "no coordinates — rebuilt as a table of its locations")
+        kind, vt = "table", "map-as-table"
+    if vt in ("map", "map-as-table") and c.get("mapLayers"):
+        # mapLayers inventories EVERY discovered gaLayer; the one actually built
+        # (dims_raw/dim_disp above) came from _choose_map_layer's pick. Any OTHER
+        # PointLayer lost that pick (e.g. a City layer under the chosen State
+        # AreaLayer) needs coordinates Sigma point maps don't get from this
+        # source — flagged loudly rather than silently dropped.
+        for layer in c["mapLayers"]:
+            if layer.get("type") == "PointLayer" and layer.get("dims") != c.get("dimensions"):
+                warnings.append(
+                    f"'{title}' (map): {layer.get('type')} on {layer.get('dims')} dropped — "
+                    "Sigma point maps need latitude/longitude and the source carries none")
+    if not mids and not (kind == "table" and vt == "map-as-table"):
         warnings.append(f"skip '{title}': no translatable measures"); return None
 
     el = {"id": "el-" + re.sub(r"[^a-z0-9]", "", str(c["id"]).lower()),
@@ -659,8 +774,7 @@ def build_element(c, resolve, warnings, metrics=None):
     if kind == "region-map":
         # Qlik map layer dim -> Sigma region-map; only emit when the region
         # grain is recognizable (else flag, never guess a wrong regionType)
-        dname = (dims_raw[0] or "").upper()
-        rtype = "us-state" if "STATE" in dname else ("country" if "COUNTRY" in dname else None)
+        rtype = _region_type(dims_raw[0])
         if rtype is None:
             warnings.append(f"skip '{title}' (map): region grain '{dims_raw[0]}' not recognized (us-state/country)")
             return None
@@ -975,12 +1089,19 @@ def grid_layout(page_id, sheet, placed, navigation_id=None):
     preserving those coords renders filters stacked over charts. Charts/KPIs
     keep their relative geometry below the controls band; _decollide_bands in
     banded_page is the final safety net for any chart-on-chart overlap.
+
+    Lifting the controls out also frees up whatever Qlik columns they used to
+    float over — a LEFT filter rail (e.g. controls in cols 0-16 of an 84-col
+    sheet, charts in 16-84) otherwise leaves those freed columns empty on
+    every chart row, because charts still map onto the FULL [0, qcols] extent.
+    When at least one control was lifted AND the charts/KPIs only span a
+    narrower extent than the sheet, columns are instead mapped onto that
+    narrower extent so the charts fill the width the controls vacated. No
+    controls, or charts already spanning the full sheet -> identical mapping.
     Returns (page_xml, extra_spec_elements)."""
     qcols = sheet.get("columns") or 24
     ctls, charts = [], []
     for cell, el in placed:
-        c0 = round(cell["col"] * 24 / qcols) + 1
-        c1 = round((cell["col"] + cell["colspan"]) * 24 / qcols) + 1
         # control_subcell splits a filterpane cell fractionally — round to grid
         r0 = int(round(cell["row"] * ROW_SCALE)) + 1
         r1 = int(round((cell["row"] + cell["rowspan"]) * ROW_SCALE)) + 1
@@ -989,7 +1110,19 @@ def grid_layout(page_id, sheet, placed, navigation_id=None):
         if el["kind"] == "control":
             ctls.append(el["id"])            # float-over-chart coords discarded
         else:
-            charts.append([el["id"], c0, c1, r0, r1, el])
+            charts.append([cell, r0, r1, el])
+    qmin, qmax = 0, qcols
+    if ctls and charts:
+        cmin = min(cell["col"] for cell, r0, r1, el in charts)
+        cmax = max(cell["col"] + cell["colspan"] for cell, r0, r1, el in charts)
+        if cmin > 0 or cmax < qcols:
+            qmin, qmax = cmin, cmax
+    span = qmax - qmin
+    chart_items = []
+    for cell, r0, r1, el in charts:
+        c0 = round((cell["col"] - qmin) * 24 / span) + 1
+        c1 = round((cell["col"] + cell["colspan"] - qmin) * 24 / span) + 1
+        chart_items.append([el["id"], c0, c1, r0, r1, el])
     items, row = [], 1
     if ctls:
         n = len(ctls)
@@ -997,9 +1130,9 @@ def grid_layout(page_id, sheet, placed, navigation_id=None):
             cc0 = 1 + round(24 * i / n); cc1 = 1 + round(24 * (i + 1) / n)
             items.append([eid, cc0, cc1, row, row + 3])
         row += 3
-    if charts:
-        shift = row - min(c[3] for c in charts)   # drop charts below the controls band
-        items += [[c[0], c[1], c[2], c[3] + shift, c[4] + shift, *c[5:]] for c in charts]
+    if chart_items:
+        shift = row - min(c[3] for c in chart_items)   # drop charts below the controls band
+        items += [[c[0], c[1], c[2], c[3] + shift, c[4] + shift, *c[5:]] for c in chart_items]
     return banded_page(page_id, items, sheet.get("title"), navigation_id=navigation_id)
 
 def auto_layout(page_id, elems, title=None, navigation_id=None):
