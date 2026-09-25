@@ -29,6 +29,10 @@ ok('text zone is furniture', !ZoneCensus.plots?(text_zone))
 ok('filter zone is furniture', !ZoneCensus.plots?(filter_zone))
 ok('uncaptioned chart is not a tile', !ZoneCensus.plots?(uncaptioned_chart))
 ok('near-zero-height alert host is furniture', !ZoneCensus.plots?(thin_alert_chart))
+ok('near-zero-height chart is classified as a hidden host',
+   ZoneCensus.hidden_chart_host?(thin_alert_chart))
+ok('ordinary visible chart is not a hidden host',
+   !ZoneCensus.hidden_chart_host?(chart_with_measure))
 ok('nil is not a tile', !ZoneCensus.plots?(nil))
 
 # ---- content_zones : furniture excluded from the count ----------------------

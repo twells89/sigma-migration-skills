@@ -25,6 +25,14 @@ module ZoneCensus
     z.is_a?(Hash) && z['kind'] == 'chart' && !z['caption'].to_s.strip.empty?
   end
 
+  def hidden_chart_host?(z)
+    return false unless chart_zone?(z)
+    (z['w_pct'] && z['w_pct'].to_f.positive? &&
+      z['w_pct'].to_f < MIN_VISIBLE_CHART_PCT) ||
+      (z['h_pct'] && z['h_pct'].to_f.positive? &&
+        z['h_pct'].to_f < MIN_VISIBLE_CHART_PCT)
+  end
+
   # True when a chart zone actually PLOTS data — has at least one measure OR a
   # non-empty rows/cols shelf. A captioned chart zone that plots nothing is a
   # text/label worksheet (furniture), not a tile. Mirrors phase6-parity's
@@ -35,10 +43,7 @@ module ZoneCensus
     # Tableau uses near-zero-height worksheet zones as hidden alert/action
     # hosts. They are not visible data panels; expanding one into a normal
     # Sigma tile creates spurious charts absent from the source screenshot.
-    return false if z['w_pct'] && z['w_pct'].to_f.positive? &&
-                    z['w_pct'].to_f < MIN_VISIBLE_CHART_PCT
-    return false if z['h_pct'] && z['h_pct'].to_f.positive? &&
-                    z['h_pct'].to_f < MIN_VISIBLE_CHART_PCT
+    return false if hidden_chart_host?(z)
     rs = z['rows_shelf'] || {}
     cs = z['cols_shelf'] || {}
     shelf = rs['dim_count'].to_i + rs['measure_count'].to_i +

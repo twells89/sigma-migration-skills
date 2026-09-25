@@ -4868,7 +4868,7 @@ signal_built_tiles = [] # [{ 'worksheet' => cap, 'view_id' => id }]
 layout.each do |dash|
   dash['zones'].each do |z|
     next unless z['kind'] == 'chart'
-    next unless ZoneCensus.plots?(z)
+    next if ZoneCensus.hidden_chart_host?(z)
     cap = z['caption']
     next if cap.nil? || cap.empty?
 
