@@ -271,14 +271,16 @@ class TableauLayoutParser:
     def guid_from_param(self, param: str | None) -> str | None:
         if not param:
             return None
-        token = r"(?:[0-9a-f-]{36}|Calculation_\d+|[A-Za-z_][\w. ()/&-]*)"
-        match = re.search(rf"\.\[(?:[a-z-]+:)?({token})(?::[a-z]+)?\]$", param, re.I)
+        token = r"(?:[0-9a-f-]{36}|Calculation_\d+|[^:\[\]]+)"
+        match = re.search(rf"\.\[(?:[a-z-]+:)+({token}):[a-z]+(?::\d+)?\]$", param, re.I)
+        match = match or re.search(rf"\.\[({token})\]$", param, re.I)
         if match:
-            return match.group(1)
+            return match.group(1).strip()
         if "].[" not in param:
-            match = re.fullmatch(rf"\[(?:[a-z-]+:)?({token})(?::[a-z]+)?\]", param, re.I)
+            match = re.fullmatch(rf"\[(?:[a-z-]+:)+({token}):[a-z]+(?::\d+)?\]", param, re.I)
+            match = match or re.fullmatch(rf"\[({token})\]", param, re.I)
             if match:
-                return match.group(1)
+                return match.group(1).strip()
         return None
 
     @staticmethod
@@ -448,7 +450,21 @@ class TableauLayoutParser:
         result["has_measure_values"] = bool(
             re.search(r"\[(?:Multiple|Measure)\s+Values\]", shelf, re.I)
         )
-        for part in shelf.split("/"):
+        parts: list[str] = []
+        buffer: list[str] = []
+        bracket_depth = 0
+        for char in shelf:
+            if char == "[":
+                bracket_depth += 1
+            elif char == "]" and bracket_depth:
+                bracket_depth -= 1
+            if char == "/" and bracket_depth == 0:
+                parts.append("".join(buffer))
+                buffer = []
+            else:
+                buffer.append(char)
+        parts.append("".join(buffer))
+        for part in parts:
             raw = re.sub(r"^[\s(]+|[)\s]+$", "", part.strip())
             if not raw:
                 continue
@@ -699,6 +715,17 @@ class TableauLayoutParser:
                         channels.setdefault(channel, {
                             "column": attr(encoding, "column"), "field": attr(encoding, "field")
                         })
+            if not measures:
+                for channel_name in ("text", "label"):
+                    reference = (channels.get(channel_name) or {}).get("column")
+                    role, derivation, _ = self.classify_shelf_field(reference)
+                    guid = self.guid_from_param(reference)
+                    if role == "measure" and guid:
+                        measures.append({
+                            "column": f"[{guid}]",
+                            "derivation": str(derivation or "").capitalize(),
+                        })
+                        break
 
             rows_node = next((item for item in descendants(worksheet, "rows")), None)
             cols_node = next((item for item in descendants(worksheet, "cols")), None)

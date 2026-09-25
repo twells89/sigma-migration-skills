@@ -411,9 +411,13 @@ o = Object.new
       src.match(/^#{c}\s*=\s*\{.*?\}\.freeze/m) || src.match(/^#{c}\s*=.*$/)
   o.instance_eval(m[0]) if m
 end
-%w[map_column translate_user_agg_formula translate_row_level_calc
-   translate_dim_calc translate_kpi_measure_formula translate_tableau_tc
-   translate_window_calc header_base].each do |fn|
+%w[
+  map_column strip_tableau_comments translate_sla_ratio split_top_level_args
+  parse_tableau_function_call translated_calc_reference param_control_ref
+  translate_user_agg_formula translate_row_level_calc translate_dim_calc
+  translate_kpi_measure_formula translate_tableau_tc translate_window_calc
+  header_base
+].each do |fn|
   m = src.match(/^def #{fn}\b.*?\n^end$/m)
   abort "test bug: could not extract #{fn}" unless m
   o.instance_eval(m[0])

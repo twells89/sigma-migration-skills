@@ -143,6 +143,10 @@ Dir.mktmpdir do |d|
              ] }))
   Dir.mkdir(File.join(d, 'views'))
   %w[v1 v2 v3 v4].each { |v| File.write(File.join(d, 'views', "#{v}.csv"), '') } # empty → build from .twb signals
+  # Null exclusion is evidence-driven: provide one non-null exported row for
+  # this path. Signal-only worksheets intentionally no longer guess null
+  # behavior and therefore emit no IsNotNull filter.
+  File.write(File.join(d, 'views', 'v1.csv'), "Region,Total Revenue\nRegion A,100\n")
   abort 'parse-twb-layout failed' unless system('ruby', PARSER, twb, lay, out: File::NULL, err: File::NULL)
   meta = JSON.parse(File.read(lay.sub(/\.json$/, '-meta.json')))
   out = File.join(d, 'specs.json')

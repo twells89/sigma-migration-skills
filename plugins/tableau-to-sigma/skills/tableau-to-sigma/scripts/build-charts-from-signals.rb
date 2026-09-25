@@ -78,6 +78,29 @@ require 'erb'
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
 
+def worksheet_element_id(caption, kpi: false)
+  prefix = kpi ? 'el-kpi-' : 'el-'
+  limit = kpi ? 38 : 40
+  slug = caption.to_s.downcase.gsub(/\W+/, '-')[0..limit].to_s.sub(/-$/, '')
+  base = "#{prefix}#{slug}"
+  $worksheet_element_id_owners ||= {}
+  owner = $worksheet_element_id_owners[base]
+  same_worksheet = owner &&
+                   owner.to_s.strip.downcase == caption.to_s.strip.downcase
+  if owner && !same_worksheet
+    digest = Digest::SHA1.hexdigest(caption.to_s)[0, 8]
+    resolved = "#{base}-#{digest}"
+    ($worksheet_element_id_collisions ||= []) << {
+      'base' => base, 'first' => owner, 'second' => caption.to_s, 'resolved' => resolved
+    }
+    $worksheet_element_id_owners[resolved] = caption.to_s
+    resolved
+  else
+    $worksheet_element_id_owners[base] ||= caption.to_s
+    base
+  end
+end
+
 opts = { master_id: 'master' }
 OptionParser.new do |p|
   p.on('--tableau-dir DIR')         { |v| opts[:tab] = v }
@@ -411,6 +434,7 @@ def synthesize_view_from_signals(z, meta)
   end
   fields = ((z.dig('cols_shelf', 'fields') || []) + (z.dig('rows_shelf', 'fields') || []))
   dims = fields.select { |f| f['role'] == 'dim' }
+               .reject { |f| TABLEAU_PSEUDO_FIELDS.include?(f['guid'].to_s) }
   # v5.4: skip axis-anchor PLACEHOLDER measures (AVG(0) / min(-1.0) — the
   # dummy-axis idiom; on pie marks it's the dual-axis donut-hole hack). They
   # carry no data, and picking one as the synthesized measure header binds the
@@ -418,6 +442,17 @@ def synthesize_view_from_signals(z, meta)
   meas = fields.select do |f|
     next false unless f['role'] == 'measure'
     !placeholder_calc?((cbg[f['guid'].to_s] || {})['formula'])
+  end
+  has_measure_values = z.dig('rows_shelf', 'has_measure_values') ||
+                       z.dig('cols_shelf', 'has_measure_values')
+  if meas.empty? && has_measure_values
+    Array(z['measures']).each do |measure|
+      column = measure['column'].to_s
+      guid = name_or_guid_from_text(column) || column.gsub(/\A\[|\]\z/, '')
+      next if guid.empty? || TABLEAU_PSEUDO_FIELDS.include?(guid)
+      meas << { 'guid' => guid, 'role' => 'measure',
+                'derivation' => measure['derivation'].to_s.downcase }
+    end
   end
   # Include a color-channel dimension if the encoding names one not on a shelf.
   if (cc = z.dig('channels', 'color', 'column'))
@@ -444,6 +479,13 @@ def synthesize_view_from_signals(z, meta)
     meas << { 'guid' => recovered, 'role' => 'measure', 'derivation' => 'none' } if recovered && !recovered.empty?
   end
   headers = (dims.map(&field_header) + meas.map(&field_header)).compact
+  if has_measure_values && dims.any? && meas.any?
+    labels = meas.map(&field_header).compact
+    return {
+      headers: ['Measure Names', field_header.call(dims.first), 'Measure Values'],
+      measure_labels: labels
+    } if labels.any?
+  end
   # Fallback for pie/detail marks: the dimension sits on the color/detail
   # encoding (not rows/cols shelves, and `channels` may be empty), so the only
   # signal is the zone's `aggregations` map — a "None"-aggregated column is the
@@ -510,6 +552,31 @@ def synthesize_view_from_signals(z, meta)
     headers = d2 + m2 if d2.any? && m2.any?
   end
   headers.length >= 2 ? { headers: headers } : nil
+end
+
+def typed_filter_members(filter)
+  members = Array(filter['members'])
+  case filter['datatype'].to_s.downcase
+  when 'boolean'
+    members.map do |member|
+      case member.to_s.strip.downcase
+      when 'true', '1' then true
+      when 'false', '0' then false
+      else member
+      end
+    end
+  when 'integer'
+    members.map { |member| Integer(member, 10) rescue member }
+  when 'real', 'float', 'number'
+    members.map { |member| Float(member) rescue member }
+  else
+    members
+  end
+end
+
+def full_boolean_domain_filter?(filter)
+  return false if filter['exclude'] || filter['datatype'].to_s.downcase != 'boolean'
+  typed_filter_members(filter).uniq.sort_by { |value| value ? 1 : 0 } == [false, true]
 end
 
 # Tableau reserved placeholder captions that the shelf parser can surface as
@@ -640,6 +707,13 @@ def render_agg(agg, master_col_ref)
   end
 end
 
+def aggregate_mapped_measure_formula(formula, aggregate)
+  source = formula.to_s.strip
+  direct = source.match(/\A\[([^\/\]]+)\/[^\]]+\]\z/)
+  return source unless direct && direct[1] != 'Metrics'
+  render_agg(aggregate, source)
+end
+
 # Tableau "User"-aggregated calc fields (derivation=User) are already-aggregated
 # expressions like `SUM([Returns]) / COUNT([Order Id])` — wrapping them in
 # another Sum() against a master column that doesn't exist emits an
@@ -652,12 +726,126 @@ USER_AGG_FN = {
   'MEDIAN' => 'Median'
 }.freeze
 
+def strip_tableau_comments(formula)
+  formula.to_s.gsub(%r{/\*.*?\*/}m, '').gsub(%r{//[^\r\n]*}, '')
+end
+
+def worksheet_calculation_for(calculations, *candidates)
+  normalized = candidates.flatten.compact.map do |candidate|
+    candidate.to_s.gsub(/^\[|\]$/, '').strip.downcase
+  end.reject(&:empty?)
+  Array(calculations).find do |calculation|
+    [calculation['name'], calculation['caption']].compact.any? do |candidate|
+      normalized.include?(candidate.to_s.gsub(/^\[|\]$/, '').strip.downcase)
+    end
+  end
+end
+
+def translated_calc_reference(name, mmap, columns_by_guid)
+  key = name.to_s.gsub(/^\[|\]$/, '').strip
+  return nil if key.empty?
+  mapped = map_column(key, mmap)
+  return "[Master/#{mapped['name']}]" if mapped
+  info = (columns_by_guid || {})[key]
+  active = strip_tableau_comments(info && info['formula']).strip
+  return nil if active.empty?
+  translate_dim_calc(active, mmap, columns_by_guid) ||
+    translate_row_level_calc(active, mmap, columns_by_guid)
+end
+
+def translate_sla_ratio(formula, mmap, columns_by_guid)
+  text = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
+  match = text.match(
+    %r{\A\(?\s*COUNTD\(\[([^\]]+)\]\)\s*-\s*\[([^\]]+)\]\s*\)?\s*/\s*COUNTD\(\[\1\]\)\z}i
+  )
+  return nil unless match
+  doc_ref = translated_calc_reference(match[1], mmap, columns_by_guid)
+  nested = (columns_by_guid[match[2]] || {})['formula'].to_s
+  conditional = strip_tableau_comments(nested).match(/\ACOUNTD\s*\(\s*(IF\b.*\bEND)\s*\)\z/i)
+  return nil unless doc_ref && conditional
+  expanded = conditional[1].gsub(/\[([^\]]+)\]/) do
+    translated_calc_reference(Regexp.last_match(1), mmap, columns_by_guid) ||
+      "[#{Regexp.last_match(1)}]"
+  end
+  sigma_if = translate_dim_calc(expanded, mmap, columns_by_guid)
+  return nil unless sigma_if
+  "(CountDistinct(#{doc_ref}) - CountDistinct(#{sigma_if})) / CountDistinct(#{doc_ref})"
+end
+
+def split_top_level_args(text)
+  args = []
+  buffer = +''
+  paren_depth = 0
+  bracket_depth = 0
+  quote = nil
+  text.to_s.each_char do |char|
+    if quote
+      quote = nil if char == quote
+      buffer << char
+      next
+    end
+    if %w[' "].include?(char)
+      quote = char
+    elsif char == '['
+      bracket_depth += 1
+    elsif char == ']' && bracket_depth.positive?
+      bracket_depth -= 1
+    elsif bracket_depth.zero?
+      paren_depth += 1 if char == '('
+      paren_depth -= 1 if char == ')' && paren_depth.positive?
+      if char == ',' && paren_depth.zero?
+        args << buffer.strip
+        buffer = +''
+        next
+      end
+    end
+    buffer << char
+  end
+  args << buffer.strip unless buffer.strip.empty?
+  args
+end
+
+def parse_tableau_function_call(text, function_name)
+  source = text.to_s.strip
+  match = source.match(/\A#{Regexp.escape(function_name)}\s*\(/i)
+  return nil unless match
+  index = match.end(0)
+  start = index
+  depth = 1
+  bracket_depth = 0
+  quote = nil
+  while index < source.length
+    char = source[index]
+    if quote
+      quote = nil if char == quote
+    elsif %w[' "].include?(char)
+      quote = char
+    elsif char == '['
+      bracket_depth += 1
+    elsif char == ']' && bracket_depth.positive?
+      bracket_depth -= 1
+    elsif bracket_depth.zero?
+      depth += 1 if char == '('
+      if char == ')'
+        depth -= 1
+        if depth.zero?
+          return [split_top_level_args(source[start...index]), source[(index + 1)..].to_s.strip]
+        end
+      end
+    end
+    index += 1
+  end
+  nil
+end
+
 # extra_fns: additional Sigma function names the residue validator should
 # accept (the window-calc path passes WINDOW_SIGMA_FNS so Cumulative*/Moving*/
 # Rank/Lag/... formulas validate; plain ratio decomposition passes none).
 def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [])
-  s = formula.to_s.gsub(/\s+/, ' ').strip
+  s = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
   return nil if s.empty?
+  sla = translate_sla_ratio(s, mmap, columns_by_guid)
+  return sla if sla
   # Resolve Tableau-internal GUID refs ([d3b60b0e-…]) to their captions first —
   # worksheet calc formulas reference columns by GUID, not caption.
   s = s.gsub(/\[([0-9a-f\-]{36})\]/i) do
@@ -667,11 +855,43 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
   # IIF(c, t, e) → If(c, t, e) so guarded ratios (divide-by-zero protection)
   # survive the decomposition.
   s = s.gsub(/\bIIF\s*\(/i, 'If(')
+  if (percentile = parse_tableau_function_call(s, 'PERCENTILE')) && percentile[0].length == 2
+    value, raw_arg = percentile[0]
+    translated_value =
+      if value =~ /\AIF\b.*\bEND\z/i
+        translate_dim_calc(value, mmap, columns_by_guid)
+      elsif (column = value.match(/\A\[([^\]]+)\]\z/))
+        translated_calc_reference(column[1], mmap, columns_by_guid)
+      end
+    percentile_arg =
+      if raw_arg =~ /\A[0-9.]+\z/
+        raw_arg
+      elsif (parameter = raw_arg.match(/\A\[Parameters?\]\s*\.\s*\[([^\]]+)\]\z/i))
+        info = (columns_by_guid || {})[parameter[1]]
+        param_control_ref((info && info['caption']) || parameter[1])
+      end
+    return "PercentileCont(#{translated_value}, #{percentile_arg}) #{percentile[1]}".strip if translated_value && percentile_arg
+  end
+  if (conditional = s.match(/\A(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*(IF\b.*\bEND)\s*\)\s*(.*)\z/i))
+    row_formula = translate_dim_calc(conditional[2], mmap, columns_by_guid)
+    if row_formula
+      function = {
+        'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
+        'MEDIAN' => 'Median', 'COUNTD' => 'CountDistinct', 'COUNT' => 'Count'
+      }[conditional[1].upcase]
+      return "#{function}(#{row_formula}) #{conditional[3]}".strip
+    end
+  end
   out = s.gsub(/\b(SUM|AVG|MIN|MAX|MEDIAN|COUNTD|COUNT)\s*\(\s*\[([^\]]+)\]\s*\)/i) do
     agg = Regexp.last_match(1).upcase
     col = Regexp.last_match(2)
     m   = map_column(col, mmap)
-    ref = "[Master/#{m ? m['name'] : col}]"
+    ref = if m
+            "[Master/#{m['name']}]"
+          else
+            translated_calc_reference(col, mmap, columns_by_guid) ||
+              "[Master/#{col}]"
+          end
     case agg
     when 'COUNT'  then "CountIf(IsNotNull(#{ref}))"
     when 'COUNTD' then "CountDistinct(#{ref})"
@@ -688,8 +908,9 @@ def translate_user_agg_formula(formula, mmap, columns_by_guid = {}, extra_fns: [
   residue = out.dup
   residue.gsub!(/"(?:\\.|[^"\\])*"/, '1') # string literals ("desc", "grand_total")
   residue.gsub!(/\[Master\/[^\]]+\]/, '1')
-  allowed = %w[Sum Avg Min Max Median CountDistinct CountIf IsNotNull Coalesce If Abs] + extra_fns
+  allowed = %w[Sum Avg Min Max Median CountDistinct CountIf IsNotNull Coalesce If Abs Null NULL] + extra_fns
   residue.gsub!(/\b(#{allowed.map { |f| Regexp.escape(f) }.join('|')})\b/, '')
+  residue.gsub!(/\b(?:and|or|not|null)\b/i, '')
   return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
   out
 end
@@ -700,8 +921,12 @@ end
 # date/logic functions, rewrites bare refs to [Master/...]. Returns nil when
 # the result still contains constructs we can't vouch for.
 def translate_row_level_calc(formula, mmap, columns_by_guid = {})
-  s = formula.to_s.gsub(/\s+/, ' ').strip
+  s = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
   return nil if s.empty?
+  if (wrapped_if = s.match(/\A\(?\s*(IF\b.*\bEND)\s*\)?\s*(.*)\z/i))
+    translated_if = translate_dim_calc(wrapped_if[1], mmap, columns_by_guid)
+    return "#{translated_if} #{wrapped_if[2]}".strip if translated_if
+  end
   s = s.gsub(/\[([0-9a-f\-]{36})\]/i) do
     info = columns_by_guid[Regexp.last_match(1)]
     info && info['caption'] ? "[#{info['caption'].strip}]" : Regexp.last_match(0)
@@ -716,6 +941,7 @@ def translate_row_level_calc(formula, mmap, columns_by_guid = {})
   s = s.gsub(/\bIIF\s*\(/i, 'If(')
   s = s.gsub(/\bIFNULL\s*\(/i, 'Coalesce(')
   s = s.gsub(/\bABS\s*\(/i, 'Abs(')
+  s = s.gsub(/\bSTR\s*\(/i, 'Text(')
   # Date-part extracts — align with the TS TABLEAU_FUNC_MAP so a row-level date
   # calc auto-translates instead of failing the residue check and dropping to a
   # manual warning (bead tt3z.4). WEEK has NO Sigma Week() fn — it maps to
@@ -738,17 +964,54 @@ def translate_row_level_calc(formula, mmap, columns_by_guid = {})
        .gsub(/\bSTARTSWITH\s*\(/i, 'StartsWith(').gsub(/\bENDSWITH\s*\(/i, 'EndsWith(')
        .gsub(/\bMID\s*\(/i, 'Mid(')
   s = s.gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") } # remaining single-quoted strings
-  out = s.gsub(/\[([^\/\]]+)\]/) do
+  out = s.gsub(/\[([^\]]+)\]/) do
     cap = Regexp.last_match(1).strip
+    next Regexp.last_match(0) if cap.start_with?('Master/') || cap.start_with?('ctl-')
     m = map_column(cap, mmap)
     "[Master/#{m ? m['name'] : cap}]"
   end
   residue = out.dup
   residue.gsub!(/"(?:\\.|[^"\\])*"/, '1')
   residue.gsub!(/\[Master\/[^\]]+\]/, '1')
-  residue.gsub!(/\b(DateDiff|DateAdd|DateTrunc|DatePart|Today|Now|If|Coalesce|Abs|Year|Month|Day|Quarter|Hour|Minute|Second|Replace|Upper|Lower|Ltrim|Rtrim|Trim|Left|Right|Len|Contains|StartsWith|EndsWith|Mid)\b/, '')
+  residue.gsub!(/\b(DateDiff|DateAdd|DateTrunc|DatePart|Today|Now|If|Coalesce|Abs|Text|Year|Month|Day|Quarter|Hour|Minute|Second|Replace|Upper|Lower|Ltrim|Rtrim|Trim|Left|Right|Len|Contains|StartsWith|EndsWith|Mid)\b/, '')
   return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
   out
+end
+
+def translate_boolean_filter_calc(formula, mmap, columns_by_guid, parameters)
+  source = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
+  return nil if source.empty?
+  parameter_names = {}
+  Array(parameters).each do |parameter|
+    name = parameter['name'].to_s.gsub(/^\[|\]$/, '').strip
+    caption = parameter['caption'].to_s.strip
+    parameter_names[name] = caption unless name.empty? || caption.empty?
+  end
+  source = source.gsub(/\[Parameters?\]\s*\.\s*\[([^\]]+)\]/i) do
+    token = Regexp.last_match(1)
+    param_control_ref(parameter_names[token] || token)
+  end
+  source = source.gsub(/\[([^\]]+)\]/) do
+    token = Regexp.last_match(1).strip
+    next Regexp.last_match(0) if token.start_with?('Master/', 'Metrics/', 'ctl-')
+    translated_calc_reference(token, mmap, columns_by_guid) ||
+      begin
+        mapped = map_column(token, mmap)
+        "[Master/#{mapped ? mapped['name'] : token}]"
+      end
+  end
+  source = source.gsub(/\bIFNULL\s*\(/i, 'Coalesce(')
+                 .gsub(/\bISNULL\s*\(/i, 'IsNull(')
+                 .gsub(/\bDATE\s*\(/i, 'Date(')
+                 .gsub(/\bUPPER\s*\(/i, 'Upper(')
+                 .gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") }
+  residue = source.dup
+  residue.gsub!(/"(?:\\.|[^"\\])*"/, '1')
+  residue.gsub!(/\[[^\]]+\]/, '1')
+  residue.gsub!(/\b(?:Date|Coalesce|IsNull|Upper|If|Abs)\b/, '')
+  residue.gsub!(/\b(?:and|or|not|null|true|false)\b/i, '')
+  return nil unless residue =~ %r{\A[\s()+\-*/.,\d!=<>]*\z}
+  source
 end
 
 # Worksheet-local DIMENSION calc -> Sigma formula over master columns
@@ -758,16 +1021,18 @@ end
 #   IF c THEN r [ELSEIF c2 THEN r2]* [ELSE e] END -> nested If(...)
 # Returns nil when the construct isn't recognized.
 def translate_dim_calc(formula, mmap, columns_by_guid = {})
-  s = formula.to_s.gsub(/\s+/, ' ').strip
+  s = strip_tableau_comments(formula).gsub(/\s+/, ' ').strip
   return nil if s.empty?
   s = s.gsub(/\[([0-9a-f\-]{36})\]/i) do
     info = columns_by_guid[Regexp.last_match(1)]
     info && info['caption'] ? "[#{info['caption'].strip}]" : Regexp.last_match(0)
   end
   return nil if s =~ /\[[0-9a-f\-]{36}\]/i
+  s = s.gsub(/'([^']*)'/) { %("#{Regexp.last_match(1)}") }
   master_ref = lambda do |str|
-    str.gsub(/\[([^\/\]]+)\]/) do
+    str.gsub(/\[([^\]]+)\]/) do
       cap = Regexp.last_match(1).strip
+      next Regexp.last_match(0) if cap.start_with?('Master/') || cap.start_with?('ctl-')
       m = map_column(cap, mmap)
       "[Master/#{m ? m['name'] : cap}]"
     end
@@ -1048,6 +1313,41 @@ def map_column(header, mmap)
   nil
 end
 
+# Master-map formulas are authored on the hidden master table, where bare
+# sibling references such as [UPLOAD_DATE] are valid. Reusing those formulas
+# on a chart/KPI element requires explicit [Master/...] qualification.
+def qualify_master_formula(formula, mmap)
+  formula.to_s.gsub(/\[([^\]]+)\]/) do
+    reference = Regexp.last_match(1).strip
+    next Regexp.last_match(0) if reference.start_with?('Master/', 'Metrics/', 'ctl-')
+    mapped = map_column(reference, mmap)
+    mapped ? "[Master/#{mapped['name']}]" : Regexp.last_match(0)
+  end
+end
+
+def normalize_mapped_formula(column, mmap)
+  qualified = qualify_master_formula(column['formula'], mmap)
+  direct = qualified.match(/\A\[([^\/\]]+)\/[^\]]+\]\z/)
+  if direct && direct[1] != 'Metrics' && !column['name'].to_s.strip.empty?
+    "[Master/#{column['name']}]"
+  else
+    qualified
+  end
+end
+
+def rewrite_page_control_text(text, control_rewrites, control_defaults)
+  rewritten = text.to_s.dup
+  control_rewrites.each do |from, to|
+    rewritten.gsub!("{{[#{from}]}}", "{{[#{to}]}}")
+  end
+  active_ids = control_rewrites.values
+  rewritten.gsub(/\{\{\[([^\]]+)\]\}\}/) do |token|
+    control_id = Regexp.last_match(1)
+    next token if active_ids.include?(control_id)
+    control_defaults.fetch(control_id, '')
+  end.gsub(/<\[[^\]]+\]\s*\.\s*\[[^\]]+\]>/, 'All')
+end
+
 # Resolve a calc-bound quick-filter to an ALREADY-materialized master column by
 # the calc's IDENTITY, not a naive caption match (bead: calc-bound-filter wiring
 # / #259). A quick-filter on a calculated field maps to no raw column, so
@@ -1197,6 +1497,10 @@ if (opts[:dashboards] && !opts[:dashboards].empty?) || (opts[:pages] && !opts[:p
   abort("--dashboard/--page matched no dashboard in #{opts[:layout]}") if layout.empty?
 end
 mmap   = JSON.parse(File.read(opts[:mmap]))
+mmap.each_value do |column|
+  next unless column.is_a?(Hash) && column['formula']
+  column['formula'] = normalize_mapped_formula(column, mmap)
+end
 meta   = opts[:meta] ? JSON.parse(File.read(opts[:meta])) : { 'worksheets' => {}, 'shared_filters' => [] }
 # Caption → Tableau formula for every calculated field the workbook defines
 # (deduped across worksheets; first definition wins). Lets the shared-filter
@@ -2183,8 +2487,9 @@ LOD_AGG_FN = { 'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
                'COUNT' => 'Count', 'COUNTD' => 'CountDistinct', 'MEDIAN' => 'Median' }.freeze
 
 def decompose_nested_fixed(formula)
-  return nil unless formula.to_s.scan(/\{\s*FIXED/i).length >= 2
-  s = formula.gsub(/\s+/, ' ').strip
+  active_formula = strip_tableau_comments(formula)
+  return nil unless active_formula.scan(/\{\s*FIXED/i).length >= 2
+  s = active_formula.gsub(/\s+/, ' ').strip
   chain = []
   k = 0
   # Innermost-first: a {FIXED ...} whose body holds no further brace. After
@@ -2286,10 +2591,61 @@ def remap_param_branch(expr, mmap, columns_by_guid)
   s
 end
 
+def split_outer_tableau_if(formula)
+  text = formula.to_s.gsub(/\s+/, ' ').strip
+  return nil unless text =~ /\AIF\b/i && text =~ /\bEND\z/i
+  head = text.match(/\AIF\s+(.+?)\s+THEN\s+/i)
+  return nil unless head
+  condition = head[1].strip
+  body_start = head.end(0)
+  body = text[body_start...text.rindex(/\bEND\z/i)].to_s.strip
+  depth = 0
+  split_at = nil
+  split_len = 0
+  body.to_enum(:scan, /\b(IF|END|ELSEIF|ELSE)\b/i).each do
+    match = Regexp.last_match
+    token = match[1].upcase
+    if token == 'IF'
+      depth += 1
+    elsif token == 'END'
+      depth -= 1 if depth.positive?
+    elsif depth.zero? && %w[ELSE ELSEIF].include?(token)
+      split_at = match.begin(0)
+      split_len = token.length
+      break
+    end
+  end
+  then_expr = split_at ? body[0...split_at].strip : body
+  else_expr = split_at ? body[(split_at + split_len)..].to_s.strip : nil
+  else_expr = "IF #{else_expr} END" if split_len == 'ELSEIF'.length
+  [condition, then_expr, else_expr]
+end
+
+def translate_nested_param_if(formula, param_captions, mmap, columns_by_guid)
+  parts = split_outer_tableau_if(formula)
+  return nil unless parts
+  condition, then_expr, else_expr = parts
+  match = condition.match(
+    /\A(?:\[Parameters?(?:\s*\([^)]*\))?\]\s*\.\s*)?\[([^\]]+)\]\s*=\s*(.+)\z/i
+  )
+  return nil unless match
+  caption = match[1]
+  return nil unless param_captions.include?(caption)
+  translate_result = lambda do |expr|
+    next 'Null' if expr.nil? || expr.empty?
+    translate_nested_param_if(expr, param_captions, mmap, columns_by_guid) ||
+      translate_dim_calc(expr, mmap, columns_by_guid) ||
+      translate_row_level_calc(expr, mmap, columns_by_guid) ||
+      remap_param_branch(expr, mmap, columns_by_guid)
+  end
+  "Switch(#{param_control_ref(caption)}, #{coerce_case_literal(match[2])}, " \
+    "#{translate_result.call(then_expr)}, #{translate_result.call(else_expr)})"
+end
+
 def translate_case_on_param(formula, param_captions, mmap = nil, columns_by_guid = {})
   return nil unless formula =~ /\bCASE\b/i
   # Strip newlines + collapse spaces
-  s = formula.gsub(/\s+/, ' ').strip
+  s = formula.gsub(%r{//[^\r\n]*}, '').gsub(/\s+/, ' ').strip
   m = s.match(/\bCASE\b\s+(.*?)\s+(WHEN\b.*?)\s+\bEND\b/i)
   return nil unless m
   param_ref = m[1].strip   # the value being switched, e.g. [Parameters].[X] or [X]
@@ -2311,8 +2667,17 @@ def translate_case_on_param(formula, param_captions, mmap = nil, columns_by_guid
   parts = [param_control_ref(param_caption)]
   # when_val = match literal (1, "Region", …) → keep; then_val = result column
   # ref → remap onto [Master/…].
-  pairs.each { |when_val, then_val| parts << coerce_case_literal(when_val); parts << remap_param_branch(then_val, mmap, columns_by_guid) }
-  parts << remap_param_branch(else_expr, mmap, columns_by_guid) if else_expr
+  translate_result = lambda do |expr|
+    row_formula = respond_to?(:translate_row_level_calc, true) ?
+                    translate_row_level_calc(expr, mmap, columns_by_guid) : nil
+    row_formula ||
+      remap_param_branch(expr, mmap, columns_by_guid)
+  end
+  pairs.each do |when_val, then_val|
+    parts << coerce_case_literal(when_val)
+    parts << translate_result.call(then_val)
+  end
+  parts << translate_result.call(else_expr) if else_expr
   "Switch(#{parts.join(', ')})"
 end
 
@@ -2320,7 +2685,23 @@ end
 #   IF [Param] = "A" THEN x ELSEIF [Param] = "B" THEN y ELSE z END
 # → Switch([Param], "A", x, "B", y, z)
 def translate_if_chain_on_param(formula, param_captions, mmap = nil, columns_by_guid = {})
-  s = formula.gsub(/\s+/, ' ').strip
+  s = formula.gsub(%r{//[^\r\n]*}, '').gsub(/\s+/, ' ').strip
+  if (percentile = s.match(/\APERCENTILE\s*\(\s*(IF\b.*\bEND)\s*,\s*([0-9.]+)\s*\)\s*(.*)\z/i))
+    switched = translate_nested_param_if(percentile[1], param_captions, mmap, columns_by_guid)
+    return "PercentileCont(#{switched}, #{percentile[2]}) #{percentile[3]}".strip if switched
+  end
+  if (aggregate = s.match(/\A(SUM|AVG|MIN|MAX|COUNTD|COUNT)\s*\(\s*(IF\b.*\bEND)\s*\)\s*(.*)\z/i))
+    switched = translate_nested_param_if(aggregate[2], param_captions, mmap, columns_by_guid)
+    if switched
+      function = { 'SUM' => 'Sum', 'AVG' => 'Avg', 'MIN' => 'Min', 'MAX' => 'Max',
+                   'COUNTD' => 'CountDistinct', 'COUNT' => 'Count' }[aggregate[1].upcase]
+      return "#{function}(#{switched}) #{aggregate[3]}".strip
+    end
+  end
+  if s =~ /\AIF\b.*\bEND\z/i
+    switched = translate_nested_param_if(s, param_captions, mmap, columns_by_guid)
+    return switched if switched
+  end
   return nil unless s =~ /\bIF\b.*\bEND\b/i
   return nil unless param_captions.any? { |cap| s.include?("[#{cap}]") }
   m = s.match(/\bIF\b\s+(.+?)\s+\bEND\b/i)
@@ -2646,10 +3027,18 @@ def measure_names_members(z, meta)
       # 'usr' routes calc members to the User-derivation resolver (window/ratio
       # translation); plain measures keep their own warehouse aggregation.
       'derivation' => is_calc ? 'usr' : deriv.downcase,
+      # Preserve the shelf aggregation for row-level calculated measures. The
+      # usr route resolves the calc formula, then reapplies this aggregation.
+      'source_derivation' => deriv,
       'raw'        => col_ref,
       'guid'       => guid
     }
   end
+end
+
+def pivot_hidden_sort_pill?(field)
+  raw = (field['column'] || field['raw']).to_s
+  field['role'] == 'measure' && raw.include?(':ok') && !raw.include?(':qk')
 end
 
 # ---- Pivot-table emission --------------------------------------------------
@@ -2681,6 +3070,18 @@ SHELF_TRUNC_FOR_PREFIX = {
   'tyr' => 'year', 'tqr' => 'quarter', 'tmn' => 'month',
   'twk' => 'week', 'tdy' => 'day', 'thr' => 'hour'
 }.freeze
+
+def pivot_dimension_formula(master, derivation)
+  dim_ref = master['formula'] || "[Master/#{master['name']}]"
+  grain = SHELF_TRUNC_FOR_PREFIX[derivation.to_s.downcase]
+  if grain == 'week'
+    %(DateAdd("day", 1 - Weekday(#{dim_ref}), DateTrunc("day", #{dim_ref})))
+  elsif grain
+    %(DateTrunc("#{grain}", #{dim_ref}))
+  else
+    dim_ref
+  end
+end
 
 def resolve_shelf_field(field, meta, mmap)
   cols_by_guid = meta['columns_by_guid'] || {}
@@ -2723,7 +3124,7 @@ end
 
 def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
   cap = z['caption']
-  el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+  el_id = worksheet_element_id(cap)
   rows_shelf = z['rows_shelf'] || {}
   cols_shelf = z['cols_shelf'] || {}
 
@@ -2781,13 +3182,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
         else
           "#{agg}([Master/#{m['name']}])"
         end
-      elsif field['role'] == 'dim' && SHELF_TRUNC_FOR_PREFIX[deriv] == 'week'
-        # Tableau weeks are Sunday-anchored; Sigma DateTrunc("week") follows
-        # the warehouse week start (Monday on Snowflake) — use the verified
-        # Sunday-anchored arithmetic instead (Weekday() is 1=Sunday).
-        %(DateAdd("day", 1 - Weekday([Master/#{m['name']}]), DateTrunc("day", [Master/#{m['name']}])))
-      elsif field['role'] == 'dim' && SHELF_TRUNC_FOR_PREFIX[deriv]
-        %(DateTrunc("#{SHELF_TRUNC_FOR_PREFIX[deriv]}", [Master/#{m['name']}]))
+      elsif field['role'] == 'dim'
+        pivot_dimension_formula(m, deriv)
       else
         "[Master/#{m['name']}]"
       end
@@ -2821,7 +3217,8 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     # (the Calculation_NNN→caption bridge — n4pi.10).
     user_vals << { 'col' => col_obj, 'name' => m['name'].to_s.strip,
                    'raw' => (field['column'] || field['raw']).to_s,
-                   'shelf' => shelf } if target == :value && %w[usr user].include?(deriv)
+                   'shelf' => shelf,
+                   'source_derivation' => field['source_derivation'] } if target == :value && %w[usr user].include?(deriv)
     case target
     when :row   then rows_by    << { 'columnId' => col_id }
     when :col   then cols_by    << { 'columnId' => col_id }
@@ -2832,14 +3229,13 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
   # v5.1 (D4): `:ok` qualified pills are Tableau's HIDDEN SORT KEYS, never
   # displayed values — enrolling them as pivot values shipped ghost columns
   # ("Rank N (copy)_…:ok:9"). Skip them; the shelf-sort path carries ordering.
-  hidden_sort_pill = ->(f) { (f['column'] || f['raw']).to_s.include?(':ok') }
   (rows_shelf['fields'] || []).each do |f|
-    next if hidden_sort_pill.call(f)
+    next if pivot_hidden_sort_pill?(f)
     add_col.call(f, :row, :rows)   if f['role'] == 'dim'
     add_col.call(f, :value, :rows) if f['role'] == 'measure'
   end
   (cols_shelf['fields'] || []).each do |f|
-    next if hidden_sort_pill.call(f)
+    next if pivot_hidden_sort_pill?(f)
     add_col.call(f, :col, :cols)   if f['role'] == 'dim'
     add_col.call(f, :value, :cols) if f['role'] == 'measure'
   end
@@ -2909,9 +3305,9 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
                   "[#{plan['control_id']}] (#{psw['cases'].size} option(s))#{drp}: #{plan['sibling_form'].gsub(/\s+/, ' ')[0..100]}"
       next
     end
-    ws_calc = (z['calculations'] || []).find do |c|
-      c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(uv['name'])
-    end
+    ws_calc = worksheet_calculation_for(
+      z['calculations'], uv['name'], uv['raw'], uv['col']['name']
+    )
     next unless ws_calc
     plan = translate_window_calc(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
     record_window_calc(z, ws_calc, plan, mode: 'pivot-value') if plan
@@ -2953,6 +3349,15 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
         next
       end
       f = translate_user_agg_formula(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
+      if f.nil? && uv['source_derivation']
+        row_formula = translate_dim_calc(
+          ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+        ) || translate_row_level_calc(
+          ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+        )
+        aggregate = SHELF_AGG_FOR_PREFIX[uv['source_derivation'].to_s.downcase]
+        f = render_agg(aggregate, row_formula) if aggregate && row_formula
+      end
       if f
         uv['col']['formula'] = f
         # Attainment/share ratios (a measure ÷ a goal/target/budget/quota) are
@@ -3210,6 +3615,56 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     end
   end
 
+  pivot_filters = []
+  Array(z['filters']).reject { |filter| filter['is_action'] }.each do |filter|
+    next unless filter['kind'] == 'list'
+    next if Array(filter['members']).empty? || full_boolean_domain_filter?(filter)
+    filter_caption = filter['column_caption'] || filter['raw_param']
+    mapped = filter_caption && map_column(filter_caption, mmap)
+    if mapped.nil? && filter_caption
+      calculation = worksheet_calculation_for(z['calculations'], filter_caption)
+      translated = calculation && translate_boolean_filter_calc(
+        calculation['formula'], mmap, meta['columns_by_guid'] || {},
+        meta['parameters'] || []
+      )
+      if translated
+        mapped = {
+          'name' => filter_caption,
+          'formula' => translated
+        }
+      end
+    end
+    unless mapped
+      warnings << "'#{cap}' pivot value filter '#{filter_caption}' could not be resolved — skipped"
+      next
+    end
+    if source['elementId'] != opts[:master_id]
+      warnings << "'#{cap}' pivot value filter '#{filter_caption}' cannot reach its two-stage helper source — skipped"
+      next
+    end
+    filter_column = cols_array.find do |column|
+      column['name'].to_s.strip.casecmp?(mapped['name'].to_s.strip)
+    end
+    unless filter_column
+      filter_id = "pf-#{el_id}-#{mapped['name'].to_s.downcase.gsub(/\W+/, '-')[0..36]}".sub(/-$/, '')
+      filter_column = {
+        'id' => filter_id,
+        'name' => mapped['name'],
+        'formula' => mapped['formula'] || "[Master/#{mapped['name']}]"
+      }
+      cols_array << filter_column
+    end
+    pivot_filters << {
+      'id' => "flt-#{el_id}-#{pivot_filters.length}",
+      'columnId' => filter_column['id'],
+      'kind' => 'list',
+      'mode' => (filter['exclude'] ? 'exclude' : 'include'),
+      'selectionMode' => 'multiple',
+      'values' => typed_filter_members(filter),
+      'includeNulls' => 'never'
+    }
+  end
+
   el = {
     'id'        => el_id,
     'kind'      => 'pivot-table',
@@ -3225,6 +3680,7 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     # no-visible-subtotals setting for expanded pivots (live-probed).
     'totals'    => { 'showGrandTotals' => 'hidden', 'showSubtotals' => 'when-collapsed' }
   }
+  el['filters'] = pivot_filters unless pivot_filters.empty?
   # v5.1 defect-4 fix: heat scale from the SOURCE ramp (parser heat_scheme),
   # 3-point downsample; never a default accent. Value-format cascade: a
   # PercentOfTotal value with no matched format renders 1-decimal like the
@@ -4001,7 +4457,7 @@ end
 # See beads-sigma-bw3.
 def build_kpi_element(z, meta, mmap, opts, warnings, data_elements = [])
   cap = z['caption']
-  el_id = "el-kpi-#{cap.downcase.gsub(/\W+/, '-')[0..38]}".sub(/-$/, '')
+  el_id = worksheet_element_id(cap, kpi: true)
 
   rows_shelf = z['rows_shelf'] || {}
   cols_shelf = z['cols_shelf'] || {}
@@ -4417,6 +4873,7 @@ signal_built_tiles = [] # [{ 'worksheet' => cap, 'view_id' => id }]
 layout.each do |dash|
   dash['zones'].each do |z|
     next unless z['kind'] == 'chart'
+    next if ZoneCensus.hidden_chart_host?(z)
     cap = z['caption']
     next if cap.nil? || cap.empty?
 
@@ -4610,6 +5067,7 @@ layout.each do |dash|
                     "headers=#{synth[:headers].inspect}. Sigma sources the same warehouse so the chart will populate; " \
                     "DATA PARITY for this one tile must be verified manually (no exportable actuals)."
         rows = [synth[:headers]]   # header row only — body stays empty
+        z['_signal_measure_labels'] = synth[:measure_labels] if synth[:measure_labels]
         z['_parity_manual'] = true
         signal_built_tiles << { 'worksheet' => cap, 'view_id' => (view && view['id']) }
       else
@@ -4640,6 +5098,7 @@ layout.each do |dash|
       dim_i   = ([0, 1, 2] - [mn_i, mv_i]).first
       dim_hdr = headers[dim_i].to_s.strip
       labels  = rows.map { |r| r[mn_i] }.compact.map(&:strip).reject(&:empty?).uniq
+      labels = Array(z['_signal_measure_labels']) if labels.empty? && z['_signal_measure_labels']
       mm_trunc = (hm = dim_hdr.match(/^(second|minute|hour|day|week|month|quarter|year) of /i)) && hm[1].downcase
       # For a date-grain header the DateTrunc below must wrap the BASE date column
       # ([Master/Order Date]); resolve the grain-stripped name FIRST so we don't
@@ -4648,9 +5107,11 @@ layout.each do |dash|
       mm_base_hdr = mm_trunc ? dim_hdr.sub(/^(?:second|minute|hour|day|week|month|quarter|year) of /i, '') : dim_hdr
       dimm = (mm_trunc && map_column(mm_base_hdr, mmap)) || map_column(dim_hdr, mmap) ||
              { 'id' => "m-#{dim_hdr.downcase.gsub(/\W+/, '-')}", 'name' => dim_hdr }
-      el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+      el_id = worksheet_element_id(cap)
       mm_dim_formula =
-        if mm_trunc == 'week'
+        if dimm['formula']
+          dimm['formula']
+        elsif mm_trunc == 'week'
           # Tableau weeks are Sunday-anchored (see the week note below).
           %(DateAdd("day", 1 - Weekday([Master/#{dimm['name']}]), DateTrunc("day", [Master/#{dimm['name']}])))
         elsif mm_trunc
@@ -4672,8 +5133,10 @@ layout.each do |dash|
       labels.each_with_index do |label, i|
         base = header_base(label)
         ws_calc = (z['calculations'] || []).find do |c|
-          n = mm_norm.call(c['name'])
-          n == mm_norm.call(base) || n == mm_norm.call(label)
+          [c['name'], c['caption']].compact.any? do |candidate|
+            n = mm_norm.call(candidate)
+            n == mm_norm.call(base) || n == mm_norm.call(label)
+          end
         end
         formula = nil
         if ws_calc
@@ -4685,7 +5148,20 @@ layout.each do |dash|
           elsif wp
             warnings << "'#{cap}' measure '#{label}' STAYS MANUAL in the multi-measure chart: #{wp['note']}"
           else
-            formula = translate_user_agg_formula(ws_calc['formula'], mmap, meta['columns_by_guid'] || {})
+            pcaps = (meta['parameters'] || []).map { |parameter| parameter['caption'] }.compact
+            pnmap = {}
+            (meta['parameters'] || []).each do |parameter|
+              pname = parameter['name'].to_s.gsub(/^\[|\]$/, '')
+              pnmap[pname] = parameter['caption'] if parameter['caption'] && !pname.empty?
+            end
+            normalized = ws_calc['formula'].to_s.gsub(
+              /(\[Parameters?\]\s*\.\s*\[)([^\]]+)(\])/i
+            ) { "#{Regexp.last_match(1)}#{pnmap[Regexp.last_match(2)] || Regexp.last_match(2)}#{Regexp.last_match(3)}" }
+            formula = translate_if_chain_on_param(
+              normalized, pcaps, mmap, meta['columns_by_guid'] || {}
+            ) || translate_user_agg_formula(
+              ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+            )
           end
         else
           mcol = map_column(base, mmap) || map_column(label, mmap)
@@ -4788,7 +5264,11 @@ layout.each do |dash|
     meas = map_column(meas_hdr, mmap)
     meas_unresolved = meas.nil?
     find_ws_calc = lambda do |hdr|
-      (z['calculations'] || []).find { |c| c['name'].to_s.gsub(/^\[|\]$/, '').strip.casecmp?(hdr.to_s.strip) }
+      (z['calculations'] || []).find do |c|
+        [c['name'], c['caption']].compact.any? do |candidate|
+          candidate.to_s.gsub(/^\[|\]$/, '').strip.casecmp?(hdr.to_s.strip)
+        end
+      end
     end
     if dim.nil?
       wc = find_ws_calc.call(dim_hdr)
@@ -4839,6 +5319,16 @@ layout.each do |dash|
         color_dim = dim.dup
         warnings << "'#{cap}' uses '#{color_caption}' on both the axis and Color shelf — " \
                     'emitted a duplicate category column for Sigma color-channel exclusivity'
+      elsif !color_caption.empty? &&
+            !channel_is_measure?(z.dig('channels', 'color')) &&
+            (mapped_color = map_column(color_caption, mmap))
+        # Signal-only embedded worksheets often have no per-sheet CSV, so the
+        # synthetic two-column header cannot expose the Color shelf as a third
+        # column. The .twb channel is still authoritative: materialize it from
+        # the master so line/bar series do not collapse into one blue trace.
+        color_dim = mapped_color
+        warnings << "'#{cap}' recovered Color shelf '#{color_caption}' from .twb signals — " \
+                    'emitted a categorical Sigma color/series column'
       end
     end
 
@@ -4865,7 +5355,8 @@ layout.each do |dash|
     # aggregated (typically a ratio like SUM(a)/COUNT(b)). Wrapping it in
     # Sum([Master/X]) is unresolvable when no master column carries the ratio —
     # decompose the calc formula into a direct Sigma formula instead (bead k3kk).
-    user_agg_formula = chart_pswitch_plan && chart_pswitch_plan['sibling_form']
+    user_agg_formula = nil
+    chart_pswitch_plan_used = false
     window_plan = nil
     window_calc_name = nil
     # Translate the measure's source calc when it's a Tableau User-aggregated calc
@@ -4994,9 +5485,6 @@ layout.each do |dash|
                     "Formula: #{user_calc['formula'].to_s.gsub(/\s+/, ' ')[0..140]}"
         window_plan = nil
       end
-      user_agg_formula ||= (window_plan.nil? || window_plan['mode'] != 'two-stage') && user_calc &&
-                           translate_user_agg_formula(user_calc['formula'], mmap,
-                                                      meta['columns_by_guid'] || {}) || nil
       # Parameter-driven metric/measure SWITCH (bead param-msw): the calc picks
       # which measure the chart shows via a control — SUM(CASE [Parameters].[P]
       # WHEN 0 THEN [A] WHEN 1 THEN [B] END) or IF [P]="x" THEN SUM([A]) ELSE
@@ -5016,11 +5504,18 @@ layout.each do |dash|
           psw_sibling = psw.gsub(%r{\[Master/([^\]]+)\]}) { "[#{Regexp.last_match(1)}]" }
           # Branches already aggregated (IF [P] THEN SUM(x)…) → the Switch IS the
           # measure; bare branches (SUM(CASE…THEN [col])) → wrap in the shelf agg.
-          pre_agg = psw_sibling =~ /\b(?:Sum|Avg|Min|Max|Count|CountDistinct|Median|StdDev|StdDevPop|Variance|VariancePop)\s*\(/
+          pre_agg = psw_sibling =~ /\b(?:Sum|Avg|Min|Max|Count|CountDistinct|Median|PercentileCont|PercentileDisc|StdDev|StdDevPop|Variance|VariancePop)\s*\(/
           shelf_agg = SIGMA_AGG[infer_csv_agg(meas_hdr) || 'Sum'] || 'Sum'
           user_agg_formula = pre_agg ? psw_sibling : "#{shelf_agg}(#{psw_sibling})"
           warnings << "'#{cap}' measure '#{meas_hdr}' is a parameter-driven metric switch — bound to the control-driven Switch on the yAxis: #{user_agg_formula[0..140]}"
         end
+      end
+      user_agg_formula ||= (window_plan.nil? || window_plan['mode'] != 'two-stage') && user_calc &&
+                           translate_user_agg_formula(user_calc['formula'], mmap,
+                                                      meta['columns_by_guid'] || {}) || nil
+      if user_agg_formula.nil? && chart_pswitch_plan
+        user_agg_formula = chart_pswitch_plan['sibling_form']
+        chart_pswitch_plan_used = true
       end
       if user_agg_formula && !(window_plan && window_plan['mode'] == 'inline')
         warnings << "'#{cap}' measure '#{meas['name']}' is a Tableau User-aggregated calc — emitted its decomposed Sigma formula directly: #{user_agg_formula[0..140]}"
@@ -5050,7 +5545,7 @@ layout.each do |dash|
       dim_trunc = hm[1].downcase
     end
 
-    el_id = "el-#{cap.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+    el_id = worksheet_element_id(cap)
 
     # If the dim column is aliased in Tableau (raw → display mapping), wrap the
     # master ref in a Switch() so the chart displays the friendly labels.
@@ -5079,7 +5574,7 @@ layout.each do |dash|
     # calc like Return Rate = Sum(...)/Count(...). Use it verbatim. Otherwise
     # wrap the master-table column with the Sigma aggregator picked above.
     measure_formula = if meas['formula']
-                        meas['formula']
+                        aggregate_mapped_measure_formula(meas['formula'], sigma_agg)
                       elsif user_agg_formula
                         user_agg_formula
                       else
@@ -5093,16 +5588,17 @@ layout.each do |dash|
     # order can hand a string column to the measure slot (the scatter
     # y=Sum(text) class) — emit the raw column ref + a loud note instead of a
     # dead column. Datatype from the twb column registry; unknown types pass.
-    if (tm = measure_formula.match(/\A(Sum|Avg|Median)\(\[Master\/([^\]]+)\]\)\z/))
+    if (tm = measure_formula.match(/\A(Sum|Avg|Median)\((\[[^\]]+\])\)\z/))
+      text_candidate = tm[2].sub(/\A\[[^\/\]]+\//, '').sub(/\]\z/, '')
       tinfo = (meta['columns_by_guid'] || {}).values.find do |v|
-        v.is_a?(Hash) && v['caption'].to_s.strip.casecmp?(tm[2].strip)
+        v.is_a?(Hash) && v['caption'].to_s.strip.casecmp?(text_candidate.strip)
       end
-      tinfo ||= (meta['columns_by_guid'] || {})[tm[2]]
+      tinfo ||= (meta['columns_by_guid'] || {})[text_candidate]
       if tinfo.is_a?(Hash) && tinfo['datatype'].to_s == 'string'
-        warnings << "'#{cap}' measure #{tm[1]}([#{tm[2]}]) aggregates a TEXT column — emitted the raw column " \
+        warnings << "'#{cap}' measure #{tm[1]}(#{tm[2]}) aggregates a TEXT column — emitted the raw column " \
                     'instead (numeric aggregates over text compile to type=error); the source likely encodes ' \
                     'this on label/shape/detail — VERIFY the tile or re-author'
-        measure_formula = "[Master/#{tm[2]}]"
+        measure_formula = tm[2]
       end
     end
 
@@ -5702,6 +6198,10 @@ layout.each do |dash|
     [[dim_csv_idx, dim_col_obj], [color_csv_idx, color_col_obj]].each do |(ci, cobj)|
       next unless null_excl_kinds.include?(kind)
       next if ci.nil? || cobj.nil?
+      # A signal-only worksheet has no exported rows from which to infer
+      # Tableau's null-bucket behavior. Adding Text(IsNotNull(...)) anyway can
+      # filter every row at runtime (case/value coercion differs by backend).
+      next if rows.empty?
       next if rows.any? { |r| r[ci].nil? || r[ci].to_s.strip.empty? } # Tableau kept nulls
       nn_id = "nn-#{cobj['id']}"
       element['columns'] << { 'id' => nn_id, 'name' => "#{cobj['name']} Not Null",
@@ -5763,11 +6263,25 @@ layout.each do |dash|
             # bins>; the bins are the chart's x grouping (dim_col_obj's formula:
             # `[Master/Region]` or `DateTrunc("month", [Master/Order Date])`).
             dim_grp = dim_col_obj && dim_col_obj['formula'].to_s
+            simple_master_measure =
+              meas_col_obj['formula'].to_s.match?(
+                /\A(?:Sum|Avg|Min|Max|Median|Count|CountDistinct)\(\[Master\/#{Regexp.escape(meas_name)}\]\)\z/
+              )
             value_formula =
-              if fagg == 'Avg' && dim_grp && !dim_grp.strip.empty?
+              if !simple_master_measure && meas_name.include?('/')
+                # Sigma parses `/` inside a bare local ref as
+                # [element/column]. Reuse the already-qualified plotted
+                # formula instead of emitting an invalid [A/B] reference.
+                meas_col_obj['formula']
+              elsif fagg == 'Avg' && !simple_master_measure
+                # A derived/parameterized plotted measure has no same-named
+                # master column. Reference its chart column directly; the old
+                # [Master/<display name>] hard-failed readback.
+                "Avg([#{meas_name}])"
+              elsif fagg == 'Avg' && dim_grp && !dim_grp.strip.empty?
                 "Sum([Master/#{meas_name}]) / CountDistinct(#{dim_grp})"
               else
-                "#{fagg}([Master/#{meas_name}])"
+                "#{fagg}(#{simple_master_measure ? "[Master/#{meas_name}]" : "[#{meas_name}]"})"
               end
             if fagg == 'Avg' && !(dim_grp && !dim_grp.strip.empty?)
               warnings << "'#{cap}' average reference line fell back to ROW-LEVEL (couldn't resolve the x-axis grouping for a mark-level mean) — verify the line value vs Tableau at Phase 6f"
@@ -5840,11 +6354,21 @@ layout.each do |dash|
       if headers.length > 2 && chart_source_eid == opts[:master_id]
         headers.drop(2).each_with_index do |header, offset|
           header = header.to_s.strip
-          mapped = map_column(header, mmap) ||
-                   { 'id' => "m-#{header.downcase.gsub(/\W+/, '-')}", 'name' => header }
+          mapped = map_column(header, mmap)
+          ws_calc = worksheet_calculation_for(z['calculations'], header, header_base(header))
+          translated_calc = ws_calc && (
+            translate_user_agg_formula(
+              ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+            ) || translate_row_level_calc(
+              ws_calc['formula'], mmap, meta['columns_by_guid'] || {}
+            )
+          )
+          mapped ||= { 'id' => "m-#{header.downcase.gsub(/\W+/, '-')}", 'name' => header }
           aliases = (meta['column_aliases'] || {})[mapped['name']] ||
                     (meta['column_aliases'] || {})[header]
-          formula = if mapped['formula']
+          formula = if translated_calc
+                      translated_calc
+                    elsif mapped['formula']
                       mapped['formula']
                     elsif aliases && !aliases.empty?
                       parts = ["[Master/#{mapped['name']}]"]
@@ -5882,6 +6406,11 @@ layout.each do |dash|
       element['columns'].each_with_index do |column, index|
         agg = aggregation_for.call(headers[index], column)
         if agg.nil? || agg == 'None' || DATE_TRUNC.key?(agg)
+          if column['formula'].to_s =~ /\A(?:Sum|Avg|Min|Max|Median|Count|CountDistinct)\(/
+            raw_mapping = map_column(column['name'], mmap)
+            column['formula'] =
+              (raw_mapping && raw_mapping['formula']) || "[Master/#{column['name']}]"
+          end
           column.delete('format') unless column['format'].is_a?(Hash) && column['format']['kind'] == 'datetime'
           group_by << column['id']
         else
@@ -6357,6 +6886,20 @@ layout.each do |dash|
         next
       end
       m = fcap ? map_column(fcap, mmap) : nil
+      if m.nil? && fcap && (calc_formula = calc_formula_by_caption[fcap])
+        translated_filter = translate_boolean_filter_calc(
+          calc_formula, mmap, meta['columns_by_guid'] || {}, meta['parameters'] || []
+        )
+        if translated_filter
+          m = {
+            'id' => "calc-filter-#{fcap.downcase.gsub(/\W+/, '-').sub(/-$/, '')}",
+            'name' => fcap,
+            'formula' => translated_filter
+          }
+          warnings << "value filter on '#{cap}' targets calculated field '#{fcap}' — " \
+                      "translated it into an element-local filter column"
+        end
+      end
       if m.nil?
         warnings << "value filter on '#{cap}' targets '#{fcap}' — no master column matched, skipping"
         next
@@ -6374,6 +6917,11 @@ layout.each do |dash|
                       end
           next
         end
+        if full_boolean_domain_filter?(f)
+          warnings << "'#{cap}' boolean quick filter on '#{fcap}' selects both true and false — " \
+                      "the complete domain is unrestricted; no Sigma element filter emitted"
+          next
+        end
         fcol = el_filter_col_for.call(m)
         next if fcol.nil? # helper-sourced chart, column unreachable (warned in el_filter_col_for)
         # D1/P0.1: an EXCLUDE-mode Tableau filter enumerates the values it
@@ -6383,7 +6931,7 @@ layout.each do |dash|
           'columnId' => fcol,
           'kind' => 'list', 'mode' => (f['exclude'] ? 'exclude' : 'include'),
           'selectionMode' => 'multiple',
-          'values' => f['members'], 'includeNulls' => 'never'
+          'values' => typed_filter_members(f), 'includeNulls' => 'never'
         }
         if f['exclude']
           warnings << "'#{cap}' EXCLUDE quick filter on '#{fcap}' → Sigma list filter mode:exclude " \
@@ -6572,14 +7120,6 @@ layout.each do |dash|
         # rewrite the Switch to reference the sibling `[X]`. Without this the
         # Switch compiles to type "error" (branch refs unresolved).
         branch_refs = translated.scan(/\[Master\/([^\]]+)\]/).flatten.uniq
-        existing_names = (element['columns'] || []).map { |c2| c2['name'] }.compact
-        branch_refs.each do |bname|
-          next if existing_names.include?(bname)
-          bid = "swcol-#{bname.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
-          element['columns'] << { 'id' => bid, 'name' => bname,
-                                  'formula' => "[Master/#{bname}]" }
-          existing_names << bname
-        end
         switch_sibling = translated.gsub(/\[Master\/([^\]]+)\]/) { "[#{Regexp.last_match(1)}]" }
 
         # The mechanical pass emits the worksheet dimension as a passthrough
@@ -6595,8 +7135,18 @@ layout.each do |dash|
         # orphan — only append when nothing carries the Switch yet.
         already_bound = (element['columns'] || []).any? { |col| col['formula'].to_s.include?(switch_sibling) }
         if rewired.zero? && !already_bound
-          calc_id = "calc-#{calc_name.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
-          element['columns'] << { 'id' => calc_id, 'name' => calc_name, 'formula' => switch_sibling }
+          warnings << "'#{cap}' parameter-driven calc #{c['name']} is not bound to this tile's " \
+                      'axes, values, filters, or grouping — translation recorded but no orphan ' \
+                      'workbook column emitted'
+          next
+        end
+        existing_names = (element['columns'] || []).map { |c2| c2['name'] }.compact
+        branch_refs.each do |bname|
+          next if existing_names.include?(bname)
+          bid = "swcol-#{bname.downcase.gsub(/\W+/, '-')[0..40]}".sub(/-$/, '')
+          element['columns'] << { 'id' => bid, 'name' => bname,
+                                  'formula' => "[Master/#{bname}]" }
+          existing_names << bname
         end
         warnings << "'#{cap}' parameter-driven calc #{c['name']} → control-driven Switch over " \
                     "#{branch_refs.size} materialized branch col(s) (#{rewired} grouping rewired): #{switch_sibling[0..90]}"
@@ -6640,7 +7190,7 @@ layout.each do |dash|
     # Param measure-picker (n4pi.10): the tile measure was set to the control-
     # driven Switch (sibling form) above — materialise the hidden passthrough
     # sibling cols its branches reference, and register the control for emission.
-    if chart_pswitch_plan
+    if chart_pswitch_plan && chart_pswitch_plan_used
       add_switch_siblings!(element, chart_pswitch_plan['branch_refs'])
       $param_switch_used << chart_pswitch_plan['control_id'] unless $param_switch_used.include?(chart_pswitch_plan['control_id'])
       warnings << "'#{cap}' measure '#{meas_hdr}' is a parameter measure-picker → control-driven Switch over " \
@@ -7537,19 +8087,19 @@ unless opts[:no_auto_controls]   # default-on: never miss a .twb parameter/filte
       # Canonicalise so the default matches a control option value (0.→0).
       spec['value'] = canonical_switch_value(p['default_value'])
     elsif p['param_domain'] == 'range' && %w[integer real].include?(p['datatype'])
-      # Numeric range parameter → Sigma `number-range` control (discovered by
-      # gap-scout 2026-05-20, beads-sigma-ebw). Two-handle slider; the single-
-      # value Tableau parameter is rendered as a range with handles initially
-      # collapsed to the default. Bounds are the schema's flat min/max (the old
-      # mode:'between' + values:[…] pair was out-of-schema and never
-      # round-tripped on readback).
-      spec['controlType'] = 'number-range'
+      # A Tableau numeric range parameter is still ONE scalar value. Sigma's
+      # number-range control returns a two-value range, which makes formulas
+      # such as PercentileCont(x, [control]) compile to type=error. Preserve
+      # the scalar contract with a single-handle slider.
+      spec['controlType'] = 'slider'
       min = p['min'] ? (p['datatype'] == 'real' ? p['min'].to_f : p['min'].to_i) : nil
       max = p['max'] ? (p['datatype'] == 'real' ? p['max'].to_f : p['max'].to_i) : nil
-      spec['min'] = min if min
-      spec['max'] = max if max
+      spec['low'] = min if min
+      spec['high'] = max if max
+      spec['mode'] = '='
+      spec['value'] = p['datatype'] == 'real' ? p['default_value'].to_f : p['default_value'].to_i
       spec['includeNulls'] = 'when-no-value-is-selected'
-      warnings << "parameter '#{cap}' is a numeric range — emitted as number-range control (Sigma 2-handle slider; Tableau's single-handle UX needs manual post-publish tweak)"
+      warnings << "parameter '#{cap}' is a scalar numeric range — emitted as a single-handle slider"
     elsif p['param_domain'] == 'range' && %w[date datetime].include?(p['datatype'])
       spec['controlType'] = 'date-range'
       spec['mode'] = 'between'
@@ -7565,7 +8115,7 @@ unless opts[:no_auto_controls]   # default-on: never miss a .twb parameter/filte
       # mode is REQUIRED on date (=|>=|<=).
       spec['controlType'] = 'date'
       spec['mode']  = '='
-      spec['value'] = p['default_value']
+      spec['value'] = iso_utc_datestamp(p['default_value'])
       spec['includeNulls'] = 'when-no-value-is-selected'
     elsif %w[integer real].include?(p['datatype'])
       # Single-value numeric parameter (not a range) → Sigma `number` control.
@@ -8971,6 +9521,19 @@ end
 #                          auto-controls AND a title text duplicated onto each
 #                          page so the customer sees the same filter set on
 #                          every page (Tableau dashboard-level filter semantics).
+control_text_defaults = (param_controls + auto_controls).each_with_object({}) do |control, defaults|
+  value =
+    if control.key?('value')
+      control['value']
+    elsif control['values'].is_a?(Array)
+      control['values'].join(', ')
+    elsif control.key?('startDate') || control.key?('endDate')
+      [control['startDate'], control['endDate']].compact.join(' to ')
+    end
+  defaults[control['controlId']] =
+    value.nil? ? '' : value.to_s.sub(/\A#(.*)#\z/, '\1')
+end
+
 if opts[:pages_mode] == :worksheet
   pages = []
   by_ws = elements.group_by { |e| e['_worksheet'] }
@@ -9015,8 +9578,7 @@ if opts[:pages_mode] == :worksheet
       # an id this page no longer carries and renders nothing.
       %w[name body].each do |field|
         next unless el[field].is_a?(String)
-
-        ctl_rewrites.each { |from, to| el[field] = el[field].gsub("{{[#{from}]}}", "{{[#{to}]}}") }
+        el[field] = rewrite_page_control_text(el[field], ctl_rewrites, control_text_defaults)
       end
       # A set-control-value effect's `control` names a param/auto controlId —
       # the SAME id this page just suffixed above. Without this, an emitted
@@ -9138,8 +9700,7 @@ elsif opts[:pages_mode] == :dashboard
       # as a formula reference (see the page-per-worksheet branch above).
       %w[name body].each do |field|
         next unless el[field].is_a?(String)
-
-        ctl_rewrites.each { |from, to| el[field] = el[field].gsub("{{[#{from}]}}", "{{[#{to}]}}") }
+        el[field] = rewrite_page_control_text(el[field], ctl_rewrites, control_text_defaults)
       end
       # A parameter-action's set-control-value effect names a param/auto
       # controlId — the SAME id this dashboard page just suffixed above via
@@ -9374,6 +9935,17 @@ end
 #     missing from the spec is a lint failure by design — the drop is already
 #     loud above); rich detail keys ride along, the lint ignores unknown keys.
 unless control_scope_records.empty?
+  final_scope_pages =
+    if defined?(_out) && _out.is_a?(Hash) && _out['pages']
+      _out['pages']
+    elsif defined?(all_elements)
+      [{ 'name' => nil, 'elements' => all_elements }]
+    else
+      []
+    end
+  final_scope_ids = final_scope_pages.flat_map do |page|
+    Array(page['elements']).map { |element| element['id'] }
+  end.compact.uniq
   unreach_names = ->(r) { Array(r['unreachable']).flat_map { |u| u['elements'] || [] } }
   page_chart_ids = lambda do |page|
     page ? ctl_chart_index.select { |c| c['dash'] == page || c['ws'] == page }.map { |c| c['id'] }
@@ -9386,16 +9958,34 @@ unless control_scope_records.empty?
     ints = ints.select { |i| (i['dashboard'] || i['worksheet']).nil? || i['dashboard'] == page || i['worksheet'] == page } if page
     bad = unreach_names.call(r)
     reached = ints.reject { |i| bad.include?(i['name']) }
-    reached_ids = reached.map { |i| i['element_id'] }.uniq
+    reached_ids = reached.map { |i| i['element_id'] }.uniq & final_scope_ids
+    final_page = final_scope_pages.find { |candidate| page.nil? || candidate['name'] == page }
+    formula_ids = Array(final_page && final_page['elements']).select do |element|
+      element.to_json.include?("[#{cid}]")
+    end.map { |element| element['id'] }.compact
+    # Formula controls are authoritative from the FINAL post-collapse,
+    # post-namespacing spec. Their earlier intended set can still contain
+    # trellis-collapsed siblings that no longer exist.
+    reached_ids = formula_ids unless formula_ids.empty?
     e = r.merge('controlId' => cid, 'sourceName' => r['source_signal'])
     e.delete('page_instances')
-    e['scope'] = (page_chart_ids.call(page) - reached_ids).empty? ? 'page' : reached_ids
+    final_page_chart_ids = page_chart_ids.call(page) & final_scope_ids
+    e['scope'] = (final_page_chart_ids - reached_ids).empty? ? 'page' : reached_ids
     aws = Array(r['action_worksheets'])
     must = reached.select { |i| aws.include?(i['worksheet']) }.map { |i| i['element_id'] }.uniq
     e['mustReach'] = must if must.any?
     e
   end
   emitted_rs, dropped_rs = control_scope_records.partition { |r| r['status'] != 'dropped' }
+  if opts[:pages_mode]
+    pruned_rs, emitted_rs = emitted_rs.partition { |r| Array(r['page_instances']).empty? }
+    dropped_rs.concat(pruned_rs.map do |record|
+      record.merge(
+        'status' => 'dropped',
+        'reason' => 'no final page instance (control had no formula/filter consumer after page scoping)'
+      )
+    end)
+  end
   contract_controls = emitted_rs.flat_map do |r|
     if (insts = Array(r['page_instances'])).any?
       insts.map { |pi| to_contract.call(r, pi['controlId'], pi['page']) }
@@ -9774,13 +10364,22 @@ end
 built_n = (defined?(elements) && elements.respond_to?(:size)) ? elements.size : 0
 dropped_n = coverage_unresolved.select { |u| u['severity'] == 'dropped' }.map { |u| u['visual'] }.uniq.size
 by_sev = coverage_unresolved.group_by { |u| u['severity'] }.transform_values(&:size)
+source_chart_zones = Array(layout).sum do |dashboard|
+  ZoneCensus.content_zones(dashboard['zones']).size
+end
+built_chart_elements = Array(elements).count do |element|
+  kind = element['kind'].to_s
+  kind.end_with?('-chart') || %w[table pivot-table region-map point-map].include?(kind)
+end
 coverage_path = opts[:coverage_out] ||
                 File.join(File.dirname(File.expand_path(opts[:out])), 'coverage.json')
 File.write(coverage_path, JSON.pretty_generate(
              { 'version' => 1, 'source' => 'tableau',
                'summary' => {
-                 'sourceVisuals' => built_n + dropped_n,
+                 'sourceVisuals' => source_chart_zones.positive? ? source_chart_zones : built_n + dropped_n,
                  'builtElements' => built_n,
+                 'builtChartElements' => built_chart_elements,
+                 'sourceChartZones' => source_chart_zones,
                  'dropped' => by_sev['dropped'] || 0,
                  'degraded' => by_sev['degraded'] || 0,
                  'approximated' => by_sev['approximated'] || 0,

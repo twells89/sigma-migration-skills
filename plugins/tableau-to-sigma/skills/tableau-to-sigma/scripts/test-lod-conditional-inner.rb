@@ -26,7 +26,7 @@ def check(cond, msg, fails)
 end
 
 src = File.read(BUILD)
-defs = %w[render_agg parse_fixed_lod lod_inner_ref translate_dim_calc
+defs = %w[render_agg parse_fixed_lod lod_inner_ref strip_tableau_comments translate_dim_calc
           translate_row_level_calc].map do |fn|
   m = src.match(/^def #{Regexp.escape(fn)}\b.*?\nend\n/m)
   abort "test bug: could not extract def #{fn} from build-charts-from-signals.rb" unless m

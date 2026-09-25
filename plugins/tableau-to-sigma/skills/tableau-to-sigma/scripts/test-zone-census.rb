@@ -18,6 +18,10 @@ title_zone         = { 'kind' => 'title', 'caption' => 'My Dashboard' }
 text_zone          = { 'kind' => 'text', 'caption' => 'Disclaimer' }
 filter_zone        = { 'kind' => 'filter', 'caption' => 'Region' }
 uncaptioned_chart  = { 'kind' => 'chart', 'caption' => '  ', 'measures' => ['X'] }
+thin_alert_chart   = { 'kind' => 'chart', 'caption' => 'Alert Host', 'measures' => ['X'],
+                       'w_pct' => 20.0, 'h_pct' => 0.1 }
+rounded_zero_host  = { 'kind' => 'chart', 'caption' => 'Rounded Alert Host', 'measures' => ['X'],
+                       'w_pct' => 20.0, 'h_pct' => 0.0 }
 
 ok('chart with a measure plots', ZoneCensus.plots?(chart_with_measure))
 ok('chart with a non-empty shelf plots', ZoneCensus.plots?(chart_with_shelf))
@@ -26,6 +30,13 @@ ok('title zone is furniture', !ZoneCensus.plots?(title_zone))
 ok('text zone is furniture', !ZoneCensus.plots?(text_zone))
 ok('filter zone is furniture', !ZoneCensus.plots?(filter_zone))
 ok('uncaptioned chart is not a tile', !ZoneCensus.plots?(uncaptioned_chart))
+ok('near-zero-height alert host is furniture', !ZoneCensus.plots?(thin_alert_chart))
+ok('near-zero-height chart is classified as a hidden host',
+   ZoneCensus.hidden_chart_host?(thin_alert_chart))
+ok('rounded-to-zero chart is classified as a hidden host',
+   ZoneCensus.hidden_chart_host?(rounded_zero_host))
+ok('ordinary visible chart is not a hidden host',
+   !ZoneCensus.hidden_chart_host?(chart_with_measure))
 ok('nil is not a tile', !ZoneCensus.plots?(nil))
 
 # ---- content_zones : furniture excluded from the count ----------------------
