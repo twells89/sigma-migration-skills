@@ -707,6 +707,13 @@ def render_agg(agg, master_col_ref)
   end
 end
 
+def aggregate_mapped_measure_formula(formula, aggregate)
+  source = formula.to_s.strip
+  direct = source.match(/\A\[([^\/\]]+)\/[^\]]+\]\z/)
+  return source unless direct && direct[1] != 'Metrics'
+  render_agg(aggregate, source)
+end
+
 # Tableau "User"-aggregated calc fields (derivation=User) are already-aggregated
 # expressions like `SUM([Returns]) / COUNT([Order Id])` — wrapping them in
 # another Sum() against a master column that doesn't exist emits an
@@ -5448,7 +5455,7 @@ layout.each do |dash|
     # calc like Return Rate = Sum(...)/Count(...). Use it verbatim. Otherwise
     # wrap the master-table column with the Sigma aggregator picked above.
     measure_formula = if meas['formula']
-                        meas['formula']
+                        aggregate_mapped_measure_formula(meas['formula'], sigma_agg)
                       elsif user_agg_formula
                         user_agg_formula
                       else

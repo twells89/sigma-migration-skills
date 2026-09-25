@@ -4,7 +4,8 @@
 source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
 %w[
   map_column qualify_master_formula rewrite_page_control_text
-  strip_tableau_comments worksheet_calculation_for
+  render_agg aggregate_mapped_measure_formula strip_tableau_comments
+  worksheet_calculation_for
   translate_row_level_calc translate_dim_calc
   translated_calc_reference translate_sla_ratio canonical_switch_value
   split_top_level_args parse_tableau_function_call
@@ -204,6 +205,18 @@ check.call(
   qualified_master_formula ==
     'If([Master/VERIFICATION_FLOW_TYPE] = "UNKNOWN", Null, [Master/Measure Value])',
   "master-derived formulas are qualified for chart reuse (got #{qualified_master_formula.inspect})"
+)
+mapped_sum = aggregate_mapped_measure_formula(
+  '[Master Reporting Layer/Measure Value]', 'Sum'
+)
+check.call(
+  mapped_sum == 'Sum([Master Reporting Layer/Measure Value])',
+  "passthrough master formulas retain their shelf aggregation (got #{mapped_sum.inspect})"
+)
+check.call(
+  aggregate_mapped_measure_formula('[Metrics/Total Revenue]', 'Sum') ==
+    '[Metrics/Total Revenue]',
+  'governed metric references are not double-aggregated'
 )
 dynamic_title = rewrite_page_control_text(
   'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}} for <[sqlproxy.x].[none:ORG:nk]>',
