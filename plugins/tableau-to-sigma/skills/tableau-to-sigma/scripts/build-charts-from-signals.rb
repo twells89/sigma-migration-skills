@@ -1289,6 +1289,16 @@ def qualify_master_formula(formula, mmap)
   end
 end
 
+def normalize_mapped_formula(column, mmap)
+  qualified = qualify_master_formula(column['formula'], mmap)
+  direct = qualified.match(/\A\[([^\/\]]+)\/[^\]]+\]\z/)
+  if direct && direct[1] != 'Metrics' && !column['name'].to_s.strip.empty?
+    "[Master/#{column['name']}]"
+  else
+    qualified
+  end
+end
+
 def rewrite_page_control_text(text, control_rewrites, control_defaults)
   rewritten = text.to_s.dup
   control_rewrites.each do |from, to|
@@ -1453,7 +1463,7 @@ end
 mmap   = JSON.parse(File.read(opts[:mmap]))
 mmap.each_value do |column|
   next unless column.is_a?(Hash) && column['formula']
-  column['formula'] = qualify_master_formula(column['formula'], mmap)
+  column['formula'] = normalize_mapped_formula(column, mmap)
 end
 meta   = opts[:meta] ? JSON.parse(File.read(opts[:meta])) : { 'worksheets' => {}, 'shared_filters' => [] }
 # Caption → Tableau formula for every calculated field the workbook defines

@@ -3,7 +3,8 @@
 
 source = File.read(File.join(__dir__, 'build-charts-from-signals.rb'))
 %w[
-  map_column qualify_master_formula rewrite_page_control_text
+  map_column qualify_master_formula normalize_mapped_formula
+  rewrite_page_control_text
   render_agg aggregate_mapped_measure_formula strip_tableau_comments
   worksheet_calculation_for
   translate_row_level_calc translate_dim_calc
@@ -206,12 +207,17 @@ check.call(
     'If([Master/VERIFICATION_FLOW_TYPE] = "UNKNOWN", Null, [Master/Measure Value])',
   "master-derived formulas are qualified for chart reuse (got #{qualified_master_formula.inspect})"
 )
+normalized_passthrough = normalize_mapped_formula(
+  { 'name' => 'MEASURE_VALUE',
+    'formula' => '[Master Reporting Layer/Measure Value]' },
+  master_map
+)
 mapped_sum = aggregate_mapped_measure_formula(
-  '[Master Reporting Layer/Measure Value]', 'Sum'
+  normalized_passthrough, 'Sum'
 )
 check.call(
-  mapped_sum == 'Sum([Master Reporting Layer/Measure Value])',
-  "passthrough master formulas retain their shelf aggregation (got #{mapped_sum.inspect})"
+  mapped_sum == 'Sum([Master/MEASURE_VALUE])',
+  "passthrough formulas bind through the master and retain shelf aggregation (got #{mapped_sum.inspect})"
 )
 check.call(
   aggregate_mapped_measure_formula('[Metrics/Total Revenue]', 'Sum') ==
