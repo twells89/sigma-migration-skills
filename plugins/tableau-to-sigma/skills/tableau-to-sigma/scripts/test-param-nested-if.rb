@@ -206,13 +206,13 @@ check.call(
   "master-derived formulas are qualified for chart reuse (got #{qualified_master_formula.inspect})"
 )
 dynamic_title = rewrite_page_control_text(
-  'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}}',
+  'From {{[ctl-start]}} to {{[ctl-end]}} by {{[ctl-period]}} for <[sqlproxy.x].[none:ORG:nk]>',
   { 'ctl-period' => 'ctl-period-page' },
   { 'ctl-start' => '2026-08-18', 'ctl-end' => '2026-09-17', 'ctl-period' => 'Daily' }
 )
 check.call(
   dynamic_title ==
-    'From 2026-08-18 to 2026-09-17 by {{[ctl-period-page]}}',
+    'From 2026-08-18 to 2026-09-17 by {{[ctl-period-page]}} for All',
   "pruned title-only controls resolve to defaults while active controls stay dynamic (got #{dynamic_title.inspect})"
 )
 

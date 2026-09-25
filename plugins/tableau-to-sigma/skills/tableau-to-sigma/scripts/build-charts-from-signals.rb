@@ -1287,7 +1287,7 @@ def rewrite_page_control_text(text, control_rewrites, control_defaults)
     control_id = Regexp.last_match(1)
     next token if active_ids.include?(control_id)
     control_defaults.fetch(control_id, '')
-  end
+  end.gsub(/<\[[^\]]+\]\s*\.\s*\[[^\]]+\]>/, 'All')
 end
 
 # Resolve a calc-bound quick-filter to an ALREADY-materialized master column by
@@ -9360,7 +9360,8 @@ control_text_defaults = (param_controls + auto_controls).each_with_object({}) do
     elsif control.key?('startDate') || control.key?('endDate')
       [control['startDate'], control['endDate']].compact.join(' to ')
     end
-  defaults[control['controlId']] = value.nil? ? '' : value.to_s
+  defaults[control['controlId']] =
+    value.nil? ? '' : value.to_s.sub(/\A#(.*)#\z/, '\1')
 end
 
 if opts[:pages_mode] == :worksheet
