@@ -1,0 +1,14 @@
+[
+  {
+    "id": "calculation_rental_rate",
+    "name": "Rental Rate",
+    "sql": "SUM(`Completed Rentals`) / SUM(`Total Web Inquiries`)",
+    "scope": "dataset",
+    "class": "aggregate",
+    "dataSourceId": "ds-rent-now",
+    "cardId": "rent-now-performance",
+    "dataType": "DECIMAL",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api"
+  }
+]
