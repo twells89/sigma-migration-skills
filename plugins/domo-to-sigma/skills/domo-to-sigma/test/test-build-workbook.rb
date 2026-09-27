@@ -201,6 +201,52 @@ eq(detail['columns'].map { |column| column['formula'] },
    'ungrouped table text/timestamp columns are not wrapped in Sum()')
 ok(!detail.key?('groupings'), 'detail table remains ungrouped so every source row survives')
 
+puts "== grouped table: unaggregated VALUE fields become implicit dimensions =="
+$translated_bms = {
+  'calc-rental-rate' => {
+    'id' => 'calc-rental-rate',
+    'name' => 'Rental Rate',
+    'class' => 'aggregate',
+    'scope' => 'dataset',
+    'sigmaFormula' => 'Sum([Completed Rentals]) / Sum([Total Web Inquiries])',
+  },
+}
+$beast_mode_usage = []
+mixed_summary = build_table({
+  'id' => 'rent-now-performance',
+  'title' => 'Rent Now Performance',
+  'chartType' => 'badge_table',
+  'groupBy' => [],
+  'columns' => [
+    { 'column' => 'Button Click', 'mapping' => 'VALUE' },
+    { 'column' => 'Waiting Discount', 'mapping' => 'VALUE' },
+    { 'column' => 'Total Web Inquiries', 'mapping' => 'VALUE', 'aggregation' => 'SUM' },
+    {
+      'column' => 'Rental Rate',
+      'mapping' => 'VALUE',
+      '_isCalc' => true,
+      'beastModeId' => 'calc-rental-rate',
+    },
+  ],
+})
+mixed_by_name = mixed_summary['columns'].to_h { |column| [column['name'], column] }
+eq(mixed_by_name['Button Click']['formula'], '[Master/Button Click]',
+   'unaggregated VALUE text is emitted as a grouping dimension, not Sum(text)')
+eq(mixed_by_name['Waiting Discount']['formula'], '[Master/Waiting Discount]',
+   'second unaggregated VALUE field remains row-level text')
+eq(mixed_by_name['Total Web Inquiries']['formula'], 'Sum([Master/Total Web Inquiries])',
+   'explicitly aggregated VALUE field remains a measure')
+eq(mixed_by_name['Rental Rate']['formula'],
+   'Sum([Master/Completed Rentals]) / Sum([Master/Total Web Inquiries])',
+   'aggregate Beast Mode remains a measure without an extra aggregation token')
+eq(mixed_summary.dig('groupings', 0, 'groupBy').sort,
+   %w[d-button-click d-waiting-discount],
+   'implicit Domo grouping fields become Sigma groupBy columns')
+eq(mixed_summary.dig('groupings', 0, 'calculations').sort,
+   %w[m-rental-rate m-total-web-inquiries],
+   'only actual aggregates become grouped calculations')
+$translated_bms = nil
+
 puts "== badge_textbox with a date column becomes a latest-value KPI =="
 $dataset_schema_by_id = {
   'ds-textbox' => {
