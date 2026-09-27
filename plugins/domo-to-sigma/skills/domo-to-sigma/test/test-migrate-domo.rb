@@ -304,8 +304,13 @@ ok(migrate_src.include?('rebuild_dm = opts[:force] || opts[:formulas_rebuilt]') 
    migrate_src.include?('repost_dm = opts[:force] || opts[:formulas_rebuilt]') &&
    migrate_src.include?("dm_post_args += ['--update-id', existing_dm_id]"),
    'a formula rebuild regenerates and PUT-updates the dependent data model instead of reusing stale formulas')
+ok(migrate_src.include?("prior_phase_done?('post-and-readback-dm')") &&
+   migrate_src.include?("prior_phase_done?('post-and-readback-wb')") &&
+   migrate_src.include?('prior workbook POST/readback did not finish cleanly') &&
+   migrate_src.include?('prior data-model POST/readback did not finish cleanly'),
+   'idempotent resume revalidates existing object ids after a failed POST/readback phase')
 ok(migrate_src.include?("update_wb_id = prior_ids['workbookId']"),
-   'plugin-update rebuild reuses an existing workbook id instead of orphaning a new workbook')
+   'workbook revalidation reuses an existing workbook id instead of orphaning a new workbook')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
    migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
    migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&

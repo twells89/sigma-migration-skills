@@ -242,6 +242,15 @@ end
 # Sigma element CSV exports use display formatting. Canonicalize only strings
 # that unambiguously carry numeric decoration so strict parity compares Domo's
 # raw numbers to their displayed equivalents without weakening plain strings.
+DISPLAY_SUFFIX_MULTIPLIERS = {
+  'y' => 1e-24, 'z' => 1e-21, 'a' => 1e-18, 'f' => 1e-15,
+  'p' => 1e-12, 'n' => 1e-9, 'µ' => 1e-6, 'm' => 1e-3,
+  'k' => 1e3, 'K' => 1e3, 'M' => 1e6,
+  'G' => 1e9, 'g' => 1e9, 'B' => 1e9, 'b' => 1e9,
+  'T' => 1e12, 't' => 1e12, 'P' => 1e15, 'E' => 1e18,
+  'Z' => 1e21, 'Y' => 1e24,
+}.freeze
+
 def canonicalise_numeric_display(rows, expected_rows = nil, percentage_points: false)
   numeric_positions = nil
   expected = Array(expected_rows).map { |row| Array(row) }
@@ -261,16 +270,18 @@ def canonicalise_numeric_display(rows, expected_rows = nil, percentage_points: f
       negative = s.start_with?('(') && s.end_with?(')')
       s = s[1..-2].to_s.strip if negative
       percent = s.end_with?('%')
-      suffix = percent ? nil : s[/([kKmMbBtT])\z/, 1]
+      suffix = percent ? nil : s[-1]
+      suffix = nil unless DISPLAY_SUFFIX_MULTIPLIERS.key?(suffix)
       decorated = percent || suffix || s.match?(/\A[$€£¥]/) || s.include?(',')
       next value unless decorated
-      body = s.gsub(/[,$€£¥\s]/, '').sub(/%\z/, '').sub(/[kKmMbBtT]\z/, '')
+      body = s.gsub(/[,$€£¥\s]/, '').sub(/%\z/, '')
+      body = body[0...-suffix.length] if suffix
       begin
         number = Float(body)
       rescue ArgumentError, TypeError
         next value
       end
-      multiplier = suffix ? { 'k' => 1e3, 'm' => 1e6, 'b' => 1e9, 't' => 1e12 }[suffix.downcase] : 1.0
+      multiplier = suffix ? DISPLAY_SUFFIX_MULTIPLIERS.fetch(suffix) : 1.0
       decimals = body.include?('.') ? body.split('.', 2).last.length : 0
       number *= multiplier
       tolerance = (10.0**-decimals) * multiplier / 2.0
@@ -363,15 +374,39 @@ def canonicalise_numeric_display(rows, expected_rows = nil, percentage_points: f
   end
 end
 
-# The newest date appearing in a row set's FIRST column, or nil if that column is
-# not uniformly a date.
-def max_date(rows)
+# Resolve the date column by header + values instead of assuming it is row[0].
+# Domo card-data and Sigma CSV exports can return the same columns in different
+# orders; comparing row.first on both sides can parse a category as a date or
+# miss the real date entirely.
+def parity_date_column_index(rows, columns = nil)
+  rows = Array(rows).map { |row| Array(row) }
+  return nil if rows.empty?
+  width = rows.map(&:length).max.to_i
+  parseable = (0...width).select do |index|
+    values = rows.map { |row| row[index] }.compact
+    !values.empty? && values.all? { |value| parse_date(value) }
+  end
+  return nil if parseable.empty?
+
+  headers = Array(columns)
+  named = parseable.select do |index|
+    headers[index].to_s.match?(/date|day|week|month|quarter|year|period|time/i)
+  end
+  return named.first unless named.empty?
+  parseable.one? ? parseable.first : nil
+end
+
+# The newest date appearing in the resolved date column, ignoring density rows
+# whose non-date measures are all nil.
+def max_date(rows, columns = nil)
   return nil unless rows.is_a?(Array) && !rows.empty?
+  date_index = parity_date_column_index(rows, columns)
+  return nil unless date_index
   meaningful = rows.map { |row| Array(row) }.select {
-    |row| row.drop(1).any? { |value| !value.nil? }
+    |row| row.each_with_index.any? { |value, index| index != date_index && !value.nil? }
   }
   return nil if meaningful.empty?
-  ds = meaningful.map { |row| parse_date(row.first) }
+  ds = meaningful.map { |row| parse_date(row[date_index]) }
   return nil if ds.any?(&:nil?)
   ds.max
 end
@@ -723,8 +758,8 @@ charts.each do |c|
   # semantics, not warehouse freshness; strict row parity below is the correct
   # oracle for those tiles.
   unless expected_transform == 'domo-pop-aligned-grain'
-    ed = max_date(exp_rows)
-    ad = max_date(act_rows)
+    ed = max_date(exp_rows, exp_columns)
+    ad = max_date(act_rows, act_columns)
     stale_evidence << { 'chart' => name, 'element_id' => eid,
                         'domo_max' => ed.to_s, 'sigma_max' => ad.to_s,
                         'days' => (ed - ad).to_i } if ed && ad && ed > ad

@@ -1704,6 +1704,21 @@ def build_table(card)
     cols = dims.map { |column| dim_col(column, card).merge('style' => { 'textWrap' => 'wrap' }) }
   else
     dims, meas = split_cols(card)
+    # Domo summary tables can mix explicitly aggregated VALUE columns with
+    # unaggregated VALUE columns. In that shape an unaggregated physical or
+    # projection field is an implicit group-by dimension, not Sum(field).
+    # Aggregate Beast Modes remain measures even without a separate aggregation
+    # token because their own formula already aggregates.
+    implicit_dimensions = meas.select do |column|
+      column['mapping'].to_s.upcase == 'VALUE' &&
+        column['aggregation'].to_s.empty? &&
+        !aggregate_beast_mode_column?(column)
+    end
+    unless implicit_dimensions.empty?
+      meas -= implicit_dimensions
+      dims += implicit_dimensions
+      dims = source_columns.select { |column| dims.include?(column) }
+    end
     mcols = meas.map { |m| measure_col(m, card) }
     cols = dims.map { |d| dim_col(d, card).merge('style' => { 'textWrap' => 'wrap' }) } + mcols
   end

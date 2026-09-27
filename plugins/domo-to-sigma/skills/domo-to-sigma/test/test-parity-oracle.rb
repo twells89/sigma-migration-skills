@@ -200,8 +200,8 @@ eval(month_abbr_src, TOPLEVEL_BINDING) if month_abbr_src && !defined?(MONTH_ABBR
 parse_date_src = oracle_src[/^def parse_date\(v\)\n.*?\nend\n/m]
 ok(parse_date_src, 'extracted parse_date(v) from build-parity-oracle.rb')
 eval(parse_date_src, TOPLEVEL_BINDING) if parse_date_src # rubocop:disable Security/Eval
-max_date_src = oracle_src[/^def max_date\(rows\)\n.*?\nend\n/m]
-ok(max_date_src, 'extracted max_date(rows) from build-parity-oracle.rb')
+max_date_src = oracle_src[/^def parity_date_column_index\(rows, columns = nil\)\n.*?(?=^def same_parity_value\?)/m]
+ok(max_date_src, 'extracted header-aware max_date helpers from build-parity-oracle.rb')
 eval(max_date_src, TOPLEVEL_BINDING) if max_date_src # rubocop:disable Security/Eval
 if max_date_src
   eq(max_date([
@@ -211,11 +211,27 @@ if max_date_src
        ['2026-12-01', nil],
      ]), Date.new(2026, 9, 1),
      'future POP density rows with no values do not make the warehouse look stale')
+  eq(max_date(
+       [['Rent', '2026-09-24', 10], ['Hold', '2026-09-25', 5]],
+       ['Button Click', 'Current Date', 'Count']
+     ),
+     Date.new(2026, 9, 25),
+     'freshness date resolves by header when the date is not row.first')
+  domo_latest = max_date(
+    [['2026-09-24', 'Rent', 10], ['2026-09-25', 'Hold', 5]],
+    ['Current Date', 'Button Click', 'Count']
+  )
+  sigma_latest = max_date(
+    [['Rent', '2026-09-24', 10], ['Hold', '2026-09-25', 5]],
+    ['Button Click', 'Current Date', 'Count']
+  )
+  eq(sigma_latest, domo_latest,
+     'Domo date-first and Sigma dimension-first exports produce identical freshness evidence')
 end
 ok(oracle_src.include?("unless expected_transform == 'domo-pop-aligned-grain'"),
    'aligned POP display dates are excluded from warehouse-freshness inference')
 
-canon_src = oracle_src[/^def canonicalise_dim\(rows\)\n.*?(?=^def max_date\(rows\))/m]
+canon_src = oracle_src[/^def canonicalise_dim\(rows\)\n.*?(?=^def parity_date_column_index\(rows, columns = nil\))/m]
 ok(canon_src, 'extracted canonicalise_dim(rows) from build-parity-oracle.rb')
 eval(canon_src, TOPLEVEL_BINDING) if canon_src # rubocop:disable Security/Eval
 
@@ -270,6 +286,9 @@ if source_grain_src
   eq(count, 2, 'source-grain rewrites are auditable')
 end
 
+suffix_src = oracle_src[/^DISPLAY_SUFFIX_MULTIPLIERS = \{.*?\}\.freeze\n/m]
+ok(suffix_src, 'extracted D3/display suffix multipliers')
+eval(suffix_src, TOPLEVEL_BINDING) if suffix_src && !defined?(DISPLAY_SUFFIX_MULTIPLIERS) # rubocop:disable Security/Eval
 display_src = oracle_src[/^def canonicalise_numeric_display\(rows, expected_rows = nil, percentage_points: false\)\n.*?\nend\n/m]
 ok(display_src, 'extracted canonicalise_numeric_display(rows) from build-parity-oracle.rb')
 eval(display_src, TOPLEVEL_BINDING) if display_src # rubocop:disable Security/Eval
@@ -277,6 +296,17 @@ if display_src
   eq(canonicalise_numeric_display([['2026-07-23', '41%', '$9.7M']]),
      [['2026-07-23', 0.41, 9_700_000.0]],
      'formatted Sigma percentages/currency compare to Domo raw numeric values')
+  eq(canonicalise_numeric_display([['Rental Success Rate %', '914m']],
+                                  [['Rental Success Rate %', 0.914]]),
+     [['Rental Success Rate %', 0.914]],
+     'D3 lowercase m is milli, never million')
+  eq(canonicalise_numeric_display([['Large', '2.5M'], ['Billions', '1.2G']],
+                                  [['Large', 2_500_000.0], ['Billions', 1_200_000_000.0]]),
+     [['Large', 2_500_000.0], ['Billions', 1_200_000_000.0]],
+     'D3 uppercase M and G preserve mega/giga values')
+  eq(canonicalise_numeric_display([['Tiny', '800µ']], [['Tiny', 0.0008]]),
+     [['Tiny', 0.0008]],
+     'D3 micro prefix is parsed with its SI scale')
   eq(canonicalise_numeric_display([['1,234', '41%']], [['1,234', 0.41]]),
      [['1,234', 0.41]],
      'text dimensions that look numeric are never coerced when source truth is text')
