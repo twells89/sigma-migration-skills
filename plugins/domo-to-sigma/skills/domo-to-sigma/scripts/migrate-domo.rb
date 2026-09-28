@@ -643,8 +643,12 @@ def enrich_workbook_handoff!(path, workbook_id, requested_folder_id)
   fail_phase!('workbook-handoff', "workbook #{workbook_id} readback has no destination path") if
     ids['path'].to_s.empty?
   ids['urlId'] = url_id
-  app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
-  ids['url'] = "#{app_base}/workbook/#{url_id}"
+  canonical_url = metadata['url'].to_s
+  if canonical_url.empty?
+    app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
+    canonical_url = "#{app_base}/workbook/#{url_id}"
+  end
+  ids['url'] = canonical_url
   File.write(path, JSON.pretty_generate(ids) + "\n")
   ids
 rescue StandardError => e
