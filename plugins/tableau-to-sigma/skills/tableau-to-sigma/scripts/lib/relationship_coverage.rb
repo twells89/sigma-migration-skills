@@ -2,6 +2,7 @@
 
 require 'digest'
 require 'json'
+require_relative 'ruby_compat'
 
 # Normalize and evaluate the Tableau converter's object-graph relationship
 # ledger. A wired-but-partial edge is blocking: dropping one computed
