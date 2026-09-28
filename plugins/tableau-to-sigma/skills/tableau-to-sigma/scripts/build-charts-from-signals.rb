@@ -9635,6 +9635,16 @@ apply_verified_trellis!(elements, PNG_TRELLIS, warnings) unless PNG_TRELLIS.empt
     Array(base_el['filters']).each do |f|
       f['values'] = [] if f.is_a?(Hash) && f['columnId'] == cat_col['id'] && f['kind'] == 'list'
     end
+    # The repeated worksheet's member field is structural once promoted to a
+    # trellis facet. Leaving the same column on Color is invalid in Sigma
+    # (`a column can only be on one channel at a time`) and aborts the entire
+    # multi-page workbook POST. This mirrors the verified-single-chart trellis
+    # path above.
+    if base_el.dig('color', 'column') == cat_col['id']
+      base_el.delete('color')
+      warnings << "native trellis on '#{dash['dashboard']}': removed redundant '#{field}' color channel " \
+                  '(the field is now the facet axis)'
+    end
     # Source arrangement → Sigma trellis axis via the shared emitter. A single
     # facet field faces ONE axis (rowsBy XOR columnsBy — emitting BOTH on the same
     # column is degenerate); a 'grid' arrangement of one field maps to columnsBy,

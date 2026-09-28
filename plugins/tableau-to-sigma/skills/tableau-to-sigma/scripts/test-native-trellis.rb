@@ -216,6 +216,8 @@ check(el && el['trellis'].is_a?(Hash) && el['trellis'].key?('columnsBy') && !el[
       'element carries trellis.columnsBy (and NOT rowsBy) for a horizontal source', fails)
 cat_col = el && Array(el['columns']).find { |c| c['id'] == cat_id }
 check(cat_col && cat_col['name'] == 'Ship Method', 'trellis.columnsBy references the Ship Method facet column', fails)
+check(el && el.dig('color', 'column') != cat_id,
+      'facet column is not duplicated on Color (Sigma one-channel rule)', fails)
 mem_filter = el && Array(el['filters']).find { |f| f['columnId'] == cat_id }
 check(mem_filter && Array(mem_filter['values']).empty?,
       'the per-member list filter is EMPTIED (values: []) so every member renders', fails)
