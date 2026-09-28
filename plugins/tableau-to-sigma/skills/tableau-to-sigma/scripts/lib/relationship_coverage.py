@@ -153,13 +153,33 @@ def evaluate(
         "blockers": blockers,
     }
     if isinstance(model, dict):
+        generated_targets = {
+            row.get("elementId")
+            for row in (
+                metadata.get("sqlProvenance", [])
+                if isinstance(metadata, dict)
+                else []
+            )
+            if isinstance(row, dict)
+            and str(row.get("originType") or "").startswith("generated-")
+            and row.get("elementId")
+        }
         relationships = [
             relationship
             for page in model.get("pages") or []
             for element in page.get("elements") or []
             for relationship in element.get("relationships") or []
             if isinstance(relationship, dict)
+            and relationship.get("targetElementId") not in generated_targets
         ]
+        result["generated_model_relationships_excluded"] = sum(
+            1
+            for page in model.get("pages") or []
+            for element in page.get("elements") or []
+            for relationship in element.get("relationships") or []
+            if isinstance(relationship, dict)
+            and relationship.get("targetElementId") in generated_targets
+        )
         empty = sum(not (relationship.get("keys") or []) for relationship in relationships)
         result["model_relationships"] = len(relationships)
         result["model_relationships_without_keys"] = empty
