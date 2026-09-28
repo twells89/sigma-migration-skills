@@ -1,10 +1,10 @@
 {
   "schema": "domo-plugin-integrity/v1",
-  "pluginVersion": "0.16.154",
+  "pluginVersion": "0.16.155",
   "files": {
-    ".claude-plugin/plugin.json": "d50f2dd0fc055dd016a409c0e4922313ad67cba953657a0506fe16a916175445",
+    ".claude-plugin/plugin.json": "b0213074eaee191fd270c51ba236733d8bb424b4a17bf2a0c7369fe51ca7ce12",
     "skills/domo-to-sigma/SKILL.md": "4222c9ba13ebd9d53437d3fcba510668fdf681ca2fa30c19c9079d0b9be029f8",
-    "skills/domo-to-sigma/scripts/migrate-domo.rb": "2b61ebb1150bbbeb9b8c01b4afa3d931f77ef2913efd12b353688f8b58a47beb",
+    "skills/domo-to-sigma/scripts/migrate-domo.rb": "6a2a613acc559e207a9480ef84958dc44d80e00576cffa50424fd182a40e0879",
     "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "8c4b82a408ebaa34112c137c30566467642dd686dfdd94f354ce46ec85e296be",
     "skills/domo-to-sigma/scripts/assert-beast-modes-accounted.rb": "f23a50eda0d20e8f9ef0fcd7df8f6064a34aa80d07966a11fd8cac3be2220ad9",
     "skills/domo-to-sigma/scripts/build-workbook.rb": "a3b77be0ffbed92d334f408ab1dd42091415ab2888d4e97d4f7c76c447cf73cd",
