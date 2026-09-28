@@ -624,6 +624,19 @@ def compute_2d_flag(dashboard_layout_path)
   grid ? 'grid' : 'stack'
 end
 
+def documented_workbook_url(metadata_url, workbook_name, url_id)
+  url = metadata_url.to_s.sub(%r{/+\z}, '')
+  name_slug = workbook_name.to_s.strip.gsub(/\s+/, '-')
+  short_suffix = "/workbook/#{url_id}"
+  if !url.empty? && url.end_with?(short_suffix) && !name_slug.empty?
+    return url.sub(/#{Regexp.escape(short_suffix)}\z/, "/workbook/#{name_slug}-#{url_id}")
+  end
+  return url unless url.empty?
+
+  app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
+  "#{app_base}/workbook/#{name_slug.empty? ? url_id : "#{name_slug}-#{url_id}"}"
+end
+
 def enrich_workbook_handoff!(path, workbook_id, requested_folder_id)
   ids = JSON.parse(File.read(path))
   metadata = Sigma.request(:get, "/v2/workbooks/#{workbook_id}")
@@ -643,12 +656,7 @@ def enrich_workbook_handoff!(path, workbook_id, requested_folder_id)
   fail_phase!('workbook-handoff', "workbook #{workbook_id} readback has no destination path") if
     ids['path'].to_s.empty?
   ids['urlId'] = url_id
-  canonical_url = metadata['url'].to_s
-  if canonical_url.empty?
-    app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
-    canonical_url = "#{app_base}/workbook/#{url_id}"
-  end
-  ids['url'] = canonical_url
+  ids['url'] = documented_workbook_url(metadata['url'], ids['name'], url_id)
   File.write(path, JSON.pretty_generate(ids) + "\n")
   ids
 rescue StandardError => e
