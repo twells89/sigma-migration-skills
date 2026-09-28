@@ -3855,6 +3855,138 @@ def detect_topn_plan(f, z, mmap, meta)
              'entity_ref' => calc['ordering_field'])
 end
 
+# Tableau commonly implements a parameter-driven "Most / Least Impacted" list
+# as a boolean CASE filter switching between two table calcs:
+#   RANK([Measure], 'desc') <= N
+#   RANK([Measure], 'asc')  <= N
+# The visible bar rides a WINDOW_MAX helper and a hidden INDEX() axis. Treating
+# those helpers as plotted measures produces a combo chart; collapsing repeated
+# regional sheets into one trellis makes Sigma's top-N global instead of
+# per-region. Detect the complete source contract so the caller can emit one
+# horizontal bar per source sheet with a dynamic rank score.
+def detect_dynamic_top_bottom_plan(f, z, mmap, meta)
+  norm = ->(value) { value.to_s.gsub(/^\[|\]$/, '').gsub(/[^0-9a-z]/i, '').downcase }
+  calcs = Array(z['calculations'])
+  filter_key = norm.call(f['column_caption'] || f['raw_param'])
+  switch_calc = calcs.find do |calc|
+    [calc['caption'], calc['name']].any? { |value| norm.call(value) == filter_key } &&
+      calc['formula'].to_s.match?(/\bCASE\b/i)
+  end
+  return nil unless switch_calc
+
+  switch_refs = switch_calc['formula'].to_s.scan(/\[([^\]]+)\]/).flatten.map { |value| norm.call(value) }
+  ranks = calcs.filter_map do |calc|
+    next unless [calc['caption'], calc['name']].any? { |value| switch_refs.include?(norm.call(value)) }
+    match = calc['formula'].to_s.match(
+      /RANK(?:_UNIQUE)?\s*\(\s*(\[[^\]]+\])\s*,\s*['"]?(desc|asc)['"]?\s*\)\s*<=\s*(\d+)/i
+    )
+    next unless match
+    { 'direction' => match[2].downcase, 'operand' => match[1], 'top_n' => match[3].to_i }
+  end
+  desc = ranks.find { |rank| rank['direction'] == 'desc' }
+  asc = ranks.find { |rank| rank['direction'] == 'asc' }
+  return nil unless desc && asc && desc['top_n'] == asc['top_n'] &&
+                    norm.call(desc['operand']) == norm.call(asc['operand'])
+
+  operand_calc = calcs.find do |calc|
+    [calc['caption'], calc['name']].any? { |value| norm.call(value) == norm.call(desc['operand']) }
+  end
+  return nil unless operand_calc
+
+  parameter_names = {}
+  Array(meta['parameters']).each do |parameter|
+    internal = parameter['name'].to_s.gsub(/^\[|\]$/, '')
+    caption = parameter['caption'].to_s
+    parameter_names[internal] = caption unless internal.empty? || caption.empty?
+  end
+  normalize_parameters = lambda do |formula|
+    formula.to_s.gsub(/(\[Parameters?\]\s*\.\s*\[)([^\]]+)(\])/i) do
+      "#{Regexp.last_match(1)}#{parameter_names[Regexp.last_match(2)] || Regexp.last_match(2)}#{Regexp.last_match(3)}"
+    end
+  end
+  param_captions = Array(meta['parameters']).map { |parameter| parameter['caption'] }.compact
+  measure_source = normalize_parameters.call(operand_calc['formula'])
+  measure_formula =
+    if (aggregate = measure_source.match(/\A\s*SUM\s*\(\s*(CASE\b.*\bEND)\s*\)\s*\z/im))
+      switched = translate_case_on_param(
+        aggregate[1], param_captions, mmap, meta['columns_by_guid'] || {}
+      )
+      switched && "Sum(#{switched})"
+    else
+      translate_user_agg_formula(measure_source, mmap, meta['columns_by_guid'] || {})
+    end
+  return nil unless measure_formula
+
+  switch_source = normalize_parameters.call(switch_calc['formula'])
+  rank_param = switch_source[/\[Parameters?\]\s*\.\s*\[([^\]]+)\]/i, 1]
+  return nil if rank_param.to_s.empty?
+  kept = Array(f['members']).map { |member| member.to_s.downcase }
+  return nil unless kept.empty? || kept.include?('true')
+
+  {
+    'filter' => f,
+    'top_n' => desc['top_n'],
+    'measure_formula' => measure_formula,
+    'measure_name' => operand_calc['caption'] || operand_calc['name'],
+    'rank_control_id' => param_control_ref(rank_param).delete_prefix('[').delete_suffix(']'),
+    'orientation' => PNG_ORIENTATION[z['caption'].to_s.downcase.strip]
+  }
+end
+
+def apply_dynamic_top_bottom!(element, plan, warnings, caption)
+  return false unless element.is_a?(Hash) && plan.is_a?(Hash)
+  y_ids = Array(element.dig('yAxis', 'columnIds')).map do |entry|
+    entry.is_a?(Hash) ? entry['columnId'] : entry
+  end.compact
+  measure = Array(element['columns']).find { |column| y_ids.include?(column['id']) } ||
+            Array(element['columns'])[1]
+  return false unless measure
+
+  branch_refs = plan['measure_formula'].scan(/\[Master\/([^\]]+)\]/).flatten.uniq
+  add_switch_siblings!(element, branch_refs)
+  measure_formula = plan['measure_formula'].gsub(/\[Master\/([^\]]+)\]/) do
+    "[#{Regexp.last_match(1)}]"
+  end
+  measure['name'] = plan['measure_name']
+  measure['formula'] = measure_formula
+
+  rank_id = "rank-#{element['id']}"
+  rank_formula = "If([#{plan['rank_control_id']}] = \"0\", #{measure_formula}, -(#{measure_formula}))"
+  element['columns'].reject! do |column|
+    column['id'] == rank_id || column['id'].to_s.start_with?("y2-#{element['id']}") ||
+      column['id'].to_s.start_with?('swcol-') && !branch_refs.include?(column['name'])
+  end
+  element['columns'] << {
+    'id' => rank_id,
+    'name' => 'Dynamic Top / Bottom Rank Score',
+    'formula' => rank_formula
+  }
+  element['filters'] = Array(element['filters']).reject { |filter| filter['kind'] == 'top-n' }
+  element['filters'] << {
+    'id' => "flt-#{element['id']}-dynamic-topn",
+    'columnId' => rank_id,
+    'kind' => 'top-n',
+    'rankingFunction' => 'rank',
+    'mode' => 'top-n',
+    'rowCount' => plan['top_n'],
+    'includeNulls' => 'never'
+  }
+  element['kind'] = 'bar-chart'
+  element['yAxis'] = { 'columnIds' => [measure['id']] }
+  element['xAxis']['sort'] = { 'by' => rank_id, 'direction' => 'descending' } if element['xAxis'].is_a?(Hash)
+  if plan['orientation'] == 'horizontal'
+    element['orientation'] = 'horizontal'
+    element.dig('xAxis', 'format')&.delete('title')
+  end
+  $param_switch_used << plan['rank_control_id'] unless $param_switch_used.include?(plan['rank_control_id'])
+  plan['measure_formula'].scan(/\[(ctl-param-[^\]]+)\]/).flatten.each do |control_id|
+    $param_switch_used << control_id unless $param_switch_used.include?(control_id)
+  end
+  warnings << "'#{caption}' parameter-driven top/bottom #{plan['top_n']} → horizontal bar with " \
+              "dynamic rank score [#{plan['rank_control_id']}] (hidden INDEX/WINDOW helper axis suppressed)"
+  true
+end
+
 # v5.1.1: re-source an element to the rank-limited PRE-FILTERED helper (or
 # write the probe sidecar when no member source exists). Shared by the pivot
 # fast path and the CSV flow's pivot/topn-prefilter branch.
@@ -6038,7 +6170,7 @@ layout.each do |dash|
     # synchronized-axes OR there are 2+ measures in the pane AND the view CSV
     # has a second measure column, emit a combo-chart with two yAxis groups.
     extra_meas_col = nil
-    if z['dual_axis'] && headers.length >= 3
+    if z['dual_axis'] && headers.length >= 3 && (!png_ck || png_ck == 'combo')
       meas2_hdr = headers[2]
       meas2 = map_column(meas2_hdr, mmap) ||
               { 'id' => "m-#{meas2_hdr.downcase.gsub(/\W+/,'-')}", 'name' => meas2_hdr }
@@ -6065,6 +6197,9 @@ layout.each do |dash|
       # configuration (log/min/max/zero) is unverified — yAxis.format only
       # governs the left axis.
       warnings << "'#{cap}' detected as dual-axis (synchronized=true or 2+ measures) — emitted as combo-chart with secondary measure on right axis (yAxis.columnIds object form). Right axis is auto-scaled; if Tableau had a custom right-axis range, configure manually in the Sigma editor."
+    elsif z['dual_axis'] && headers.length >= 3 && png_ck
+      warnings << "'#{cap}' carries a Tableau dual-axis helper, but the verified source image classifies it as " \
+                  "'#{png_ck}' — suppressed the hidden/helper secondary axis instead of changing the visible chart kind"
     end
 
     element = {
@@ -6692,6 +6827,9 @@ layout.each do |dash|
       end
       value_filters << df
     end
+    dynamic_top_bottom_plan = value_filters.filter_map do |filter|
+      detect_dynamic_top_bottom_plan(filter, z, mmap, meta)
+    end.first
     el_filters = null_excl_filters
     # Element filters must reference a column ON THE TARGET ELEMENT (bead 320u)
     # — the master-namespace ids ("m-region") don't exist on the chart and the
@@ -6729,6 +6867,10 @@ layout.each do |dash|
     # applications (D2/P0.2) without duplicating any arm.
     emit_value_filter = lambda do |f|
       fcap = f['column_caption'] || f['raw_param']
+      # The paired desc/asc rank CASE is rebuilt after all ordinary calc
+      # translation so hidden Tableau INDEX/WINDOW helpers cannot leak back
+      # onto the visible axes. Its dynamic top-N filter is emitted there too.
+      next if dynamic_top_bottom_plan && f.equal?(dynamic_top_bottom_plan['filter'])
       # --- Top-N idiom interception (before master-column resolution) ---------
       # (detection + prefilter emission shared with the pivot fast path via
       # detect_topn_plan / apply_topn_prefilter! — v5.1.1)
@@ -7196,6 +7338,9 @@ layout.each do |dash|
       warnings << "'#{cap}' measure '#{meas_hdr}' is a parameter measure-picker → control-driven Switch over " \
                   "[#{chart_pswitch_plan['control_id']}] (#{chart_pswitch['cases'].size} option(s))"
     end
+
+    apply_dynamic_top_bottom!(element, dynamic_top_bottom_plan, warnings, cap) \
+      if dynamic_top_bottom_plan
 
     # Stamp with worksheet + dashboard so the page emitters can group.
     element['_worksheet'] = cap
@@ -9429,6 +9574,17 @@ apply_verified_trellis!(elements, PNG_TRELLIS, warnings) unless PNG_TRELLIS.empt
     unless base_el
       warnings << "native trellis on '#{dash['dashboard']}': base worksheet #{base_cap.inspect} has no chart " \
                   'element — trellis NOT collapsed (member charts stay flat)'
+      next
+    end
+    member_elements = elements.select do |element|
+      element['_dashboard'] == dash['dashboard'] &&
+        caps.include?(element['_worksheet'].to_s) && element['source']
+    end
+    if member_elements.any? do |element|
+         Array(element['filters']).any? { |filter| filter['kind'] == 'top-n' }
+       end
+      warnings << "native trellis on '#{dash['dashboard']}': #{caps.size} member charts carry top-N filters — " \
+                  'left FLAT because Sigma evaluates top-N across the trellis domain, not independently per panel'
       next
     end
     # Native `trellis` survives readback ONLY on the readback-safe kinds (empirical
