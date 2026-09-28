@@ -135,6 +135,46 @@ if documented_url_src
      'already documented workbook URL remains unchanged')
 end
 
+prior_post_src = migrate_src[/^def prior_post_phase_succeeded\?\(name, state = PRIOR_RUN_STATE\)\n.*?\nend\n/m]
+ok(prior_post_src, 'extracted prior POST/readback terminal-state helper')
+if prior_post_src
+  eval(prior_post_src, TOPLEVEL_BINDING) # rubocop:disable Security/Eval
+  done_state = {
+    'phases' => {
+      'post-and-readback-wb' => { 'status' => 'done' },
+    },
+  }
+  skipped_state = {
+    'phases' => {
+      'post-and-readback-wb' => {
+        'status' => 'skip',
+        'note' => 'already posted (idempotent skip)',
+      },
+    },
+  }
+  failed_state = {
+    'phases' => {
+      'post-and-readback-wb' => { 'status' => 'fail' },
+    },
+  }
+  unrelated_skip = {
+    'phases' => {
+      'post-and-readback-wb' => {
+        'status' => 'skip',
+        'note' => 'offline: no live workbook',
+      },
+    },
+  }
+  ok(prior_post_phase_succeeded?('post-and-readback-wb', done_state),
+     'successful POST/readback is terminal')
+  ok(prior_post_phase_succeeded?('post-and-readback-wb', skipped_state),
+     'successful idempotent skip remains terminal on every later resume')
+  ok(!prior_post_phase_succeeded?('post-and-readback-wb', failed_state),
+     'failed POST/readback is revalidated')
+  ok(!prior_post_phase_succeeded?('post-and-readback-wb', unrelated_skip),
+     'an unrelated skip is not mistaken for a successful POST')
+end
+
 # A version-aware workbook rebuild cannot recover newly extractable POP
 # metadata if it reuses the old cards.json unchanged. Pin the targeted refresh:
 # only prior POP cards with neither periods nor a completed public probe make a
@@ -324,8 +364,8 @@ ok(migrate_src.include?('rebuild_dm = opts[:force] || opts[:formulas_rebuilt]') 
    migrate_src.include?('repost_dm = opts[:force] || opts[:formulas_rebuilt]') &&
    migrate_src.include?("dm_post_args += ['--update-id', existing_dm_id]"),
    'a formula rebuild regenerates and PUT-updates the dependent data model instead of reusing stale formulas')
-ok(migrate_src.include?("prior_phase_done?('post-and-readback-dm')") &&
-   migrate_src.include?("prior_phase_done?('post-and-readback-wb')") &&
+ok(migrate_src.include?("prior_post_phase_succeeded?('post-and-readback-dm')") &&
+   migrate_src.include?("prior_post_phase_succeeded?('post-and-readback-wb')") &&
    migrate_src.include?('prior workbook POST/readback did not finish cleanly') &&
    migrate_src.include?('prior data-model POST/readback did not finish cleanly'),
    'idempotent resume revalidates existing object ids after a failed POST/readback phase')

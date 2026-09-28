@@ -1692,7 +1692,9 @@ end
 def build_table(card)
   source_columns = Array(card['columns'])
   detail_mode = Array(card['groupBy']).empty? &&
-    source_columns.all? { |column| column['aggregation'].to_s.empty? }
+    source_columns.all? do |column|
+      column['aggregation'].to_s.empty? && !aggregate_beast_mode_column?(column)
+    end
   if detail_mode
     # Domo basic/detail tables frequently label every visible field as VALUE
     # even though there is no grouping or aggregation. Mapping role alone must

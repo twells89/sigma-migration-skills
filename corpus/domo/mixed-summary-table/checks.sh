@@ -32,6 +32,15 @@ ruby -rjson -e '
     grouping.fetch("groupBy").sort == %w[d-button-click d-waiting-discount]
   abort "measures missing from calculations" unless
     grouping.fetch("calculations").sort == %w[m-rental-rate m-total-web-inquiries]
+
+  beast_only = specs.fetch("pages").flat_map { |page| page.fetch("elements") }
+    .find { |element| element["id"] == "el-rent-now-beast-modes-only" }
+  abort "aggregate-Beast-Mode-only table missing" unless beast_only
+  beast_grouping = beast_only.fetch("groupings").first
+  abort "aggregate-only table fell into detail mode" unless
+    beast_grouping.fetch("groupBy").sort == %w[d-button-click d-waiting-discount]
+  abort "aggregate Beast Modes were not grouped calculations" unless
+    beast_grouping.fetch("calculations").sort == %w[m-rent-clicks m-rental-rate]
 ' "$TMP"
 
 echo "Domo mixed summary table: PASS"

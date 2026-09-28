@@ -10,5 +10,17 @@
     "dataType": "DECIMAL",
     "persistedOnDataSource": true,
     "sourceFormulaScope": "dataset-api"
+  },
+  {
+    "id": "calculation_rent_clicks",
+    "name": "Rent Clicks",
+    "sql": "SUM(CASE WHEN `Button Click` = 'Rent' THEN 1 ELSE 0 END)",
+    "scope": "dataset",
+    "class": "aggregate",
+    "dataSourceId": "ds-rent-now",
+    "cardId": "rent-now-beast-modes-only",
+    "dataType": "LONG",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api"
   }
 ]

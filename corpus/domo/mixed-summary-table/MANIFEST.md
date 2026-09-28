@@ -5,7 +5,9 @@ aggregated `VALUE` roles. Domo treats unaggregated VALUE fields as implicit
 group-by dimensions when the same summary table contains explicit aggregates.
 
 The fixture proves text categories remain bare dimension references, explicit
-aggregates remain measures, and aggregate Beast Modes stay calculations.
+aggregates remain measures, and aggregate Beast Modes stay calculations. A
+second card has no explicit aggregation tokens at all; its only measures are
+aggregate Beast Modes, proving that shape cannot fall back to detail mode.
 
 ## Expectations
 
