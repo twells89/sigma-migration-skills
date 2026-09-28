@@ -117,6 +117,51 @@ class RelationshipCoverageTest(unittest.TestCase):
         )
         self.assertEqual("pass", complete["status"])
 
+    def test_generated_helper_relationship_is_excluded_from_source_count(self):
+        meta = metadata(
+            [
+                {
+                    "left": "FACT",
+                    "right": "DIM",
+                    "derivedVia": "serialized",
+                    "keyCount": 1,
+                }
+            ]
+        )
+        meta["sqlProvenance"] = [
+            {
+                "elementId": "window-helper",
+                "originType": "generated-window",
+            }
+        ]
+        result = relationship_coverage.evaluate(
+            meta,
+            "<object-graph/>",
+            {
+                "pages": [
+                    {
+                        "elements": [
+                            {
+                                "relationships": [
+                                    {
+                                        "targetElementId": "dim",
+                                        "keys": [{"sourceColumnId": "a", "targetColumnId": "b"}],
+                                    },
+                                    {
+                                        "targetElementId": "window-helper",
+                                        "keys": [{"sourceColumnId": "a", "targetColumnId": "c"}],
+                                    },
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+        self.assertEqual("pass", result["status"])
+        self.assertEqual(1, result["model_relationships"])
+        self.assertEqual(1, result["generated_model_relationships_excluded"])
+
     def test_strict_emitter_and_assertion_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             workdir = Path(tmp)
