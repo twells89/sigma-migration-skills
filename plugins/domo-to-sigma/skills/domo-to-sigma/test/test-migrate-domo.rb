@@ -120,18 +120,18 @@ ok(documented_url_src, 'extracted documented_workbook_url helper')
 if documented_url_src
   eval(documented_url_src, TOPLEVEL_BINDING) # rubocop:disable Security/Eval
   eq(documented_workbook_url(
-       'https://app.sigmacomputing.com/tj-wells-1989/workbook/abc123',
+       'https://app.sigmacomputing.com/example-org/workbook/abc123',
        'Mixed Summary Table Validation',
        'abc123'
      ),
-     'https://app.sigmacomputing.com/tj-wells-1989/workbook/Mixed-Summary-Table-Validation-abc123',
+     'https://app.sigmacomputing.com/example-org/workbook/Mixed-Summary-Table-Validation-abc123',
      'short API URL expands to Sigma documented org/name/urlId browser URL')
   eq(documented_workbook_url(
-       'https://app.sigmacomputing.com/tj-wells-1989/workbook/Existing-Name-abc123',
+       'https://app.sigmacomputing.com/example-org/workbook/Existing-Name-abc123',
        'Mixed Summary Table Validation',
        'abc123'
      ),
-     'https://app.sigmacomputing.com/tj-wells-1989/workbook/Existing-Name-abc123',
+     'https://app.sigmacomputing.com/example-org/workbook/Existing-Name-abc123',
      'already documented workbook URL remains unchanged')
 end
 
