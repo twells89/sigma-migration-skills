@@ -115,6 +115,26 @@ if render_target_page_src
   ok(render_target_page({ 'pages' => [] }).nil?, 'render_target_page returns nil for an empty pages array')
 end
 
+documented_url_src = migrate_src[/^def documented_workbook_url\(metadata_url, workbook_name, url_id\)\n.*?\nend\n/m]
+ok(documented_url_src, 'extracted documented_workbook_url helper')
+if documented_url_src
+  eval(documented_url_src, TOPLEVEL_BINDING) # rubocop:disable Security/Eval
+  eq(documented_workbook_url(
+       'https://app.sigmacomputing.com/tj-wells-1989/workbook/abc123',
+       'Mixed Summary Table Validation',
+       'abc123'
+     ),
+     'https://app.sigmacomputing.com/tj-wells-1989/workbook/Mixed-Summary-Table-Validation-abc123',
+     'short API URL expands to Sigma documented org/name/urlId browser URL')
+  eq(documented_workbook_url(
+       'https://app.sigmacomputing.com/tj-wells-1989/workbook/Existing-Name-abc123',
+       'Mixed Summary Table Validation',
+       'abc123'
+     ),
+     'https://app.sigmacomputing.com/tj-wells-1989/workbook/Existing-Name-abc123',
+     'already documented workbook URL remains unchanged')
+end
+
 # A version-aware workbook rebuild cannot recover newly extractable POP
 # metadata if it reuses the old cards.json unchanged. Pin the targeted refresh:
 # only prior POP cards with neither periods nor a completed public probe make a
