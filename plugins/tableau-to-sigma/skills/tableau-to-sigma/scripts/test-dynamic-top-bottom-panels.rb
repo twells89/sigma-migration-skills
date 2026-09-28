@@ -49,6 +49,7 @@ calculations = [
 zone = lambda do |id, caption, region, x|
   {
     'id' => id, 'kind' => 'chart', 'caption' => caption,
+    'display_title' => 'The <[Parameters].[Parameter 3]> States',
     'x_pct' => x, 'y_pct' => 0.0, 'w_pct' => 50.0, 'h_pct' => 100.0,
     'chart_kind' => 'bar', 'chart_kind_inferred' => false,
     'mark_class' => 'Bar', 'dual_axis' => true,
@@ -191,6 +192,8 @@ check.call(panels.size == 2, "both source region panels survive (got #{panels.ma
 panels.each do |element|
   check.call(element['kind'] == 'bar-chart', "#{element['id']} remains a bar chart")
   check.call(element['orientation'] == 'horizontal', "#{element['id']} preserves horizontal orientation")
+  check.call(element['name'] == 'Top / Bottom 5 States',
+             "#{element['id']} uses a stable label instead of rendering the raw parameter value")
   check.call(element['trellis'].nil?, "#{element['id']} is not globally trellised")
   topn = Array(element['filters']).find { |filter| filter['kind'] == 'top-n' }
   check.call(topn && topn['rowCount'] == 5, "#{element['id']} carries a per-panel top-5 filter")

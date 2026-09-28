@@ -3972,6 +3972,10 @@ def apply_dynamic_top_bottom!(element, plan, warnings, caption)
     'includeNulls' => 'never'
   }
   element['kind'] = 'bar-chart'
+  if element['name'].to_s.include?("{{[#{plan['rank_control_id']}]}}") ||
+     element['name'].to_s.match?(/<\[Parameters?\]\s*\.\s*\[[^\]]+\]>/i)
+    element['name'] = "Top / Bottom #{plan['top_n']} States"
+  end
   element['yAxis'] = { 'columnIds' => [measure['id']] }
   element['xAxis']['sort'] = { 'by' => rank_id, 'direction' => 'descending' } if element['xAxis'].is_a?(Hash)
   if plan['orientation'] == 'horizontal'
