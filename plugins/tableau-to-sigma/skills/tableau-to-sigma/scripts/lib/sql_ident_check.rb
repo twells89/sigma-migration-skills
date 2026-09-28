@@ -185,6 +185,7 @@ module SqlIdentCheck
     tokens = tokenize(sql)
     idents  = []
     defined = {}
+    ctes = {}
     tables  = []
     bad_aliases = []
     # (#693) An `AS <name>` alias legally spans exactly ONE token — either a
@@ -244,6 +245,7 @@ module SqlIdentCheck
         if cte && (cte.kind == :word || cte.kind == :quoted) &&
            tokens[i + 2] && tokens[i + 2].kind == :word && tokens[i + 2].value.upcase == 'AS'
           defined[cte.value.upcase] = true
+          ctes[cte.value.upcase] = true
           i += 3
           next
         end
@@ -353,7 +355,8 @@ module SqlIdentCheck
 
       i += 1
     end
-    { idents: idents, aliases: defined, tables: tables, bad_aliases: bad_aliases }
+    base_tables = tables.reject { |table| ctes[table[:name].to_s.upcase] }
+    { idents: idents, aliases: defined, ctes: ctes, tables: base_tables, bad_aliases: bad_aliases }
   end
 
   # Check one statement against catalog columns.
