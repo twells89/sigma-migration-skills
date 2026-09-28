@@ -1,17 +1,17 @@
 {
   "schema": "domo-plugin-integrity/v1",
-  "pluginVersion": "0.16.141",
+  "pluginVersion": "0.16.155",
   "files": {
-    ".claude-plugin/plugin.json": "3b817ee8da11945dff4484ee3307a2916332a7295060e813d50500da9697d146",
+    ".claude-plugin/plugin.json": "b0213074eaee191fd270c51ba236733d8bb424b4a17bf2a0c7369fe51ca7ce12",
     "skills/domo-to-sigma/SKILL.md": "4222c9ba13ebd9d53437d3fcba510668fdf681ca2fa30c19c9079d0b9be029f8",
-    "skills/domo-to-sigma/scripts/migrate-domo.rb": "9b75f6553cb35eb7bcc1d0c097eae7380a9672a8fa9489828ce36074caa5b9ec",
-    "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "6796821b83eed0812a7ac5c80a8b745ce779ab3314a98c22e33d3987b718a903",
+    "skills/domo-to-sigma/scripts/migrate-domo.rb": "6a2a613acc559e207a9480ef84958dc44d80e00576cffa50424fd182a40e0879",
+    "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "8c4b82a408ebaa34112c137c30566467642dd686dfdd94f354ce46ec85e296be",
     "skills/domo-to-sigma/scripts/assert-beast-modes-accounted.rb": "f23a50eda0d20e8f9ef0fcd7df8f6064a34aa80d07966a11fd8cac3be2220ad9",
-    "skills/domo-to-sigma/scripts/build-workbook.rb": "97600d02322cf7cfd71ffe9bd8831376ec26aae5fbaa799ac5feae9f1b6f8ea6",
-    "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "611e3c79a11ecc63f1f39aea82fad2feb4db5d230fbd72d759814d0662c90770",
+    "skills/domo-to-sigma/scripts/build-workbook.rb": "a3b77be0ffbed92d334f408ab1dd42091415ab2888d4e97d4f7c76c447cf73cd",
+    "skills/domo-to-sigma/scripts/derive-presentation-overrides.rb": "373f518540cab87b8e8d099e13d8fda650f98257e32bb57540c66b742bc582f2",
     "skills/domo-to-sigma/scripts/check-plugin-integrity.rb": "2d8fb28c64196194f5f21b0ad0cd6fda0388ef7f3b8add2b2ef587886b3ed525",
     "skills/domo-to-sigma/scripts/lib/beast_mode_lod.rb": "90ef9fd563e0cfd2d4f5968af78cfa5954b37fde9ce36e7211f137dae31b216d",
-    "skills/domo-to-sigma/scripts/lib/beast_mode_semantics.rb": "0b91ea52143c98f5138553ba44346315ab0cf291c291f13129e4a73c94fd7240",
+    "skills/domo-to-sigma/scripts/lib/beast_mode_semantics.rb": "8b9c255be7b59d4bf95a4ab34580133b464a88fe47dbab3d1f3e21ebc3d57d64",
     "skills/domo-to-sigma/scripts/lib/plugin_integrity.rb": "45a93ec51883fd762b350d422333d3c4a89893897c99bf3b5d05d1a6baf6b64e"
   }
 }

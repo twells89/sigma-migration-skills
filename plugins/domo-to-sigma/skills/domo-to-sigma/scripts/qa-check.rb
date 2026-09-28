@@ -38,7 +38,7 @@ def check_filter_type_audit(audit)
   [errors, warns]
 end
 
-def check(spec, scope: nil)
+def check(spec, scope: nil, kpi_override_ids: [])
   errors = []
   warns  = []
   pages = spec['pages'] || []
@@ -53,7 +53,11 @@ def check(spec, scope: nil)
         vcol = (e['columns'] || []).find { |c| c['id'] == e.dig('value', 'columnId') } || (e['columns'] || []).first
         f = vcol && vcol['formula']
         # #1: a KPI must not be Count/CountDistinct of a row-key/id column.
-        if f =~ /\A\s*(Count|CountDistinct)\s*\(/i && refs_in(f).any? { |r| id_like?(r) }
+        source_card_id = e['id'].to_s.sub(/\Ael-/, '').sub(/-(?:summary|verify)\z/, '')
+        operator_confirmed = Array(kpi_override_ids).map(&:to_s).include?(source_card_id)
+        if !operator_confirmed &&
+           f =~ /\A\s*(Count|CountDistinct)\s*\(/i &&
+           refs_in(f).any? { |r| id_like?(r) }
           errors << "[#{pg['name']}] KPI '#{e['name']}' value is #{f} — counts a row-key/id (Domo table default). Use the authored measure (kpi-overrides.json)."
         end
         # KPI value must bind via columnId (not id).
@@ -115,7 +119,9 @@ if $PROGRAM_NAME == __FILE__
   run_root = ENV['DOMO_RUN_DIR'] || File.dirname(File.dirname(path))
   scope_path = File.join(run_root, 'control-scope.json')
   scope = JSON.parse(File.read(scope_path)) rescue nil
-  errors, warns = check(spec, scope: scope)
+  kpi_overrides_path = File.join(File.dirname(path), 'kpi-overrides.json')
+  kpi_overrides = JSON.parse(File.read(kpi_overrides_path)) rescue {}
+  errors, warns = check(spec, scope: scope, kpi_override_ids: kpi_overrides.keys)
   audit_path = File.join(File.dirname(path), 'filter-type-audit.json')
   if File.exist?(audit_path)
     audit_errors, audit_warns = check_filter_type_audit(JSON.parse(File.read(audit_path)))
