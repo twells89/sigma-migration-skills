@@ -163,6 +163,10 @@ def rebuild_workbook_artifacts?(opts)
   opts[:force] || PLUGIN_VERSION_CHANGED || opts[:formulas_rebuilt]
 end
 
+def prior_phase_done?(name)
+  PRIOR_RUN_STATE.dig('phases', name, 'status') == 'done'
+end
+
 def pop_discovery_refresh_needed?(cards_path)
   cards = JSON.parse(File.read(cards_path))
   Array(cards).any? do |card|
@@ -620,6 +624,19 @@ def compute_2d_flag(dashboard_layout_path)
   grid ? 'grid' : 'stack'
 end
 
+def documented_workbook_url(metadata_url, workbook_name, url_id)
+  url = metadata_url.to_s.sub(%r{/+\z}, '')
+  name_slug = workbook_name.to_s.strip.gsub(/\s+/, '-')
+  short_suffix = "/workbook/#{url_id}"
+  if !url.empty? && url.end_with?(short_suffix) && !name_slug.empty?
+    return url.sub(/#{Regexp.escape(short_suffix)}\z/, "/workbook/#{name_slug}-#{url_id}")
+  end
+  return url unless url.empty?
+
+  app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
+  "#{app_base}/workbook/#{name_slug.empty? ? url_id : "#{name_slug}-#{url_id}"}"
+end
+
 def enrich_workbook_handoff!(path, workbook_id, requested_folder_id)
   ids = JSON.parse(File.read(path))
   metadata = Sigma.request(:get, "/v2/workbooks/#{workbook_id}")
@@ -639,8 +656,7 @@ def enrich_workbook_handoff!(path, workbook_id, requested_folder_id)
   fail_phase!('workbook-handoff', "workbook #{workbook_id} readback has no destination path") if
     ids['path'].to_s.empty?
   ids['urlId'] = url_id
-  app_base = ENV.fetch('SIGMA_APP_URL', 'https://app.sigmacomputing.com').sub(%r{/+\z}, '')
-  ids['url'] = "#{app_base}/workbook/#{url_id}"
+  ids['url'] = documented_workbook_url(metadata['url'], ids['name'], url_id)
   File.write(path, JSON.pretty_generate(ids) + "\n")
   ids
 rescue StandardError => e
@@ -1174,11 +1190,15 @@ def run_live!(opts)
 
   hr('post-and-readback (data-model)')
   dm_ids_path = File.join(OUT, 'dm-ids.json')
-  repost_dm = opts[:force] || opts[:formulas_rebuilt]
+  prior_dm_post_done = prior_phase_done?('post-and-readback-dm')
+  repost_dm = opts[:force] || opts[:formulas_rebuilt] || !prior_dm_post_done
   if !repost_dm && File.exist?(dm_ids_path)
     log 'dm-ids.json already present — skip (idempotent; pass --force to re-post)'
     skip_phase!('post-and-readback-dm', 'already posted (idempotent skip)')
   else
+    if File.exist?(dm_ids_path) && !prior_dm_post_done
+      log 'dm-ids.json exists but the prior data-model POST/readback did not finish cleanly — revalidating via PUT'
+    end
     dm_spec = JSON.parse(File.read(dm_spec_path))
     grounding = DomoWarehouseColumnRefs.apply!(
       dm_spec,
@@ -1250,17 +1270,21 @@ def run_live!(opts)
 
   hr('post-and-readback (workbook)')
   wb_ids_path = File.join(OUT, 'wb-ids.json')
-  if !rebuild_workbook_artifacts?(opts) && File.exist?(wb_ids_path)
+  prior_workbook_post_done = prior_phase_done?('post-and-readback-wb')
+  if !rebuild_workbook_artifacts?(opts) && File.exist?(wb_ids_path) && prior_workbook_post_done
     log 'wb-ids.json already present — skip (idempotent; pass --force to re-post)'
     skip_phase!('post-and-readback-wb', 'already posted (idempotent skip)')
   else
+    if File.exist?(wb_ids_path) && !prior_workbook_post_done
+      log 'wb-ids.json exists but the prior workbook POST/readback did not finish cleanly — revalidating via PUT'
+    end
     post_spec = File.join(OUT, 'workbook-post-spec.json')
     sanitized = DomoSigma::WorkbookPostSanitizer.build(spec_path, post_spec)
     log "workbook POST boundary: removed #{sanitized[:removed]} data-model-only " \
         "visibleAsSource field(s) -> #{post_spec}"
     args = ['--type', 'workbook', '--spec', post_spec, '--out', wb_ids_path, '--workdir', OUT]
     update_wb_id = opts[:workbook_id]
-    if !update_wb_id && PLUGIN_VERSION_CHANGED && File.exist?(wb_ids_path)
+    if !update_wb_id && File.exist?(wb_ids_path)
       prior_ids = JSON.parse(File.read(wb_ids_path)) rescue {}
       update_wb_id = prior_ids['workbookId']
     end

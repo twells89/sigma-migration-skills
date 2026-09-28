@@ -115,6 +115,26 @@ if render_target_page_src
   ok(render_target_page({ 'pages' => [] }).nil?, 'render_target_page returns nil for an empty pages array')
 end
 
+documented_url_src = migrate_src[/^def documented_workbook_url\(metadata_url, workbook_name, url_id\)\n.*?\nend\n/m]
+ok(documented_url_src, 'extracted documented_workbook_url helper')
+if documented_url_src
+  eval(documented_url_src, TOPLEVEL_BINDING) # rubocop:disable Security/Eval
+  eq(documented_workbook_url(
+       'https://app.sigmacomputing.com/example-org/workbook/abc123',
+       'Mixed Summary Table Validation',
+       'abc123'
+     ),
+     'https://app.sigmacomputing.com/example-org/workbook/Mixed-Summary-Table-Validation-abc123',
+     'short API URL expands to Sigma documented org/name/urlId browser URL')
+  eq(documented_workbook_url(
+       'https://app.sigmacomputing.com/example-org/workbook/Existing-Name-abc123',
+       'Mixed Summary Table Validation',
+       'abc123'
+     ),
+     'https://app.sigmacomputing.com/example-org/workbook/Existing-Name-abc123',
+     'already documented workbook URL remains unchanged')
+end
+
 # A version-aware workbook rebuild cannot recover newly extractable POP
 # metadata if it reuses the old cards.json unchanged. Pin the targeted refresh:
 # only prior POP cards with neither periods nor a completed public probe make a
@@ -304,13 +324,19 @@ ok(migrate_src.include?('rebuild_dm = opts[:force] || opts[:formulas_rebuilt]') 
    migrate_src.include?('repost_dm = opts[:force] || opts[:formulas_rebuilt]') &&
    migrate_src.include?("dm_post_args += ['--update-id', existing_dm_id]"),
    'a formula rebuild regenerates and PUT-updates the dependent data model instead of reusing stale formulas')
+ok(migrate_src.include?("prior_phase_done?('post-and-readback-dm')") &&
+   migrate_src.include?("prior_phase_done?('post-and-readback-wb')") &&
+   migrate_src.include?('prior workbook POST/readback did not finish cleanly') &&
+   migrate_src.include?('prior data-model POST/readback did not finish cleanly'),
+   'idempotent resume revalidates existing object ids after a failed POST/readback phase')
 ok(migrate_src.include?("update_wb_id = prior_ids['workbookId']"),
-   'plugin-update rebuild reuses an existing workbook id instead of orphaning a new workbook')
+   'workbook revalidation reuses an existing workbook id instead of orphaning a new workbook')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
    migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
+   migrate_src.include?("documented_workbook_url(metadata['url'], ids['name'], url_id)") &&
    migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&
    migrate_src.include?("ids['url']") && migrate_src.include?("ids['path']"),
-   'live handoff reads back and records the canonical Sigma URL and destination path')
+   'live handoff records Sigma\'s documented org/name/urlId URL and destination path')
 ok(migrate_src.include?('/v2/files/#{workbook_id}') && migrate_src.include?('actual_folder_id'),
    'live handoff verifies the workbook actually landed in the requested folder')
 ok(migrate_src.include?('use a shared Sigma folder the customer can browse'),
