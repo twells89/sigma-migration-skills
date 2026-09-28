@@ -333,10 +333,10 @@ ok(migrate_src.include?("update_wb_id = prior_ids['workbookId']"),
    'workbook revalidation reuses an existing workbook id instead of orphaning a new workbook')
 ok(migrate_src.include?('enrich_workbook_handoff!(wb_ids_path, workbook_id, opts[:folder_id])') &&
    migrate_src.include?("metadata['workbookUrlId']") && migrate_src.include?("inode['urlId']") &&
-   migrate_src.include?("canonical_url = metadata['url'].to_s") &&
+   migrate_src.include?("documented_workbook_url(metadata['url'], ids['name'], url_id)") &&
    migrate_src.include?("ENV.fetch('SIGMA_APP_URL'") &&
    migrate_src.include?("ids['url']") && migrate_src.include?("ids['path']"),
-   'live handoff prefers Sigma\'s canonical org-scoped URL and records the destination path')
+   'live handoff records Sigma\'s documented org/name/urlId URL and destination path')
 ok(migrate_src.include?('/v2/files/#{workbook_id}') && migrate_src.include?('actual_folder_id'),
    'live handoff verifies the workbook actually landed in the requested folder')
 ok(migrate_src.include?('use a shared Sigma folder the customer can browse'),
