@@ -163,8 +163,12 @@ def rebuild_workbook_artifacts?(opts)
   opts[:force] || PLUGIN_VERSION_CHANGED || opts[:formulas_rebuilt]
 end
 
-def prior_phase_done?(name)
-  PRIOR_RUN_STATE.dig('phases', name, 'status') == 'done'
+def prior_post_phase_succeeded?(name, state = PRIOR_RUN_STATE)
+  phase = state.dig('phases', name) || {}
+  return true if phase['status'] == 'done'
+
+  phase['status'] == 'skip' &&
+    phase['note'].to_s.include?('already posted')
 end
 
 def pop_discovery_refresh_needed?(cards_path)
@@ -1190,7 +1194,7 @@ def run_live!(opts)
 
   hr('post-and-readback (data-model)')
   dm_ids_path = File.join(OUT, 'dm-ids.json')
-  prior_dm_post_done = prior_phase_done?('post-and-readback-dm')
+  prior_dm_post_done = prior_post_phase_succeeded?('post-and-readback-dm')
   repost_dm = opts[:force] || opts[:formulas_rebuilt] || !prior_dm_post_done
   if !repost_dm && File.exist?(dm_ids_path)
     log 'dm-ids.json already present — skip (idempotent; pass --force to re-post)'
@@ -1270,7 +1274,7 @@ def run_live!(opts)
 
   hr('post-and-readback (workbook)')
   wb_ids_path = File.join(OUT, 'wb-ids.json')
-  prior_workbook_post_done = prior_phase_done?('post-and-readback-wb')
+  prior_workbook_post_done = prior_post_phase_succeeded?('post-and-readback-wb')
   if !rebuild_workbook_artifacts?(opts) && File.exist?(wb_ids_path) && prior_workbook_post_done
     log 'wb-ids.json already present — skip (idempotent; pass --force to re-post)'
     skip_phase!('post-and-readback-wb', 'already posted (idempotent skip)')

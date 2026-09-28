@@ -210,6 +210,13 @@ $translated_bms = {
     'scope' => 'dataset',
     'sigmaFormula' => 'Sum([Completed Rentals]) / Sum([Total Web Inquiries])',
   },
+  'calc-rent-clicks' => {
+    'id' => 'calc-rent-clicks',
+    'name' => 'Rent Clicks',
+    'class' => 'aggregate',
+    'scope' => 'dataset',
+    'sigmaFormula' => 'Sum(If([Button Click] = "Rent", 1, 0))',
+  },
 }
 $beast_mode_usage = []
 mixed_summary = build_table({
@@ -245,6 +252,37 @@ eq(mixed_summary.dig('groupings', 0, 'groupBy').sort,
 eq(mixed_summary.dig('groupings', 0, 'calculations').sort,
    %w[m-rental-rate m-total-web-inquiries],
    'only actual aggregates become grouped calculations')
+
+beast_mode_only_summary = build_table({
+  'id' => 'rent-now-beast-modes-only',
+  'title' => 'Rent Now Beast Mode Summary',
+  'chartType' => 'badge_table',
+  'groupBy' => [],
+  'columns' => [
+    { 'column' => 'Button Click', 'mapping' => 'VALUE' },
+    { 'column' => 'Waiting Discount', 'mapping' => 'VALUE' },
+    {
+      'column' => 'Rental Rate',
+      'mapping' => 'VALUE',
+      '_isCalc' => true,
+      'beastModeId' => 'calc-rental-rate',
+    },
+    {
+      'column' => 'Rent Clicks',
+      'mapping' => 'VALUE',
+      '_isCalc' => true,
+      'beastModeId' => 'calc-rent-clicks',
+    },
+  ],
+})
+ok(beast_mode_only_summary.key?('groupings'),
+   'aggregate-Beast-Mode-only table bypasses detail mode and remains grouped')
+eq(beast_mode_only_summary.dig('groupings', 0, 'groupBy').sort,
+   %w[d-button-click d-waiting-discount],
+   'aggregate-only summary keeps unaggregated VALUE fields as dimensions')
+eq(beast_mode_only_summary.dig('groupings', 0, 'calculations').sort,
+   %w[m-rent-clicks m-rental-rate],
+   'aggregate-only summary places Beast Modes under calculations')
 $translated_bms = nil
 
 puts "== badge_textbox with a date column becomes a latest-value KPI =="

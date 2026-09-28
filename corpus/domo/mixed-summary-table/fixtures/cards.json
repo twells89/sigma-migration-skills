@@ -52,5 +52,72 @@
         "sourceFormulaScope": "dataset-api"
       }
     ]
+  },
+  {
+    "id": "rent-now-beast-modes-only",
+    "title": "Rent Now Aggregate Summary",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-rent-now",
+    "columns": [
+      {
+        "column": "Button Click",
+        "alias": "Button Click",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Waiting Discount",
+        "alias": "Waiting Discount",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Rental Rate",
+        "alias": "Rental Rate",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_rental_rate",
+        "_isCalc": true
+      },
+      {
+        "column": "Rent Clicks",
+        "alias": "Rent Clicks",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_rent_clicks",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_pageId": "rent-now-page",
+    "_pageOrder": 1,
+    "beastModes": [
+      {
+        "id": "calculation_rental_rate",
+        "name": "Rental Rate",
+        "sql": "SUM(`Completed Rentals`) / SUM(`Total Web Inquiries`)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-rent-now",
+        "cardId": "rent-now-beast-modes-only",
+        "dataType": "DECIMAL",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_rent_clicks",
+        "name": "Rent Clicks",
+        "sql": "SUM(CASE WHEN `Button Click` = 'Rent' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-rent-now",
+        "cardId": "rent-now-beast-modes-only",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      }
+    ]
   }
 ]
