@@ -248,6 +248,20 @@ module PerPageMasters
     cpages = content_pages(spec, dp)
     using = cpages.select { |pg| page_source_ids(pg).any? { |id| pool_by_id.key?(id) } }
     return result if using.size <= 1 # nothing to de-share
+    # FAST-PATH / handoff re-entry receives the already-split authored spec.
+    # Running the transform again used to produce ids such as
+    # `master-overview-overview`, remove the first-generation masters, and
+    # leave layout XML pointing at elements that no longer existed. Detect the
+    # page suffix contract before cloning: every consuming page already reaches
+    # at least one Data-page element ending in its own unique page suffix.
+    reentry_slugs = {}
+    already_split = using.all? do |page|
+      suffix = page_suffix(page, reentry_slugs)
+      page_source_ids(page).any? do |id|
+        pool_by_id.key?(id) && id.end_with?("-#{suffix}")
+      end
+    end
+    return result if already_split
 
     # A master is a Data-page table sourced from the data model (source.kind ==
     # 'data-model'); helpers source another workbook-local element. Used only for
