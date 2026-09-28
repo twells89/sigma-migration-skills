@@ -33,7 +33,7 @@ calculations = [
   {
     'name' => '[rank_switch]', 'caption' => 'Most/Least Impacted',
     'formula' => "CASE [Parameters].[Parameter 3]\n" \
-                 "WHEN 0 THEN [top_desc]\nWHEN 1 THEN [top_asc]\nEND",
+                 "WHEN 0 THEN [top_asc]\nWHEN 1 THEN [top_desc]\nEND",
     'parameter_refs' => ['RANK']
   },
   { 'name' => '[index_calc]', 'caption' => 'Index', 'formula' => 'INDEX()' },
@@ -49,7 +49,7 @@ calculations = [
 zone = lambda do |id, caption, region, x|
   {
     'id' => id, 'kind' => 'chart', 'caption' => caption,
-    'display_title' => 'The <[Parameters].[Parameter 3]> States',
+    'display_title' => 'The <[Parameters].[Parameter 3]> Products',
     'x_pct' => x, 'y_pct' => 0.0, 'w_pct' => 50.0, 'h_pct' => 100.0,
     'chart_kind' => 'bar', 'chart_kind_inferred' => false,
     'mark_class' => 'Bar', 'dual_axis' => true,
@@ -192,7 +192,7 @@ check.call(panels.size == 2, "both source region panels survive (got #{panels.ma
 panels.each do |element|
   check.call(element['kind'] == 'bar-chart', "#{element['id']} remains a bar chart")
   check.call(element['orientation'] == 'horizontal', "#{element['id']} preserves horizontal orientation")
-  check.call(element['name'] == 'Top / Bottom 5 States',
+  check.call(element['name'] == 'Top / Bottom 5 Products',
              "#{element['id']} uses a stable label instead of rendering the raw parameter value")
   check.call(element['trellis'].nil?, "#{element['id']} is not globally trellised")
   topn = Array(element['filters']).find { |filter| filter['kind'] == 'top-n' }
@@ -202,6 +202,14 @@ panels.each do |element|
   formulas = Array(element['columns']).map { |column| column['formula'].to_s }
   check.call(formulas.any? { |formula| formula.include?('[ctl-param-rank]') },
              "#{element['id']} rank score is driven by the RANK control")
+  rank_formula = Array(element['columns']).find do |column|
+    column['name'] == 'Dynamic Top / Bottom Rank Score'
+  end&.dig('formula').to_s
+  check.call(
+    rank_formula.include?('Switch([ctl-param-rank], "1",') &&
+      rank_formula.include?('"0", -('),
+    "#{element['id']} derives descending/ascending polarity from the source CASE mapping"
+  )
   check.call(formulas.none? { |formula| formula.match?(/\b(?:IF|THEN|END)\b/) },
              "#{element['id']} leaks no Tableau IF/THEN/END syntax")
 end

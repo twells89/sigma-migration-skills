@@ -3881,7 +3881,12 @@ def detect_dynamic_top_bottom_plan(f, z, mmap, meta)
       /RANK(?:_UNIQUE)?\s*\(\s*(\[[^\]]+\])\s*,\s*['"]?(desc|asc)['"]?\s*\)\s*<=\s*(\d+)/i
     )
     next unless match
-    { 'direction' => match[2].downcase, 'operand' => match[1], 'top_n' => match[3].to_i }
+    {
+      'direction' => match[2].downcase,
+      'operand' => match[1],
+      'top_n' => match[3].to_i,
+      'identifiers' => [calc['caption'], calc['name']].map { |value| norm.call(value) }
+    }
   end
   desc = ranks.find { |rank| rank['direction'] == 'desc' }
   asc = ranks.find { |rank| rank['direction'] == 'asc' }
@@ -3920,6 +3925,22 @@ def detect_dynamic_top_bottom_plan(f, z, mmap, meta)
   switch_source = normalize_parameters.call(switch_calc['formula'])
   rank_param = switch_source[/\[Parameters?\]\s*\.\s*\[([^\]]+)\]/i, 1]
   return nil if rank_param.to_s.empty?
+  case_pairs = switch_source.scan(
+    /\bWHEN\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+THEN\s+(\[[^\]]+\])/i
+  )
+  value_for = lambda do |rank|
+    pair = case_pairs.find do |_value, result_ref|
+      rank['identifiers'].include?(norm.call(result_ref))
+    end
+    next nil unless pair
+    raw = pair[0].to_s.strip
+    raw = raw[1...-1] if (raw.start_with?('"') && raw.end_with?('"')) ||
+                             (raw.start_with?("'") && raw.end_with?("'"))
+    canonical_switch_value(raw)
+  end
+  desc_value = value_for.call(desc)
+  asc_value = value_for.call(asc)
+  return nil if desc_value.to_s.empty? || asc_value.to_s.empty? || desc_value == asc_value
   kept = Array(f['members']).map { |member| member.to_s.downcase }
   return nil unless kept.empty? || kept.include?('true')
 
@@ -3929,8 +3950,31 @@ def detect_dynamic_top_bottom_plan(f, z, mmap, meta)
     'measure_formula' => measure_formula,
     'measure_name' => operand_calc['caption'] || operand_calc['name'],
     'rank_control_id' => param_control_ref(rank_param).delete_prefix('[').delete_suffix(']'),
+    'desc_value' => desc_value,
+    'asc_value' => asc_value,
     'orientation' => PNG_ORIENTATION[z['caption'].to_s.downcase.strip]
   }
+end
+
+def pluralize_dynamic_entity_label(label)
+  value = label.to_s.strip
+  return 'Items' if value.empty?
+  return value if value.match?(/s\z/i)
+  return "#{value[0...-1]}ies" if value.match?(/[^aeiou]y\z/i)
+  return "#{value}es" if value.match?(/(?:x|z|ch|sh)\z/i)
+  "#{value}s"
+end
+
+def dynamic_rank_entity_label(element)
+  title = element['name'].to_s
+  explicit =
+    title[/\{\{\[[^\]]+\]\}\}\s*(.+)\z/, 1] ||
+    title[/<\[Parameters?\]\s*\.\s*\[[^\]]+\]>\s*(.+)\z/i, 1]
+  return explicit.strip unless explicit.to_s.strip.empty?
+
+  x_id = element.dig('xAxis', 'columnId')
+  column = Array(element['columns']).find { |candidate| candidate['id'] == x_id }
+  pluralize_dynamic_entity_label(column && column['name'])
 end
 
 def apply_dynamic_top_bottom!(element, plan, warnings, caption)
@@ -3951,7 +3995,9 @@ def apply_dynamic_top_bottom!(element, plan, warnings, caption)
   measure['formula'] = measure_formula
 
   rank_id = "rank-#{element['id']}"
-  rank_formula = "If([#{plan['rank_control_id']}] = \"0\", #{measure_formula}, -(#{measure_formula}))"
+  rank_formula = "Switch([#{plan['rank_control_id']}], " \
+                 "#{JSON.generate(plan['desc_value'])}, #{measure_formula}, " \
+                 "#{JSON.generate(plan['asc_value'])}, -(#{measure_formula}), #{measure_formula})"
   element['columns'].reject! do |column|
     column['id'] == rank_id || column['id'].to_s.start_with?("y2-#{element['id']}") ||
       column['id'].to_s.start_with?('swcol-') && !branch_refs.include?(column['name'])
@@ -3974,7 +4020,7 @@ def apply_dynamic_top_bottom!(element, plan, warnings, caption)
   element['kind'] = 'bar-chart'
   if element['name'].to_s.include?("{{[#{plan['rank_control_id']}]}}") ||
      element['name'].to_s.match?(/<\[Parameters?\]\s*\.\s*\[[^\]]+\]>/i)
-    element['name'] = "Top / Bottom #{plan['top_n']} States"
+    element['name'] = "Top / Bottom #{plan['top_n']} #{dynamic_rank_entity_label(element)}"
   end
   element['yAxis'] = { 'columnIds' => [measure['id']] }
   element['xAxis']['sort'] = { 'by' => rank_id, 'direction' => 'descending' } if element['xAxis'].is_a?(Hash)
