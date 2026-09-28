@@ -107,6 +107,10 @@ sql_model = { 'pages' => [{ 'elements' => [
     'source' => { 'connectionId' => 'conn-1', 'kind' => 'sql',
                   'statement' => %(SELECT "Subject", SUM("Num Enrolled") AS S FROM "EXTRACT".'COURSE LIST$' GROUP BY "Subject") },
     'columns' => [{ 'id' => 'c-l1', 'name' => 'Subject' }, { 'id' => 'c-l2', 'name' => 'S' }] },
+  { 'id' => 'el-window', 'kind' => 'table', 'name' => 'Window Subject',
+    'source' => { 'connectionId' => 'conn-1', 'kind' => 'sql',
+                  'statement' => %(WITH base AS (SELECT "Subject" AS SUBJECT FROM 'COURSE LIST$' GROUP BY 1) SELECT SUBJECT FROM base) },
+    'columns' => [{ 'id' => 'c-w1', 'name' => 'Subject' }] },
   { 'id' => 'el-join', 'kind' => 'table', 'name' => 'joined helper',
     'source' => { 'connectionId' => 'conn-1', 'kind' => 'sql',
                   'statement' => %(SELECT a."Subject" FROM t1 a JOIN t2 b ON a.x = b.x) },
@@ -126,8 +130,9 @@ Dir.mktmpdir do |dir|
   rm2 = MechanicalSpecs.remap_from_manifest!(sql_model, mpath)
 end
 lod = sql_model['pages'][0]['elements'].find { |e| e['id'] == 'el-lod' }
+window = sql_model['pages'][0]['elements'].find { |e| e['id'] == 'el-window' }
 join = sql_model['pages'][0]['elements'].find { |e| e['id'] == 'el-join' }
-check(rm2[:sql_elements] == 1, "exactly the single-table sql element remapped (got #{rm2[:sql_elements]})", fails)
+check(rm2[:sql_elements] == 2, "both physical-single-table sql elements remapped (got #{rm2[:sql_elements]})", fails)
 check(lod.dig('source', 'statement').include?('FROM DEMO_DB.LANDED.COURSE_LIST_DATASET'),
       "FROM identifier landed (got #{lod.dig('source', 'statement')[0, 90]})", fails)
 check(!lod.dig('source', 'statement').include?("COURSE LIST$"),
@@ -135,6 +140,9 @@ check(!lod.dig('source', 'statement').include?("COURSE LIST$"),
 check(lod.dig('source', 'statement').include?('SUM(NUM_ENROLLED)') &&
       lod.dig('source', 'statement').include?('GROUP BY SUBJECT'),
       'original column identifiers folded to warehouse names', fails)
+check(window.dig('source', 'statement').include?('FROM DEMO_DB.LANDED.COURSE_LIST_DATASET') &&
+      window.dig('source', 'statement').end_with?('SELECT SUBJECT FROM base'),
+      'window-helper CTE remaps its physical table while preserving the outer CTE reference', fails)
 check(join.dig('source', 'statement').include?('FROM t1 a JOIN t2 b'),
       'multi-table statement left as-is (named residue)', fails)
 
