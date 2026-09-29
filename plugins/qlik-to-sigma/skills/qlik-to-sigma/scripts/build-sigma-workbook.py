@@ -680,10 +680,10 @@ def build_map_element(c, resolve, warnings, metrics=None):
             return None
         display = resolve(dimensions[0])
         region_type = layer.get("regionType") or _map_region_type(dimensions[0])
-        if not display or not region_type:
+        if not display:
             warnings.append(
-                f"skip '{title}' (map): region grain {dimensions[0]!r} is not "
-                "a resolvable country/state/county/ZIP/province field")
+                f"skip '{title}' (map): location field {dimensions[0]!r} "
+                "is not on the denorm element")
             return None
         region_id = nid("x")
         columns.append(
@@ -695,6 +695,26 @@ def build_map_element(c, resolve, warnings, metrics=None):
         )
         if measure_id:
             columns.append(measure_column)
+        if not region_type:
+            warnings.append(
+                f"'{title}' (map) EXPLICIT APPROXIMATION: region grain "
+                f"{dimensions[0]!r} is not a Sigma region type "
+                "(country/state/county/ZIP/province) and the source carries "
+                "no coordinates — rebuilt as a table of its locations")
+            element.update(
+                {
+                    "kind": "table",
+                    "columns": columns,
+                    "groupings": [
+                        {
+                            "id": nid("g"),
+                            "groupBy": [region_id],
+                            "calculations": [measure_id] if measure_id else [],
+                        }
+                    ],
+                }
+            )
+            return apply_presentation(element, c)
         element.update(
             {
                 "kind": "region-map",
