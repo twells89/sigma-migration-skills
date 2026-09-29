@@ -1,0 +1,14 @@
+[
+  {
+    "id": "ds-rent-now",
+    "name": "Synthetic Rent Now Statistics",
+    "schema": {
+      "columns": [
+        {"name": "Button Click", "type": "STRING"},
+        {"name": "Waiting Discount", "type": "STRING"},
+        {"name": "Total Web Inquiries", "type": "LONG"},
+        {"name": "Completed Rentals", "type": "LONG"}
+      ]
+    }
+  }
+]

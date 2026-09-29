@@ -191,6 +191,42 @@ class QlikSnapshotTests(unittest.TestCase):
         self.assertTrue(result["complete"])
         self.assertEqual(2, result["expectedRows"])
 
+    def test_tabular_chart_data_preserves_sparse_fixed_width_cells(self) -> None:
+        module = self.load_discovery()
+        result = module.parse_tabular_chart_rows(
+            "MonthYear     Revenue\n"
+            "2024-01       1.5e6\n"
+            "2024-02            \n"
+            "2024-03       -\n",
+            1,
+        )
+        self.assertEqual(
+            [
+                ["2024-01", 1.5e6],
+                ["2024-02", None],
+                ["2024-03", None],
+            ],
+            result["rows"],
+        )
+
+    def test_tabular_chart_data_preserves_empty_tab_cells(self) -> None:
+        module = self.load_discovery()
+        result = module.parse_tabular_chart_rows(
+            "Region\tRevenue\tMargin\n"
+            "West\t10\t\n"
+            "East\t\t3\n"
+            "\t5\t1\n",
+            1,
+        )
+        self.assertEqual(
+            [
+                ["West", 10.0, None],
+                ["East", None, 3.0],
+                [None, 5.0, 1.0],
+            ],
+            result["rows"],
+        )
+
     def test_snapshot_captures_dimension_only_visual_rows(self) -> None:
         module = self.load_discovery()
         calls = []

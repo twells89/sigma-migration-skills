@@ -6,8 +6,10 @@
 Consumes reconcile-columns.py output and auto-generates the Sigma data-model SQL element:
   - SELECT writes `<realColumn> AS <qlikField>` for every field (preserving Qlik names while
     pointing at real warehouse columns — the rename reconciliation)
-  - infers LEFT JOINs: the fact (table named *FACT or with the most *_KEY fields) joined to
-    each dim on a shared Qlik *_KEY field name (mapped to each side's real column)
+  - infers LEFT JOINs: the fact (table named *FACT, else most *_KEY fields, else the table
+    linked to the most others) joined to each dim on a shared Qlik *_KEY field name, or —
+    when no *_KEY is shared — on every shared field name, as Qlik associates (a composite
+    join for a synthetic key), each mapped to its side's real column
   - translates a conservative set of row-wise Qlik LOAD expressions (If/Match,
     string/date helpers, arithmetic) to SQL; unsupported functions hard-fail
     instead of silently dropping a workbook field
@@ -47,11 +49,24 @@ def main():
         return s if "." in s else f'{a.database}.{a.schema}.{s}'
     keyfields = lambda t: [f["qlikField"] for f in t["fields"] if f["qlikField"].upper().endswith("_KEY")]
     # fact = name has FACT, else most *_KEY fields
+    # Qlik associates tables on ANY shared field name, not only *_KEY.
+    plain = lambda t: {f["qlikField"].upper() for f in t["fields"]
+                       if f["realColumn"] != "*" and not f.get("isExpression")}
+    links = lambda t: sum(1 for o in tables if o is not t and plain(t) & plain(o))
     fact = next((t for t in tables if "FACT" in t["qlikTable"].upper()), None) \
-        or max(tables, key=lambda t: len(keyfields(t)))
+        or max(tables, key=lambda t: (len(keyfields(t)), links(t), len(t["fields"])))
     dims = [t for t in tables if t is not fact]
     factkeys = set(k.upper() for k in keyfields(fact))
-    real = lambda t, q: next(f["realColumn"] for f in t["fields"] if f["qlikField"] == q)
+    real = lambda t, q: next(f["realColumn"] for f in t["fields"] if f["qlikField"].upper() == q.upper())
+    def join_keys(d):
+        """*_KEY links win (the historical rule); else every shared field = Qlik's synthetic key."""
+        keyed = [k for k in keyfields(d) if k.upper() in factkeys]
+        if keyed:
+            return keyed[:1]
+        fact_fields = plain(fact)
+        return [f["qlikField"] for f in d["fields"]
+                if f["realColumn"] != "*" and not f.get("isExpression")
+                and f["qlikField"].upper() in fact_fields]
 
     select, joins, alias = [], [], {}
     unsupported = []
@@ -84,14 +99,18 @@ def main():
     a_i = 0
     for d in dims:
         # find join key: a *_KEY qlikField in this dim that the fact also has
-        jk = next((k for k in keyfields(d) if k.upper() in factkeys), None)
+        keys = join_keys(d)
+        jk = keys[0] if keys else None
         al = _dim_aliases[a_i]; a_i += 1; alias[d["qlikTable"]] = al
-        if jk:
-            joins.append(f'LEFT JOIN {wh(d)} {al} ON f.{real(fact, jk)} = {al}.{real(d, jk)}')
-        # dim descriptive columns (skip its own key columns to avoid dup)
+        if keys:
+            on = " AND ".join(f'f.{real(fact, k)} = {al}.{real(d, k)}' for k in keys)
+            joins.append(f'LEFT JOIN {wh(d)} {al} ON {on}')
+        joined = {k.upper() for k in keys}
+        # dim descriptive columns (skip its own key/join columns to avoid dup)
         for f in d["fields"]:
             if f["realColumn"] == "*": continue
             if f["qlikField"].upper().endswith("_KEY"): continue
+            if f["qlikField"].upper() in joined: continue
             value = projection(d, f, al)
             if value is not None and f.get("isExpression") and jk:
                 # The expression belongs to the Qlik dimension table. A missing

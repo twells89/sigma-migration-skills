@@ -69,6 +69,34 @@ result = RelationshipCoverage.evaluate(
 check.call(result['status'] == 'pass',
            'matching data-model relationship count with non-empty keys passes')
 
+generated_meta = complete_meta.merge(
+  'sqlProvenance' => [{
+    'elementId' => 'window-helper',
+    'originType' => 'generated-window'
+  }]
+)
+result = RelationshipCoverage.evaluate(
+  generated_meta, source_text: '<object-graph/>',
+  model: {
+    'pages' => [{ 'elements' => [{
+      'relationships' => [
+        {
+          'targetElementId' => 'dim',
+          'keys' => [{ 'sourceColumnId' => 'fact-key', 'targetColumnId' => 'dim-key' }]
+        },
+        {
+          'targetElementId' => 'window-helper',
+          'keys' => [{ 'sourceColumnId' => 'fact-key', 'targetColumnId' => 'window-key' }]
+        }
+      ]
+    }] }]
+  }
+)
+check.call(result['status'] == 'pass' &&
+           result['model_relationships'] == 1 &&
+           result['generated_model_relationships_excluded'] == 1,
+           'generated helper relationships are excluded from source relationship coverage')
+
 if fails.empty?
   puts 'ALL PASS'
   exit 0

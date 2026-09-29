@@ -419,6 +419,10 @@ module DashboardRead
       if !pit.is_a?(Hash)
         errs << 'a control highlights tiles (multi-metric pattern) but there is no `point_in_time` block — ' \
                 'add { year_column, entity_discriminator (null if none), latest_year (scalar or per-metric map) }.'
+      elsif pit['not_applicable'] == true
+        if pit['reason'].to_s.strip.empty?
+          errs << 'point_in_time.not_applicable=true requires a non-empty reason explaining why the source is non-temporal'
+        end
       else
         errs << 'point_in_time.year_column is required' if pit['year_column'].to_s.strip.empty?
         errs << 'point_in_time.latest_year is required (scalar year or {metric: year} map)' \

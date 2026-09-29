@@ -8,7 +8,7 @@
 #
 #   kpi-format-overrides.json    Domo-style compact KPI display + font size
 #   kpi-card-header-overrides.json screenshot-backed KPI title/subtitle blocks
-#   card-header-overrides.json   screenshot-backed chart title/summary blocks
+#   card-header-overrides.json   operator-authored only; never auto-emitted here
 #   chart-axis-overrides.json    compact currency axis display
 #   category-order-overrides.json source category order from Domo rows
 #   chart-color-overrides.json   suppress unsafe high-cardinality SERIES colors
@@ -18,9 +18,9 @@
 # Every sidecar is intentionally a sparse map keyed by card id: a missing id
 # means no source-grounded presentation override exists and the builder must use
 # its normal defaults. It is never an error and must never abort the migration.
-# Card headers are emitted only when layout-observed.json proves the source card
-# geometry; the observed path nests each header with its primary chart/KPI so no
-# element is left unplaced.
+# KPI headers are emitted only when layout-observed.json proves source geometry.
+# Chart/table Summary Numbers stay companion KPIs; replacing one with a bespoke
+# text header remains an explicit operator opt-in.
 #
 # Usage:
 #   ruby scripts/derive-presentation-overrides.rb --workdir /tmp/run
@@ -243,17 +243,6 @@ cards.each do |card|
       'prefix' => '$'
     }
   end
-  if observed_layout && summary
-    aggregate = AGGREGATIONS.fetch(summary['aggregation'])
-    expression = "#{aggregate}([Master/#{summary['ref']}])"
-    grain = card.dig('dateGrain', 'dateTimeElement').to_s.downcase
-    grain_line = grain.empty? ? nil : "by #{grain.capitalize}"
-    details = [grain_line, full_summary(expression, summary['format']), summary['label']].compact
-    card_headers[id] = {
-      'body' => "**#{card['title']}**\n\n<p class=\"p-small\">#{details.join("\n")}</p>"
-    }
-  end
-
   # NOTE: a card's source Summary Number is surfaced automatically by the
   # EXISTING companion-KPI mechanism (build-workbook.rb emits an `-summary`
   # kpi-chart beside the chart, and build-domo-layout.rb already synthesizes a
@@ -324,7 +313,6 @@ files = {
   'chart-color-overrides.json' => [color_guards, Hash],
 }
 files['kpi-card-header-overrides.json'] = [kpi_headers, Hash] if observed_layout
-files['card-header-overrides.json'] = [card_headers, Hash] if observed_layout
 
 written = []
 skipped = []

@@ -100,6 +100,9 @@
 #     entry's `converted` is forced to `true` and any stale converted:false
 #     "could not fully translate" note is cleared first — a human-authored
 #     formula must never carry forward the discarded automated attempt's note.
+#     After a live Sigma compile failure proves a converted:true result wrong,
+#     set `"force": true` on the override to supersede that clean-but-invalid
+#     formula. The same lint/readback gates still apply.
 #   - Every use is still POST-linted by lint_formula (raw IN(, And()/Or()/
 #     Not() as calls, unbalanced brackets) — a hand-authored typo is a hard
 #     lintError in formulas.json, never a silent pass.
@@ -149,12 +152,27 @@ end
 
 # Removed from Beast Mode / unsupported in Sigma — warn if seen.
 UNSUPPORTED = %w[SQRT CONVERT_TZ MICROSECOND WEEKDAY].freeze
+# These source functions can retain the same letters after a successful
+# Domo-specific semantic rewrite. The generic converter still warns that it
+# does not know them, so case-insensitive residual-name matching alone would
+# incorrectly block valid Sigma MonthName/Ntile/Rank/Lag/Lead formulas.
+SEMANTICALLY_MAPPED_UNKNOWN_FUNCTIONS = %w[MONTHNAME NTILE RANK LAG LEAD].freeze
+COMMENT_BLOCK_PREFIX = 'Comment normalization blocked:'.freeze
 
 # Convert a raw Beast Mode string toward what convert_sql_to_sigma_formula expects,
 # applying only the Domo-specific deltas. Returns [normalizedSql, warnings].
 def normalize_bm(sql, klass = nil)
   warnings = []
-  s = sql.to_s.dup
+  s, removed_comments, unterminated_comment =
+    DomoSigma::BeastModeSemantics.strip_mysql_comments(sql)
+  if removed_comments.positive?
+    warnings << "Removed #{removed_comments} MySQL comment#{removed_comments == 1 ? '' : 's'} before formula translation."
+  end
+  if unterminated_comment
+    warnings << "#{COMMENT_BLOCK_PREFIX} unterminated /* ... */ block comment."
+  elsif removed_comments.positive? && s.strip.empty?
+    warnings << "#{COMMENT_BLOCK_PREFIX} comment removal left no executable formula."
+  end
 
   # 1. Backtick / bracket MySQL identifier quoting → Sigma [Column Name].
   s = s.gsub(/`([^`]+)`/) { "[#{$1}]" }
@@ -187,10 +205,21 @@ def normalize_bm(sql, klass = nil)
 end
 
 NEEDS_REVIEW = %w[window lod].freeze
+AGGREGATE_SQL_RE = /\b(?:SUM|COUNT|AVG|MIN|MAX|MEDIAN|STDDEV(?:_POP|_SAMP)?|
+  VARIANCE|VAR_POP|VAR_SAMP|APPROXIMATE_COUNT_DISTINCT)\s*\(/ix
 PROVENANCE_KEYS = %w[
   dataSourceId _dataSourceId cardId dataType persistedOnDataSource saveToDataSet
   sourceFormulaScope definitionConflict extractionError nameConflictIds
 ].freeze
+
+def effective_formula_class(sql, recorded = nil)
+  source, = DomoSigma::BeastModeSemantics.strip_mysql_comments(sql)
+  return 'lod' if source.match?(/\bFIXED\s*\(/i)
+  return 'window' if source.match?(/\bOVER\s*\(|\b(?:RANK|DENSE_RANK|ROW_NUMBER|LAG|LEAD|NTILE|PERCENT_RANK|CUME_DIST)\s*\(/i)
+  return 'aggregate' if source.match?(AGGREGATE_SQL_RE)
+  return recorded if source.strip.empty? && !recorded.to_s.empty?
+  'projection'
+end
 
 def formula_source_fingerprint(path)
   Digest::SHA256.file(path).hexdigest
@@ -257,6 +286,23 @@ end
 # internals.
 def mask_strings_and_brackets(f)
   f.to_s.gsub(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\[[^\]]*\]/, ' ')
+end
+
+# The generic converter reports functions it cannot map, but historically still
+# marked their emitted spellings converted:true. Keep only warnings whose source
+# function name remains callable in the final formula; a Domo semantic rewrite
+# such as CURDATE() → Today() or DATE_FORMAT() → DateFormat() clears the hazard.
+def unresolved_unknown_functions(entry, sigma, semantically_rewritten: false)
+  Array(entry['warnings']).each_with_object([]) do |warning, functions|
+    match = warning.to_s.match(/\A([A-Z_][A-Z0-9_]*)\(\) has no Sigma mapping\b/i)
+    next unless match
+
+    function = match[1]
+    next if semantically_rewritten &&
+            SEMANTICALLY_MAPPED_UNKNOWN_FUNCTIONS.include?(function.upcase)
+
+    functions << function if sigma.to_s.match?(/\b#{Regexp.escape(function)}\s*\(/i)
+  end.uniq
 end
 
 # Lint a translated Sigma formula for the traps that ship silently-broken output.
@@ -380,15 +426,19 @@ def resolve_entry(entry, overrides)
   used_lod_synthesis = false
   semantic = DomoSigma::BeastModeSemantics.translate(entry, sigma)
   used_semantic_synthesis = false
-  semantic_block_reason = nil
+  comment_block_warning = Array(entry['preWarnings']).find {
+    |warning| warning.to_s.start_with?(COMMENT_BLOCK_PREFIX)
+  }
+  semantic_block_reason = comment_block_warning&.sub(/\A#{Regexp.escape(COMMENT_BLOCK_PREFIX)}\s*/, '')
   semantic_placement = nil
 
   if override && !override['sigmaFormula'].to_s.strip.empty?
-    if already_resolved && entry['class'].to_s != 'lod'
+    force_override = override['force'] == true
+    if already_resolved && entry['class'].to_s != 'lod' && !force_override
       warnings << "formula-overrides.json has an entry for " \
         "#{entry['name'] || entry['id']} but it already has a sigmaFormula that " \
         "converted cleanly (converted:true) — override NOT applied (an override " \
-        "only supersedes a missing or converted:false result)."
+        "only supersedes a missing or converted:false result unless it sets \"force\": true)."
     else
       sigma = override['sigmaFormula']
       used_override = true
@@ -409,6 +459,18 @@ def resolve_entry(entry, overrides)
   end
 
   return [nil, warnings] if sigma.nil? || sigma.to_s.strip.empty?
+
+  unless used_override
+    unknown_functions = unresolved_unknown_functions(
+      entry,
+      sigma,
+      semantically_rewritten: used_semantic_synthesis,
+    )
+    unless unknown_functions.empty?
+      semantic_block_reason =
+        "unmapped function(s) remain after conversion: #{unknown_functions.map { |fn| "#{fn}()" }.join(', ')}"
+    end
+  end
 
   errs, lint_warns = lint_formula(sigma, entry['class'])
   resolved = entry.merge('sigmaFormula' => sigma, 'lintErrors' => errs, 'lintWarnings' => lint_warns)
@@ -440,6 +502,11 @@ def resolve_entry(entry, overrides)
     resolved['note'] = 'Domo COUNT-or-SUM / FIXED-percent denominator synthesized as a workbook PercentOfTotal formula; final scope is selected from the card visual roles.'
     warnings << "#{entry['name'] || entry['id']}: recognized Domo fixed-percent-of-total LOD; " \
                 'the workbook builder will select color/x-axis/grand-total scope from the card bindings.'
+  elsif semantic_block_reason
+    resolved['_source'] = 'domo-semantic-block'
+    resolved['converted'] = false
+    resolved['note'] = semantic_block_reason
+    warnings << "#{entry['name'] || entry['id']}: blocked from automatic placement — #{semantic_block_reason}."
   elsif used_semantic_synthesis
     resolved['_source'] = 'domo-semantic-synthesis'
     resolved['semanticPlacement'] = semantic_placement if semantic_placement
@@ -447,11 +514,6 @@ def resolve_entry(entry, overrides)
     resolved.delete('note')
     resolved['note'] = 'Domo-specific semantic rewrite applied after generic SQL conversion.'
     warnings << "#{entry['name'] || entry['id']}: applied a Domo-specific semantic rewrite."
-  elsif semantic_block_reason
-    resolved['_source'] = 'domo-semantic-block'
-    resolved['converted'] = false
-    resolved['note'] = semantic_block_reason
-    warnings << "#{entry['name'] || entry['id']}: blocked from automatic placement — #{semantic_block_reason}."
   elsif entry['converted'] == false
     # Track E: --convert already computed a REAL converted flag (via the
     # vendored hasResidualCaseKeyword/hasResidualInfixOperator) — surface it
@@ -671,17 +733,18 @@ else
   beast = JSON.parse(File.read(path))
   pending = beast.map do |b|
     sql = b['sql'] || b['formula'] || b['expression']
-    norm, warns = normalize_bm(sql, b['class'])
+    klass = effective_formula_class(sql, b['class'])
+    norm, warns = normalize_bm(sql, klass)
     provenance = b.select { |key, _| PROVENANCE_KEYS.include?(key) }
     {
       'id'           => b['id'],
       'name'         => b['name'],
       'scope'        => b['scope'],
-      'class'        => b['class'],
+      'class'        => klass,
       'originalSql'  => sql,
       'normalizedSql'=> norm,
       'preWarnings'  => warns,
-      'needsReview'  => NEEDS_REVIEW.include?(b['class']) || warns.any? { |w| w.include?('AGGREGATE') },
+      'needsReview'  => NEEDS_REVIEW.include?(klass) || warns.any? { |w| w.include?('AGGREGATE') },
       'sigmaFormula' => nil,   # ← filled by convert_sql_to_sigma_formula in Phase 2
     }.merge(provenance)
   end
