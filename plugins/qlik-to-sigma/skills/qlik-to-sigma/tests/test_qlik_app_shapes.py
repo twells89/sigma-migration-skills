@@ -27,6 +27,8 @@ SKILL = os.path.dirname(HERE)
 SCRIPTS = os.path.join(SKILL, "scripts")
 sys.path.insert(0, SCRIPTS)
 
+import qlik_load_script
+
 
 def load_module(filename, name):
     path = os.path.join(SCRIPTS, filename)
@@ -42,6 +44,42 @@ def load_build_sigma_workbook():
 
 def load_qlik_discover():
     return load_module("qlik-discover.py", "qlik_discover_test")
+
+
+def load_build_sigma_dm():
+    return load_module("build-sigma-dm.py", "build_sigma_dm_test")
+
+
+def test_auto_concatenate_respects_labels_and_noconcatenate():
+    records = qlik_load_script.parse_raw(
+        """
+Orders:
+LOAD OrderID, Amount FROM [lib://Space:DataFiles/orders1.qvd];
+LOAD OrderID, Amount FROM [lib://Space:DataFiles/orders2.qvd];
+NOCONCATENATE LOAD OrderID, Amount
+FROM [lib://Space:DataFiles/orders3.qvd];
+"""
+    )
+    assert [record["qlikTable"] for record in records] == [
+        "Orders",
+        "orders3",
+    ]
+    assert [record["sourceTable"] for record in records] == [
+        "orders1",
+        "orders3",
+    ]
+
+
+def test_dm_metric_rewrite_resolves_qualified_refs_to_denorm_display_names():
+    module = load_build_sigma_dm()
+    columns = {
+        module._norm("Netamount"): "Netamount",
+        module._norm("Order Id"): "Order Id",
+    }
+    assert module.rewrite_metric_refs(
+        "Sum([Orders/Net Amount]) / CountDistinct([OrderID])",
+        columns,
+    ) == "Sum([Netamount]) / CountDistinct([Order Id])"
 
 
 # ---------------------------------------------------------------------------
