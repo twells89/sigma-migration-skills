@@ -1,0 +1,106 @@
+{
+  "qInfo": {
+    "qId": "map-stores",
+    "qType": "map"
+  },
+  "qUndoExclude": {
+    "gaLayers": [
+      {
+        "qHyperCube": {
+          "qSize": {
+            "qcx": 1,
+            "qcy": 2
+          },
+          "qDataPages": [
+            {
+              "qMatrix": [
+                [
+                  {
+                    "qText": "Boston",
+                    "qAttrExps": {
+                      "qValues": [
+                        {
+                          "qText": "US",
+                          "qNum": "NaN"
+                        },
+                        {
+                          "qText": "125.50",
+                          "qNum": 125.5
+                        }
+                      ]
+                    }
+                  }
+                ],
+                [
+                  {
+                    "qText": "Seattle",
+                    "qAttrExps": {
+                      "qValues": [
+                        {
+                          "qText": "US",
+                          "qNum": "NaN"
+                        },
+                        {
+                          "qText": "88.25",
+                          "qNum": 88.25
+                        }
+                      ]
+                    }
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "qHyperCube": {
+          "qSize": {
+            "qcx": 1,
+            "qcy": 2
+          },
+          "qDataPages": [
+            {
+              "qMatrix": [
+                [
+                  {
+                    "qText": "MA",
+                    "qAttrExps": {
+                      "qValues": [
+                        {
+                          "qText": "125.50",
+                          "qNum": 125.5
+                        },
+                        {
+                          "qText": "US",
+                          "qNum": "NaN"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                [
+                  {
+                    "qText": "WA",
+                    "qAttrExps": {
+                      "qValues": [
+                        {
+                          "qText": "88.25",
+                          "qNum": 88.25
+                        },
+                        {
+                          "qText": "US",
+                          "qNum": "NaN"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
