@@ -465,12 +465,17 @@ def apply_presentation(el, c):
     if chart_kind and isinstance(legend, dict):
         out = {}
         show = legend.get("show")
+        is_map = el.get("kind") in {"region-map", "point-map", "geography-map"}
         if show is False:
             out["visibility"] = "hidden"
         dock = str(legend.get("dock") or "").lower()
-        if show is not False and dock in ("top", "bottom", "left", "right"):
+        if is_map and show is not False and dock in {
+            "top-left", "top-right", "bottom-left", "bottom-right"
+        }:
             out["position"] = dock
-        elif show is True:
+        elif not is_map and show is not False and dock in ("top", "bottom", "left", "right"):
+            out["position"] = dock
+        elif show is True and not is_map:
             out["visibility"] = "shown"
         if out:
             el["legend"] = out
@@ -604,10 +609,191 @@ def emit_trellis(el, c, resolve, warnings):
     warnings.append(f"native trellis: '{el.get('name')}' -> ONE {el['kind']} element with "
                     f"trellis.{axis_key} (orientation={orientation}, facet column {facet_col['id']})")
 
+
+def _map_region_type(field):
+    name = str(field or "").upper().replace(" ", "_")
+    if "COUNTRY" in name:
+        return "country"
+    if "STATE" in name:
+        return "us-state"
+    if "COUNTY" in name:
+        return "us-county"
+    if "ZIP" in name or "POSTAL_CODE" in name:
+        return "us-zipcode"
+    if "PROVINCE" in name:
+        return "ca-province"
+    return None
+
+
+def build_map_element(c, resolve, warnings, metrics=None):
+    """Emit one supported Qlik map layer as a native Sigma map element."""
+    title = c.get("title") or "Map"
+    dimensions = [
+        dimension[0] if isinstance(dimension, list) and dimension else dimension
+        for dimension in c.get("dimensions") or []
+    ]
+    layer = c.get("mapLayer") or {}
+    layer_kind = layer.get("kind")
+    if not layer_kind:
+        layer_kind = "region"
+        layer = {
+            "kind": layer_kind,
+            "regionType": _map_region_type(dimensions[0] if dimensions else None),
+        }
+
+    authored_layers = c.get("mapLayers") or []
+    if len(authored_layers) > 1:
+        warnings.append(
+            f"'{title}' map has {len(authored_layers)} authored layers; emitted the "
+            f"supported {layer.get('sourceType') or layer_kind} layer as one Sigma map "
+            "and dropped the other overlay layer(s) (Sigma workbook map elements "
+            "author one layer per element)")
+
+    element = {
+        "id": "el-" + re.sub(r"[^a-z0-9]", "", str(c["id"]).lower()),
+        "name": title,
+        "source": {"elementId": MASTER_ID, "kind": "table"},
+    }
+    columns = []
+    measure_id = None
+    measures = c.get("measures") or []
+    if measures:
+        formula = translate_measure(measures[0], resolve)
+        if formula is None:
+            warnings.append(f"skip '{title}' (map): measure not translated: {measures[0]}")
+            return None
+        formula = _mb.metric_ref_or_inline(formula, MASTER, metrics)
+        measure_id = nid("y")
+        measure_name = (c.get("measureLabels") or [None])[0] or "Value"
+        measure_column = {"id": measure_id, "formula": formula, "name": measure_name}
+        measure_format = sigma_fmt(
+            ((c.get("measureFmts") or [None]) + [None])[0],
+            measure_name,
+            warnings,
+        )
+        if measure_format:
+            measure_column["format"] = measure_format
+
+    if layer_kind == "region":
+        if not dimensions:
+            warnings.append(f"skip '{title}' (map): region layer has no dimension")
+            return None
+        display = resolve(dimensions[0])
+        region_type = layer.get("regionType") or _map_region_type(dimensions[0])
+        if not display:
+            warnings.append(
+                f"skip '{title}' (map): location field {dimensions[0]!r} "
+                "is not on the denorm element")
+            return None
+        region_id = nid("x")
+        columns.append(
+            {
+                "id": region_id,
+                "formula": f"[{MASTER}/{display}]",
+                "name": (c.get("dimLabels") or [None])[0] or display,
+            }
+        )
+        if measure_id:
+            columns.append(measure_column)
+        if not region_type:
+            warnings.append(
+                f"'{title}' (map) EXPLICIT APPROXIMATION: region grain "
+                f"{dimensions[0]!r} is not a Sigma region type "
+                "(country/state/county/ZIP/province) and the source carries "
+                "no coordinates — rebuilt as a table of its locations")
+            element.update(
+                {
+                    "kind": "table",
+                    "columns": columns,
+                    "groupings": [
+                        {
+                            "id": nid("g"),
+                            "groupBy": [region_id],
+                            "calculations": [measure_id] if measure_id else [],
+                        }
+                    ],
+                }
+            )
+            return apply_presentation(element, c)
+        element.update(
+            {
+                "kind": "region-map",
+                "columns": columns,
+                "region": {"columnId": region_id, "regionType": region_type},
+            }
+        )
+        if measure_id:
+            element["color"] = {"by": "scale", "column": measure_id}
+        return apply_presentation(element, c)
+
+    if layer_kind == "point":
+        if len(dimensions) < 2:
+            warnings.append(
+                f"skip '{title}' (map): point layer requires explicit latitude and longitude"
+            )
+            return None
+        latitude_name, longitude_name = resolve(dimensions[0]), resolve(dimensions[1])
+        if not latitude_name or not longitude_name:
+            warnings.append(
+                f"skip '{title}' (map): latitude/longitude fields are not on the denorm element"
+            )
+            return None
+        latitude_id, longitude_id = nid("lat"), nid("lon")
+        columns.extend(
+            [
+                {
+                    "id": latitude_id,
+                    "formula": f"[{MASTER}/{latitude_name}]",
+                    "name": latitude_name,
+                },
+                {
+                    "id": longitude_id,
+                    "formula": f"[{MASTER}/{longitude_name}]",
+                    "name": longitude_name,
+                },
+            ]
+        )
+        label_id = None
+        if len(dimensions) > 2:
+            label_name = resolve(dimensions[2])
+            if label_name:
+                label_id = nid("lbl")
+                columns.append(
+                    {
+                        "id": label_id,
+                        "formula": f"[{MASTER}/{label_name}]",
+                        "name": label_name,
+                    }
+                )
+        if measure_id:
+            columns.append(measure_column)
+        element.update(
+            {
+                "kind": "point-map",
+                "columns": columns,
+                "latitude": {"columnId": latitude_id},
+                "longitude": {"columnId": longitude_id},
+            }
+        )
+        if measure_id:
+            element["size"] = {"columnId": measure_id}
+        if label_id:
+            element["label"] = [{"columnId": label_id}]
+        return apply_presentation(element, c)
+
+    warnings.append(
+        f"skip '{title}' (map): Qlik location-name point layer has no explicit "
+        "latitude/longitude and no supported region layer")
+    return None
+
+
 def build_element(c, resolve, warnings, metrics=None):
     """One Qlik chart object -> one Sigma element (or None + warning). `metrics`
     (DM metrics referenceable on the master) lets a measure bind to a governed
     [Metrics/<name>] reference; None/empty keeps every measure inline."""
+    if c.get("vizType") == "map":
+        return build_map_element(c, resolve, warnings, metrics)
+
     # An untitled Qlik KPI displays its measure label; use that before the viz type.
     title = c.get("title") or next((l for l in (c.get("measureLabels") or []) if l), None) \
         or c.get("vizType")

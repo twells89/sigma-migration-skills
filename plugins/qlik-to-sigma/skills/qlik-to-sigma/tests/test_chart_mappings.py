@@ -14,6 +14,8 @@ SCRIPTS = os.path.join(SKILL, "scripts")
 BUILDER = os.path.join(SCRIPTS, "build-sigma-workbook.py")
 DISCOVERY = os.path.join(SCRIPTS, "qlik-discover.py")
 CATALOG = os.path.join(SKILL, "refs", "catalogs", "viz-kind.json")
+MAP_FIXTURE = os.path.join(SKILL, "fixtures", "map-layers", "map-properties.json")
+MAP_LAYOUT = os.path.join(SKILL, "fixtures", "map-layers", "map-layout.json")
 
 sys.path.insert(0, os.path.join(SCRIPTS, "lib"))
 spec = importlib.util.spec_from_file_location("qlik_workbook_builder", BUILDER)
@@ -52,6 +54,9 @@ RESOLVE = builder.Resolver([
     ("Revenue", "REVENUE"),
     ("Cost", "COST"),
     ("Quantity", "QUANTITY"),
+    ("Latitude", "LATITUDE"),
+    ("Longitude", "LONGITUDE"),
+    ("City", "CITY"),
 ])
 
 
@@ -94,6 +99,94 @@ def test_catalog_is_complete():
     assert actual == EXPECTED, f"chart catalog drift:\nactual={actual}\nexpected={EXPECTED}"
     flagged = {row["source"] for row in rows if row.get("approximation")}
     assert flagged == APPROXIMATIONS
+
+
+def test_map_discovery_prefers_supported_area_layer():
+    properties = json.load(open(MAP_FIXTURE, encoding="utf-8"))
+    layers = discovery._map_layers(properties)
+    assert [layer["kind"] for layer in layers] == ["location-point", "region"]
+    selected = discovery._preferred_map_layer(layers)
+    assert selected["index"] == 1
+    assert selected["dimension"] == "State"
+    assert selected["regionType"] == "us-state"
+    assert selected["measure"] == "Sum(TotalAmount)"
+
+
+def test_selected_map_layer_rows_feed_strict_parity():
+    properties = json.load(open(MAP_FIXTURE, encoding="utf-8"))
+    layout = json.load(open(MAP_LAYOUT, encoding="utf-8"))
+    layers = discovery._map_layers(properties)
+    selected = discovery._preferred_map_layer(layers)
+    original = discovery.qlik
+    discovery.qlik = lambda *_args, **_kwargs: layout
+    try:
+        rows = discovery.qlik_map_layer_rows(
+            "app",
+            ["--context", "fixture"],
+            {
+                "id": "map-stores",
+                "vizType": "map",
+                "mapLayer": selected,
+                "dimensions": [["State"]],
+                "measures": ["Sum(TotalAmount)"],
+            },
+        )
+    finally:
+        discovery.qlik = original
+    assert rows["rows"] == [["MA", 125.5], ["WA", 88.25]]
+    assert rows["complete"] is True
+    assert rows["expectedRows"] == 2
+
+
+def test_multilayer_map_emits_supported_region_layer():
+    properties = json.load(open(MAP_FIXTURE, encoding="utf-8"))
+    layers = discovery._map_layers(properties)
+    record = chart("map")
+    record.update(
+        {
+            "dimensions": [["STATE"]],
+            "dimLabels": ["State"],
+            "measures": ["Sum(REVENUE)"],
+            "measureLabels": ["Revenue"],
+            "measureFmts": [None],
+            "mapLayers": layers,
+            "mapLayer": discovery._preferred_map_layer(layers),
+        }
+    )
+    warnings = []
+    element = builder.build_element(record, RESOLVE, warnings)
+    assert element["kind"] == "region-map"
+    assert element["region"]["regionType"] == "us-state"
+    assert element["color"]["by"] == "scale"
+    assert any("2 authored layers" in warning for warning in warnings)
+
+
+def test_explicit_coordinates_emit_point_map():
+    record = chart("map")
+    record.update(
+        {
+            "dimensions": [["LATITUDE"], ["LONGITUDE"], ["CITY"]],
+            "dimLabels": ["Latitude", "Longitude", "City"],
+            "dimNullSuppression": [False, False, False],
+            "measures": ["Sum(REVENUE)"],
+            "measureLabels": ["Revenue"],
+            "measureFmts": [None],
+            "mapLayer": {
+                "kind": "point",
+                "sourceType": "PointLayer",
+                "latitude": "LATITUDE",
+                "longitude": "LONGITUDE",
+                "label": "CITY",
+                "measure": "Sum(REVENUE)",
+            },
+        }
+    )
+    element = builder.build_element(record, RESOLVE, [])
+    assert element["kind"] == "point-map"
+    assert element["latitude"]["columnId"]
+    assert element["longitude"]["columnId"]
+    assert element["size"]["columnId"]
+    assert element["label"][0]["columnId"]
 
 
 def test_every_mapping_emits_its_contract_shape():

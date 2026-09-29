@@ -1,0 +1,86 @@
+{
+  "qInfo": {
+    "qId": "map-stores",
+    "qType": "map"
+  },
+  "title": "Stores",
+  "gaLayers": [
+    {
+      "type": "PointLayer",
+      "locationOrLatitude": {
+        "key": "[City]",
+        "label": "City",
+        "type": "expression"
+      },
+      "locationCountry": {
+        "key": "'US'",
+        "label": "'US'",
+        "type": "expression"
+      },
+      "size": {
+        "measure": {
+          "key": "Sum(TotalAmount)",
+          "label": "Revenue",
+          "type": "expression"
+        }
+      },
+      "qHyperCubeDef": {
+        "qDimensions": [
+          {
+            "qDef": {
+              "qFieldDefs": [
+                "City"
+              ],
+              "qFieldLabels": [
+                "City"
+              ]
+            }
+          }
+        ],
+        "qMeasures": []
+      }
+    },
+    {
+      "type": "AreaLayer",
+      "locationOrLatitude": {
+        "key": "[State]",
+        "label": "State",
+        "type": "expression"
+      },
+      "locationCountry": {
+        "key": "'US'",
+        "label": "'US'",
+        "type": "expression"
+      },
+      "color": {
+        "mode": "byMeasure",
+        "byMeasureDef": {
+          "key": "Sum(TotalAmount)",
+          "label": "Revenue",
+          "type": "expression"
+        }
+      },
+      "qHyperCubeDef": {
+        "qDimensions": [
+          {
+            "qDef": {
+              "qFieldDefs": [
+                "State"
+              ],
+              "qFieldLabels": [
+                "State"
+              ],
+              "qAttributeExpressions": [
+                {
+                  "id": "colorByAlternative",
+                  "qExpression": "Sum(TotalAmount)"
+                }
+              ]
+            }
+          }
+        ],
+        "qMeasures": []
+      }
+    }
+  ]
+}

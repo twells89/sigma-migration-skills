@@ -6,7 +6,7 @@ Every documented source construct maps to a real, current Sigma target or a loud
 
 **`sigma_verified` legend:** ✅ y = the mapped Sigma target resolved at **query time** in a live migration (no `type=error` column) on the date shown; 🟡 n = target is documented but not yet query-verified.
 
-**Coverage:** 77 documented constructs across 6 dimensions; 12 live-verified.
+**Coverage:** 77 documented constructs across 6 dimensions; 13 live-verified.
 
 ## Visualization / chart kind
 
@@ -24,8 +24,8 @@ Authoritative source: <https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/
 | `table` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Table/table.htm) | `table` | ✅ y · 2026-07-13 | warn+skip |
 | `kpi` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/KPI/KPI.htm) | `kpi-chart` | ✅ y · 2026-07-13 | warn+skip |
 | `pivot-table` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/PivotTable/pivot-table.htm) | `pivot-table` | 🟡 n | warn+skip |
-| `map` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Map/Map.htm) | `region-map` | 🟡 n | warn+skip |
-| | | | | _build_element refuses to guess a region grain and warns+skips if it cannot resolve one._ |
+| `map` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Map/Map.htm) | `region-map` | ✅ y · 2026-09-29 | warn+skip |
+| | | | | _Layer-aware: prefer an authored AreaLayer whose field maps to a released Sigma regionType; otherwise emit a PointLayer only when explicit latitude+longitude fields exist. Location-name points without coordinates are retained as source evidence but never guessed, and multi-layer overlays are reported because Sigma workbook map elements author one layer per element._ |
 | `waterfallchart` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/WaterfallChart/waterfall-chart.htm) | `waterfall-chart` | 🟡 n | warn+skip |
 | | | | | _Direct released workbook-as-code kind; preserves the Qlik dimension and ordered measures on xAxis/yAxis._ |
 | `gauge` | [doc](https://help.qlik.com/en-US/sense/Subsystems/Hub/Content/Sense_Hub/Visualizations/Gauge/gauge-chart.htm) | `progress` | 🟡 n | warn+skip |
