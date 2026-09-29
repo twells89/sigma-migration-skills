@@ -532,6 +532,29 @@ staleness-explained deltas don't block.)
 ## Phase 5.5 — Visual QA (mandatory gate — never skip)
 A workbook that POSTs 200 and passes numeric/bucket parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters floating over charts.** Qlik's associative model floats listboxes/filterpanes on top of charts and Sigma's grid has no z-order; the build script now lifts controls to a top band and de-overlaps (`_decollide_bands`), but novel sheets can still slip through.
 
+### Screenshot-driven design loop
+
+When the customer supplies full-sheet screenshots, they are BUILD INPUTS, not
+just final evidence:
+
+1. Pass each image as `--source-sheet-png <sheetId>=<image>` (repeat per sheet),
+   or place it under `<WORK>/source-pages/<sheetId>.png`.
+2. The first run seeds `<WORK>/design-manifest.json` and exits 10 before any
+   Sigma write. An image-capable agent MUST read every `sourceImage`, inventory
+   every tile in Sigma terms, set the tile `kind`, title, orientation, legend,
+   and grid, mark every page/tile `reviewed:true`, and set `status:"approved"`.
+3. Rerun with `--design-manifest <WORK>/design-manifest.json`. The preflight and
+   live workbook builds consume those approved overrides.
+4. If source-vs-target visual QA fails, the orchestrator writes
+   `design-iteration-request.json`. Read each source/target pair, revise the
+   manifest, increment `iteration`, and rerun with both
+   `--workbook-id <existing-id>` and `--design-manifest ...`; this PUTs the
+   existing workbook and rerenders it instead of creating duplicates.
+
+The manifest never invents formulas or fields: source expressions and parity
+still come from Qlik metadata. It controls visual interpretation and composition.
+Schema and review contract: `refs/screenshot-design-manifest.md`.
+
 1. Capture one full-sheet source image per sheet when Qlik can provide it (or a
    customer screenshot); record unavailable source images and the reason in the
    census. Per-visual PNGs are useful drill-down evidence but do not prove the
@@ -549,7 +572,11 @@ A workbook that POSTs 200 and passes numeric/bucket parity can still be visually
    evidence. Record the source-vs-target verdict with the selected profile's
    `record-visual-check.rb` or `record_visual_check.py`; a missing source image
    is a named waiver, not PASS.
-5. Fix any failure in the spec — for multi-page workbooks use the companion **sigma-workbooks** skill's `scripts/wb-rep.rb` (full-clone: `plugins/sigma-authoring/skills/sigma-workbooks/scripts/wb-rep.rb`; pull → edit element files → push) — then **re-render and re-read**.
+5. Fix any failure through the approved design manifest and rerun with
+   `--workbook-id`; for non-manifest repairs use the companion
+   **sigma-workbooks** skill's `scripts/wb-rep.rb` (full-clone:
+   `plugins/sigma-authoring/skills/sigma-workbooks/scripts/wb-rep.rb`; pull →
+   edit element files → push) — then **re-render and re-read**.
 6. Declare the migration done on a **clean render**, not on HTTP 200.
 
 ### Completion accounting (mandatory)
@@ -606,6 +633,7 @@ run must never install or invoke Ruby to manufacture completion evidence.
 | `scripts/learned-rules.py` | 2 | Loader: the build step applies customer-accumulated rules before falling back to a WARN. |
 | `scripts/normalize-qlik-expressions.py` | 2 | Apply only catalog-grounded scalar rewrites to raw converter output, remove unsafe/unknown callable artifacts fail-closed, and write the patched converter output plus `formula-mapping.json`. |
 | `scripts/qlik-screenshot.py` | 1/6 | Export PNGs of a sheet's charts (or specific viz ids) via the Qlik reporting API, for before/after capture. **Validated** (per-viz PNG; whole-sheet is PDF only). |
+| `scripts/qlik_design_manifest.py` | 1/5.5 | Seed/validate the screenshot design manifest. The image-capable agent approves per-tile kind/title/orientation/legend/grid before build; failed renders produce an iteration request and update the existing workbook in place. |
 | `scripts/sigma-export-png.py` | 5.5 | Render a workbook page/element to PNG via the export API for visual inspection against `refs/layout-visual-qa.md` (the Visual QA gate). |
 | `scripts/png_health.py` | 5.5 | Deterministic PNG decode/ink health check; rejects solid, all-white, or effectively blank exports and can write run-local render-health JSON. It does not judge source fidelity. |
 | `scripts/visual-similarity.py` | 5.5 | Deterministic source-vs-Sigma structural floor; optional normalized tile bounds add per-tile blank detection. Exit 2 is an error, never PASS. |

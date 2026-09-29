@@ -198,6 +198,7 @@ jobs:
           python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_qlikview_prj.py
           python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_trellis.py
           python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_qlik_app_shapes.py
+          python3 plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_design_manifest.py
           python3 tools/test-qlik-python-runtime.py
 
   qlik-python-cold:

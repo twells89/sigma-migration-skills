@@ -57,6 +57,12 @@ class CliContractTests(unittest.TestCase):
                 "/tmp/discovery",
                 "--reuse-dm",
                 "dm",
+                "--workbook-id",
+                "workbook",
+                "--design-manifest",
+                "/tmp/design.json",
+                "--source-sheet-png",
+                "sheet-1=/tmp/source.png",
                 "--no-reuse",
                 "--dry-run",
                 "--skip-layout-lint",
@@ -83,6 +89,12 @@ class CliContractTests(unittest.TestCase):
         self.assertTrue(parsed.yes)
         self.assertEqual("/tmp/discovery", parsed.from_discovery)
         self.assertEqual("dm", parsed.reuse_dm)
+        self.assertEqual("workbook", parsed.workbook_id)
+        self.assertEqual("/tmp/design.json", parsed.design_manifest)
+        self.assertEqual(
+            ["sheet-1=/tmp/source.png"],
+            parsed.source_sheet_png,
+        )
         self.assertTrue(parsed.no_reuse)
         self.assertTrue(parsed.dry_run)
         self.assertTrue(parsed.skip_layout_lint)
