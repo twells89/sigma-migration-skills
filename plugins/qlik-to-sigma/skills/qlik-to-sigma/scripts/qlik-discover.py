@@ -226,6 +226,162 @@ def _gauge(props):
     return out or None
 
 
+def _map_field(value):
+    """Normalize a Qlik map location expression when it is a simple field."""
+    raw = value
+    if isinstance(value, dict):
+        raw = value.get("key") or value.get("field") or value.get("qField")
+    raw = str(raw or "").strip().lstrip("=").strip()
+    bracketed = re.fullmatch(r"\[([^\]]+)\]", raw)
+    if bracketed:
+        return bracketed.group(1)
+    return raw if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$ ]*", raw) else None
+
+
+def _map_dimension(hypercube):
+    dimensions = (hypercube or {}).get("qDimensions") or []
+    if not dimensions:
+        return None, None
+    dimension = dimensions[0]
+    qdef = dimension.get("qDef") or {}
+    field = (qdef.get("qFieldDefs") or [None])[0] or dimension.get("qLibraryId")
+    label = (qdef.get("qFieldLabels") or [None])[0]
+    return field, label
+
+
+def _map_measure(layer, hypercube):
+    """Return the first authored map size/color measure and its label."""
+    measures = (hypercube or {}).get("qMeasures") or []
+    if measures:
+        measure = measures[0]
+        qdef = measure.get("qDef") or {}
+        expression = qdef.get("qDef") or measure.get("qLibraryId")
+        if expression:
+            return expression, qdef.get("qLabel")
+
+    candidates = [
+        ((layer.get("color") or {}).get("byMeasureDef") or {}),
+        ((layer.get("size") or {}).get("measure") or {}),
+        ((layer.get("size") or {}).get("measureDef") or {}),
+    ]
+    for candidate in candidates:
+        expression = candidate.get("key") or candidate.get("qExpression")
+        if expression:
+            return expression, candidate.get("label")
+
+    dimensions = (hypercube or {}).get("qDimensions") or []
+    for dimension in dimensions:
+        qdef = dimension.get("qDef") or {}
+        attributes = (
+            dimension.get("qAttributeExpressions")
+            or qdef.get("qAttributeExpressions")
+            or []
+        )
+        preferred = sorted(
+            attributes,
+            key=lambda item: not any(
+                token in str(item.get("id") or "").lower()
+                for token in ("color", "size", "measure")
+            ),
+        )
+        for attribute in preferred:
+            expression = (
+                attribute.get("qExpression")
+                or attribute.get("qLibraryId")
+                or (attribute.get("qDef") or {}).get("qDef")
+            )
+            if expression:
+                return expression, attribute.get("qLabel")
+    return None, None
+
+
+def _map_region_type(field):
+    name = str(field or "").upper().replace(" ", "_")
+    if "COUNTRY" in name:
+        return "country"
+    if "STATE" in name:
+        return "us-state"
+    if "COUNTY" in name:
+        return "us-county"
+    if "ZIP" in name or "POSTAL_CODE" in name:
+        return "us-zipcode"
+    if "PROVINCE" in name:
+        return "ca-province"
+    return None
+
+
+def _map_layers(props):
+    """Normalize every authored Qlik map layer instead of taking only layer 0."""
+    result = []
+    for index, layer in enumerate(props.get("gaLayers") or []):
+        hypercube = layer.get("qHyperCubeDef") or {}
+        dimension, dimension_label = _map_dimension(hypercube)
+        measure, measure_label = _map_measure(layer, hypercube)
+        layer_type = str(layer.get("type") or "").lower()
+        location = _map_field(layer.get("locationOrLatitude")) or dimension
+        normalized = {
+            "index": index,
+            "sourceType": layer.get("type"),
+            "measure": measure,
+            "measureLabel": measure_label,
+        }
+        if layer_type == "arealayer":
+            normalized.update(
+                {
+                    "kind": "region",
+                    "dimension": location,
+                    "dimensionLabel": dimension_label,
+                    "regionType": _map_region_type(location),
+                }
+            )
+        elif layer_type == "pointlayer":
+            longitude = _map_field(layer.get("longitude"))
+            if longitude:
+                normalized.update(
+                    {
+                        "kind": "point",
+                        "latitude": location,
+                        "longitude": longitude,
+                        "label": _map_field(
+                            ((layer.get("label") or {}).get("expression") or {})
+                        ),
+                    }
+                )
+            else:
+                normalized.update(
+                    {
+                        "kind": "location-point",
+                        "dimension": location,
+                        "dimensionLabel": dimension_label,
+                    }
+                )
+        else:
+            normalized.update(
+                {
+                    "kind": "unsupported",
+                    "dimension": location,
+                    "dimensionLabel": dimension_label,
+                }
+            )
+        result.append({key: value for key, value in normalized.items() if value is not None})
+    return result
+
+
+def _preferred_map_layer(layers):
+    """Pick a Sigma-authorable layer without guessing coordinates or regions."""
+    for layer in layers:
+        if layer.get("kind") == "region" and layer.get("regionType"):
+            return layer
+    for layer in layers:
+        if (
+            layer.get("kind") == "point"
+            and layer.get("latitude")
+            and layer.get("longitude")
+        ):
+            return layer
+    return None
+
+
 def _drill_groups(qdims):
     """Capture every authored Qlik drill hierarchy, not just its active level."""
     out = []
@@ -333,6 +489,69 @@ def _trellis_container(props, hc):
         return [], None
 
 
+def _listbox_label(title, field_labels, meta):
+    """Choose a listbox's display label. An explicit per-object title (Qlik's
+    own listbox/filterpane-child title, e.g. "Quarter") wins; then an
+    author-set qFieldLabels override; then the field's evaluated fallback
+    title (qDimensionInfo.qFallbackTitle == the raw field name, e.g.
+    "Order_quarter") as a last resort. Without this order a listbox with no
+    title override surfaced the raw field name instead of its authored
+    title."""
+    return title or (field_labels or [None])[0] or (meta or {}).get("label")
+
+
+def _layer_dims(layer):
+    """A single gaLayer's own hypercube dimensions, in the same field-defs
+    shape as the top-level chart record's `dimensions` — used to inventory
+    EVERY map layer (rec["mapLayers"]) regardless of which one was chosen."""
+    lhc = layer.get("qHyperCubeDef") or {}
+    return [(dd.get("qDef", {}).get("qFieldDefs") or [dd.get("qLibraryId")])
+            for dd in lhc.get("qDimensions", [])]
+
+
+def _choose_map_layer(ga_layers):
+    """A Qlik map object's hypercube lives per-layer (props.gaLayers), not on
+    the object itself. Layers commonly stack a City PointLayer (needs
+    coordinates a Sigma point map would need but the source doesn't carry)
+    UNDER a State/Country AreaLayer (a real Sigma region-map) — the first
+    DIMENSIONED AreaLayer wins so the region survives; otherwise fall back to
+    the first layer carrying any hypercube (the previous rule — byte-identical
+    when there is no AreaLayer).
+
+    A color-only AreaLayer (no measure shelf, colored `byMeasure`) still
+    carries a real value via color.byMeasureDef {key, label, type}: type
+    "libraryItem" makes `key` a master-measure library id (the builder's
+    existing dimensions.json/measures.json substitution resolves it later),
+    type "expression" makes it the raw expression. Either way it is folded
+    into one synthetic qMeasure so the caller's normal qMeasures extraction
+    (dimensions/measures/measureLabels/measureFmts below) needs no
+    map-specific branch.
+    Returns (qDimensions, qMeasures) — both [] when no gaLayer has a
+    hypercube."""
+    layers = ga_layers or []
+    def hc_of(layer):
+        return layer.get("qHyperCubeDef") or {}
+    area = next((l for l in layers if str(l.get("type")) == "AreaLayer"
+                and hc_of(l).get("qDimensions")), None)
+    layer = area or next((l for l in layers
+                          if hc_of(l).get("qDimensions") or hc_of(l).get("qMeasures")), None)
+    if layer is None:
+        return [], []
+    lhc = hc_of(layer)
+    qdims, qmeas = lhc.get("qDimensions", []), lhc.get("qMeasures", [])
+    if not qmeas:
+        color = layer.get("color") or {}
+        bmdef = color.get("byMeasureDef") if color.get("mode") == "byMeasure" else None
+        if bmdef and bmdef.get("key"):
+            synth = {"qDef": {"qLabel": bmdef.get("label")}}
+            if bmdef.get("type") == "libraryItem":
+                synth["qLibraryId"] = bmdef["key"]
+            else:
+                synth["qDef"]["qDef"] = bmdef["key"]
+            qmeas = [synth]
+    return qdims, qmeas
+
+
 def awrite(path, obj):
     """Atomic JSON write — orchestrators poll for these files from a
     concurrent lane and must never observe a half-written artifact."""
@@ -413,17 +632,180 @@ def parse_script(qvs):
 
 def qlik_eval(app, ctx_args, expr):
     """Evaluate one expression via the engine (read-only). Returns the raw value string or None."""
-    out = qlik_run(["app", "eval", expr, "-a", app, *ctx_args])
+    # qlik-cli echoes the expression before the value; flatten a multi-line
+    # expression so the value stays on line 2 (whitespace is insignificant).
+    out = qlik_run(["app", "eval", re.sub(r"\s*[\r\n]+\s*", " ", str(expr)), "-a", app, *ctx_args])
     lines = [l for l in out.stdout.splitlines() if l.strip()]
     return lines[1].strip() if out.returncode == 0 and len(lines) >= 2 else None
 
 
+def parse_tabular_chart_rows(text, dimension_count):
+    """Parse qlik-cli's padded table output when --json is unsupported."""
+    lines = [
+        line.rstrip("\r\n")
+        for line in str(text or "").splitlines()
+        if line.strip()
+    ]
+    if len(lines) < 2:
+        return None
+    header = lines[0]
+    tabular = "\t" in header
+    if tabular:
+        headers = [cell.strip() for cell in header.split("\t")]
+        starts = None
+    else:
+        matches = list(
+            re.finditer(r"\S(?:.*?\S)?(?=\s{2,}|$)", header)
+        )
+        headers = [match.group(0).strip() for match in matches]
+        starts = [match.start() for match in matches]
+    if not headers:
+        return None
+    rows = []
+    number = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+    for line in lines[1:]:
+        if tabular:
+            cells = line.split("\t")
+            if len(cells) > len(headers):
+                return None
+            cells += [""] * (len(headers) - len(cells))
+            cells = [cell.strip() for cell in cells]
+        else:
+            cells = [
+                line[start:(starts[index + 1] if index + 1 < len(starts) else None)].strip()
+                for index, start in enumerate(starts)
+            ]
+        row = []
+        for index, cell in enumerate(cells):
+            if cell in {"", "-", "\u2013", "\u2014"}:
+                row.append(None)
+            elif index >= dimension_count and number.fullmatch(cell):
+                row.append(float(cell))
+            else:
+                row.append(cell)
+        rows.append(row)
+    return {
+        "rows": rows,
+        "complete": bool(rows),
+        "expectedRows": len(rows),
+        "pivot": False,
+    }
+
+
+def qlik_dimension_rows(app, ctx_args, chart):
+    """Read a dimension-only visual through the field-values engine command."""
+    dimensions = [
+        dimension[0] if isinstance(dimension, list) and dimension else dimension
+        for dimension in chart.get("dimensions") or []
+    ]
+    dimensions = [dimension for dimension in dimensions if isinstance(dimension, str)]
+    if len(dimensions) != 1 or chart.get("measures"):
+        return None
+    field = dimensions[0]
+    response = qlik_run(["app", "values", field, "-a", app, *ctx_args])
+    if response.returncode != 0:
+        return None
+    rows = [[line.strip()] for line in response.stdout.splitlines() if line.strip()]
+    expected = qlik_eval(app, ctx_args, bucket_expr([field]))
+    try:
+        expected_rows = int(float(expected))
+    except (TypeError, ValueError):
+        expected_rows = None
+    return {
+        "rows": rows,
+        "complete": bool(
+            rows
+            and expected_rows is not None
+            and len(rows) >= expected_rows
+        ),
+        "expectedRows": expected_rows,
+        "pivot": False,
+    }
+
+
+def qlik_map_layer_rows(app, ctx_args, chart):
+    """Read evaluated rows from the selected Qlik map layer hypercube."""
+    selected = chart.get("mapLayer") or {}
+    index = selected.get("index")
+    if not isinstance(index, int):
+        return None
+    layout = qlik(
+        "app", "object", "layout", str(chart.get("id")),
+        "-a", app, *ctx_args, "--json",
+    ) or {}
+    layers = ((layout.get("qUndoExclude") or {}).get("gaLayers") or [])
+    if index >= len(layers):
+        layers = layout.get("gaLayers") or []
+    if index >= len(layers):
+        return None
+    hypercube = layers[index].get("qHyperCube") or {}
+    pages = hypercube.get("qDataPages") or []
+    matrix = [
+        row
+        for page in pages
+        for row in (page.get("qMatrix") or [])
+        if isinstance(row, list) and row
+    ]
+    rows = []
+    for raw_row in matrix:
+        cell = raw_row[0] if isinstance(raw_row[0], dict) else {}
+        row = [cell.get("qText")]
+        if chart.get("measures"):
+            attribute_values = ((cell.get("qAttrExps") or {}).get("qValues") or [])
+            numeric = next(
+                (
+                    value.get("qNum")
+                    for value in attribute_values
+                    if isinstance(value, dict)
+                    and isinstance(value.get("qNum"), (int, float))
+                    and value.get("qNum") == value.get("qNum")
+                ),
+                None,
+            )
+            if numeric is None:
+                return None
+            row.append(numeric)
+        rows.append(row)
+    expected_rows = (hypercube.get("qSize") or {}).get("qcy")
+    return {
+        "rows": rows,
+        "complete": bool(
+            rows
+            and isinstance(expected_rows, int)
+            and len(rows) >= expected_rows
+        ),
+        "expectedRows": expected_rows,
+        "pivot": False,
+    }
+
+
 def qlik_chart_rows(app, ctx_args, chart):
     """Read one chart's evaluated hypercube rows through qlik-cli."""
-    data = qlik(
+    command = [
         "app", "object", "data", str(chart.get("id")),
         "-a", app, *ctx_args, "--json",
-    )
+    ]
+    response = qlik_run(command)
+    if response.returncode != 0:
+        fallback = (
+            qlik_map_layer_rows(app, ctx_args, chart)
+            if chart.get("vizType") == "map"
+            else None
+        ) or qlik_dimension_rows(app, ctx_args, chart)
+        if fallback:
+            return fallback
+        sys.stderr.write(
+            f"WARN {' '.join(str(value) for value in command)} -> "
+            f"{((response.stderr or response.stdout) or '')[:200]}\n"
+        )
+        return {}
+    try:
+        data = json.loads(response.stdout or "null")
+    except json.JSONDecodeError:
+        return parse_tabular_chart_rows(
+            response.stdout,
+            len(chart.get("dimensions") or []),
+        ) or {}
 
     def matrices(value):
         found = []
@@ -578,7 +960,7 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
     for c in charts:
         dims = [(d[0] if isinstance(d, list) else d) for d in (c.get("dimensions") or [])]
         dims = [d for d in dims if d]
-        if not (c.get("sheet") and dims and c.get("measures")):
+        if not (c.get("sheet") and dims):
             continue
         expr = bucket_expr(dims)
         if expr in bseen:
@@ -602,7 +984,6 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
         for chart in charts
         if chart.get("sheet")
         and chart.get("dimensions")
-        and chart.get("measures")
     ]
     chart_values = pmap(
         lambda chart: qlik_chart_rows(app, ctx, chart),
@@ -818,6 +1199,20 @@ def main():
         props = all_props[oid]
         effective, effective_type = effective_chart_properties(props, qtype)
         hc = effective.get("qHyperCubeDef", {})
+        map_layers = _map_layers(props) if effective_type == "map" else []
+        selected_map = _preferred_map_layer(map_layers)
+        if selected_map:
+            layer = (props.get("gaLayers") or [])[selected_map["index"]]
+            hc = layer.get("qHyperCubeDef") or hc
+        qdims, qmeas = hc.get("qDimensions", []), hc.get("qMeasures", [])
+        if not qdims and not qmeas:
+            # Legacy fallback for map shapes that predate layer normalization.
+            for layer in (props.get("gaLayers") or []):
+                lhc = layer.get("qHyperCubeDef") or {}
+                if lhc.get("qDimensions") or lhc.get("qMeasures"):
+                    hc = lhc
+                    qdims, qmeas = lhc.get("qDimensions", []), lhc.get("qMeasures", [])
+                    break
         # Carry the object's sort definition so the workbook build can reproduce it:
         # per-dimension qSortCriterias (qSortByNumeric/qSortByAscii/qSortByExpression),
         # per-measure qSortBy, and the column precedence (qInterColumnSortOrder).
@@ -828,16 +1223,6 @@ def main():
             "dimensions": [ (dd.get("qDef", {}).get("qSortCriterias") or []) for dd in hc.get("qDimensions", []) ],
             "measures":   [ (mm.get("qSortBy") or {}) for mm in hc.get("qMeasures", []) ],
         }
-        qdims, qmeas = hc.get("qDimensions", []), hc.get("qMeasures", [])
-        if not qdims and not qmeas:
-            # map objects carry their hypercube on a layer (gaLayers[].qHyperCubeDef),
-            # not the top-level object -- surface the first layer that has one
-            for layer in (props.get("gaLayers") or []):
-                lhc = layer.get("qHyperCubeDef") or {}
-                if lhc.get("qDimensions") or lhc.get("qMeasures"):
-                    hc = lhc
-                    qdims, qmeas = lhc.get("qDimensions", []), lhc.get("qMeasures", [])
-                    break
         rec = {
             "id": oid, "vizType": effective_type,
             "title": _resolve_title(effective, a.app, ctx) or _resolve_title(props, a.app, ctx),
@@ -851,6 +1236,13 @@ def main():
                 ((mm.get("qNumFormat") or mm.get("qDef", {}).get("qNumFormat") or {}).get("qFmt"))
                 for mm in qmeas
             ],
+            # qType "U" == Qlik's "Auto" format (no explicit qFmt) -- the builder
+            # uses this to ship an equivalent d3 auto-abbreviate format (",.4s")
+            # instead of the unformatted-number warning, which no longer applies.
+            "measureFmtTypes": [
+                (mm.get("qNumFormat") or mm.get("qDef", {}).get("qNumFormat") or {}).get("qType")
+                for mm in qmeas
+            ],
             "sort": sort,
             # color encoding (byMeasure gradient / byDimension category) so the
             # builder can reproduce the Qlik chart's color, not default it.
@@ -861,6 +1253,30 @@ def main():
             # or refLineExpr.label (an expression string).
             "refLines": _reflines(effective.get("refLine") or {}),
         }
+        if map_layers:
+            rec["mapLayers"] = map_layers
+        if selected_map:
+            rec["mapLayer"] = selected_map
+            if selected_map["kind"] == "region":
+                rec["dimensions"] = [[selected_map["dimension"]]]
+                rec["dimLabels"] = [selected_map.get("dimensionLabel")]
+            else:
+                point_fields = [
+                    selected_map["latitude"],
+                    selected_map["longitude"],
+                ]
+                if selected_map.get("label"):
+                    point_fields.append(selected_map["label"])
+                rec["dimensions"] = [[field] for field in point_fields]
+                rec["dimLabels"] = [None] * len(point_fields)
+            rec["dimNullSuppression"] = [False] * len(rec["dimensions"])
+            rec["measures"] = (
+                [selected_map["measure"]] if selected_map.get("measure") else []
+            )
+            rec["measureLabels"] = (
+                [selected_map.get("measureLabel")] if rec["measures"] else []
+            )
+            rec["measureFmts"] = [None] * len(rec["measures"])
         legend = _legend(effective)
         if legend:
             rec["legend"] = legend
@@ -888,8 +1304,7 @@ def main():
             rec["listbox"] = {
                 "field": (ldef.get("qFieldDefs") or [None])[0] or lod.get("qLibraryId")
                          or meta.get("field"),
-                "label": (ldef.get("qFieldLabels") or [None])[0] or rec["title"]
-                         or meta.get("label"),
+                "label": _listbox_label(rec["title"], ldef.get("qFieldLabels"), meta),
                 "state": lod.get("qStateName") or props.get("qStateName") or meta.get("state"),
                 "tags": meta.get("tags") or [],
                 "numFmt": meta.get("numFmt"),
@@ -936,7 +1351,7 @@ def main():
                            "measures": [], "measureLabels": [], "measureFmts": [],
                            "sort": {},
                            "listbox": {"field": meta.get("field"),
-                                       "label": meta.get("label"),
+                                       "label": _listbox_label(meta.get("title"), None, meta),
                                        "state": meta.get("state"),
                                        "tags": meta.get("tags") or [],
                                        "numFmt": meta.get("numFmt")}})

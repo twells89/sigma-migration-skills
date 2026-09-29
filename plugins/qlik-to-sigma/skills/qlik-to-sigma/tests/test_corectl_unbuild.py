@@ -30,9 +30,18 @@ def run(*args):
     return result
 
 
+def qlik_json_result(payload):
+    return subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=json.dumps(payload),
+        stderr="",
+    )
+
+
 def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
     module = load_discovery()
-    module.qlik = lambda *_args, **_kwargs: {
+    module.qlik_run = lambda *_args, **_kwargs: qlik_json_result({
         "qDataPages": [{
             "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
             "qMatrix": [
@@ -46,7 +55,7 @@ def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
                 ],
             ]
         }]
-    }
+    })
     result = module.qlik_chart_rows(
         "app",
         ["--context", "fixture"],
@@ -59,7 +68,7 @@ def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
 
 def test_pivot_hypercube_rows_capture_numeric_value_matrix():
     module = load_discovery()
-    module.qlik = lambda *_args, **_kwargs: {
+    module.qlik_run = lambda *_args, **_kwargs: qlik_json_result({
         "qPivotDataPages": [{
             "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
             "qData": [
@@ -73,7 +82,7 @@ def test_pivot_hypercube_rows_capture_numeric_value_matrix():
                 ],
             ],
         }]
-    }
+    })
     result = module.qlik_chart_rows(
         "app",
         ["--context", "fixture"],
@@ -222,6 +231,71 @@ SQL SELECT ORDER_ID, CUSTOMER_KEY, NET_REVENUE FROM DB.SCHEMA.ORDER_FACT;
     assert reconciled[0]["fields"][2]["loadExpression"] == "If(Match(REGION, 'West'), 1, 0)"
     assert reconciled[0]["fields"][3]["expressionColumns"] == ["REGION"]
     assert [table["name"] for table in parse_tables(script)] == ["CustomerDim", "OrderFact"]
+
+
+def test_unlabeled_loads_are_named_after_their_source_like_qlik():
+    from qlik_load_script import parse_reconcile, parse_tables
+    script = """///$tab Data
+// --- ORDERS ---
+LOAD
+    OrderID,
+    Order_yearMonth as Period,
+    ShopID,
+    NetAmount
+FROM [lib://Team:DataFiles/Orders.qvd]
+(qvd);
+
+// LOAD Ghost FROM [lib://DataFiles/Commented.qvd] (qvd);
+/* LOAD Ghost2 FROM [lib://DataFiles/Block.qvd] (qvd); */
+
+Shops:
+LOAD ShopID, Region
+FROM [lib://Team:DataFiles/Shops.qvd]
+(qvd);
+
+LOAD ItemID, Category;
+SQL SELECT ItemID, Category FROM DB.SCHEMA.ITEMS;
+
+LEFT JOIN (Shops) LOAD ShopID, ShopType FROM [lib://DataFiles/ShopTypes.qvd] (qvd);
+
+LOAD OrderID, Period, ShopID, NetAmount
+FROM [lib://Team:DataFiles/Orders2025.qvd]
+(qvd);
+"""
+    reconciled = parse_reconcile(script)
+    assert [t["qlikTable"] for t in reconciled] == ["Orders", "Shops", "ITEMS"], reconciled
+    assert reconciled[0]["sourceTable"] == "Orders"
+    assert reconciled[0]["fields"][1] == {
+        "qlikField": "Period", "realColumn": "Order_yearMonth", "renamed": True, "isExpression": False}
+    assert [f["qlikField"] for f in reconciled[1]["fields"]] == ["ShopID", "Region"]
+    assert reconciled[2]["sourceTable"] == "DB.SCHEMA.ITEMS"
+    assert [t["name"] for t in parse_tables(script)] == ["Orders", "Shops", "ITEMS"]
+
+
+def test_denorm_joins_on_shared_non_key_field_names():
+    reconcile = [
+        {"qlikTable": "Orders", "sourceTable": "Orders", "fields": [
+            {"qlikField": "OrderID", "realColumn": "ORDERID"},
+            {"qlikField": "ShopID", "realColumn": "SHOPID"},
+            {"qlikField": "ItemID", "realColumn": "ITEMID"},
+            {"qlikField": "NetAmount", "realColumn": "NETAMOUNT"}]},
+        {"qlikTable": "Items", "sourceTable": "Items", "fields": [
+            {"qlikField": "ItemID", "realColumn": "ITEMID"},
+            {"qlikField": "Category", "realColumn": "CATEGORY"}]},
+        {"qlikTable": "Shops", "sourceTable": "Shops", "fields": [
+            {"qlikField": "ShopID", "realColumn": "SHOPID"},
+            {"qlikField": "Region", "realColumn": "REGION"}]},
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        src, out = os.path.join(tmp, "reconcile.json"), os.path.join(tmp, "denorm.json")
+        json.dump(reconcile, open(src, "w"))
+        subprocess.run([sys.executable, os.path.join(SCRIPTS, "gen-denorm-sql.py"), "--reconcile", src,
+                        "--database", "DB", "--schema", "S", "--out", out], check=True,
+                       capture_output=True, text=True)
+        sql = json.load(open(out))["sql"]
+    assert "LEFT JOIN DB.S.Items a ON f.ITEMID = a.ITEMID" in sql, sql
+    assert "LEFT JOIN DB.S.Shops b ON f.SHOPID = b.SHOPID" in sql, sql
+    assert sql.count(" AS ItemID") == 1 and sql.count(" AS ShopID") == 1, sql
 
 
 def test_auto_chart_uses_generated_visualization_and_primary_color():
