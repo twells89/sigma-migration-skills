@@ -151,6 +151,16 @@ rows = ControlLint.controls_report(spec)
 check(rows.all? { |r| r[:ghost_targets].empty? }, 'no ghost (cross-page) filter targets in any control', fails)
 check(rows.all? { |r| !r[:reach].empty? }, 'every control reaches its page master (no dead controls)', fails)
 
+# A gated workbook handoff re-enters with this already-split spec. The
+# transform must be byte-idempotent: no master-overview-overview ids and no
+# stale layout/source references.
+split_once = JSON.generate(spec)
+res_again = PerPageMasters.split!(spec)
+check(!res_again[:applied] && JSON.generate(spec) == split_once,
+      'already-split handoff re-entry → NO-OP, spec byte-identical', fails)
+check(dp['elements'].none? { |element| element['id'].match?(/-overview-overview|-detail-detail/) },
+      're-entry creates no double-suffixed master/helper ids', fails)
+
 puts
 if fails.empty?
   puts 'ALL PASS — per-page masters de-share correctly; single-page builds unchanged'

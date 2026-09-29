@@ -1,0 +1,561 @@
+[
+  {
+    "id": "detail-card",
+    "title": "AI Call Detail",
+    "chartType": "badge_basic_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-ai-calls",
+    "columns": [
+      {
+        "column": "ContactId",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "During Business Hours",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Call Start Time",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Call Duration",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Call Intent",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "BEAST-Recording Link",
+        "alias": "Recording Link",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_recording_link",
+        "_isCalc": true
+      },
+      {
+        "column": "Call Summary",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Sales Escalation",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Service Escalation",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Has Immediate Callback",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "WaitingId",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "ANI",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Has Rental",
+        "mapping": "VALUE"
+      }
+    ],
+    "summaryNumber": {
+      "column": "ContactId",
+      "aggregation": "COUNT",
+      "label": "Count of contactId",
+      "format": {
+        "type": "abbreviated",
+        "format": "0"
+      },
+      "_defaultCountSuspect": true,
+      "_raw": {
+        "name": "big_number",
+        "columns": [
+          {
+            "column": "ContactId",
+            "aggregation": "COUNT",
+            "alias": "Count of contactId",
+            "format": {
+              "type": "abbreviated",
+              "format": "0"
+            }
+          }
+        ],
+        "filters": [],
+        "orderBy": [],
+        "groupBy": [],
+        "fiscal": false,
+        "projection": false,
+        "distinct": false,
+        "limit": 1
+      }
+    },
+    "dateGrain": {
+      "column": "Call Start Time"
+    },
+    "groupBy": [],
+    "orderBy": [
+      "Call Start Time"
+    ],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 2563,
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "formula": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Inquiry Created`",
+            "columnPosition": 14
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "certificationStatus": "EXPIRED",
+        "usedByOtherCards": true,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": false,
+        "bignumber": false
+      },
+      {
+        "templateId": 2560,
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "formula": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Recording URL`",
+            "columnPosition": 20
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "certificationStatus": "EXPIRED",
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_basic_table",
+      "columnAliases": {},
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "ai-calls-page",
+    "beastModes": [
+      {
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "detail-card",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "detail-card",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "detail-card",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "card-definition"
+      },
+      {
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "detail-card",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "card-definition"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 6
+  },
+  {
+    "id": "refresh-card",
+    "title": "Last Refresh:",
+    "chartType": "badge_textbox",
+    "datasetId": "ds-ai-calls",
+    "columns": [
+      {
+        "column": "Call Date",
+        "mapping": "ITEM"
+      }
+    ],
+    "dateGrain": {
+      "column": "Call Date"
+    },
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 2563,
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "formula": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Inquiry Created`",
+            "columnPosition": 14
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "certificationStatus": "EXPIRED",
+        "usedByOtherCards": true,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": false,
+        "bignumber": false
+      },
+      {
+        "templateId": 2560,
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "formula": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Recording URL`",
+            "columnPosition": 20
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "certificationStatus": "EXPIRED",
+        "usedByOtherCards": true,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_textbox",
+      "columnAliases": {},
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "ai-calls-page",
+    "beastModes": [
+      {
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "refresh-card",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "refresh-card",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "refresh-card",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "card-definition"
+      },
+      {
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "refresh-card",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "card-definition"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 9
+  },
+  {
+    "id": "quick-chart",
+    "title": "AI Calls and Inquiries By Day",
+    "chartType": "badge_line_stackedbar",
+    "sigmaKindHint": "bar-chart",
+    "datasetId": "ds-ai-calls",
+    "columns": [
+      {
+        "column": "Date",
+        "mapping": "ITEM",
+        "calendar": true
+      },
+      {
+        "column": "Inquiry Count",
+        "mapping": "SERIES",
+        "beastModeId": "calculation_inquiry_count",
+        "_isCalc": true
+      },
+      {
+        "column": "ContactId",
+        "alias": "Call Count",
+        "aggregation": "COUNT",
+        "distinct": true,
+        "mapping": "SERIES"
+      }
+    ],
+    "summaryNumber": {
+      "column": "ContactId",
+      "aggregation": "COUNT",
+      "label": "Calls",
+      "format": {
+        "type": "abbreviated",
+        "format": "0"
+      },
+      "_defaultCountSuspect": true,
+      "_raw": {
+        "name": "big_number",
+        "columns": [
+          {
+            "column": "ContactId",
+            "aggregation": "COUNT",
+            "alias": "Calls",
+            "format": {
+              "type": "abbreviated",
+              "format": "0"
+            }
+          }
+        ],
+        "filters": [],
+        "orderBy": [],
+        "groupBy": [],
+        "fiscal": false,
+        "projection": false,
+        "distinct": false,
+        "limit": 1
+      }
+    },
+    "dateGrain": {
+      "column": "Call Start Time",
+      "dateTimeElement": "DAY"
+    },
+    "groupBy": [
+      "Date"
+    ],
+    "orderBy": [
+      "Date"
+    ],
+    "filters": [],
+    "quickFilters": [
+      {
+        "type": "string",
+        "displayType": "multiple_select",
+        "name": "During Business Hours",
+        "column": "During Business Hours",
+        "columnDisplayName": "During Business Hours",
+        "operator": "NOT_IN",
+        "values": [],
+        "collapsed": false,
+        "controlType": "SLICER"
+      }
+    ],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 2563,
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "formula": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Inquiry Created`",
+            "columnPosition": 14
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "certificationStatus": "EXPIRED",
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "LONG",
+        "isAggregatable": false,
+        "bignumber": false
+      },
+      {
+        "templateId": 2560,
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "formula": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Recording URL`",
+            "columnPosition": 20
+          }
+        ],
+        "cacheWindow": "non_dynamic",
+        "locked": false,
+        "certificationStatus": "EXPIRED",
+        "usedByOtherCards": true,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_line_stackedbar",
+      "columnAliases": {
+        "ContactId": "Call Count"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#AA"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "ai-calls-page",
+    "beastModes": [
+      {
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "quick-chart",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "quick-chart",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      },
+      {
+        "id": "calculation_inquiry_count",
+        "name": "Inquiry Count",
+        "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "quick-chart",
+        "dataType": "LONG",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "card-definition"
+      },
+      {
+        "id": "calculation_recording_link",
+        "name": "BEAST-Recording Link",
+        "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-ai-calls",
+        "cardId": "quick-chart",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "card-definition"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 0
+  }
+]

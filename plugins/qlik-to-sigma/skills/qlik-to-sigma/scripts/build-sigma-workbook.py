@@ -186,6 +186,16 @@ def _display_wrapper_aggregate(e):
     rest = re.sub(r"'[^']*'", "", e)
     rest = re.sub(r"\b(?:" + _AGG_ALT + r")\s*\([^()]*\)", "", rest, flags=re.I)
     rest = re.sub(r"\b(?:If|Num)\b", "", rest, flags=re.I)
+    # Scientific literals are common in unit thresholds (1e9, 1.0E+6).
+    # Remove complete numeric tokens rather than allowing bare e/E in the
+    # residual charset, which would turn an unknown field/function into a
+    # falsely accepted display-only wrapper.
+    rest = re.sub(
+        r"(?<![A-Za-z0-9_.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+"
+        r"(?![A-Za-z0-9_])",
+        "",
+        rest,
+    )
     if not re.fullmatch(r"[\s\d.,()&/*+\-<>=]*", rest):
         return e
     prefix = re.search(r"'([^']*)'\s*&\s*Num\s*\(", e, re.I)

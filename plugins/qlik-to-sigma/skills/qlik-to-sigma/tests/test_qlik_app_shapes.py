@@ -93,8 +93,40 @@ def test_translate_measure_display_wrapper_and_rejections():
     assert result == f"Sum([{module.MASTER}/NetAmount])"
     module.TRANSLATION_NOTES.clear()
 
+    scientific = (
+        "=If(Sum(NetAmount)>=1e9,'$'&Num(Sum(NetAmount)/1e9,'#,##0.0')&'B',"
+        "If(Sum(NetAmount)>=1e6,'$'&Num(Sum(NetAmount)/1e6,'#,##0.0')&'M',"
+        "'$'&Num(Sum(NetAmount),'#,##0')))"
+    )
+    assert module.translate_measure(scientific, resolver) == (
+        f"Sum([{module.MASTER}/NetAmount])"
+    )
+    module.TRANSLATION_NOTES.clear()
+
+    for literal in ("1E6", "1.0e+9", "-1.5e-3"):
+        candidate = (
+            f"If(Sum(NetAmount)>={literal},"
+            "'$'&Num(Sum(NetAmount),'#,##0'),'$0')"
+        )
+        assert module.translate_measure(candidate, resolver) == (
+            f"Sum([{module.MASTER}/NetAmount])"
+        )
+        module.TRANSLATION_NOTES.clear()
+
+    bare_identifier = (
+        "If(Sum(NetAmount)>=e,"
+        "'$'&Num(Sum(NetAmount),'#,##0'),'$0')"
+    )
+    assert module.translate_measure(bare_identifier, resolver) is None
+
     mixed = "If(Sum(NetAmount)>1,'$'&Num(Sum(Qty)),'x')"
     assert module.translate_measure(mixed, resolver) is None
+
+    nested_unknown = (
+        "If(Sum(NetAmount)>1,"
+        "'$'&Num(Round(Sum(NetAmount)),'#,##0'),'$0')"
+    )
+    assert module.translate_measure(nested_unknown, resolver) is None
 
     unknown_fn = "Sum(NetAmount) & GetCurrentSelections()"
     assert module.translate_measure(unknown_fn, resolver) is None

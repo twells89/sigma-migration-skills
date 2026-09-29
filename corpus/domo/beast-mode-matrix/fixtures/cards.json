@@ -3048,5 +3048,89 @@
     ],
     "_size": "",
     "_pageOrder": 25
+  },
+  {
+    "id": "bm-card-36",
+    "title": "_TEMP BM 36 Date Curdate Case",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-bm-matrix",
+    "columns": [
+      {
+        "column": "Date Curdate Case",
+        "alias": "Date Curdate Case",
+        "mapping": "ITEM",
+        "beastModeId": "calculation_matrix_36",
+        "_isCalc": true
+      },
+      {
+        "column": "Employee_ID",
+        "alias": "Employee_ID",
+        "aggregation": "COUNT",
+        "mapping": "VALUE"
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "cardFormulas": [
+      {
+        "templateId": 230,
+        "id": "calculation_matrix_36",
+        "name": "Date Curdate Case",
+        "formula": "CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+        "variable": false,
+        "status": "VALID",
+        "persistedOnDataSource": true,
+        "columnPositions": [
+          {
+            "columnName": "`Inquiry Date`",
+            "columnPosition": 10
+          }
+        ],
+        "cacheWindow": "day",
+        "locked": false,
+        "usedByOtherCards": false,
+        "isAnalytic": false,
+        "referenceCount": 1,
+        "isControlled": false,
+        "dataType": "STRING",
+        "isAggregatable": true,
+        "bignumber": false
+      }
+    ],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_metadata": {
+      "chartType": "badge_table",
+      "columnAliases": {
+        "Date Curdate Case": "Date Curdate Case",
+        "Employee_ID": "Employee_ID"
+      },
+      "columnFormats": {},
+      "summaryNumberFormat": {
+        "type": "number",
+        "format": "#A"
+      }
+    },
+    "_shape": "B",
+    "_pageId": "bm-page",
+    "beastModes": [
+      {
+        "id": "calculation_matrix_36",
+        "name": "Date Curdate Case",
+        "sql": "CASE WHEN `Inquiry Date` > CURDATE() THEN 'Yes' ELSE 'No' END",
+        "scope": "dataset",
+        "class": "projection",
+        "cardId": "bm-card-36",
+        "dataType": "STRING",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api",
+        "dataSourceId": "ds-bm-matrix"
+      }
+    ],
+    "_size": "",
+    "_pageOrder": 35
   }
 ]

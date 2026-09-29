@@ -97,7 +97,9 @@ Unknown or expression-valued LOD shapes remain explicit. Put the intended workbo
 `discovery/formula-overrides.json`; for an LOD entry, that sidecar is a supported
 workbook placement even when the generic SQL converter returned a string marked
 clean. The workbook builder inlines it, and Beast Mode accounting records the
-element usage. Never edit generated `chart-specs.json`.
+element usage. For any other converted:true formula later disproven by Sigma's
+compile check, set `"force": true` beside `sigmaFormula`; never edit generated
+`chart-specs.json`.
 
 ---
 
@@ -105,17 +107,27 @@ element usage. Never edit generated `chart-specs.json`.
 
 Apply these to the raw Beast Mode string first:
 
-1. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
+1. **Remove comments before classification and translation.** Strip Domo-valid
+   `/* ... */` and `-- comment` forms while preserving those markers inside
+   quoted strings and backtick identifiers. The normalizer also strips
+   `# comment` defensively for imported MySQL text, but live Domo marks that
+   form `PARSING_ERROR`; do not describe it as a valid source Beast Mode.
+   Replace comments with whitespace/newlines so adjacent tokens never merge.
+   An unterminated block comment or a comment-only formula fails closed.
+2. **Strip backtick / bracket identifier quoting** → Sigma uses `[Column Name]`.
    `` `Sales` `` and `` `Operating Budget` `` → `[Sales]`, `[Operating Budget]`.
-2. **Legacy `WEEKDAY`.** Domo replaces it with `DAYOFWEEK`; live card-data proved
+3. **Legacy `WEEKDAY`.** Domo replaces it with `DAYOFWEEK`; live card-data proved
    both return 1=Sunday..7=Saturday. Normalize both to Sigma `Weekday`.
-3. **Legacy functions.** Live Domo accepted `SQRT` and `CONVERT_TZ`; they map to
+4. **Legacy functions.** Live Domo accepted `SQRT` and `CONVERT_TZ`; they map to
    `Power(x,0.5)` and reordered `ConvertTimezone(date,to,from)`. `MICROSECOND`
    was `ILLEGAL_FUNCTION` and fails closed.
-4. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
+5. **Decide row vs aggregate context.** If a top-level aggregate (`SUM`, `AVG`,
    `COUNT`, …) wraps the expression, the result is a workbook/element aggregate;
    otherwise it's a row-level DM calc column. Domo decides this implicitly by the
    card's grouping — we must make it explicit.
+6. **Promote aggregate division to decimal.** Domo returns fractional
+   `SUM(flag)/SUM(population)` results even for integer columns; Sigma/Snowflake
+   can truncate to zero unless the numerator is multiplied by `1.0`.
 
 ---
 
@@ -198,15 +210,15 @@ failure when broken:
 
 | Beast Mode | Sigma |
 |---|---|
-| `CONCAT(a, ' ', b)` | `[a] & " " & [b]` |
+| `CONCAT(a, ' ', b)` | `Concat(Text([a]), " ", Text([b]))` — MySQL auto-casts; Sigma requires every non-literal argument to be text |
 | `INSTR(col, 's')` | `Find([col], "s")` (1-based, mind index base) |
 | `LEFT(col, n)` | `Left([col], n)` |
 | `RIGHT(col, n)` | `Right([col], n)` |
-| `LENGTH(col)` | `Length([col])` |
+| `LENGTH(col)` | `Len([col])` |
 | `LOWER(col)` | `Lower([col])` |
 | `UPPER(col)` | `Upper([col])` |
 | `REPLACE(col, 'a', 'b')` | `Replace([col], "a", "b")` |
-| `SUBSTRING(col, pos, len)` | `Mid([col], pos, len)` (1-based pos in both) |
+| `SUBSTRING(col, pos[, len])` / `SUBSTR(...)` | `Mid([col], pos[, len])` (1-based pos in both; length optional) |
 | `TRIM(col)` | `Trim([col])` |
 
 ---

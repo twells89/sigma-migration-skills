@@ -866,15 +866,18 @@ module MechanicalSpecs
       end
       next unless best
       entry = best[1]
-      # Multi-table guard: >1 FROM/JOIN, or a COMMA JOIN (`FROM a, b` — one
+      # Multi-table guard: >1 PHYSICAL FROM/JOIN, or a COMMA JOIN (`FROM a, b` — one
       # FROM, zero JOINs; v5.4.9 review fix: previously scored single-table and
-      # got a half-rewritten `FROM <landed>, b`). Top-level comma test: take
+      # got a half-rewritten `FROM <landed>, b`). CTE references such as the
+      # outer `FROM base` in a generated window helper are excluded by the
+      # shared SQL scanner; they are not second warehouse tables. Top-level comma test: take
       # the FROM clause up to the next clause keyword, drop parenthesized
       # groups (column lists of an inline subquery — itself caught by the
       # 2-FROM count), then look for a remaining comma.
       from_clause = stmt[/\bFROM\b(.*?)(?=\b(?:WHERE|GROUP\s+BY|ORDER\s+BY|HAVING|QUALIFY|LIMIT|UNION)\b|;|\z)/im, 1].to_s
       comma_join = from_clause.gsub(/\([^()]*\)/, '').include?(',')
-      if stmt.scan(/\bFROM\b/i).size + stmt.scan(/\bJOIN\b/i).size > 1 || comma_join
+      physical_tables = SqlIdentCheck.scan(stmt)[:tables]
+      if physical_tables.size > 1 || comma_join
         warn "custom-SQL element '#{el['name']}' references multiple tables#{comma_join ? ' (comma join)' : ''} — " \
              "NOT auto-remapped; repoint it with --table-mapping (landed table: #{entry['sf_table']})"
         next

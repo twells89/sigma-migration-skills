@@ -1,0 +1,6 @@
+{
+  "detail-card": {
+    "column": "ContactId",
+    "aggregation": "COUNT"
+  }
+}

@@ -62,6 +62,13 @@ check(S.check(wrapped, CATALOG)[:ok], 'subquery wrap + derived alias __base clea
 cte = 'WITH base AS (SELECT "Region View" AS RV, SUM("Deal Value") AS DV FROM DEAL_FACTS GROUP BY 1) ' \
       'SELECT RV, DV, SUM(DV) OVER (PARTITION BY RV) AS W FROM base'
 check(S.check(cte, CATALOG)[:ok], 'window-helper CTE: inner aliases referenced outside are clean', fails)
+cte_spec = {
+  'pages' => [{ 'elements' => [{
+    'source' => { 'kind' => 'sql', 'statement' => cte }
+  }] }]
+}
+check(S.referenced_tables(cte_spec) == ['DEAL_FACTS'],
+      'referenced_tables excludes CTE names and returns only physical tables', fails)
 
 puts 'Part F — table-alias prefixes resolve per-table'
 joined = 'SELECT __f."Customer Ref ID" AS CUSTOMER_REF_ID, __d0."Account Name" AS ACCOUNT_NAME ' \

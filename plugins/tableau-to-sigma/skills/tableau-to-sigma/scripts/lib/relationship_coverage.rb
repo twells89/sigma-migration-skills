@@ -2,6 +2,7 @@
 
 require 'digest'
 require 'json'
+require_relative 'ruby_compat'
 
 # Normalize and evaluate the Tableau converter's object-graph relationship
 # ledger. A wired-but-partial edge is blocking: dropping one computed
@@ -103,7 +104,7 @@ module RelationshipCoverage
       'entries' => entries,
       'blockers' => blockers
     }
-    add_model_checks(result, model)
+    add_model_checks(result, model, metadata)
     result
   end
 
@@ -119,12 +120,20 @@ module RelationshipCoverage
     )
   end
 
-  def add_model_checks(result, model)
+  def add_model_checks(result, model, metadata = nil)
     return result unless model.is_a?(Hash)
-    relationships = Array(model['pages']).flat_map do |page|
+    generated_targets = Array(metadata.is_a?(Hash) ? metadata['sqlProvenance'] : nil).filter_map do |entry|
+      next unless entry.is_a?(Hash) && entry['originType'].to_s.start_with?('generated-')
+      entry['elementId']
+    end.compact
+    all_relationships = Array(model['pages']).flat_map do |page|
       Array(page['elements']).flat_map { |element| Array(element['relationships']) }
     end
+    relationships = all_relationships.reject do |relationship|
+      generated_targets.include?(relationship['targetElementId'])
+    end
     empty = relationships.count { |relationship| Array(relationship['keys']).empty? }
+    result['generated_model_relationships_excluded'] = all_relationships.length - relationships.length
     result['model_relationships'] = relationships.length
     result['model_relationships_without_keys'] = empty
     if result['applicable'] && relationships.length != result['serialized']

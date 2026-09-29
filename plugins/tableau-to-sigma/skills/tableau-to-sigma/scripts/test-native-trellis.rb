@@ -216,6 +216,8 @@ check(el && el['trellis'].is_a?(Hash) && el['trellis'].key?('columnsBy') && !el[
       'element carries trellis.columnsBy (and NOT rowsBy) for a horizontal source', fails)
 cat_col = el && Array(el['columns']).find { |c| c['id'] == cat_id }
 check(cat_col && cat_col['name'] == 'Ship Method', 'trellis.columnsBy references the Ship Method facet column', fails)
+check(el && el.dig('color', 'column') != cat_id,
+      'facet column is not duplicated on Color (Sigma one-channel rule)', fails)
 mem_filter = el && Array(el['filters']).find { |f| f['columnId'] == cat_id }
 check(mem_filter && Array(mem_filter['values']).empty?,
       'the per-member list filter is EMPTIED (values: []) so every member renders', fails)
@@ -261,6 +263,29 @@ else
   # donut conversion is unit-covered by the kind gate in build-charts).
   puts "  SKIP  synthetic pie parsed as #{pgrp['chart_kind'].inspect}, not 'pie' — pie→donut gate covered in build-charts"
 end
+
+# ---- Sparse matches across unrelated sections must NOT collapse ------------
+puts "\n== SPARSE repeated worksheets: no cross-section trellis collapse =="
+sparse_twb = trellis_twb(:vert).gsub("h='18000'", "h='5000'")
+sdash, sels, = run_pipeline(sparse_twb, DASH)
+check(sdash && !sdash.key?('trellis'),
+      'widely separated matching worksheets carry NO trellis group', fails)
+check(chart_elements(sels).size == MEMBERS.size,
+      'all sparse source panels remain independent chart elements', fails)
+
+# ---- Numbered dashboard panels are independent authored sections -----------
+puts "\n== NUMBERED repeated worksheets: preserve independent panels =="
+numbered_twb = trellis_twb(:horz)
+MEMBERS.each_with_index do |member, index|
+  numbered_twb = numbered_twb.gsub(
+    "Revenue - #{member}", "#{21 + index}. Revenue - #{member}"
+  )
+end
+ndash, nels, = run_pipeline(numbered_twb, DASH)
+check(ndash && !ndash.key?('trellis'),
+      'distinct numbered panel titles carry NO trellis group', fails)
+check(chart_elements(nels).size == MEMBERS.size,
+      'all numbered source panels remain independent chart elements', fails)
 
 # ---- Non-trellis dashboard is UNCHANGED ------------------------------------
 puts "\n== NON-trellis dashboard: no trellis key, one flat chart =="

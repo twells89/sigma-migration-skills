@@ -1,0 +1,180 @@
+[
+  {
+    "id": "ds-ai-calls",
+    "name": "Synthetic AI Call Detail",
+    "rows": 24904,
+    "columns": 40,
+    "owner": {
+      "id": 408550414,
+      "name": "Chris Mara"
+    },
+    "dataCurrentAt": "2026-09-23T11:38:14Z",
+    "createdAt": "2026-07-16T19:44:07Z",
+    "updatedAt": "2026-09-23T11:38:15Z",
+    "pdpEnabled": false,
+    "schema": {
+      "columns": [
+        {
+          "type": "LONG",
+          "name": "AI Call ID"
+        },
+        {
+          "type": "STRING",
+          "name": "Direction"
+        },
+        {
+          "type": "DATE",
+          "name": "Call Date"
+        },
+        {
+          "type": "DATETIME",
+          "name": "Call Start Time"
+        },
+        {
+          "type": "DATETIME",
+          "name": "Call End Time"
+        },
+        {
+          "type": "STRING",
+          "name": "During Business Hours"
+        },
+        {
+          "type": "LONG",
+          "name": "Call Duration"
+        },
+        {
+          "type": "STRING",
+          "name": "ContactId"
+        },
+        {
+          "type": "STRING",
+          "name": "SessionId"
+        },
+        {
+          "type": "LONG",
+          "name": "SiteId"
+        },
+        {
+          "type": "LONG",
+          "name": "TenantId"
+        },
+        {
+          "type": "LONG",
+          "name": "WaitingId"
+        },
+        {
+          "type": "STRING",
+          "name": "ANI"
+        },
+        {
+          "type": "STRING",
+          "name": "DNIS"
+        },
+        {
+          "type": "STRING",
+          "name": "Data Stage"
+        },
+        {
+          "type": "STRING",
+          "name": "Call Outcome"
+        },
+        {
+          "type": "STRING",
+          "name": "Call Intent"
+        },
+        {
+          "type": "STRING",
+          "name": "Recording URL"
+        },
+        {
+          "type": "STRING",
+          "name": "Recording Link"
+        },
+        {
+          "type": "STRING",
+          "name": "Call Summary"
+        },
+        {
+          "type": "STRING",
+          "name": "Inquiry Attempted"
+        },
+        {
+          "type": "STRING",
+          "name": "Inquiry Created"
+        },
+        {
+          "type": "STRING",
+          "name": "Transferred to PBP"
+        },
+        {
+          "type": "STRING",
+          "name": "PayNow Link Sent"
+        },
+        {
+          "type": "STRING",
+          "name": "Received SMS Consent"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Inquiry"
+        },
+        {
+          "type": "STRING",
+          "name": "Inquiry Cancelled"
+        },
+        {
+          "type": "STRING",
+          "name": "Inquiry Deleted"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Rental"
+        },
+        {
+          "type": "STRING",
+          "name": "Sales Escalation"
+        },
+        {
+          "type": "STRING",
+          "name": "Service Escalation"
+        },
+        {
+          "type": "STRING",
+          "name": "PBP Transfer"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Escalation"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Transfer"
+        },
+        {
+          "type": "STRING",
+          "name": "Sales Escalation Issue"
+        },
+        {
+          "type": "STRING",
+          "name": "Service Escalation Issue"
+        },
+        {
+          "type": "STRING",
+          "name": "PBP Transfer Issue"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Escalation Issue"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Transfer Issue"
+        },
+        {
+          "type": "STRING",
+          "name": "Has Immediate Callback"
+        }
+      ]
+    }
+  }
+]

@@ -98,6 +98,29 @@ class MigrateTableauPythonTest(unittest.TestCase):
             migrate.source_arguments("Fixture Workbook"),
         )
 
+    def test_new_mode_resumes_objects_created_by_same_workdir(self):
+        args = SimpleNamespace(
+            reuse_mode="new",
+            data_model_id=None,
+            sigma_workbook_id=None,
+        )
+        self.assertTrue(
+            migrate.is_current_run_resume(
+                args, {"data_model_id": "dm-current"}
+            )
+        )
+        self.assertFalse(migrate.is_current_run_resume(args, {}))
+        self.assertFalse(
+            migrate.is_current_run_resume(
+                SimpleNamespace(
+                    reuse_mode="new",
+                    data_model_id="dm-explicit",
+                    sigma_workbook_id=None,
+                ),
+                {"data_model_id": "dm-current"},
+            )
+        )
+
     def test_fact_element_resolves_from_server_readback(self):
         readback = {
             "pages": [
