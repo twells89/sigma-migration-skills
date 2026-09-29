@@ -316,6 +316,16 @@ def gate_coverage(workdir: Path, parity: dict[str, Any]) -> None:
         )
 
 
+def requires_display_name(element: dict[str, Any]) -> bool:
+    """Only gate kinds whose display-name field survives workbook readback."""
+    return str(element.get("kind") or "").casefold() not in {
+        "container",
+        "divider",
+        "spacer",
+        "text",
+    }
+
+
 def gate_layout(
     workdir: Path,
     document: dict[str, Any],
@@ -368,7 +378,7 @@ def gate_layout(
             violations.append(f"generic page title {name!r}")
     raw_id = re.compile(r"^(?:[0-9a-f]{8}-[0-9a-f-]{27,}|(?:el|pg|chart)[-_][0-9a-z_-]+)$", re.I)
     for element in all_elements(document):
-        if str(element.get("kind") or "").casefold() in {"container", "divider", "spacer"}:
+        if not requires_display_name(element):
             continue
         name = str(element.get("name") or element.get("title") or "")
         element_id = str(element.get("id") or "")
