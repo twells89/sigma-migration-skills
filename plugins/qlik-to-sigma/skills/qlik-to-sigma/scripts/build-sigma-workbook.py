@@ -60,7 +60,9 @@ TEMPORAL = re.compile(r"DATE|MONTH|YEAR|QUARTER|WEEK|DAY", re.I)
 # The human-readable matrix in refs/qlik-coverage.md is GENERATED from these files.
 # Loader: shared/lib/coverage_catalog.py (synced to scripts/lib/). Mirrors the
 # beads-sigma-93ps contract: catalog = data, code = thin resolver/predicates.
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _SCRIPT_DIR)
+sys.path.insert(0, os.path.join(_SCRIPT_DIR, "lib"))
 import coverage_catalog as _cc  # noqa: E402
 import trellis_emit as _te      # noqa: E402  shared native-trellis emitter (supported-kind gate + fallbacks)
 import metric_binding as _mb    # noqa: E402  shared DM-metric binder ([Metrics/<name>] over inline re-derive)
