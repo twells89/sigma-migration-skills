@@ -1283,6 +1283,12 @@ def main():
         presentation = _presentation(effective)
         if presentation:
             rec["presentation"] = presentation
+        ga_layers = props.get("gaLayers")
+        if ga_layers:
+            # Inventory of EVERY layer, chosen or not — the builder warns when a
+            # City PointLayer was dropped in favor of the chosen AreaLayer.
+            rec["mapLayers"] = [{"type": layer.get("type"), "dims": _layer_dims(layer)}
+                                for layer in ga_layers]
         if effective_type == "combochart":
             rec["seriesTypes"] = [_combo_series(measure) for measure in qmeas]
         rec.update(_content_fields(effective, effective_type))
