@@ -42,6 +42,16 @@ def disp(c):
     return " ".join(w if (i and w in SIGMA_LOWERCASE) else w.capitalize()
                     for i, w in enumerate(words))
 
+def _norm(value):
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+def rewrite_metric_refs(formula, denorm_by_norm):
+    """Rewrite qualified or bare metric refs to denorm display names."""
+    def replace(match):
+        leaf = match.group(1).split("/")[-1]
+        return f"[{denorm_by_norm.get(_norm(leaf), leaf)}]"
+    return re.sub(r"\[([^\]]+)\]", replace, formula)
+
 def api(method, path, body=None):
     BASE = os.environ["SIGMA_BASE_URL"]; TOK = os.environ["SIGMA_API_TOKEN"]
     data = json.dumps(body).encode() if body is not None else None
@@ -122,11 +132,15 @@ def main():
         rec = rec_by_upper.get((path[-1] if path else "").upper())
         if rec and not rec["sourceTable"].upper().startswith(("RESIDENT", "INLINE", "AUTOGENERATE", "?")):
             rt = real_table(rec)
-            field_by_disp = {disp(f["qlikField"]).lower(): f for f in rec["fields"]}
+            # Match converter columns to Qlik fields on a separator/case-free key: the
+            # converter splits camelCase (OrderID -> "Order Id") while
+            # disp() splits only on underscores ("Orderid").
+            norm = lambda v: re.sub(r"[^a-z0-9]", "", str(v).lower())
+            field_by_disp = {norm(f["qlikField"]): f for f in rec["fields"]}
             new_cols, order = [], []
             for c in el.get("columns", []):
                 m = re.match(r"\[([^/\]]+)/([^\]]+)\]$", c.get("formula", ""))
-                f = field_by_disp.get(m.group(2).lower()) if m else None
+                f = field_by_disp.get(norm(m.group(2))) if m else None
                 if f is None:
                     new_cols.append(c); order.append(c["id"]); continue
                 if f.get("isExpression"):
@@ -149,6 +163,10 @@ def main():
         elements.append(el)
 
     # --- 2. metrics -> denorm element (keep only those whose refs resolve) -----
+    # Resolve metric refs separator/case-free (the converter splits camelCase:
+    # [Net Amount]; the denorm column is disp()'d: "Netamount") and rewrite
+    # each ref to the denorm column's actual display name.
+    denorm_by_norm = {_norm(c["name"]): c["name"] for c in denorm["columns"]}
     denorm_disp = {c["name"].lower() for c in denorm["columns"]}
     src_expr = {m.get("title"): m.get("expr") or m.get("qDef") for m in measures}
     kept, dropped = [], []
@@ -162,7 +180,8 @@ def main():
         # 400 -- drop + report instead of emitting an invalid formula
         body = re.sub(r"\[[^\]]*\]", "", m.get("formula", ""))
         qlik_only = re.search(r"\$\(|\b(?:Rank|HRank|Aggr|Above|Below|Peek|Previous|RowNo|FirstSortedValue)\s*\(", body, re.I)
-        if refs and not qlik_only and all(r.lower() in denorm_disp for r in refs):
+        if refs and not qlik_only and all(_norm(r) in denorm_by_norm for r in refs):
+            m["formula"] = rewrite_metric_refs(m.get("formula", ""), denorm_by_norm)
             if src_expr.get(m.get("name")):
                 m.setdefault("description", f"Qlik: {src_expr[m['name']]}")
             kept.append(m)
