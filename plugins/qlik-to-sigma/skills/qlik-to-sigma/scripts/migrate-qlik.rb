@@ -1398,8 +1398,8 @@ if !built_ok && design_manifest_path && File.file?(design_manifest_path)
     'manifest' => design_manifest_path,
     'nextIteration' => manifest.fetch('iteration', 0).to_i + 1,
     'workbookId' => WB_ID,
-    'sourceImages' => Array(render_health['sources']).filter_map { |row| row['path'] },
-    'targetImages' => Array(render_health['sigma_pages']).filter_map { |row| row['path'] },
+    'sourceImages' => Array(render_health['sources']).map { |row| row['path'] }.compact,
+    'targetImages' => Array(render_health['sigma_pages']).map { |row| row['path'] }.compact,
     'similarity' => similarity,
     'instructions' => "Read each source/target image pair, revise design-manifest.json, " \
                       "increment iteration, keep status=approved after review, and rerun " \
