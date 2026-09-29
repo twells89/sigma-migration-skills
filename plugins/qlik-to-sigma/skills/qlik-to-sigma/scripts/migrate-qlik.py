@@ -26,6 +26,7 @@ for _stream in (sys.stdout, sys.stderr):
 import control_lint
 import flip_gate
 import layout_lint
+import qlik_design_manifest as design_manifest
 from lib import sigma_rest
 from lib.code_rep import document, metadata
 from lib.scout_gate import classify as classify_scouts
@@ -36,7 +37,7 @@ VENDORED_CONVERTER = (HERE.parent / "converter" / "qlik.mjs").resolve()
 TOTAL_PHASES = 6
 NATIVE = {
     "barchart", "auto-chart", "kpi", "linechart", "table", "piechart",
-    "combochart", "scatterplot", "pivot-table", "filterpane", "listbox",
+    "combochart", "scatterplot", "pivot-table", "map", "filterpane", "listbox",
 }
 SKIP_KINDS = {
     "sheet", "singlepublic", "appprops", "LoadModel", "measure", "dimension",
@@ -73,6 +74,10 @@ class CommandFailure(RuntimeError):
         super().__init__(
             f"command failed ({returncode}): {' '.join(command)}"
         )
+
+
+class DesignReviewRequired(RuntimeError):
+    """Exit-10 checkpoint: an image-capable agent must approve the manifest."""
 
 
 class Lane:
@@ -193,6 +198,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--prj")
     parser.add_argument("--reuse-dm")
     parser.add_argument("--no-reuse", action="store_true")
+    parser.add_argument("--workbook-id",
+                        help="update an existing migration workbook during screenshot iteration")
+    parser.add_argument("--design-manifest",
+                        help="approved screenshot design manifest")
+    parser.add_argument(
+        "--source-sheet-png",
+        action="append",
+        default=[],
+        metavar="SHEET_ID=PATH",
+        help="source full-sheet screenshot; repeat once per sheet",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-layout-lint", action="store_true")
     parser.add_argument("--skip-control-flip", nargs="?", const=True)
@@ -552,6 +568,87 @@ class Migration:
         snapshot = load_json(self.workdir / "snapshot.json", default={})
         sheets = load_json(self.workdir / "layout.json", default=[])
         return converter_input, charts, measures, app_meta, snapshot, sheets
+
+    def prepare_design_review(
+        self,
+        charts: list[dict[str, Any]],
+        sheets: list[dict[str, Any]],
+    ) -> Path | None:
+        """Require screenshot interpretation before any Sigma write."""
+        assert self.workdir
+        explicit = design_manifest.parse_source_specs(
+            self.args.source_sheet_png or []
+        )
+        if explicit:
+            source_dir = self.workdir / "source-pages"
+            source_dir.mkdir(parents=True, exist_ok=True)
+            staged = {}
+            for sheet_id, source in explicit.items():
+                destination = source_dir / f"{sheet_id}{source.suffix.lower()}"
+                shutil.copy2(source, destination)
+                staged[sheet_id] = destination
+            explicit = staged
+
+        manifest_path = self.workdir / "design-manifest.json"
+        if self.args.design_manifest:
+            supplied = Path(self.args.design_manifest).expanduser().resolve()
+            if not supplied.is_file():
+                raise ValueError(
+                    f"FATAL: --design-manifest does not exist: {supplied}"
+                )
+            if supplied != manifest_path:
+                shutil.copy2(supplied, manifest_path)
+
+        sources = design_manifest.discover_source_images(
+            self.workdir,
+            sheets,
+            explicit,
+        )
+        if not sources and not manifest_path.is_file():
+            return None
+
+        if not manifest_path.is_file():
+            manifest = design_manifest.seed_manifest(charts, sheets, sources)
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            raise DesignReviewRequired(
+                "SCREENSHOT DESIGN REVIEW REQUIRED\n"
+                f"  Read every sourceImage in {manifest_path} with an image-capable agent.\n"
+                "  Set each tile kind/title/orientation/legend/grid, mark every "
+                "page and tile reviewed=true, set status=approved, then rerun "
+                f"with --design-manifest {manifest_path}."
+            )
+
+        manifest = load_json(manifest_path)
+        try:
+            design_manifest.validate_manifest(
+                manifest,
+                charts,
+                sheets,
+                require_approved=True,
+            )
+        except design_manifest.ManifestError as exc:
+            raise DesignReviewRequired(
+                "SCREENSHOT DESIGN REVIEW INCOMPLETE\n"
+                f"  {exc}\n"
+                f"  Review and approve {manifest_path}, then rerun."
+            ) from exc
+        manifest = design_manifest.stage_manifest_images(
+            manifest,
+            self.workdir,
+        )
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"   ✓ approved screenshot design manifest: {manifest_path} "
+            f"({len(manifest.get('pages') or [])} page(s), "
+            f"iteration {manifest.get('iteration', 0)})"
+        )
+        return manifest_path
 
     def convert(
         self, converter_input: dict[str, Any]
@@ -920,6 +1017,7 @@ class Migration:
         measures: list[Any],
         base_name: str,
         sheets: list[Any],
+        design_path: Path | None,
     ) -> tuple[dict[str, Any], dict[str, Any], str | None]:
         assert self.workdir
         self.header(3, "Build data model")
@@ -1072,6 +1170,8 @@ class Migration:
         preflight_folder = folder or candidate.get("folderId")
         if preflight_folder:
             preflight_workbook += ["--folder", str(preflight_folder)]
+        if design_path:
+            preflight_workbook += ["--design-manifest", str(design_path)]
         self.execute(preflight_workbook)
         self.execute(
             python_command(
@@ -1170,6 +1270,10 @@ class Migration:
         workbook_folder = folder or dm_result.get("folderId")
         if workbook_folder:
             workbook_command += ["--folder", str(workbook_folder)]
+        if design_path:
+            workbook_command += ["--design-manifest", str(design_path)]
+        if self.args.workbook_id:
+            workbook_command += ["--workbook-id", self.args.workbook_id]
         self.execute(workbook_command + ["--dry-run"])
         self.execute(
             python_command(
@@ -1184,7 +1288,7 @@ class Migration:
             self.execute(workbook_command)
         workbook_result = load_json(self.workdir / "wb-result.json")
         workbook_id = workbook_result.get("workbookId")
-        if not self.args.dry_run:
+        if not self.args.dry_run and not self.args.workbook_id:
             with (self.workdir / "posted-workbooks.jsonl").open(
                 "a", encoding="utf-8"
             ) as handle:
@@ -2090,6 +2194,49 @@ class Migration:
             and post_finalizer.returncode == 0
             and verification.returncode == 0
         )
+        manifest_path = self.workdir / "design-manifest.json"
+        if not built_ok and manifest_path.is_file():
+            similarity = load_json(
+                self.workdir / "visual-similarity.json",
+                default={},
+            )
+            render_health = load_json(
+                self.workdir / "render-health.json",
+                default={},
+            )
+            manifest = load_json(manifest_path, default={})
+            request = {
+                "schemaVersion": 1,
+                "status": "needs-revision",
+                "manifest": str(manifest_path),
+                "nextIteration": int(manifest.get("iteration") or 0) + 1,
+                "workbookId": workbook_id,
+                "sourceImages": [
+                    row.get("path")
+                    for row in render_health.get("sources") or []
+                    if isinstance(row, dict) and row.get("path")
+                ],
+                "targetImages": [
+                    row.get("path")
+                    for row in render_health.get("sigma_pages") or []
+                    if isinstance(row, dict) and row.get("path")
+                ],
+                "similarity": similarity,
+                "instructions": (
+                    "Read each source/target image pair, revise design-manifest.json, "
+                    "increment iteration, keep status=approved after review, and rerun "
+                    f"with --workbook-id {workbook_id} --design-manifest {manifest_path}."
+                ),
+            }
+            request_path = self.workdir / "design-iteration-request.json"
+            request_path.write_text(
+                json.dumps(request, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print(
+                f"DESIGN ITERATION REQUIRED: revise {manifest_path} using "
+                f"{request_path}, then update workbook {workbook_id} in place."
+            )
         print(
             f"TERMINAL    : {'GREEN' if built_ok else 'RED'} — "
             f"accounting/report "
@@ -2117,6 +2264,7 @@ class Migration:
             snapshot,
             sheets,
         ) = self.discover()
+        design_path = self.prepare_design_review(charts, sheets)
         app_name = (
             app_meta.get("name")
             or converter_input.get("appName")
@@ -2144,7 +2292,7 @@ class Migration:
         if decision_exit is not None:
             return decision_exit
         dm_result, workbook_result, dm_id = self.build(
-            converted_path, measures, base_name, sheets
+            converted_path, measures, base_name, sheets, design_path
         )
         if self.args.dry_run:
             self.header(6, "Parity")
@@ -2204,6 +2352,9 @@ def main(argv: list[str] | None = None) -> int:
         args = parse_args(argv)
         migration = Migration(args)
         return migration.run()
+    except DesignReviewRequired as exc:
+        print(str(exc), file=sys.stderr)
+        return 10
     except (ValueError, RuntimeError, sigma_rest.SigmaError) as exc:
         print(f"FATAL: {exc}", file=sys.stderr)
         return 1
