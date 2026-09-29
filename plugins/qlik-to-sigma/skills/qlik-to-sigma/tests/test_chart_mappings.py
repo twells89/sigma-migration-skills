@@ -255,8 +255,12 @@ def test_live_presentation_subtypes_and_content():
     horizontal = chart("barchart")
     horizontal["presentation"] = {"orientation": "horizontal"}
     horizontal_warnings = []
-    assert "orientation" not in builder.build_element(horizontal, RESOLVE, horizontal_warnings)
-    assert any("HORIZONTAL ORIENTATION GAP" in warning for warning in horizontal_warnings)
+    assert builder.build_element(horizontal, RESOLVE, horizontal_warnings)["orientation"] == "horizontal"
+    assert not any("HORIZONTAL ORIENTATION GAP" in warning for warning in horizontal_warnings)
+
+    horizontal_line = chart("linechart")
+    horizontal_line["presentation"] = {"orientation": "horizontal"}
+    assert "orientation" not in builder.build_element(horizontal_line, RESOLVE, [])
 
     colored = chart("barchart")
     colored["color"] = {"mode": "byDimension"}

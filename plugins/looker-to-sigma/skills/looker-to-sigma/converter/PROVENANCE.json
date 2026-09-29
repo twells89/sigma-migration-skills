@@ -4,5 +4,12 @@
   "source_commit_date": "2026-09-14",
   "bundler": "esbuild --bundle --format=esm --platform=node",
   "vendored_modules": "lookml.mjs",
-  "note": "Self-contained bundled artifacts, not source. Refresh with tools/vendor-converters.sh after the converter repo changes. The three former local_patches (filter normalization, dynamicParameters, ${TABLE} branch allowance) LANDED UPSTREAM in source_commit 16ad063 and are no longer bundle-local \u2014 this bundle is regenerable from source with no drift."
+  "local_patches": [
+    {
+      "commit": "16ad0639f3e600238f7b21f1791960d7219156d0 (upstream branch commit)",
+      "summary": "OPEN PIN — the vendored LookML fixes exist in upstream commit 16ad063 but are absent from the current default HEAD 21f3167; re-vendoring from default would regress filter normalization, dynamicParameters, and ${TABLE} branch handling.",
+      "upstream_pr": "twells89/sigma-data-model-mcp@16ad0639f3e600238f7b21f1791960d7219156d0"
+    }
+  ],
+  "note": "Self-contained bundled artifact, not source. The three fixes landed in upstream commit 16ad063, but that commit is not present on the repository's current default HEAD; keep this bundle pinned until the upstream branch is merged, then re-vendor and retire the OPEN PIN entry."
 }
