@@ -119,7 +119,8 @@ def print_lane_log(lane)
   File.read(lane[:log]).each_line { |l| puts "   │ #{l.rstrip}" }
 end
 
-opts = { context: 'sigma-migration', database: 'DEMO_DB', schema: 'DEMO' }
+opts = { context: 'sigma-migration', database: 'DEMO_DB', schema: 'DEMO',
+         source_sheet_png: [] }
 OptionParser.new do |o|
   o.on('--app ID')            { |v| opts[:app]      = v }
   o.on('--connection ID')     { |v| opts[:conn]     = v }
@@ -136,6 +137,11 @@ OptionParser.new do |o|
   o.on('--prj DIR')           { |v| opts[:prj]      = File.expand_path(v) }
   o.on('--reuse-dm ID')       { |v| opts[:reuse_dm] = v }
   o.on('--no-reuse')          {     opts[:no_reuse] = true }
+  o.on('--workbook-id ID')    { |v| opts[:workbook_id] = v }
+  o.on('--design-manifest PATH') { |v| opts[:design_manifest] = File.expand_path(v) }
+  o.on('--source-sheet-png SPEC', 'SHEET_ID=/path/to/full-sheet.png; repeat per sheet') {
+    |v| opts[:source_sheet_png] << v
+  }
   o.on('--dry-run')           {     opts[:dry_run]  = true }
   o.on('--skip-layout-lint')  {     opts[:skip_layout_lint] = true }
   o.on('--skip-control-flip [REASON]') { |v| opts[:skip_control_flip] = v || true } # waive gate 7b (runtime control-flip proof); name the reason in your report
@@ -390,6 +396,73 @@ measures   = JSON.parse(File.read(File.join(WORK, 'measures.json')))
 app_meta   = File.exist?(File.join(WORK, 'app-meta.json')) ? JSON.parse(File.read(File.join(WORK, 'app-meta.json'))) : {}
 snapshot   = File.exist?(File.join(WORK, 'snapshot.json')) ? JSON.parse(File.read(File.join(WORK, 'snapshot.json'))) : {}
 sheets     = File.exist?(File.join(WORK, 'layout.json'))   ? JSON.parse(File.read(File.join(WORK, 'layout.json')))   : []
+
+# Screenshot -> design manifest gate. The image-capable AGENT reviews the
+# seeded manifest; scripts only validate and apply its explicit decisions.
+design_manifest_path = File.join(WORK, 'design-manifest.json')
+unless opts[:source_sheet_png].empty?
+  source_dir = File.join(WORK, 'source-pages')
+  FileUtils.mkdir_p(source_dir)
+  opts[:source_sheet_png].map! do |spec|
+    sheet_id, source = spec.split('=', 2)
+    abort "FATAL: bad --source-sheet-png #{spec.inspect}; want SHEET_ID=PATH" \
+      if sheet_id.to_s.empty? || source.to_s.empty? || !File.file?(File.expand_path(source))
+    source = File.expand_path(source)
+    destination = File.join(source_dir, "#{sheet_id}#{File.extname(source).downcase}")
+    FileUtils.cp(source, destination)
+    "#{sheet_id}=#{destination}"
+  end
+end
+if opts[:design_manifest]
+  abort "FATAL: --design-manifest not found: #{opts[:design_manifest]}" \
+    unless File.file?(opts[:design_manifest])
+  FileUtils.cp(opts[:design_manifest], design_manifest_path) \
+    unless File.expand_path(opts[:design_manifest]) == File.expand_path(design_manifest_path)
+end
+source_images = Dir[
+  File.join(WORK, '{source-pages,dashboards,user-screenshots,source-captures,qlik-screenshots}',
+            '**', '*.{png,PNG,jpg,JPG,jpeg,JPEG,webp,WEBP}')
+]
+if !source_images.empty? || File.file?(design_manifest_path)
+  manifest_tool = File.join(HERE, 'qlik_design_manifest.py')
+  unless File.file?(design_manifest_path)
+    cmd = [*PyResolve.argv, manifest_tool, 'seed',
+           '--charts', File.join(WORK, 'charts.json'),
+           '--layout', File.join(WORK, 'layout.json'),
+           '--workdir', WORK, '--out', design_manifest_path]
+    opts[:source_sheet_png].each { |spec| cmd += ['--source', spec] }
+    run!(cmd)
+    join_lane(snap_lane, 'snapshot', timeout: 300) if snap_lane
+    warn "SCREENSHOT DESIGN REVIEW REQUIRED: read source images, approve #{design_manifest_path}, " \
+         'then rerun with --design-manifest.'
+    exit 10
+  end
+  out, status = Open3.capture2e(
+    *PyResolve.argv, manifest_tool, 'validate',
+    '--charts', File.join(WORK, 'charts.json'),
+    '--layout', File.join(WORK, 'layout.json'),
+    '--manifest', design_manifest_path
+  )
+  unless status.success?
+    join_lane(snap_lane, 'snapshot', timeout: 300) if snap_lane
+    warn out.force_encoding('UTF-8').scrub
+    exit 10
+  end
+  manifest = JSON.parse(File.read(design_manifest_path))
+  source_dir = File.join(WORK, 'source-pages')
+  FileUtils.mkdir_p(source_dir)
+  Array(manifest['pages']).each do |page|
+    source = File.expand_path(page['sourceImage'].to_s)
+    destination = File.join(source_dir, "#{page['sheetId']}#{File.extname(source).downcase}")
+    FileUtils.cp(source, destination) unless source == File.expand_path(destination)
+    page['sourceImage'] = File.expand_path(destination)
+  end
+  File.write(design_manifest_path, JSON.pretty_generate(manifest))
+  puts "   ✓ approved screenshot design manifest: #{design_manifest_path}"
+else
+  design_manifest_path = nil
+end
+
 app_name   = app_meta['name'] || conv_input['appName'] || opts[:app]
 base_name  = opts[:name] ? "#{opts[:name]} #{app_name}" : app_name
 
@@ -574,7 +647,7 @@ end
 # build-sigma-workbook.py turns them into Sigma list controls wired to the
 # master (global scope, matching Qlik's associative model); alternate-state
 # panes are flagged manual in its warnings + control-scope.json.
-NATIVE = %w[barchart auto-chart kpi linechart table piechart combochart scatterplot pivot-table
+NATIVE = %w[barchart auto-chart kpi linechart table piechart combochart scatterplot pivot-table map
             filterpane listbox].freeze
 SKIP_KINDS = %w[sheet singlepublic appprops LoadModel measure dimension masterobject sheetlist].freeze
 real_charts.each do |c|
@@ -777,6 +850,7 @@ pre_wb_cmd = [*PyResolve.argv, File.join(HERE, 'build-sigma-workbook.py'),
 pre_wb_cmd += ['--dm-spec', File.join(WORK, 'dm-spec.json')] unless reuse_denorm_eid
 pre_wb_cmd += ['--folder', (opts[:folder] || candidate_dm_res['folderId'] || prep[:folder_id])] \
   if opts[:folder] || candidate_dm_res['folderId'] || prep[:folder_id]
+pre_wb_cmd += ['--design-manifest', design_manifest_path] if design_manifest_path
 run!(pre_wb_cmd)
 run!(['ruby', File.join(HERE, 'lib', 'preflight_lint.rb'), File.join(WORK, 'wb-preflight-spec.json')])
 run!(['ruby', File.join(HERE, 'lint-render-integrity.rb'),
@@ -822,6 +896,8 @@ wb_cmd = [*PyResolve.argv, File.join(HERE, 'build-sigma-workbook.py'),
 # so measures stay inline there (unchanged) until a live metric-fetch exists.
 wb_cmd += ['--dm-spec', File.join(WORK, 'dm-spec.json')] unless reuse_denorm_eid
 wb_cmd += ['--folder', (opts[:folder] || dm_res['folderId'] || prep[:folder_id])] if opts[:folder] || dm_res['folderId'] || prep[:folder_id]
+wb_cmd += ['--design-manifest', design_manifest_path] if design_manifest_path
+wb_cmd += ['--workbook-id', opts[:workbook_id]] if opts[:workbook_id]
 if opts[:dry_run]
   run!(wb_cmd + ['--dry-run'])
 else
@@ -837,7 +913,7 @@ run!(wb_cmd) unless opts[:dry_run]
 wb_res = JSON.parse(File.read(File.join(WORK, 'wb-result.json')))
 WB_ID = wb_res['workbookId']
 emap  = JSON.parse(File.read(File.join(WORK, 'element-map.json')))
-unless opts[:dry_run]
+unless opts[:dry_run] || opts[:workbook_id]
   File.open(File.join(WORK, 'posted-workbooks.jsonl'), 'a') do |file|
     file.puts(JSON.generate('id' => WB_ID, 'name' => "#{base_name} → Sigma"))
   end
@@ -1311,6 +1387,27 @@ post_finalizer_ok = run_terminal.call('Qlik accounting and report finalization (
 
 built_ok = mechanical_ok && cleanup_ok && pre_finalizer_ok && assert_ok &&
            post_finalizer_ok
+if !built_ok && design_manifest_path && File.file?(design_manifest_path)
+  manifest = JSON.parse(File.read(design_manifest_path)) rescue {}
+  similarity = JSON.parse(File.read(File.join(WORK, 'visual-similarity.json'))) rescue {}
+  render_health = JSON.parse(File.read(File.join(WORK, 'render-health.json'))) rescue {}
+  request_path = File.join(WORK, 'design-iteration-request.json')
+  File.write(request_path, JSON.pretty_generate(
+    'schemaVersion' => 1,
+    'status' => 'needs-revision',
+    'manifest' => design_manifest_path,
+    'nextIteration' => manifest.fetch('iteration', 0).to_i + 1,
+    'workbookId' => WB_ID,
+    'sourceImages' => Array(render_health['sources']).map { |row| row['path'] }.compact,
+    'targetImages' => Array(render_health['sigma_pages']).map { |row| row['path'] }.compact,
+    'similarity' => similarity,
+    'instructions' => "Read each source/target image pair, revise design-manifest.json, " \
+                      "increment iteration, keep status=approved after review, and rerun " \
+                      "with --workbook-id #{WB_ID} --design-manifest #{design_manifest_path}."
+  ))
+  puts "DESIGN ITERATION REQUIRED: revise #{design_manifest_path} using #{request_path}, " \
+       "then update workbook #{WB_ID} in place."
+end
 puts "TERMINAL    : #{built_ok ? 'GREEN' : 'RED'} — accounting/report " \
      "#{post_finalizer_ok ? 'current' : 'failed'}, shared assert " \
      "#{assert_ok ? 'passed' : 'failed'}"

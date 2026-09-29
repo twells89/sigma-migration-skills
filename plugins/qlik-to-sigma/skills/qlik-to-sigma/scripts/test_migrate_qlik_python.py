@@ -57,6 +57,12 @@ class CliContractTests(unittest.TestCase):
                 "/tmp/discovery",
                 "--reuse-dm",
                 "dm",
+                "--workbook-id",
+                "workbook",
+                "--design-manifest",
+                "/tmp/design.json",
+                "--source-sheet-png",
+                "sheet-1=/tmp/source.png",
                 "--no-reuse",
                 "--dry-run",
                 "--skip-layout-lint",
@@ -83,6 +89,12 @@ class CliContractTests(unittest.TestCase):
         self.assertTrue(parsed.yes)
         self.assertEqual("/tmp/discovery", parsed.from_discovery)
         self.assertEqual("dm", parsed.reuse_dm)
+        self.assertEqual("workbook", parsed.workbook_id)
+        self.assertEqual("/tmp/design.json", parsed.design_manifest)
+        self.assertEqual(
+            ["sheet-1=/tmp/source.png"],
+            parsed.source_sheet_png,
+        )
         self.assertTrue(parsed.no_reuse)
         self.assertTrue(parsed.dry_run)
         self.assertTrue(parsed.skip_layout_lint)
@@ -167,6 +179,60 @@ class CliContractTests(unittest.TestCase):
                 1,
             )
         )
+
+
+class ScreenshotDesignGateTests(unittest.TestCase):
+    def test_first_run_seeds_then_approved_manifest_resumes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "customer.png"
+            source.write_bytes(b"fixture")
+            args = migrate.parse_args(
+                ["--source-sheet-png", f"sheet-1={source}"]
+            )
+            migration = migrate.Migration(args)
+            migration.workdir = root
+            charts = [
+                {
+                    "id": "chart-1",
+                    "vizType": "barchart",
+                    "title": "Revenue",
+                    "dimensions": [["Region"]],
+                    "measures": ["Sum(Revenue)"],
+                }
+            ]
+            sheets = [
+                {
+                    "sheetId": "sheet-1",
+                    "title": "Overview",
+                    "columns": 24,
+                    "rows": 12,
+                    "cells": [
+                        {
+                            "objectId": "chart-1",
+                            "type": "barchart",
+                            "col": 0,
+                            "row": 0,
+                            "colspan": 24,
+                            "rowspan": 12,
+                        }
+                    ],
+                }
+            ]
+            with self.assertRaises(migrate.DesignReviewRequired):
+                migration.prepare_design_review(charts, sheets)
+            manifest_path = root / "design-manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["status"] = "approved"
+            manifest["pages"][0]["reviewed"] = True
+            manifest["pages"][0]["tiles"][0]["reviewed"] = True
+            manifest_path.write_text(json.dumps(manifest))
+            migration.args.source_sheet_png = []
+            migration.args.design_manifest = str(manifest_path)
+            self.assertEqual(
+                manifest_path,
+                migration.prepare_design_review(charts, sheets),
+            )
 
 
 class NoRubyContractTests(unittest.TestCase):
