@@ -115,6 +115,19 @@ Dir.mktmpdir do |d|
   ok, errs = DashboardRead.validate(d)
   check(!ok && errs.any? { |e| e =~ /point_in_time/ }, 'highlight pattern without point_in_time is rejected', fails)
 end
+# A non-temporal source can explicitly prove the snapshot rewrite is not
+# applicable while retaining highlight-only control behavior.
+Dir.mktmpdir do |d|
+  non_temporal = hl_doc(
+    'point_in_time' => {
+      'not_applicable' => true,
+      'reason' => 'single current-state extract with no date field'
+    }
+  )
+  File.write(DashboardRead.path(d), JSON.dump(non_temporal))
+  ok, = DashboardRead.validate(d)
+  check(ok, 'reasoned non-temporal point_in_time disposition is accepted', fails)
+end
 
 # A PARAMETER-driven highlight (not a shared_filter) is surfaced into filter_shelf
 # so the multi-metric forcing function can't be skipped. Only tiles that REFERENCE

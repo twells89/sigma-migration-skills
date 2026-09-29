@@ -28,6 +28,16 @@ REVIEW = {"review", "needs-review", "blocked", "unresolved", "failed", "fail", "
 STRUCTURAL = {
     "sheet", "singlepublic", "appprops", "loadmodel", "measure", "dimension",
     "masterobject", "sheetlist",
+    # app metadata objects (Insight Advisor logical model, master-item color map)
+    "businessmodel", "colormap",
+}
+# Queryable-looking object kinds the pipeline does not rebuild: each gets an
+# explicit, reasoned `skipped` disposition instead of an unaccounted error.
+NO_SIGMA_EQUIVALENT = {
+    "story": "Qlik storytelling has no Sigma equivalent; not migrated",
+    "slide": "Qlik story slide has no Sigma equivalent; not migrated",
+    "action-button": "Qlik action button (variable/navigation actions) is not auto-migrated; "
+                     "Sigma page tabs replace sheet navigation — re-author any needed button actions",
 }
 CONTROL_KINDS = {"filterpane", "listbox"}
 TEXT_KINDS = {"text-image", "text", "image"}
@@ -416,12 +426,20 @@ class Accounting:
         rows = list(self.scope.get("controls") or []) + list(self.scope.get("unbound") or []) + list(
             self.scope.get("dropped") or []
         )
-        matches = [row for row in rows if isinstance(row, dict) and names & scalar_names(row)]
+        def row_names(row):
+            # control-scope sourceName is "<vizType> <objectId> field '<field>'"
+            found = scalar_names(row)
+            tagged = re.match(r"\s*\S+\s+(\S+)", str(row.get("sourceName") or ""))
+            if tagged:
+                found.add(fold(tagged.group(1)))
+            return found
+        matches = [row for row in rows if isinstance(row, dict) and names & row_names(row)]
         if not matches and chart.get("vizType") == "filterpane":
             children = set(map(str, chart.get("children") or []))
             matches = [
                 row for row in rows if isinstance(row, dict)
-                and (children & {str(row.get("sourceId")), str(row.get("objectId")), str(row.get("id"))})
+                and ({fold(c) for c in children} & ({fold(row.get("sourceId")), fold(row.get("objectId")),
+                                                     fold(row.get("id"))} | row_names(row)))
             ]
         statuses = []
         for row in matches:
@@ -495,6 +513,9 @@ class Accounting:
                 if kind in STRUCTURAL:
                     status = "not-applicable"
                     obj["_evidence"].append(self.evidence("charts", "structural/placeholder object is not a visual"))
+                elif kind in NO_SIGMA_EQUIVALENT and not self.built_visual(obj):
+                    status = "skipped"
+                    obj["_evidence"].append(self.evidence("charts", NO_SIGMA_EQUIVALENT[kind]))
                 elif kind in CONTROL_KINDS:
                     status = self.control_status(obj)
                     if status is None:

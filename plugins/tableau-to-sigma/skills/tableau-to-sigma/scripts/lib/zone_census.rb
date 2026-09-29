@@ -16,12 +16,21 @@
 # Pure: no I/O, no network. Unit-tested by test-zone-census.rb.
 module ZoneCensus
   module_function
+  MIN_VISIBLE_CHART_PCT = 0.25
 
   # A zone that is a captioned chart worksheet (the only zone kind that can be
   # a real data tile). Non-chart zones (title/text/filter/parameter/image/
   # legend) are never data tiles.
   def chart_zone?(z)
     z.is_a?(Hash) && z['kind'] == 'chart' && !z['caption'].to_s.strip.empty?
+  end
+
+  def hidden_chart_host?(z)
+    return false unless chart_zone?(z)
+    (z.key?('w_pct') && !z['w_pct'].nil? &&
+      z['w_pct'].to_f < MIN_VISIBLE_CHART_PCT) ||
+      (z.key?('h_pct') && !z['h_pct'].nil? &&
+        z['h_pct'].to_f < MIN_VISIBLE_CHART_PCT)
   end
 
   # True when a chart zone actually PLOTS data — has at least one measure OR a
@@ -31,6 +40,10 @@ module ZoneCensus
   # so they are correctly kept).
   def plots?(z)
     return false unless chart_zone?(z)
+    # Tableau uses near-zero-height worksheet zones as hidden alert/action
+    # hosts. They are not visible data panels; expanding one into a normal
+    # Sigma tile creates spurious charts absent from the source screenshot.
+    return false if hidden_chart_host?(z)
     rs = z['rows_shelf'] || {}
     cs = z['cols_shelf'] || {}
     shelf = rs['dim_count'].to_i + rs['measure_count'].to_i +

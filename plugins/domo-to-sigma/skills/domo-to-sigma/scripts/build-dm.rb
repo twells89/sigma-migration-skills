@@ -213,6 +213,50 @@ def beast_mode_block_reason(bm)
   nil
 end
 
+# Sigma resolves same-element references case-insensitively and treats
+# underscores like spaces, but it does not camel-split a reference at compile
+# time. Validate every calculated column/metric against the exact namespace this
+# builder emits so a dangling [Call DateTime] cannot survive until REST POST when
+# the actual column is named "Call Date Time".
+def sigma_reference_key(name)
+  name.to_s.tr('_', ' ').downcase.gsub(/\s+/, ' ').strip
+end
+
+def emitted_column_name(column)
+  return column['name'] unless column['name'].to_s.strip.empty?
+
+  match = column['formula'].to_s.match(/\A\[[^\/\]]+\/([^\]]+)\]\z/)
+  match && match[1]
+end
+
+def validate_element_formula_references!(element, dataset_id:)
+  named_columns = Array(element['columns']).each_with_object([]) do |column, names|
+    name = emitted_column_name(column)
+    names << name if name
+  end
+  named_metrics = Array(element['metrics']).map { |metric| metric['name'] }.compact
+  known = (named_columns + named_metrics).each_with_object({}) do |name, index|
+    index[sigma_reference_key(name)] = name
+  end
+
+  calculated = Array(element['columns']).select { |column| !column['name'].to_s.strip.empty? }
+  calculated += Array(element['metrics'])
+  failures = calculated.each_with_object([]) do |item, out|
+    missing = formula_column_references(item['formula']).reject {
+      |reference| known.key?(sigma_reference_key(reference))
+    }.uniq
+    next if missing.empty?
+
+    out << "#{item['name'] || item['id']}: " \
+           "#{missing.map { |reference| "[#{reference}]" }.join(', ')}"
+  end
+  return element if failures.empty?
+
+  raise ArgumentError,
+        "data-model formula reference preflight failed for dataset #{dataset_id}: " \
+        "#{failures.join('; ')}. Emitted names: #{known.values.sort.join(', ')}"
+end
+
 # Build one warehouse-table element for a DataSet.
 def build_element(ds, map_entry, dataset_bms, outcomes: [])
   table = map_entry['table'] || placeholder_table(map_entry) || map_entry['name'] || ds['name'] || 'TABLE'
@@ -321,14 +365,22 @@ def build_element(ds, map_entry, dataset_bms, outcomes: [])
     when 'projection'
       name = unique_semantic_name(bm['name'], used_names)
       id = beast_mode_spec_id('bm-col', bm)
-      cols << { 'id' => id, 'name' => name, 'formula' => bm['sigmaFormula'] }
+      cols << {
+        'id' => id,
+        'name' => name,
+        'formula' => normalize_formula_column_refs(bm['sigmaFormula']),
+      }
       order << id
       outcomes << common.merge('status' => 'emitted', 'target' => 'data-model-column',
                                'targetId' => id, 'sigmaName' => name)
     when 'aggregate'
       name = unique_semantic_name(bm['name'], used_names)
       id = beast_mode_spec_id('bm-metric', bm)
-      metrics << { 'id' => id, 'name' => name, 'formula' => bm['sigmaFormula'] }
+      metrics << {
+        'id' => id,
+        'name' => name,
+        'formula' => normalize_formula_column_refs(bm['sigmaFormula']),
+      }
       outcomes << common.merge('status' => 'emitted', 'target' => 'data-model-metric',
                                'targetId' => id, 'sigmaName' => name)
     when 'window', 'lod'
@@ -342,7 +394,7 @@ def build_element(ds, map_entry, dataset_bms, outcomes: [])
     end
   end
 
-  {
+  element = {
     'id' => el_id, 'kind' => 'table',
     'source' => {
       'connectionId' => map_entry['connectionId'] || '<CONNECTION_ID>',
@@ -352,6 +404,7 @@ def build_element(ds, map_entry, dataset_bms, outcomes: [])
     'columns' => cols, 'metrics' => metrics, 'order' => order, 'relationships' => [],
     '_datasetId' => ds['id'],
   }
+  validate_element_formula_references!(element, dataset_id: ds['id'])
 end
 
 if $PROGRAM_NAME == __FILE__

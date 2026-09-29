@@ -260,7 +260,9 @@ instance (2026-07-30 validation, 48 cards / 22 distinct chartTypes). Sigma
 | `badge_pie` | `pie-chart` | ✅ kind verified | Sigma has a **distinct** `pie-chart` kind (not just `donut-chart`) — `value`+`color`, no hole/holeValue/innerRadius. `value`/`color` use `{ columnId }` (same pointer key as KPI). `pie-chart` does **not** support native `trellis` (silently stripped) — emit `donut-chart` if faceting is required. |
 | `badge_donut` | `donut-chart` | ✅ kind verified, **confirmed live by card creation** | same `value`/`color` shape as pie, plus optional `holeValue`/`innerRadius`. Supports native `trellis`. |
 | `badge_singlevalue` | `kpi-chart` | ✅ kind verified, **confirmed live by card creation** | Rule 0. |
+| `badge_textbox` | `kpi-chart` / `text` | ✅ field-observed | Data-backed → latest KPI; static → text. |
 | `badge_table` | `table` | ✅ kind verified, **confirmed live by card creation** | the REAL table token — `badge_datagrid` does not exist. |
+| `badge_basic_table` | `table` | ✅ field-observed | Ungrouped VALUE fields remain row-level (never implicit `Sum`). |
 | `badge_map` | `region-map` (default) | ✅ kind verified, ⚠️ per-card judgment | Sigma's real map kinds are `geography-map` / `point-map` / `region-map` — a bare `map` kind is **confirmed invalid** (rejected `400`). This converter defaults to `region-map` and infers `regionType` (`country` / `us-state` / `us-county` / `us-zipcode` / `us-cbsa` / `ca-province`) from the geography column's name; when it can't classify the column (a custom territory code, a non-US subdivision, etc.) it degrades honestly to a table + warns rather than emit a broken map spec. A lat/long pair should use `point-map` instead — not currently auto-detected. |
 | `badge_line_bar` | `combo-chart` | ✅ kind verified, **confirmed live by card creation** | bar + line combo. First measure → `bar` series, second → `line` series (Domo's enum doesn't say which is which; this is a documented heuristic, flagged if the measure count isn't 2). `yAxis2` needed only if the two series need different scales. |
 | `badge_line_stackedbar` | `combo-chart` | ✅ kind verified | line + **stacked** bar combo — same series heuristic, plus `stacking: stacked` on the bar side. |
@@ -422,9 +424,8 @@ inconsistent handling of the two filter levels — port **both**, every time:
    `kind: list`; numeric comparisons use a hidden boolean column plus list
    filter. Warn and drop unknown operators; never guess.
 3. **Analyzer Quick Filters** (`definition.slicers[]`; public `quickFilters[]`)
-   → card-scoped Sigma controls. They are not permanent `main.filters`.
-   Tables/pivots need a hidden table source so the picker populates and filters
-   the visible element without a source cycle.
+   → card-scoped controls over a hidden table source (charts/tables/pivots),
+   never permanent `main.filters`.
 
 Domo serializes list-filter values as strings even for numeric columns. Type
 them from `datasets.json`: `LONG`/`DECIMAL`/`DOUBLE` values become JSON numbers

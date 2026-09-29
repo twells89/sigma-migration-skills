@@ -612,6 +612,15 @@ def reuse_decision(
     return dm, workbook
 
 
+def is_current_run_resume(args: argparse.Namespace, state: dict) -> bool:
+    return (
+        args.reuse_mode == "new"
+        and not args.data_model_id
+        and not args.sigma_workbook_id
+        and bool(state.get("data_model_id") or state.get("workbook_id"))
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbook", required=True, help="name or Tableau share URL")
@@ -1035,10 +1044,28 @@ def main() -> int:
     existing_dm = args.data_model_id or state.get("data_model_id")
     existing_workbook = args.sigma_workbook_id or state.get("workbook_id")
     reuse_result_path = workdir / "reuse-discovery.json"
-    should_discover = args.reuse_mode != "new" or bool(
-        existing_dm or existing_workbook
+    current_run_resume = is_current_run_resume(args, state)
+    should_discover = not current_run_resume and (
+        args.reuse_mode != "new" or bool(existing_dm or existing_workbook)
     )
-    if should_discover:
+    if current_run_resume:
+        discovered_dm = existing_dm
+        discovered_workbook = existing_workbook
+        write(
+            reuse_result_path,
+            {
+                "contract_version": 1,
+                "read_only": True,
+                "status": "current-run-resume",
+                "data_model_id": discovered_dm,
+                "workbook_id": discovered_workbook,
+                "rationale": (
+                    "re-entering objects created and read back cleanly by this "
+                    "workdir; external compatibility rescoring is not applicable"
+                ),
+            },
+        )
+    elif should_discover:
         reuse_args = [
             "--workdir",
             str(workdir),

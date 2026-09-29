@@ -1,0 +1,26 @@
+[
+  {
+    "id": "calculation_inquiry_count",
+    "name": "Inquiry Count",
+    "sql": "SUM(CASE WHEN `Inquiry Created` = 'Yes' THEN 1 ELSE 0 END)",
+    "scope": "dataset",
+    "class": "aggregate",
+    "dataSourceId": "ds-ai-calls",
+    "cardId": "detail-card",
+    "dataType": "LONG",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api"
+  },
+  {
+    "id": "calculation_recording_link",
+    "name": "BEAST-Recording Link",
+    "sql": "CONCAT('<a href=\"', `Recording URL`, '\" target=\"_blank\">Listen to Recording</a>')",
+    "scope": "dataset",
+    "class": "aggregate",
+    "dataSourceId": "ds-ai-calls",
+    "cardId": "detail-card",
+    "dataType": "STRING",
+    "persistedOnDataSource": true,
+    "sourceFormulaScope": "dataset-api"
+  }
+]

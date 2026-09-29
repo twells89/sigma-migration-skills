@@ -47,8 +47,11 @@ w = Object.new
       src.match(/^#{c}\s*=.*$/)
   w.instance_eval(m[0]) if m
 end
-%w[translate_window_calc translate_tableau_tc translate_user_agg_formula
-   map_column header_base].each do |fn|
+%w[
+  translate_window_calc translate_tableau_tc translate_user_agg_formula
+  strip_tableau_comments translate_sla_ratio split_top_level_args
+  parse_tableau_function_call translated_calc_reference map_column header_base
+].each do |fn|
   m = src.match(/^def #{fn}\b.*?\n^end$/m)
   w.instance_eval(m[0]) if m
 end

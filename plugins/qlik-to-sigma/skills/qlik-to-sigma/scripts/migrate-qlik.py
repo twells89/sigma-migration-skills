@@ -49,6 +49,22 @@ DEGRADE_RE = re.compile(
 )
 
 
+# A Qlik display value ("$529.2M", "$837.0") equals a warehouse number when the
+# number rounds to it at the precision and unit scale Qlik printed.
+QLIK_SCALE = {"K": 1e3, "M": 1e6, "B": 1e9, "G": 1e9, "T": 1e12}
+
+
+def display_match(shown, number):
+    if shown is None or number is None:
+        return False
+    m = re.fullmatch(r"(-?\d+(?:\.(\d+))?)([KMBGT])?", re.sub(r"[$,\s]", "", str(shown)), re.I)
+    if not m:
+        return False
+    scale = QLIK_SCALE[m.group(3).upper()] if m.group(3) else 1.0
+    tol = 0.5 * (10.0 ** -(len(m.group(2)) if m.group(2) else 0)) * scale
+    return abs(float(m.group(1)) * scale - number) <= tol + 1e-9
+
+
 class CommandFailure(RuntimeError):
     def __init__(self, command: list[str], returncode: int, output: str):
         self.command = command
@@ -1293,7 +1309,9 @@ class Migration:
                 os.environ.get("QLIK_BIN", "qlik"),
                 "app",
                 "eval",
-                expression,
+                # qlik-cli echoes the expression before the value: flatten a
+                # multi-line expression so the value stays on line 2.
+                re.sub(r"\s*[\r\n]+\s*", " ", str(expression)),
                 "-a",
                 self.args.app,
                 "--context",
@@ -1533,7 +1551,7 @@ class Migration:
             printed_decimals = None
             if sigma_value is not None:
                 printed = re.fullmatch(
-                    r"\s*-?\d+\.(\d+)\s*", str(sigma_value)
+                    r"\s*-?\d+\.(\d+)\s*", re.sub(r"[$,%\s]", "", str(sigma_value))
                 )
                 printed_decimals = len(printed.group(1)) if printed else None
             rounded_match = bool(
@@ -1542,7 +1560,9 @@ class Migration:
                 and printed_decimals is not None
                 and abs(round(qlik_number, printed_decimals) - sigma_number)
                 <= 1e-9
-            )
+            ) or display_match(qlik_value, sigma_number)
+            if qlik_number is None and display_match(qlik_value, sigma_number):
+                qlik_number = sigma_number
             if (
                 qlik_number is not None
                 and sigma_number is not None

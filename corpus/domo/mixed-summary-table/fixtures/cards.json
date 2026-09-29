@@ -1,0 +1,56 @@
+[
+  {
+    "id": "rent-now-performance",
+    "title": "Rent Now Performance",
+    "chartType": "badge_table",
+    "sigmaKindHint": "table",
+    "datasetId": "ds-rent-now",
+    "columns": [
+      {
+        "column": "Button Click",
+        "alias": "Button Click",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Waiting Discount",
+        "alias": "Waiting Discount",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Total Web Inquiries",
+        "alias": "Total Web Inquiries",
+        "aggregation": "SUM",
+        "mapping": "VALUE"
+      },
+      {
+        "column": "Rental Rate",
+        "alias": "Rental Rate",
+        "mapping": "VALUE",
+        "beastModeId": "calculation_rental_rate",
+        "_isCalc": true
+      }
+    ],
+    "groupBy": [],
+    "orderBy": [],
+    "filters": [],
+    "conditionalFormats": [],
+    "allowTableDrill": true,
+    "drillPath": [],
+    "_pageId": "rent-now-page",
+    "_pageOrder": 0,
+    "beastModes": [
+      {
+        "id": "calculation_rental_rate",
+        "name": "Rental Rate",
+        "sql": "SUM(`Completed Rentals`) / SUM(`Total Web Inquiries`)",
+        "scope": "dataset",
+        "class": "aggregate",
+        "dataSourceId": "ds-rent-now",
+        "cardId": "rent-now-performance",
+        "dataType": "DECIMAL",
+        "persistedOnDataSource": true,
+        "sourceFormulaScope": "dataset-api"
+      }
+    ]
+  }
+]
