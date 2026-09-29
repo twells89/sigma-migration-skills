@@ -6,7 +6,10 @@ import re
 from qlik_load_expr import referenced_columns
 
 
-LABEL = re.compile(r"(?m)^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*(?:\r?\n|$)")
+LABEL = re.compile(
+    r"(?im)^[ \t]*(?:(?P<no_concatenate>NOCONCATENATE)[ \t]*(?:\r?\n[ \t]*)?)?"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*(?:\r?\n|$)"
+)
 DROP_TABLE = re.compile(r"(?im)^\s*DROP\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s*;")
 SQL_SELECT = re.compile(
     r'\b(?:SQL\s+)?SELECT\b(.*?)\bFROM\s+([A-Za-z0-9_."`]+)', re.IGNORECASE | re.DOTALL)
@@ -176,7 +179,13 @@ def table_blocks(qvs):
             )
 
     blocks = [
-        (match.start(), match.end(), match.group(1), True, False)
+        (
+            match.start(),
+            match.end(),
+            match.group("name"),
+            True,
+            bool(match.group("no_concatenate")),
+        )
         for match in labels
     ]
     blocks += [
@@ -188,7 +197,7 @@ def table_blocks(qvs):
         end = blocks[index + 1][0] if index + 1 < len(blocks) else len(masked)
         body = masked[body_start:end]
         if labeled:
-            no_concatenate = bool(
+            no_concatenate = no_concatenate or bool(
                 re.match(r"\s*NOCONCATENATE\b", body, re.IGNORECASE)
             )
         yield name, body, labeled, no_concatenate

@@ -70,6 +70,27 @@ FROM [lib://Space:DataFiles/orders3.qvd];
     ]
 
 
+def test_noconcatenate_label_layouts_survive_resident_source_drop():
+    layouts = (
+        "Orders:\nNOCONCATENATE",
+        "NOCONCATENATE\nOrders:",
+        "NOCONCATENATE Orders:",
+    )
+    for labeled_prefix in layouts:
+        records = qlik_load_script.parse_reconcile(
+            f"""
+Staging:
+LOAD OrderID, Amount FROM [lib://Space:DataFiles/orders.qvd];
+{labeled_prefix}
+LOAD OrderID, Amount RESIDENT Staging;
+DROP TABLE Staging;
+"""
+        )
+        assert len(records) == 1, (labeled_prefix, records)
+        assert records[0]["qlikTable"] == "Orders"
+        assert records[0]["sourceTable"] == "orders"
+
+
 def test_dm_metric_rewrite_resolves_qualified_refs_to_denorm_display_names():
     module = load_build_sigma_dm()
     columns = {
