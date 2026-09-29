@@ -483,12 +483,113 @@ def qlik_eval(app, ctx_args, expr):
     return lines[1].strip() if out.returncode == 0 and len(lines) >= 2 else None
 
 
+def parse_tabular_chart_rows(text, dimension_count):
+    """Parse qlik-cli's padded table output when --json is unsupported."""
+    lines = [
+        line.rstrip("\r\n")
+        for line in str(text or "").splitlines()
+        if line.strip()
+    ]
+    if len(lines) < 2:
+        return None
+    header = lines[0]
+    tabular = "\t" in header
+    if tabular:
+        headers = [cell.strip() for cell in header.split("\t")]
+        starts = None
+    else:
+        matches = list(
+            re.finditer(r"\S(?:.*?\S)?(?=\s{2,}|$)", header)
+        )
+        headers = [match.group(0).strip() for match in matches]
+        starts = [match.start() for match in matches]
+    if not headers:
+        return None
+    rows = []
+    number = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+    for line in lines[1:]:
+        if tabular:
+            cells = line.split("\t")
+            if len(cells) > len(headers):
+                return None
+            cells += [""] * (len(headers) - len(cells))
+            cells = [cell.strip() for cell in cells]
+        else:
+            cells = [
+                line[start:(starts[index + 1] if index + 1 < len(starts) else None)].strip()
+                for index, start in enumerate(starts)
+            ]
+        row = []
+        for index, cell in enumerate(cells):
+            if cell in {"", "-", "\u2013", "\u2014"}:
+                row.append(None)
+            elif index >= dimension_count and number.fullmatch(cell):
+                row.append(float(cell))
+            else:
+                row.append(cell)
+        rows.append(row)
+    return {
+        "rows": rows,
+        "complete": bool(rows),
+        "expectedRows": len(rows),
+        "pivot": False,
+    }
+
+
+def qlik_dimension_rows(app, ctx_args, chart):
+    """Read a dimension-only visual through the field-values engine command."""
+    dimensions = [
+        dimension[0] if isinstance(dimension, list) and dimension else dimension
+        for dimension in chart.get("dimensions") or []
+    ]
+    dimensions = [dimension for dimension in dimensions if isinstance(dimension, str)]
+    if len(dimensions) != 1 or chart.get("measures"):
+        return None
+    field = dimensions[0]
+    response = qlik_run(["app", "values", field, "-a", app, *ctx_args])
+    if response.returncode != 0:
+        return None
+    rows = [[line.strip()] for line in response.stdout.splitlines() if line.strip()]
+    expected = qlik_eval(app, ctx_args, bucket_expr([field]))
+    try:
+        expected_rows = int(float(expected))
+    except (TypeError, ValueError):
+        expected_rows = None
+    return {
+        "rows": rows,
+        "complete": bool(
+            rows
+            and expected_rows is not None
+            and len(rows) >= expected_rows
+        ),
+        "expectedRows": expected_rows,
+        "pivot": False,
+    }
+
+
 def qlik_chart_rows(app, ctx_args, chart):
     """Read one chart's evaluated hypercube rows through qlik-cli."""
-    data = qlik(
+    command = [
         "app", "object", "data", str(chart.get("id")),
         "-a", app, *ctx_args, "--json",
-    )
+    ]
+    response = qlik_run(command)
+    if response.returncode != 0:
+        fallback = qlik_dimension_rows(app, ctx_args, chart)
+        if fallback:
+            return fallback
+        sys.stderr.write(
+            f"WARN {' '.join(str(value) for value in command)} -> "
+            f"{((response.stderr or response.stdout) or '')[:200]}\n"
+        )
+        return {}
+    try:
+        data = json.loads(response.stdout or "null")
+    except json.JSONDecodeError:
+        return parse_tabular_chart_rows(
+            response.stdout,
+            len(chart.get("dimensions") or []),
+        ) or {}
 
     def matrices(value):
         found = []
@@ -643,7 +744,7 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
     for c in charts:
         dims = [(d[0] if isinstance(d, list) else d) for d in (c.get("dimensions") or [])]
         dims = [d for d in dims if d]
-        if not (c.get("sheet") and dims and c.get("measures")):
+        if not (c.get("sheet") and dims):
             continue
         expr = bucket_expr(dims)
         if expr in bseen:
@@ -667,7 +768,6 @@ def compute_snapshot(app, ctx, charts, tables, app_meta, pool, skip_eval):
         for chart in charts
         if chart.get("sheet")
         and chart.get("dimensions")
-        and chart.get("measures")
     ]
     chart_values = pmap(
         lambda chart: qlik_chart_rows(app, ctx, chart),

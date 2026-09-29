@@ -30,9 +30,18 @@ def run(*args):
     return result
 
 
+def qlik_json_result(payload):
+    return subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=json.dumps(payload),
+        stderr="",
+    )
+
+
 def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
     module = load_discovery()
-    module.qlik = lambda *_args, **_kwargs: {
+    module.qlik_run = lambda *_args, **_kwargs: qlik_json_result({
         "qDataPages": [{
             "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
             "qMatrix": [
@@ -46,7 +55,7 @@ def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
                 ],
             ]
         }]
-    }
+    })
     result = module.qlik_chart_rows(
         "app",
         ["--context", "fixture"],
@@ -59,7 +68,7 @@ def test_chart_hypercube_rows_preserve_dimensions_and_numeric_measures():
 
 def test_pivot_hypercube_rows_capture_numeric_value_matrix():
     module = load_discovery()
-    module.qlik = lambda *_args, **_kwargs: {
+    module.qlik_run = lambda *_args, **_kwargs: qlik_json_result({
         "qPivotDataPages": [{
             "qArea": {"qTop": 0, "qLeft": 0, "qWidth": 2, "qHeight": 2},
             "qData": [
@@ -73,7 +82,7 @@ def test_pivot_hypercube_rows_capture_numeric_value_matrix():
                 ],
             ],
         }]
-    }
+    })
     result = module.qlik_chart_rows(
         "app",
         ["--context", "fixture"],
