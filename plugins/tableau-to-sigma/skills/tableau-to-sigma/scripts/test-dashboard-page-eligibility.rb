@@ -9,6 +9,7 @@
 require 'json'
 require 'open3'
 require 'tmpdir'
+require_relative 'lib/dashboard_coverage'
 
 BUILD = File.join(__dir__, 'build-charts-from-signals.rb')
 PARSER = File.join(__dir__, 'parse-twb-layout.rb')
@@ -121,6 +122,66 @@ end
 visibility = (parsed || []).to_h { |dashboard| [dashboard['dashboard'], dashboard['emit_page']] }
 check(visibility['User Guide'] == true && visibility['Harrison Parameter'] == false,
       "parser maps visible windows to page eligibility (got #{visibility.inspect})", fails)
+
+# Large-workbook regression: a whole-workbook conversion must preserve all
+# visible dashboard windows end to end. This locks the customer-reported
+# 13-tab failure class and proves the coverage gate rejects a deceptively
+# successful two-page result.
+thirteen_names = (1..13).map { |index| format('Dashboard %02d', index) }
+Dir.mktmpdir do |dir|
+  twb = File.join(dir, 'thirteen-tabs.twb')
+  layout_path = File.join(dir, 'layout.json')
+  meta_path = File.join(dir, 'layout-meta.json')
+  map_path = File.join(dir, 'master-map.json')
+  spec_path = File.join(dir, 'spec.json')
+  dashboards = thirteen_names.each_with_index.map do |name, index|
+    "<dashboard name='#{name}'><zones><zone id='#{index + 1}' type-v2='text'>" \
+      "<formatted-text><run>#{name} content</run></formatted-text>" \
+      '</zone></zones></dashboard>'
+  end.join
+  windows = thirteen_names.map do |name|
+    "<window class='dashboard' name='#{name}'/>"
+  end.join
+  File.write(twb, "<workbook><dashboards>#{dashboards}</dashboards><windows>#{windows}</windows></workbook>")
+  _stdout, stderr, status = Open3.capture3('ruby', PARSER, twb, layout_path)
+  check(status.success?, "13-tab parser exits 0 (#{status.exitstatus}): #{stderr.lines.first}", fails)
+  File.write(map_path, JSON.generate({}))
+  File.write(File.join(dir, 'get-workbook.json'), JSON.generate('views' => { 'view' => [] }))
+  Dir.mkdir(File.join(dir, 'views'))
+  stdout, stderr, status = Open3.capture3(
+    'ruby', BUILD,
+    '--tableau-dir', dir,
+    '--layout', layout_path,
+    '--meta', meta_path,
+    '--master-map', map_path,
+    '--master-element-id', 'master',
+    '--page-per-dashboard',
+    '--skip-dashboard-read', 'unit-test',
+    '--title', 'Thirteen Tabs',
+    '--out', spec_path
+  )
+  check(status.success?, "13-tab builder exits 0 (#{status.exitstatus}): #{(stdout + stderr).lines.first}", fails)
+  spec = JSON.parse(File.read(spec_path))
+  built_names = Array(spec['pages']).map { |page| page['name'] }
+  check(built_names == thirteen_names,
+        "all 13 visible dashboards become pages in source order (got #{built_names.inspect})", fails)
+
+  verdict = DashboardCoverage.evaluate(twb_path: twb, spec_path: spec_path, scope: { 'mode' => 'full' })
+  check(verdict['status'] == 'pass' && verdict['expected_pages'].size == 13 &&
+        verdict['built_pages'].size == 13 && verdict['missing_dashboards'].empty?,
+        "coverage gate passes 13/13 (got #{verdict.slice('status', 'built_pages', 'missing_dashboards').inspect})", fails)
+
+  partial_path = File.join(dir, 'partial.json')
+  partial = JSON.parse(JSON.generate(spec))
+  partial['pages'] = partial['pages'].first(2)
+  File.write(partial_path, JSON.generate(partial))
+  partial_verdict = DashboardCoverage.evaluate(
+    twb_path: twb, spec_path: partial_path, scope: { 'mode' => 'full' }
+  )
+  check(partial_verdict['status'] == 'fail' && partial_verdict['built_pages'].size == 2 &&
+        partial_verdict['missing_dashboards'].size == 11,
+        "coverage gate rejects a 2-of-13 partial build (got #{partial_verdict.slice('status', 'built_pages', 'missing_dashboards').inspect})", fails)
+end
 
 puts
 if fails.empty?

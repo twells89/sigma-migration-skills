@@ -2273,7 +2273,11 @@ if have_twb
     run!(['ruby', File.join(HERE, 'parse-twb-layout.rb'), twb, layout_json] + DASH_SCOPE)
   end
   line 'parse-twb-layout REUSED (.twb sha + scope unchanged) — delete dashboard-layout.json to force a re-parse' if parse_st == :reused
-  line "per-dashboard scope: #{(opts[:dashboards] || []) + (opts[:pages] || [])} (single-tab build)" if scoped?
+  if scoped?
+    scoped_targets = (opts[:dashboards] || []) + (opts[:pages] || [])
+    scope_label = scoped_targets.size == 1 ? 'single-dashboard build' : "#{scoped_targets.size}-dashboard build"
+    line "per-dashboard scope: #{scoped_targets} (#{scope_label})"
+  end
   dash = JSON.parse(File.read(layout_json))
   # E9.6 — a scoped name that matches NOTHING is a named STOP listing the
   # workbook's dashboards, never a silent full-workbook (or silent EMPTY) run.
