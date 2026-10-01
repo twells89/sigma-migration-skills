@@ -8,7 +8,7 @@ export function reportSpecErrors(spec) {
   }
   if (!spec.pages.length || !spec.layout) errors.push('need at least one page and pixel layout');
   const data = spec.elements.filter((e) => e.source?.kind);
-  if (!data.length) errors.push('a Report needs at least one data-bearing element');
+  if (!data.some((e) => e.kind !== 'image')) errors.push('a Report needs at least one data-bearing element');
   const unsupported = spec.elements.filter((e) => ['pivot-table', 'waterfall-chart', 'progress', 'repeated-container'].includes(e.kind));
   if (unsupported.length) errors.push(`Report code API does not support workbook kinds: ${unsupported.map((e) => e.kind).join(', ')}`);
   for (const e of spec.elements) {

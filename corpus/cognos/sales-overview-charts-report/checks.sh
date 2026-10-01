@@ -51,6 +51,32 @@ assert not warnings, warnings
 print('  ok   print CLI emits a paginated Sigma Report with header and footer')
 PY
 
+node "$skill/scripts/compose-print-layout.mjs" --spec "$tmp/report.json" \
+  --blueprint "$skill/fixtures/print-layout-blueprint.json" --out "$tmp/composed.json"
+python3 - "$tmp/composed.json" <<'PY'
+import json
+import re
+import sys
+
+report = json.load(open(sys.argv[1]))
+assert [p['name'] for p in report['pages']] == ['Cover', 'Letter', 'Summary'] + [f'Terms {i}' for i in range(1, 7)]
+assert sum(e['kind'] == 'table' for e in report['elements']) == 1
+assert sum(e['kind'] == 'image' for e in report['elements']) == 11
+assert next(e for e in report['elements'] if e['kind'] == 'table')['name'] == 'Product revenue by line'
+assert sum(p['type'] == 'footer' for p in report['panels']) == 1
+assert not any(p['type'] == 'header' for p in report['panels'])
+footer = next(p for p in report['panels'] if p['type'] == 'footer')
+assert footer['pages'] == [p['id'] for p in report['pages']]
+assert any('{{CurrentPageNumber()}} of {{TotalPageCount()}}' in e.get('body', '') for e in report['elements'])
+layout = report['layout']
+assert re.findall(r'<Page id="([^"]+)"', layout) == [p['id'] for p in report['pages']]
+assert layout.count('flow="paginated"') == 1
+assert 'x="48" y="265" width="670" height="455" flow="paginated"' in layout
+assert layout.count('x="48" y="48" width="670" height="830"') == 5
+assert all(layout.count(f'elementId="{e["id"]}"') == 1 for e in report['elements'])
+print('  ok   bundled print report composes neutral nine-page cover, letter, summary, terms, watermark and numbered footer')
+PY
+
 if node "$skill/converter/cli.mjs" "$skill/fixtures/banking-risk-crosstab.report.xml" \
   --print --dm example-model > "$tmp/pivot.json" 2> "$tmp/pivot-error.log"; then
   echo '  FAIL print CLI silently converted an unsupported Report pivot'

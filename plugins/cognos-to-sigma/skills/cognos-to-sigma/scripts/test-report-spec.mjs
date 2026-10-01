@@ -12,6 +12,7 @@ assert.deepEqual(reportSpecErrors(base), []);
 assert.match(reportSpecErrors({ ...base, elements: [{ ...base.elements[0], kind: 'pivot-table' }] }).join(' '), /pivot-table/);
 assert.match(reportSpecErrors({ ...base, layout: '<Page id="page"/>' }).join(' '), /unplaced/);
 assert.match(reportSpecErrors({ ...base, elements: [] }).join(' '), /data-bearing/);
+assert.match(reportSpecErrors({ ...base, elements: [{ id: 'table', kind: 'image', source: { kind: 'url', url: 'https://example.org/image.svg' } }] }).join(' '), /data-bearing/);
 assert.match(reportSpecErrors({ ...base, elements: [{ ...base.elements[0], source: { kind: 'data-model', elementId: 'el' } }] }).join(' '), /unbound/);
 assert.match(reportSpecErrors({ ...base, pages: [{ id: 'missing', name: 'Missing' }] }).join(' '), /page missing/);
 console.log('test-report-spec: PASS');
