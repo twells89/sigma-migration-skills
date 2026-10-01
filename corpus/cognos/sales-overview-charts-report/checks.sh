@@ -106,3 +106,28 @@ for pivot in pivots:
     assert pivot['columnsBy'][0]['sort']['direction'] == 'ascending'
 print('  ok   production workbook pivots retain Avg, grand totals and edge sorts')
 PY
+
+# Print must not silently ignore a structured detail filter that has no
+# filterExpression. Exercise the shipped bundle as well as the TS unit tests.
+python3 - "$skill/fixtures/print-list.report.xml" "$tmp/structured-filter.xml" <<'PY'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text()
+assert source.count('</selection></query>') == 1
+source = source.replace('</selection></query>',
+    '</selection><detailFilters><detailFilter><filterDefinition><filterInValues refDataItem="Region">'
+    '<filterValues><filterValue>West</filterValue></filterValues></filterInValues>'
+    '</filterDefinition></detailFilter></detailFilters></selection></query>')
+Path(sys.argv[2]).write_text(source)
+PY
+if node "$skill/converter/cli.mjs" "$tmp/structured-filter.xml" --print --dm example-model \
+    --out "$tmp/filtered.json" 2> "$tmp/filtered-error.log"; then
+  echo '  FAIL print CLI silently dropped a structured filter'
+  exit 1
+fi
+python3 - "$tmp/filtered-error.log" <<'PY'
+import sys
+message = open(sys.argv[1]).read()
+assert 'filter was not converted' in message or 'structured or empty filter' in message, message
+print('  ok   production print CLI refuses an unconverted structured detail filter')
+PY

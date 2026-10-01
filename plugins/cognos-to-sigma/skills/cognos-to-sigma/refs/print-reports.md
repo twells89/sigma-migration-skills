@@ -15,11 +15,16 @@ Sigma Report `contents` instead of a workbook spec.
 3. Land required data in the warehouse and post/read back a Sigma data model.
    No placeholder `--dm` can be used for Sigma validation.
 4. Resolve conversion warnings, including compound cells, unsupported formulas,
-   horizontal pagination, static HTML and missing data. Reports containing
-   Cognos prompt/drill controls are refused until the controls can be carried
-   into the PDF without changing data. Unconverted detail or summary filters
-   also stop the print path. A
-   created Report with unsupported visual content is not a completed conversion.
+    horizontal pagination, static HTML and missing data. Structured filters
+    without expressions are warned in the workbook path and refused in print
+    mode rather than exporting rows Cognos excluded. Reports containing
+    Cognos prompt/drill controls are refused until the controls can be carried
+    into the PDF without changing data. Unconverted detail or summary filters
+    also stop the print path. Hidden workbook chart-source tables (such as a
+    scatter's grouping dependency) cannot be printed as extra tables; print
+    mode refuses them until the dependency has a verified non-printing Report
+    placement. A created Report with unsupported visual content is not a
+    completed conversion.
 
 **Live API limit:** Sigma Report *code* currently rejects `pivot-table` even
 though the UI supports pivots. The print converter rejects a Cognos crosstab

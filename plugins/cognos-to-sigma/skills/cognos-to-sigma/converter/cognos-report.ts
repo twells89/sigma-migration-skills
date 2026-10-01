@@ -100,7 +100,7 @@ export interface CognosReportResult {
   stats: Record<string, number>;
   // Used only by the print converter to preserve Cognos page and element order;
   // never serialized into a posted workbook spec.
-  lineage?: Array<{ elementId: string; pageId: string; source: any; kind: string; order: number }>;
+  lineage?: Array<{ elementId: string; pageId: string; source: any; kind: string; order: number; hiddenSource?: boolean }>;
 }
 export interface CognosReportOptions {
   dataModelId?: string;
@@ -224,7 +224,11 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       const m = expr.match(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[[^\]]+\]/); // [C].[Module].[Subject].[Col]
       if (m && !subject) subject = m[1];
     }
-    const filters = findAll(q, 'detailFilter').map((f: any) => txt(f.filterExpression || f.expression)).filter(Boolean);
+    const filterNodes = findAll(q, 'detailFilter');
+    const filters = filterNodes.map((f: any) => txt(f.filterExpression || f.expression)).filter(Boolean);
+    if (filterNodes.length !== filters.length) {
+      warnings.push(`query "${name}": ${filterNodes.length - filters.length} structured or empty detail filter(s) have no expression — re-create as Sigma filters; no unfiltered output is parity-verified.`);
+    }
     queries.set(name, { name, subject, items, filters });
   }
 
@@ -421,7 +425,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     addToPage(pageId, element);
     if (options.captureLineage && sourceNode && typeof sourceNode === 'object') {
       lineage.push({ elementId: element.id, pageId, source: sourceNode, kind: element.kind,
-        order: sourceOrder.get(sourceNode) ?? 0 });
+        order: sourceOrder.get(sourceNode) ?? 0, ...(element.visibleAsSource === false ? { hiddenSource: true } : {}) });
     }
     if (sourceNode && typeof sourceNode === 'object') {
       const current = elementsBySourceNode.get(sourceNode) || [];
@@ -699,25 +703,32 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       cols.push({ id, name: sigmaDisplayName(di.name), formula: result });
       return { id };
     };
-    const rowsBy = rowRefs.map((r) => mk(r, false)).filter(Boolean) as NonNullable<WbElement['rowsBy']>;
-    const columnsBy = colRefs.map((c) => mk(c, false)).filter(Boolean) as NonNullable<WbElement['columnsBy']>;
+    // Keep each emitted edge paired with its source ref. A missing query item
+    // must not shift subsequent members' sorts onto an earlier surviving edge.
+    const makeEdges = (refs: string[]) => refs.flatMap((ref) => {
+      const item = mk(ref, false);
+      return item ? [{ ref, item }] : [];
+    });
+    const rowEdges = makeEdges(rowRefs), columnEdges = makeEdges(colRefs);
+    const rowsBy = rowEdges.map(({ item }) => item);
+    const columnsBy = columnEdges.map(({ item }) => item);
     // Finish values before resolving sort.by: Cognos can order an edge by a
     // measure, in which case it must target the AGGREGATED value column.
     const values = (measRefs.map((m) => mk(m, true)).filter(Boolean) as Array<{ id: string }>).map((o) => o.id);
-    const addEdgeSorts = (subtree: any, edgeRefs: string[], axis: NonNullable<WbElement['rowsBy']>) => {
-      for (let i = 0; i < axis.length; i++) {
-        const member = findAll(subtree, 'crosstabNodeMember').find((m: any) => m['@_refDataItem'] === edgeRefs[i]);
+    const addEdgeSorts = (subtree: any, edges: Array<{ ref: string; item: { id: string; sort?: { by: string; direction: 'ascending' | 'descending' } } }>) => {
+      for (const { ref, item } of edges) {
+        const member = findAll(subtree, 'crosstabNodeMember').find((m: any) => m['@_refDataItem'] === ref);
         const si = findAll(member?.sortList || {}, 'sortItem')[0];
         if (!si) continue;
-        const byRef = si['@_refDataItem'] || edgeRefs[i];
+        const byRef = si['@_refDataItem'] || ref;
         const by = cols.find((c) => c.name === sigmaDisplayName(byRef))?.id;
         if (!by) { warnings.push(`crosstab "${qName}" sort key "${byRef}" is not on an edge or a value — apply manually.`); continue; }
         const raw = String(si['@_sortOrder'] || si['@_direction'] || 'ascending').toLowerCase();
-        axis[i].sort = { by, direction: raw.startsWith('desc') ? 'descending' : 'ascending' };
+        item.sort = { by, direction: raw.startsWith('desc') ? 'descending' : 'ascending' };
       }
     };
-    addEdgeSorts(X.crosstabRows, rowRefs, rowsBy);
-    addEdgeSorts(X.crosstabColumns, colRefs, columnsBy);
+    addEdgeSorts(X.crosstabRows, rowEdges);
+    addEdgeSorts(X.crosstabColumns, columnEdges);
     // Sigma pivot: rowsBy/columnsBy are {id} objects, values are bare column-id strings.
     if (!values.length || (!rowsBy.length && !columnsBy.length)) warnings.push(`crosstab "${qName}" missing a measure or both edges — review the pivot.`);
     const el: WbElement = {
@@ -1231,6 +1242,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   for (const fnode of findAll(report, 'summaryFilter')) {
     const fexpr = txt(fnode.filterExpression || fnode.expression);
     if (fexpr) warnings.push(`summary filter: "${fexpr.slice(0, 80)}" — post-aggregation filter; re-create as a Sigma filter on the aggregated column.`);
+    else warnings.push('summary filter: structured or empty filter has no expression — re-create as a Sigma post-aggregation filter.');
   }
 
   // Page headers are now first-class document.panels definitions. Cognos page

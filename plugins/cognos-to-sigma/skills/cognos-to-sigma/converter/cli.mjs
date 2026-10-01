@@ -4869,7 +4869,11 @@ function convertCognosReportToSigma(xml2, options = {}) {
       const m = expr.match(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[[^\]]+\]/);
       if (m && !subject) subject = m[1];
     }
-    const filters = findAll(q, "detailFilter").map((f) => txt(f.filterExpression || f.expression)).filter(Boolean);
+    const filterNodes = findAll(q, "detailFilter");
+    const filters = filterNodes.map((f) => txt(f.filterExpression || f.expression)).filter(Boolean);
+    if (filterNodes.length !== filters.length) {
+      warnings.push(`query "${name}": ${filterNodes.length - filters.length} structured or empty detail filter(s) have no expression \u2014 re-create as Sigma filters; no unfiltered output is parity-verified.`);
+    }
     queries.set(name, { name, subject, items, filters });
   }
   const prompts = /* @__PURE__ */ new Map();
@@ -5043,7 +5047,8 @@ function convertCognosReportToSigma(xml2, options = {}) {
         pageId,
         source: sourceNode,
         kind: element.kind,
-        order: sourceOrder.get(sourceNode) ?? 0
+        order: sourceOrder.get(sourceNode) ?? 0,
+        ...element.visibleAsSource === false ? { hiddenSource: true } : {}
       });
     }
     if (sourceNode && typeof sourceNode === "object") {
@@ -5316,26 +5321,31 @@ function convertCognosReportToSigma(xml2, options = {}) {
       cols.push({ id, name: sigmaDisplayName(di.name), formula: result });
       return { id };
     };
-    const rowsBy = rowRefs.map((r) => mk(r, false)).filter(Boolean);
-    const columnsBy = colRefs.map((c) => mk(c, false)).filter(Boolean);
+    const makeEdges = (refs) => refs.flatMap((ref) => {
+      const item = mk(ref, false);
+      return item ? [{ ref, item }] : [];
+    });
+    const rowEdges = makeEdges(rowRefs), columnEdges = makeEdges(colRefs);
+    const rowsBy = rowEdges.map(({ item }) => item);
+    const columnsBy = columnEdges.map(({ item }) => item);
     const values = measRefs.map((m) => mk(m, true)).filter(Boolean).map((o) => o.id);
-    const addEdgeSorts = (subtree, edgeRefs, axis) => {
-      for (let i = 0; i < axis.length; i++) {
-        const member = findAll(subtree, "crosstabNodeMember").find((m) => m["@_refDataItem"] === edgeRefs[i]);
+    const addEdgeSorts = (subtree, edges) => {
+      for (const { ref, item } of edges) {
+        const member = findAll(subtree, "crosstabNodeMember").find((m) => m["@_refDataItem"] === ref);
         const si = findAll(member?.sortList || {}, "sortItem")[0];
         if (!si) continue;
-        const byRef = si["@_refDataItem"] || edgeRefs[i];
+        const byRef = si["@_refDataItem"] || ref;
         const by = cols.find((c) => c.name === sigmaDisplayName(byRef))?.id;
         if (!by) {
           warnings.push(`crosstab "${qName2}" sort key "${byRef}" is not on an edge or a value \u2014 apply manually.`);
           continue;
         }
         const raw = String(si["@_sortOrder"] || si["@_direction"] || "ascending").toLowerCase();
-        axis[i].sort = { by, direction: raw.startsWith("desc") ? "descending" : "ascending" };
+        item.sort = { by, direction: raw.startsWith("desc") ? "descending" : "ascending" };
       }
     };
-    addEdgeSorts(X.crosstabRows, rowRefs, rowsBy);
-    addEdgeSorts(X.crosstabColumns, colRefs, columnsBy);
+    addEdgeSorts(X.crosstabRows, rowEdges);
+    addEdgeSorts(X.crosstabColumns, columnEdges);
     if (!values.length || !rowsBy.length && !columnsBy.length) warnings.push(`crosstab "${qName2}" missing a measure or both edges \u2014 review the pivot.`);
     const el = {
       id: sigmaShortId(),
@@ -5846,6 +5856,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
   for (const fnode of findAll(report, "summaryFilter")) {
     const fexpr = txt(fnode.filterExpression || fnode.expression);
     if (fexpr) warnings.push(`summary filter: "${fexpr.slice(0, 80)}" \u2014 post-aggregation filter; re-create as a Sigma filter on the aggregated column.`);
+    else warnings.push("summary filter: structured or empty filter has no expression \u2014 re-create as a Sigma post-aggregation filter.");
   }
   const panels = [];
   pageNodes2.forEach((pageNode, i) => {
@@ -5953,6 +5964,9 @@ function convertCognosPrintToSigma(xml2, options = {}) {
   const panels = [];
   const pageLines = [], panelLines = [];
   const notPrintable = /* @__PURE__ */ new Set(["navigation", "page-break", "drill", "progress", "repeated-container", "container", "tabbed-container", "divider"]);
+  if (lineage.some((slot) => slot.hiddenSource)) {
+    throw new Error("Cognos report uses a hidden visual source table; author its dependency on a non-printing Report page and verify the visual before printing.");
+  }
   const slots = lineage.filter((slot) => !notPrintable.has(slot.kind) && slot.kind !== "control").sort((a, b) => a.pageId === b.pageId ? a.order - b.order : doc.pages.findIndex((p) => p.id === a.pageId) - doc.pages.findIndex((p) => p.id === b.pageId));
   const used = /* @__PURE__ */ new Set();
   const unsupported = slots.filter((slot) => slot.kind === "pivot-table");
@@ -5983,8 +5997,11 @@ function convertCognosPrintToSigma(xml2, options = {}) {
   if (original.some((warning) => /unmapped Cognos aggregate|aggregate .* is not mapped|unmapped Cognos rollup/i.test(warning))) {
     throw new Error("a Cognos measure has no grounded Sigma aggregate; refusing to publish a print report with potentially wrong values");
   }
-  if (original.some((warning) => /filter .*re-create|summary filter:/.test(warning))) {
+  if (original.some((warning) => /filter.*re-create|summary filter:/.test(warning))) {
     throw new Error("a Cognos report filter was not converted; a print report could display different values until its filter is authored");
+  }
+  if (findAll2(report, "detailFilter").some((filter) => !text(filter?.filterExpression || filter?.expression)) || findAll2(report, "summaryFilter").some((filter) => !text(filter?.filterExpression || filter?.expression))) {
+    throw new Error("a Cognos report uses a structured or empty filter without a translated expression; refusing an unfiltered print report");
   }
   const add = (element, x, y, w, h, flow = false) => {
     if (!element || placed.has(element.id)) return "";

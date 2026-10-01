@@ -222,6 +222,33 @@ for (const [input, expected] of NAME_CASES) {
 }
 
 {
+  // A missing first edge must not shift the surviving member's sort to the
+  // wrong source node. Workbook stays data-preserving and warns about the gap.
+  const xml = `<report><queries><query name="q"><selection>
+    <dataItem name="Region"><expression>[C].[M].[Sales].[Region]</expression></dataItem>
+    <dataItem name="Year"><expression>[C].[M].[Sales].[Year]</expression></dataItem>
+    <dataItem name="Amount" aggregate="total"><expression>[C].[M].[Sales].[Amount]</expression></dataItem>
+  </selection></query></queries><layouts><layout><reportPages><page name="Pivot"><pageBody><contents>
+    <crosstab refQuery="q"><crosstabRows><crosstabNodeMember refDataItem="Absent"><sortList><sortItem refDataItem="Amount" sortOrder="ascending"/></sortList></crosstabNodeMember>
+    <crosstabNodeMember refDataItem="Region"><sortList><sortItem refDataItem="Amount" sortOrder="descending"/></sortList></crosstabNodeMember></crosstabRows>
+    <crosstabColumns><crosstabNodeMember refDataItem="Year"><sortList><sortItem refDataItem="Year" sortOrder="ascending"/></sortList></crosstabNodeMember></crosstabColumns>
+    <crosstabCorner><dataItemLabel refDataItem="Amount"/></crosstabCorner></crosstab>
+  </contents></pageBody></page></reportPages></layout></layouts></report>`;
+  const result = convertCognosReportToSigma(xml);
+  const pivot = (CodeRep.workbookElements(result.workbook) as any[]).find((e) => e.kind === 'pivot-table');
+  const amount = pivot?.columns?.find((c: any) => c.name === 'Amount');
+  const checks: Array<[string, boolean]> = [
+    ['missing crosstab edge is flagged', result.warnings.some((w) => /member "Absent" not in query/.test(w))],
+    ['remaining row sort stays on its source edge', pivot?.rowsBy?.length === 1 && pivot.rowsBy[0].sort?.direction === 'descending' && pivot.rowsBy[0].sort?.by === amount?.id],
+    ['unaffected column sort is preserved', pivot?.columnsBy?.[0]?.sort?.direction === 'ascending'],
+  ];
+  for (const [label, ok] of checks) {
+    if (ok) console.log(`✓ pivots: ${label}`);
+    else { fail++; console.log(`✗ pivots: ${label}`); }
+  }
+}
+
+{
   const xml = `<report><queries><query name="q"><selection>
     <dataItem name="Region" aggregate="none"><expression>[C].[M].[Sales].[Region]</expression></dataItem>
     <dataItem name="Target" aggregate="none"><expression>[C].[M].[Sales].[Target]</expression></dataItem>
@@ -296,6 +323,42 @@ for (const [input, expected] of NAME_CASES) {
   catch (err: any) {
     if (/prompt|parameter|control/.test(err.message)) console.log('✓ print: refuses prompt controls that change values');
     else { fail++; console.log('✗ print: unexpected prompted-report error: ' + err.message); }
+  }
+  const structured = xml.replace('</selection></query>', '</selection><detailFilters><detailFilter><filterDefinition><filterInValues refDataItem="Region"><filterValues><filterValue>West</filterValue></filterValues></filterInValues></filterDefinition></detailFilter></detailFilters></query>');
+  const workbook = convertCognosReportToSigma(structured);
+  const workbookTable = (CodeRep.workbookElements(workbook.workbook) as any[]).find((e) => e.kind === 'table');
+  if (!workbookTable?.filters?.length && workbook.warnings.some((w) => /structured or empty detail filter/.test(w))) console.log('✓ print: structured Cognos filter is warned, not mistaken for a converted workbook filter');
+  else { fail++; console.log('✗ print: structured Cognos filter was falsely converted or not warned'); }
+  try { convertCognosPrintToSigma(structured); fail++; console.log('✗ print: refuses structured detail filters'); }
+  catch (err: any) {
+    if (/filter was not converted|structured or empty filter/.test(err.message)) console.log('✓ print: refuses structured detail filters before publishing extra rows');
+    else { fail++; console.log('✗ print: unexpected structured-filter error: ' + err.message); }
+  }
+  const structuredSummary = xml.replace('</selection></query>', '</selection><summaryFilters><summaryFilter><filterDefinition><filterInValues refDataItem="Region"><filterValues><filterValue>West</filterValue></filterValues></filterInValues></filterDefinition></summaryFilter></summaryFilters></query>');
+  try { convertCognosPrintToSigma(structuredSummary); fail++; console.log('✗ print: refuses structured summary filters'); }
+  catch (err: any) {
+    if (/filter was not converted|structured or empty filter/.test(err.message)) console.log('✓ print: refuses structured summary filters');
+    else { fail++; console.log('✗ print: unexpected structured-summary-filter error: ' + err.message); }
+  }
+  const scatter = `<report><queries><query name="scatter"><selection>
+      <dataItem name="Group"><expression>[C].[M].[Sales].[Group]</expression></dataItem>
+      <dataItem name="X"><expression>[C].[M].[Sales].[X]</expression></dataItem>
+      <dataItem name="Y"><expression>[C].[M].[Sales].[Y]</expression></dataItem>
+    </selection></query></queries><reportDataStores><reportDataStore name="ds"><dsV5ListQuery refQuery="scatter"/></reportDataStore></reportDataStores>
+    <layouts><layout><reportPages><page name="Plot"><pageBody><contents><vizControl name="Sample scatter" type="com.ibm.vis.scatter">
+      <vcDataSet refDataStore="ds"/><vcSlotData idSlot="series"><vcSlotDsColumn refDsColumn="Group"/></vcSlotData>
+      <vcSlotData idSlot="x"><vcSlotDsColumn refDsColumn="X"/></vcSlotData>
+      <vcSlotData idSlot="y"><vcSlotDsColumn refDsColumn="Y"/></vcSlotData>
+    </vizControl></contents></pageBody></page></reportPages></layout></layouts></report>`;
+  const scatterWorkbook = convertCognosReportToSigma(scatter, { captureLineage: true });
+  if (scatterWorkbook.lineage?.some((entry) => entry.hiddenSource && entry.kind === 'table') &&
+      (CodeRep.workbookElements(scatterWorkbook.workbook) as any[]).some((e) => e.kind === 'scatter-chart')) {
+    console.log('✓ print: hidden scatter source is identifiable before workbook wrapping');
+  } else { fail++; console.log('✗ print: scatter fixture did not create the hidden source'); }
+  try { convertCognosPrintToSigma(scatter); fail++; console.log('✗ print: refuses hidden scatter source'); }
+  catch (err: any) {
+    if (/hidden visual source table/.test(err.message)) console.log('✓ print: refuses hidden scatter helper instead of printing it as a table');
+    else { fail++; console.log('✗ print: unexpected scatter-source error: ' + err.message); }
   }
 }
 

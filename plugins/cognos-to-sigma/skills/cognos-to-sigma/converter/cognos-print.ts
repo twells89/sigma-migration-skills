@@ -60,6 +60,12 @@ export function convertCognosPrintToSigma(xml: string, options: CognosPrintOptio
   const panels: Array<Record<string, any>> = [];
   const pageLines: string[] = [], panelLines: string[] = [];
   const notPrintable = new Set(['navigation', 'page-break', 'drill', 'progress', 'repeated-container', 'container', 'tabbed-container', 'divider']);
+  // CodeRep.wrap strips visibleAsSource from workbook code, so use the
+  // pre-wrap lineage marker. Printing a hidden scatter/progress helper as a
+  // table changes the PDF; removing it also breaks its dependent visual.
+  if (lineage.some((slot) => slot.hiddenSource)) {
+    throw new Error('Cognos report uses a hidden visual source table; author its dependency on a non-printing Report page and verify the visual before printing.');
+  }
   const slots: Placement[] = lineage.filter((slot) => !notPrintable.has(slot.kind) && slot.kind !== 'control')
     .sort((a, b) => a.pageId === b.pageId ? a.order - b.order : doc.pages.findIndex((p: any) => p.id === a.pageId) - doc.pages.findIndex((p: any) => p.id === b.pageId));
   const used = new Set<string>();
@@ -94,8 +100,15 @@ export function convertCognosPrintToSigma(xml: string, options: CognosPrintOptio
   if (original.some((warning) => /unmapped Cognos aggregate|aggregate .* is not mapped|unmapped Cognos rollup/i.test(warning))) {
     throw new Error('a Cognos measure has no grounded Sigma aggregate; refusing to publish a print report with potentially wrong values');
   }
-  if (original.some((warning) => /filter .*re-create|summary filter:/.test(warning))) {
+  if (original.some((warning) => /filter.*re-create|summary filter:/.test(warning))) {
     throw new Error('a Cognos report filter was not converted; a print report could display different values until its filter is authored');
+  }
+  // Filter XML can be structured (e.g. filterDefinition/filterInValues) and
+  // have no filterExpression. The workbook translator cannot see these in
+  // q.filters, so warn/refuse rather than exporting unfiltered extra rows.
+  if (findAll(report, 'detailFilter').some((filter) => !text(filter?.filterExpression || filter?.expression)) ||
+      findAll(report, 'summaryFilter').some((filter) => !text(filter?.filterExpression || filter?.expression))) {
+    throw new Error('a Cognos report uses a structured or empty filter without a translated expression; refusing an unfiltered print report');
   }
   const add = (element: any, x: number, y: number, w: number, h: number, flow = false) => {
     if (!element || placed.has(element.id)) return '';
