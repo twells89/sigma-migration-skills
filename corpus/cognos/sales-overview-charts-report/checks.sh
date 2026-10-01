@@ -53,6 +53,7 @@ PY
 
 node "$skill/scripts/compose-print-layout.mjs" --spec "$tmp/report.json" \
   --blueprint "$skill/fixtures/print-layout-blueprint.json" --out "$tmp/composed.json"
+test -s "$tmp/composed.json" || { echo '  FAIL print layout composer did not write its output'; exit 1; }
 python3 - "$tmp/composed.json" <<'PY'
 import json
 import re

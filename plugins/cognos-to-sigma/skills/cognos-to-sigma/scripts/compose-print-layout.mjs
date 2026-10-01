@@ -266,7 +266,7 @@ export function composePrintLayout(input, manifest) {
   return { contents: spec, summary: { pages: created, backgrounds, textElements: spec.elements.filter((e) => e.kind === 'text').length - input.elements.filter((e) => e.kind === 'text').length } };
 }
 
-if (process.argv[1] && process.argv[1].endsWith('/compose-print-layout.mjs')) {
+if (process.argv[1] && /(?:^|[\\/])compose-print-layout\.mjs$/.test(process.argv[1])) {
   const args = parseArgs(process.argv.slice(2));
   if (!args.spec || !args.blueprint || !args.out) {
     console.error('usage: node scripts/compose-print-layout.mjs --spec <converted-report.json> --blueprint <neutral-layout.json> --out <report.json>');
