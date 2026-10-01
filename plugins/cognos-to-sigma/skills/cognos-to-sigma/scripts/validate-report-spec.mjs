@@ -68,7 +68,7 @@ if (!args.create && !args.update) {
   console.log(JSON.stringify({ valid: true, warnings: dryRun.json.warnings }, null, 2));
   process.exit(0);
 }
-const id = verified.json?.reportId;
+const id = args.update || verified.json?.reportId;
 if (!id) throw new Error(`create succeeded but no reportId was returned: ${verified.text.slice(0, 300)}`);
 const get = await api('GET', `/v2/reports/${id}?includeContents=true`);
 if (!get.ok || !get.json?.contents) throw new Error(`report ${id} written, but readback failed: HTTP ${get.status}`);

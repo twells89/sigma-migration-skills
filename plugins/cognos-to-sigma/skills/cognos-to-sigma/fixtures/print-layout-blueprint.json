@@ -2,9 +2,9 @@
   "pages": [
     {
       "name": "Cover", "position": "first",
-      "emblem": {"x": 38, "y": 30, "width": 425, "height": 430, "label": "RIVER", "subtitle": "COUNTY"},
+      "emblem": {"x": 48, "y": 48, "width": 425, "height": 430, "label": "RIVER", "subtitle": "COUNTY"},
       "watermark": {"text": "DRAFT", "color": "#f3c3bd", "opacity": 0.48, "angle": -32},
-      "imageBox": {"x": 32, "y": 468, "width": 650, "height": 320},
+      "imageBox": {"x": 48, "y": 468, "width": 650, "height": 320},
       "blocks": [
         {"x": 475, "y": 488, "width": 225, "height": 26, "body": "Recipient   River County Operations", "fontSize": 11},
         {"x": 475, "y": 525, "width": 225, "height": 26, "body": "Document   Quarterly allocation", "fontSize": 11},
@@ -17,10 +17,10 @@
     {
       "name": "Letter", "position": "after", "afterPage": "Cover",
       "watermark": {"text": "DRAFT", "color": "#f3c3bd", "opacity": 0.40, "angle": -32},
-      "imageBox": {"x": 32, "y": 145, "width": 660, "height": 650},
+      "imageBox": {"x": 48, "y": 145, "width": 660, "height": 650},
       "blocks": [
-        {"x": 50, "y": 35, "width": 240, "height": 25, "body": "River County Operations", "fontSize": 13},
-        {"x": 505, "y": 35, "width": 210, "height": 25, "body": "QUARTERLY ALLOCATION", "fontSize": 14},
+        {"x": 50, "y": 48, "width": 240, "height": 25, "body": "River County Operations", "fontSize": 13},
+        {"x": 505, "y": 48, "width": 210, "height": 25, "body": "QUARTERLY ALLOCATION", "fontSize": 14},
         {"x": 50, "y": 85, "width": 350, "height": 110, "body": "River County Operations\n101 Example Avenue\nNorthport, ST 01010\nUnited States", "fontSize": 12},
         {"x": 465, "y": 96, "width": 245, "height": 110, "body": "Prepared: Third quarter\nReference: Example 01\nAudience: Operations team", "fontSize": 12},
         {"x": 50, "y": 240, "width": 660, "height": 95, "body": "Thank you for reviewing this illustrative allocation statement. This page demonstrates a formal letter block, document metadata and a generous signing area. It carries no customer terms or commercial figures.", "fontSize": 12},
@@ -39,7 +39,7 @@
       "watermark": {"text": "DRAFT", "color": "#f3c3bd", "opacity": 0.35, "angle": -32},
       "imageBox": {"x": 48, "y": 225, "width": 630, "height": 540},
       "blocks": [
-        {"x": 278, "y": 28, "width": 295, "height": 48, "body": "## Allocation information"},
+        {"x": 278, "y": 48, "width": 295, "height": 48, "body": "## Allocation information"},
         {"x": 48, "y": 88, "width": 670, "height": 28, "body": "Recipient  /  River County Operations       Reference  /  Example 01", "fontSize": 11},
         {"x": 48, "y": 130, "width": 670, "height": 28, "body": "Reporting period  /  Third quarter       Status  /  Illustrative", "fontSize": 11},
         {"x": 48, "y": 175, "width": 670, "height": 62, "body": "Example allocation summary", "fontSize": 25},
@@ -48,7 +48,7 @@
     },
     {
       "name": "Terms 1", "blocks": [
-        {"x": 160, "y": 24, "width": 490, "height": 40, "body": "Illustrative terms and review notes", "fontSize": 13},
+        {"x": 160, "y": 48, "width": 490, "height": 40, "body": "Illustrative terms and review notes", "fontSize": 13},
         {"x": 48, "y": 83, "width": 670, "height": 795, "fontSize": 9, "dense": true, "sampleFill": true,
           "body": "1. SCOPE OF EXAMPLE\nThis specimen is provided solely to evaluate whether a multi-page report preserves line wrapping, readable footers, headers, page order and text density. It does not state a promise, price, entitlement or acceptance of any service. The categories and names are fictitious.\n\n2. SOURCE VERIFICATION\nEvery numeric value must be independently checked against the source report and the warehouse backing the destination report. Record the relevant dates, filters, grain and comparison method. Page-level similarities cannot establish the correctness of calculations or business rules.\n\n3. DOCUMENT REVIEW\nInspect the cover, correspondence page, tabular page and each terms page at the exported paper size. Check captions, document identifiers, footer repetition, final lines and section transitions. A valid API response is not a visual review.\n\n4. VERSION CONTROL\nRetain approved source content with the migration record. Changes to page width, margin, font family, point size or line spacing can move text and create extra sheets. Re-export after changing any of these settings.\n\n5. DATA PRESENTATION\nKeep a consistent distinction between informational labels and values derived from the warehouse. Align numerical cells by decimal place and ensure table headings remain associated with their columns. Note when the table represents a sample rather than a complete statement.\n\n6. REVIEW RESPONSIBILITY\nReaders should verify that each expected section exists and that no information was omitted, hidden or duplicated. A gap should be identified explicitly and corrected before describing the resulting report as equivalent to a source document.\n\n7. PAGE SEQUENCE\nPhysical order matters in a document prepared for printing. Check that the introductory pages lead into the summary and that subsequent notes continue in the intended reading order without blank or partial spill pages."}
       ]

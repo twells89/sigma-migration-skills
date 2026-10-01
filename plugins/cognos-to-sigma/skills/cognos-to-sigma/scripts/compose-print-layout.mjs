@@ -87,6 +87,8 @@ export function composePrintLayout(input, manifest) {
   const height = spec.config?.pageHeight ?? 1056;
   const margin = spec.config?.margin ?? 0;
   if (![width, height, margin].every(Number.isFinite) || width <= 2 * margin || height <= 2 * margin || margin < 0) throw new Error('invalid report page geometry');
+  const fitsPrintablePage = (x, y, w, h) =>
+    x >= margin && y >= margin && x + w <= width - margin && y + h <= height - margin;
   let layout = spec.layout;
   const created = [];
   const referenced = new Set();
@@ -103,7 +105,7 @@ export function composePrintLayout(input, manifest) {
     if (!block.body || typeof block.body !== 'string') throw new Error('every blueprint text block needs a body');
     const x = number(block.x, 'x'), y = number(block.y, 'y');
     const w = number(block.width, 'width'), h = number(block.height, 'height');
-    if (!w || !h || x + w > width - 2 * margin || y + h > height - 2 * margin) {
+    if (!w || !h || !fitsPrintablePage(x, y, w, h)) {
       throw new Error(`text block on ${pageId} exceeds the page canvas`);
     }
     if (block.dense) {
@@ -152,7 +154,7 @@ export function composePrintLayout(input, manifest) {
       const box = cfg.emblem;
       const x = number(box.x, 'emblem x'), y = number(box.y, 'emblem y');
       const w = number(box.width, 'emblem width'), h = number(box.height, 'emblem height');
-      if (!w || !h || x + w > width - 2 * margin || y + h > height - 2 * margin) throw new Error('emblem exceeds the printable page canvas');
+      if (!w || !h || !fitsPrintablePage(x, y, w, h)) throw new Error('emblem exceeds the printable page canvas');
       const image = { id: id(), kind: 'image', source: { kind: 'url', url: emblemImage(box, w, h) } };
       spec.elements.push(image);
       layout = layout.replace(new RegExp(`(<Page\\b[^>]*\\bid="${esc(page.id)}"[^>]*>)`),
@@ -182,7 +184,7 @@ export function composePrintLayout(input, manifest) {
         const box = cfg.tableBox;
         const x = number(box.x, 'table x'), y = number(box.y, 'table y');
         const w = number(box.width, 'table width'), h = number(box.height, 'table height');
-        if (!w || !h || x + w > width - 2 * margin || y + h > height - 2 * margin) throw new Error('table exceeds the printable page canvas');
+        if (!w || !h || !fitsPrintablePage(x, y, w, h)) throw new Error('table exceeds the printable page canvas');
         const replacement = tables[0].replace(/\bx="[^"]+"/, `x="${x}"`).replace(/\by="[^"]+"/, `y="${y}"`)
           .replace(/\bwidth="[^"]+"/, `width="${w}"`).replace(/\bheight="[^"]+"/, `height="${h}"`);
         layout = layout.replace(tables[0], replacement);
@@ -193,7 +195,7 @@ export function composePrintLayout(input, manifest) {
       const imageBox = cfg.imageBox || { x: 120, y: 300, width: width - 240, height: height - 600 };
       const bx = number(imageBox.x, 'image x'), by = number(imageBox.y, 'image y');
       const bw = number(imageBox.width, 'image width'), bh = number(imageBox.height, 'image height');
-      if (!bw || !bh || bx + bw > width - 2 * margin || by + bh > height - 2 * margin) {
+      if (!bw || !bh || !fitsPrintablePage(bx, by, bw, bh)) {
         throw new Error('image exceeds the printable page canvas');
       }
       const url = cfg.watermark ? watermarkImage(cfg.watermark, bw, bh) : cfg.backgroundImageUrl;
