@@ -10,12 +10,14 @@
  *
  * Options: --connection <id> --database <DB> --schema <S> --dm <dataModelId> --pretty
  * Framework Manager: --list | --subject-area "<name>" | --all
+ * PDF-oriented Sigma Report: report.xml --print [--dm ID --page-width PX --page-height PX --margin PX --out PATH --warnings-out PATH]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { convertCognosToSigma, convertCognosIR } from './cognos.js';
 import { convertCognosReportToSigma } from './cognos-report.js';
+import { convertCognosPrintToSigma } from './cognos-print.js';
 import {
   isFrameworkManagerXml, listFrameworkManagerSubjectAreas, normalizeCognosFrameworkManager,
 } from './cognos-fm.js';
@@ -40,6 +42,7 @@ if (!file) {
   console.error('usage: cli.ts <module.json|report.xml|fm-model.xml> [--connection X --database DB --schema S --dm ID]');
   console.error('       Framework Manager: cli.ts <fm-model.xml> --list');
   console.error('                          cli.ts <fm-model.xml> --subject-area "<name>" [--connection X]');
+  console.error('       Print:             cli.ts <report.xml> --print [--dm ID --page-width PX --page-height PX --margin PX --out PATH]');
   process.exit(1);
 }
 
@@ -69,6 +72,15 @@ if (isFm && args.includes('--list')) {
 }
 
 const isReport = !isFm && (file.endsWith('.xml') || xml.trimStart().startsWith('<'));
+const print = args.includes('--print');
+if (print && ((args.includes('--out') && !opt('out')) || (args.includes('--warnings-out') && !opt('warnings-out')))) {
+  console.error('--out and --warnings-out require a path');
+  process.exit(2);
+}
+if (print && !isReport) {
+  console.error('--print requires a Cognos report-spec XML, not a Data Module or Framework Manager model');
+  process.exit(2);
+}
 
 // FM ingest findings ride on the IR (`ingestWarnings`) and are merged by convertCognosIR,
 // so they cannot be lost here.
@@ -78,13 +90,22 @@ const res = isFm
       { connectionId: opt('connection', '<CONNECTION_ID>'), database: opt('database'), schema: opt('schema'), learnedRules: loadLearnedRules() },
     )
   : isReport
-    ? convertCognosReportToSigma(xml, { dataModelId: opt('dm', '<DM_ID>'), metrics: loadMetrics() })
+    ? print
+      ? convertCognosPrintToSigma(xml, {
+          dataModelId: opt('dm', '<DM_ID>'), metrics: loadMetrics(),
+          ...(opt('page-width') ? { pageWidth: Number(opt('page-width')) } : {}),
+          ...(opt('page-height') ? { pageHeight: Number(opt('page-height')) } : {}),
+          ...(opt('margin') ? { margin: Number(opt('margin')) } : {}),
+        })
+      : convertCognosReportToSigma(xml, { dataModelId: opt('dm', '<DM_ID>'), metrics: loadMetrics() })
     : convertCognosToSigma(xml, { connectionId: opt('connection', '<CONNECTION_ID>'), database: opt('database'), schema: opt('schema'), learnedRules: loadLearnedRules() });
 
-const payload = isReport ? (res as any).workbook : (res as any).model;
-const label = isReport ? 'report→workbook' : isFm ? 'framework-manager→data-model' : 'module→data-model';
-process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+const payload = isReport ? print ? (res as any).contents : (res as any).workbook : (res as any).model;
+const label = isReport ? print ? 'report→print' : 'report→workbook' : isFm ? 'framework-manager→data-model' : 'module→data-model';
+if (print && opt('out')) writeFileSync(opt('out'), JSON.stringify(payload, null, 2) + '\n');
+else process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
 console.error(`\n[${label}] stats: ${JSON.stringify(res.stats)}`);
+if (print && opt('warnings-out')) writeFileSync(opt('warnings-out'), JSON.stringify(res.warnings, null, 2) + '\n');
 // Detected security (RLS) — detect-only; the skill's apply_sigma_rls.py ports it.
 const security = (res as any).security;
 if (security?.length) {

@@ -1,0 +1,17 @@
+<report xmlns="http://developer.cognos.com/schemas/report/17.5/">
+  <reportName>Regional orders print sample</reportName>
+  <layouts><layout><reportPages><page name="Regional orders">
+    <pageHeader><contents><textItem><dataSource><staticValue>Regional orders</staticValue></dataSource></textItem></contents></pageHeader>
+    <pageBody><contents><list name="Orders by region" refQuery="orders" rowsPerPage="50">
+      <listColumns>
+        <listColumn><listColumnBody><dataItemValue refDataItem="Region"/></listColumnBody></listColumn>
+        <listColumn><listColumnBody><dataItemValue refDataItem="Order Amount"/></listColumnBody></listColumn>
+      </listColumns>
+    </list></contents></pageBody>
+    <pageFooter><contents><textItem><dataSource><staticValue>Sample data</staticValue></dataSource></textItem></contents></pageFooter>
+  </page></reportPages></layout></layouts>
+  <queries><query name="orders"><selection>
+    <dataItem name="Region" aggregate="none"><expression>[C].[Orders_Model].[Orders].[Region]</expression></dataItem>
+    <dataItem name="Order Amount" aggregate="total"><expression>[C].[Orders_Model].[Orders].[Order_Amount]</expression></dataItem>
+  </selection></query></queries>
+</report>

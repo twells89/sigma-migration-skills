@@ -7,6 +7,8 @@ description: >-
   Converts Data Module JSON and Framework Manager project XML → Sigma data model,
   and report-spec XML → Sigma workbook, translating
   the Cognos expression DSL and flagging constructs with no clean Sigma analog.
+  For print-critical list reports, --print emits a Sigma Report with paginated
+  PDF export and source-PDF comparison (see refs/print-reports.md).
   Dashboards (exploration JSON) are hand-authored per refs/dashboard-migration.md
   (tabs → separate Sigma pages). Discovery via the CA REST API.
 user-invocable: true
@@ -50,6 +52,11 @@ of emitting wrong logic.
 > NOT do dashboards).
 > For the canonical Sigma data-model + workbook spec shapes, defer to the companion
 > `sigma-data-models` / `sigma-workbooks` skills.
+
+**Print-critical reports:** read `refs/print-reports.md` for the separate
+report-spec XML → Sigma Report → paginated PDF workflow. Its code supports
+lists/tables; Sigma Report code currently rejects `pivot-table`, so Cognos
+crosstabs require a manual print path. Source PDF comparison is the parity gate.
 
 ---
 
@@ -96,7 +103,8 @@ Inputs are the exported module JSON + report XML (Phase 0 / `cognos-discover.sh`
 gets them from a live CA). `--name` prefixes both the DM and workbook names.
 
 Parity is two-pass when `--expected` isn't supplied up front: pass 1 auto-exports
-every element to CSV via the Sigma REST export API → `<workdir>/sigma-actuals.json`
+data elements to CSV (pivots to JSON when totals can break CSV export) via the
+Sigma REST export API → `<workdir>/sigma-actuals.json`
 (keys `"<Element>/<Column>" = sum`, `"<Element>/rows" = count`), prints the
 `assert-parity --plan` mcp-v2 query list, then exits 10 with resume instructions.
 When two elements share a display name (a report can render the same query twice,
@@ -355,13 +363,18 @@ A workbook that POSTs 200 and passes parity ($-total / row-count) can still be v
   filter; `[Col] = ?prompt?` → segmented control + hidden boolean match column +
   `values:[true]` filter. Filter columns are added hidden when the layout didn't show them.
 - **Auto-aggregated lists → grouped tables** (`groupings: groupBy dims / calculations
-  measures`); footer `Total(...)` columns are skipped with a warning (the group already
-  aggregates — re-add via Sigma totals).
+  measures`); invisible source group keys are retained as hidden columns,
+  source sorts are applied and compound cells are flagged for review. Detail
+  lists with a visible row ID keep their detail grain. Footer `Total(...)`
+  columns are skipped with a warning (the group already aggregates — re-add
+  via Sigma totals).
 - **Scaled currency** (`$###.#M`-style patterns) → the nearest Sigma d3 format (SI-suffix
   `$,.3s`); percent formats → `,.N%`. **Numeric dims on a category axis** (e.g. Year) are
   Text-cast so they bind categorically, and slot `dsSort` becomes `xAxis.sort`.
-- **Crosstabs → Sigma pivot-tables** (rows/columns edges → rowsBy/columnsBy, measure → values),
-  **charts (RAVE2 `<vizControl>`) → Sigma chart elements** (bar/column/line/area/pie/donut/
+- **Crosstabs → Sigma pivot-tables** (rows/columns edges → rowsBy/columnsBy,
+  source aggregation → values, including `Avg`), with edge sorts and explicit
+  grand totals. Pivots with totals use JSON rather than CSV for parity export.
+- **Charts (RAVE2 `<vizControl>`) → Sigma chart elements** (bar/column/line/area/pie/donut/
   combo/scatter via the slot model — see `refs/format-shapes.md`) and **maps (`tiledmap`) →
   Sigma region-map / point-map**.
 - Released workbook-code mappings: Cognos **waterfalls → `waterfall-chart`**;
@@ -375,8 +388,7 @@ A workbook that POSTs 200 and passes parity ($-total / row-count) can still be v
 **Flagged with a warning (and a readable placeholder), never faked:** macros whose prompt
 value set isn't recoverable from the report, **running-total / moving-* / rank / lag / lead**
 (window funcs with no clean single-column analog), **GetResourceString** (localization),
-composite/non-equi **joins**, **summary filters** (post-aggregation), table **sort order**
-(not part of the workbook spec — apply in the UI), and Cognos viz types with no native Sigma
+composite/non-equi **joins**, **summary filters** (post-aggregation), and Cognos viz types with no native Sigma
 element (network, word-cloud, packed-bubble, treemap → flagged table).
 **Box charts are workspace-gated** and stay a loud, data-preserving table
 fallback until entitlement is proven. Cross-report drill-through stays a loud

@@ -52,8 +52,12 @@ interface WbControl {
 interface WbElement {
   id: string; kind: string; name?: string; source?: Record<string, any>;
   columns?: WbColumn[]; order?: string[]; filters?: any[];
-  groupings?: Array<{ id: string; groupBy: string[]; calculations: string[] }>;            // grouped table
-  rowsBy?: Array<{ id: string }>; columnsBy?: Array<{ id: string }>; values?: string[];   // pivot
+  sort?: Array<{ columnId: string; direction: 'ascending' | 'descending' }>;
+  groupings?: Array<{ id: string; groupBy: string[]; calculations: string[];
+    sort?: Array<{ columnId: string; direction: 'ascending' | 'descending' }> }>;
+  rowsBy?: Array<{ id: string; sort?: { by: string; direction: 'ascending' | 'descending' } }>;
+  columnsBy?: Array<{ id: string; sort?: { by: string; direction: 'ascending' | 'descending' } }>;
+  values?: string[]; totals?: { showGrandTotals: 'shown' };
   xAxis?: { columnId: string; sort?: { by: string; direction: string } };                  // cartesian charts
   yAxis?: { columnIds: string[] };
   value?: { id?: string; columnId?: string };                                              // pie/donut {id} · kpi {columnId}
@@ -94,6 +98,9 @@ export interface CognosReportResult {
   };
   warnings: string[];
   stats: Record<string, number>;
+  // Used only by the print converter to preserve Cognos page and element order;
+  // never serialized into a posted workbook spec.
+  lineage?: Array<{ elementId: string; pageId: string; source: any; kind: string; order: number; hiddenSource?: boolean }>;
 }
 export interface CognosReportOptions {
   dataModelId?: string;
@@ -103,10 +110,11 @@ export interface CognosReportOptions {
   // measure whose inline aggregate matches one binds to a governed [Metrics/<name>]
   // reference instead of re-deriving it inline. Absent → inline, byte-identical.
   metrics?: Record<string, BindMetric[]>;
+  captureLineage?: boolean;
 }
 
 // ── ingest ────────────────────────────────────────────────────────────────────
-interface DataItem { name: string; expression: string; aggregate?: string; dataType?: string; }
+interface DataItem { name: string; expression: string; aggregate?: string; dataType?: string; sort?: string; }
 interface Query { name: string; subject: string; items: Map<string, DataItem>; filters: string[]; }
 interface PromptMeta { options: string[]; def?: string; valueRefs: Record<string, string>; }
 
@@ -212,11 +220,15 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       // RS_dataType XMLAttribute (1=int, 2=decimal, 3=string …) — used to detect
       // numeric dimensions that need a categorical (Text) axis binding.
       const dataType = findAll(di, 'XMLAttribute').find((x: any) => x['@_name'] === 'RS_dataType')?.['@_value'];
-      items.set(dn, { name: dn, expression: expr, aggregate: di['@_aggregate'], dataType });
+      items.set(dn, { name: dn, expression: expr, aggregate: di['@_aggregate'], dataType, sort: di['@_sort'] });
       const m = expr.match(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[[^\]]+\]/); // [C].[Module].[Subject].[Col]
       if (m && !subject) subject = m[1];
     }
-    const filters = findAll(q, 'detailFilter').map((f: any) => txt(f.filterExpression || f.expression)).filter(Boolean);
+    const filterNodes = findAll(q, 'detailFilter');
+    const filters = filterNodes.map((f: any) => txt(f.filterExpression || f.expression)).filter(Boolean);
+    if (filterNodes.length !== filters.length) {
+      warnings.push(`query "${name}": ${filterNodes.length - filters.length} structured or empty detail filter(s) have no expression — re-create as Sigma filters; no unfiltered output is parity-verified.`);
+    }
     queries.set(name, { name, subject, items, filters });
   }
 
@@ -380,6 +392,15 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     name: p['@_name'] || 'Report',
   }));
   const pageIdBySourceNode = new WeakMap<object, string>();
+  const sourceOrder = new WeakMap<object, number>();
+  let sourceOrdinal = 0;
+  const indexLayout = (node: any) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(indexLayout); return; }
+    if (!sourceOrder.has(node)) sourceOrder.set(node, sourceOrdinal++);
+    Object.values(node).forEach(indexLayout);
+  };
+  if (options.captureLineage) pageNodes.forEach(indexLayout);
   pageNodes.forEach((pageNode, i) => {
     if (!pageNode || typeof pageNode !== 'object') return;
     for (const tag of ['singleton', 'list', 'crosstab', 'vizControl', 'pageBreak', 'repeater', 'repeaterTable', 'block']) {
@@ -390,6 +411,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   });
   const elementsByPage = new Map<string, Array<WbElement | WbControl>>(pages.map((p) => [p.id, []]));
   const elementsBySourceNode = new WeakMap<object, WbElement[]>();
+  const lineage: NonNullable<CognosReportResult['lineage']> = [];
   const containerChildren = new Map<string, string[]>();
   const lists = findAll(report, 'list');
   const pageEls: WbElement[] = [];
@@ -401,6 +423,10 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     const pageId = sourceNode && typeof sourceNode === 'object'
       ? pageIdBySourceNode.get(sourceNode) || pages[0].id : pages[0].id;
     addToPage(pageId, element);
+    if (options.captureLineage && sourceNode && typeof sourceNode === 'object') {
+      lineage.push({ elementId: element.id, pageId, source: sourceNode, kind: element.kind,
+        order: sourceOrder.get(sourceNode) ?? 0, ...(element.visibleAsSource === false ? { hiddenSource: true } : {}) });
+    }
     if (sourceNode && typeof sourceNode === 'object') {
       const current = elementsBySourceNode.get(sourceNode) || [];
       current.push(element);
@@ -539,17 +565,43 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     const qName = L['@_refQuery'];
     const q = queries.get(qName);
     if (!q) { warnings.push(`<list> refQuery="${qName}" has no matching query — skipped.`); continue; }
-    const colRefs: string[] = findAll(L, 'dataItemValue').map((d) => d['@_refDataItem']).filter(Boolean);
+    // Only listColumnBody defines displayed columns. Group headers and compound
+    // cells can have additional dataItemValues that aren't separate columns.
+    const colRefs: string[] = [];
+    const layoutColumns = arr(L.listColumns?.listColumn);
+    for (const lc of layoutColumns) {
+      const body = findAll(lc.listColumnBody || {}, 'dataItemValue')
+        .map((d) => d['@_refDataItem']).filter(Boolean) as string[];
+      if (!body.length) continue;
+      colRefs.push(body[0]);
+      if (new Set(body).size > 1) warnings.push(`list "${L['@_name'] || qName}": a visible column combines ${[...new Set(body)].join(', ')} — used ${body[0]} as the data column; reproduce the compound cell in Sigma.`);
+    }
+    // A list with explicit columns but no resolvable bodies must not silently
+    // expand to every query item (often hidden/report-plumbing columns).
+    if (layoutColumns.length && !colRefs.length) {
+      warnings.push(`list "${L['@_name'] || qName}": no visible dataItemValue resolved from its listColumnBody — cannot emit a faithful table.`);
+      continue;
+    }
     const refs = colRefs.length ? colRefs : [...q.items.keys()];
     const columns: WbColumn[] = [];
     const AGG: Record<string, string> = { total: 'Sum', summary: 'Sum', aggregate: 'Sum', calculated: 'Sum', average: 'Avg', count: 'Count', maximum: 'Max', minimum: 'Min' };
+    const sourceGroups = [...new Set(findAll(L, 'listGroup')
+      .map((g: any) => g['@_refDataItem']).filter(Boolean))] as string[];
+    const visibleDims = refs.filter((ref) => {
+      const item = q.items.get(ref);
+      return item && (!item.aggregate || item.aggregate === 'none');
+    });
+    const detailGrain = visibleDims.some((ref) => /\b(?:call\s*id|transaction\s*id|row\s*id)\b/i.test(ref));
+    if (detailGrain && sourceGroups.length) {
+      warnings.push(`list "${L['@_name'] || qName}": row-level identifier (${visibleDims.filter((ref) => /\b(?:call\s*id|transaction\s*id|row\s*id)\b/i.test(ref)).join(', ')}) appears with Cognos group headers — keep row-grain measures rather than rolling them up again; verify the source PDF.`);
+    }
     // Cognos lists auto-group: non-aggregate dataItems are the grain, aggregate
     // ('total'/'calculated'/…) dataItems are rolled up per group. Mirror that with a
     // Sigma grouped table (beads-sigma-0xlz): dims → groupBy, measures (Agg-wrapped)
     // → grouping calculations.
     const isMeasureItem = (d: DataItem) => !!d.aggregate && d.aggregate !== 'none';
-    const grouped = refs.some((r) => { const d = q.items.get(r); return d && isMeasureItem(d); })
-      && refs.some((r) => { const d = q.items.get(r); return d && !isMeasureItem(d); });
+    const grouped = !detailGrain && refs.some((r) => { const d = q.items.get(r); return d && isMeasureItem(d); })
+      && (sourceGroups.length > 0 || refs.some((r) => { const d = q.items.get(r); return d && !isMeasureItem(d); }));
     const dimIds: string[] = [];
     const measureIds: string[] = [];
     const footerRefs: string[] = [];
@@ -583,9 +635,6 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     if (footerRefs.length) {
       warnings.push(`list "${qName}": footer total(s) ${footerRefs.join(', ')} — the grouped Sigma table already aggregates per group; add a grand-total via the table's totals UI (a duplicate Sum column would double-aggregate).`);
     }
-    for (const si of findAll(L, 'sortItem')) {
-      if (si['@_refDataItem']) warnings.push(`list "${qName}" sorts by "${si['@_refDataItem']}" (${si['@_sortOrder'] || 'ascending'}) — table sort isn't part of the Sigma workbook spec; apply the sort in the UI.`);
-    }
     // conditional styles on list columns (e.g. threshold-driven $K/$M/$B data formats)
     // have no spec analog — never drop them silently.
     const condRefs = [...new Set(findAll(L, 'conditionalStyleRef').map((c: any) => c['@_refConditionalStyle']).filter(Boolean))];
@@ -595,9 +644,34 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       source: dmSource(q),
       columns, order: columns.map((c) => c.id),
     };
-    if (grouped && dimIds.length && measureIds.length) {
-      el.groupings = [{ id: sigmaShortId(), groupBy: dimIds, calculations: measureIds }];
+    const groupCols: string[] = [];
+    for (const ref of sourceGroups) {
+      const id = columns.find((c) => c.name === sigmaDisplayName(ref))?.id || ensureFilterCol(el, q, ref);
+      if (id && !groupCols.includes(id)) groupCols.push(id);
+      else if (!id) warnings.push(`list "${L['@_name'] || qName}": group key "${ref}" is not a query dataItem — grouping needs manual repair.`);
     }
+    if (grouped && (groupCols.length || dimIds.length) && measureIds.length) {
+      el.groupings = [{ id: sigmaShortId(), groupBy: [...new Set([...groupCols, ...dimIds])], calculations: measureIds }];
+    } else if (sourceGroups.length && !detailGrain) {
+      warnings.push(`list "${L['@_name'] || qName}": source group headers cannot be reproduced without an aggregate grouping — group keys were retained but review the presentation.`);
+    }
+    const sortItems = findAll(L.sortList || L.listSorts || {}, 'sortItem').filter((si: any) => si['@_refDataItem']);
+    if (!sortItems.length) {
+      for (const ref of refs) {
+        const dir = q.items.get(ref)?.sort;
+        if (dir) sortItems.push({ '@_refDataItem': ref, '@_sortOrder': dir });
+      }
+    }
+    const sorts: NonNullable<WbElement['sort']> = [];
+    for (const si of sortItems) {
+      const ref = si['@_refDataItem'];
+      const id = columns.find((c) => c.name === sigmaDisplayName(ref))?.id || ensureFilterCol(el, q, ref);
+      if (!id) { warnings.push(`list "${L['@_name'] || qName}": sort key "${ref}" not in query — apply manually.`); continue; }
+      const raw = String(si['@_sortOrder'] || si['@_direction'] || 'ascending').toLowerCase();
+      sorts.push({ columnId: id, direction: raw.startsWith('desc') ? 'descending' : 'ascending' });
+    }
+    if (sorts.length && el.groupings) el.groupings[0].sort = sorts;
+    else if (sorts.length) el.sort = sorts;
     applyQueryFilters(el, q);
     addElement(L, el);
   }
@@ -614,23 +688,58 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     let measRefs = [...new Set(findAll(X.crosstabCorner || {}, 'dataItemLabel').map((d) => d['@_refDataItem']).filter((r) => r && !isTotal(r)))];
     if (!measRefs.length) measRefs = [...q.items.keys()].filter((k) => !rowRefs.includes(k) && !colRefs.includes(k) && !isTotal(k));
     const cols: WbColumn[] = [];
+    const AGG: Record<string, string> = { total: 'Sum', sum: 'Sum', summary: 'Sum', aggregate: 'Sum', average: 'Avg', avg: 'Avg', count: 'Count', countdistinct: 'CountDistinct', maximum: 'Max', minimum: 'Min' };
     const mk = (ref: string, agg: boolean): { id: string } | null => {
       const di = q.items.get(ref); if (!di) { warnings.push(`crosstab "${qName}" member "${ref}" not in query — skipped.`); return null; }
       const { formula, warns } = translate(di.expression, q); warns.forEach((w) => warnings.push(`"${qName}.${ref}": ${w}`));
       const id = sigmaShortId();
-      cols.push({ id, name: sigmaDisplayName(di.name), formula: agg ? bindMeasure(`Sum(${formula})`, q) : formula });
+      let result = formula;
+      if (agg) {
+        const kind = String(di.aggregate || 'total').toLowerCase();
+        const fn = AGG[kind];
+        if (!fn) warnings.push(`crosstab "${qName}" measure "${ref}": aggregate '${di.aggregate}' is not mapped — left its formula for manual review (never silently Sum).`);
+        else result = bindMeasure(/^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(formula) ? formula : `${fn}(${formula})`, q);
+      }
+      cols.push({ id, name: sigmaDisplayName(di.name), formula: result });
       return { id };
     };
-    const rowsBy = rowRefs.map((r) => mk(r, false)).filter(Boolean) as Array<{ id: string }>;
-    const columnsBy = colRefs.map((c) => mk(c, false)).filter(Boolean) as Array<{ id: string }>;
-    // Sigma pivot: rowsBy/columnsBy are {id} objects, values are bare column-id strings.
+    // Keep each emitted edge paired with its source ref. A missing query item
+    // must not shift subsequent members' sorts onto an earlier surviving edge.
+    const makeEdges = (refs: string[]) => refs.flatMap((ref) => {
+      const item = mk(ref, false);
+      return item ? [{ ref, item }] : [];
+    });
+    const rowEdges = makeEdges(rowRefs), columnEdges = makeEdges(colRefs);
+    const rowsBy = rowEdges.map(({ item }) => item);
+    const columnsBy = columnEdges.map(({ item }) => item);
+    // Finish values before resolving sort.by: Cognos can order an edge by a
+    // measure, in which case it must target the AGGREGATED value column.
     const values = (measRefs.map((m) => mk(m, true)).filter(Boolean) as Array<{ id: string }>).map((o) => o.id);
+    const addEdgeSorts = (subtree: any, edges: Array<{ ref: string; item: { id: string; sort?: { by: string; direction: 'ascending' | 'descending' } } }>) => {
+      for (const { ref, item } of edges) {
+        const member = findAll(subtree, 'crosstabNodeMember').find((m: any) => m['@_refDataItem'] === ref);
+        const si = findAll(member?.sortList || {}, 'sortItem')[0];
+        if (!si) continue;
+        const byRef = si['@_refDataItem'] || ref;
+        const by = cols.find((c) => c.name === sigmaDisplayName(byRef))?.id;
+        if (!by) { warnings.push(`crosstab "${qName}" sort key "${byRef}" is not on an edge or a value — apply manually.`); continue; }
+        const raw = String(si['@_sortOrder'] || si['@_direction'] || 'ascending').toLowerCase();
+        item.sort = { by, direction: raw.startsWith('desc') ? 'descending' : 'ascending' };
+      }
+    };
+    addEdgeSorts(X.crosstabRows, rowEdges);
+    addEdgeSorts(X.crosstabColumns, columnEdges);
+    // Sigma pivot: rowsBy/columnsBy are {id} objects, values are bare column-id strings.
     if (!values.length || (!rowsBy.length && !columnsBy.length)) warnings.push(`crosstab "${qName}" missing a measure or both edges — review the pivot.`);
     const el: WbElement = {
       id: sigmaShortId(), kind: 'pivot-table', name: `${q.subject ? sigmaDisplayName(q.subject) + ' — ' : ''}${qName} (crosstab)`,
       source: dmSource(q),
       columns: cols, order: cols.map((c) => c.id), rowsBy, columnsBy, values,
     };
+    if (findAll(X.crosstabRows, 'crosstabNodeMember').some((m: any) => isTotal(m['@_refDataItem'])) ||
+        findAll(X.crosstabColumns, 'crosstabNodeMember').some((m: any) => isTotal(m['@_refDataItem']))) {
+      el.totals = { showGrandTotals: 'shown' };
+    }
     applyQueryFilters(el, q);
     addElement(X, el);
   }
@@ -1133,6 +1242,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   for (const fnode of findAll(report, 'summaryFilter')) {
     const fexpr = txt(fnode.filterExpression || fnode.expression);
     if (fexpr) warnings.push(`summary filter: "${fexpr.slice(0, 80)}" — post-aggregation filter; re-create as a Sigma filter on the aggregated column.`);
+    else warnings.push('summary filter: structured or empty filter has no expression — re-create as a Sigma post-aggregation filter.');
   }
 
   // Page headers are now first-class document.panels definitions. Cognos page
@@ -1189,5 +1299,6 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   return {
     workbook: CodeRep.wrap(document, { name: reportName }) as CognosReportResult['workbook'],
     warnings, stats,
+    ...(options.captureLineage ? { lineage } : {}),
   };
 }

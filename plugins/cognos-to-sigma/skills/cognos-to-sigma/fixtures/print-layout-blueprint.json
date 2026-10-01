@@ -1,0 +1,92 @@
+{
+  "pages": [
+    {
+      "name": "Cover", "position": "first",
+      "emblem": {"x": 48, "y": 48, "width": 425, "height": 430, "label": "RIVER", "subtitle": "COUNTY"},
+      "watermark": {"text": "DRAFT", "color": "#f3c3bd", "opacity": 0.48, "angle": -32},
+      "imageBox": {"x": 48, "y": 468, "width": 650, "height": 320},
+      "blocks": [
+        {"x": 475, "y": 488, "width": 225, "height": 26, "body": "Recipient   River County Operations", "fontSize": 11},
+        {"x": 475, "y": 525, "width": 225, "height": 26, "body": "Document   Quarterly allocation", "fontSize": 11},
+        {"x": 475, "y": 562, "width": 225, "height": 26, "body": "Reference  Example 01", "fontSize": 11},
+        {"x": 475, "y": 599, "width": 225, "height": 26, "body": "Period     Third quarter", "fontSize": 11},
+        {"x": 475, "y": 636, "width": 225, "height": 26, "body": "Prepared   Review edition", "fontSize": 11},
+        {"x": 48, "y": 850, "width": 670, "height": 29, "body": "This is a fictional print-layout demonstration; confirm all data against the source.", "fontSize": 10}
+      ]
+    },
+    {
+      "name": "Letter", "position": "after", "afterPage": "Cover",
+      "watermark": {"text": "DRAFT", "color": "#f3c3bd", "opacity": 0.40, "angle": -32},
+      "imageBox": {"x": 48, "y": 145, "width": 660, "height": 650},
+      "blocks": [
+        {"x": 50, "y": 48, "width": 240, "height": 25, "body": "River County Operations", "fontSize": 13},
+        {"x": 505, "y": 48, "width": 210, "height": 25, "body": "QUARTERLY ALLOCATION", "fontSize": 14},
+        {"x": 50, "y": 85, "width": 350, "height": 110, "body": "River County Operations\n101 Example Avenue\nNorthport, ST 01010\nUnited States", "fontSize": 12},
+        {"x": 465, "y": 96, "width": 245, "height": 110, "body": "Prepared: Third quarter\nReference: Example 01\nAudience: Operations team", "fontSize": 12},
+        {"x": 50, "y": 240, "width": 660, "height": 95, "body": "Thank you for reviewing this illustrative allocation statement. This page demonstrates a formal letter block, document metadata and a generous signing area. It carries no customer terms or commercial figures.", "fontSize": 12},
+        {"x": 50, "y": 350, "width": 660, "height": 88, "body": "The companion summary page uses available demonstration data. Confirm filters, aggregation and reporting period against a matching source export before relying on any amount. Keep approved business text separate from this neutral template.", "fontSize": 12},
+        {"x": 50, "y": 455, "width": 660, "height": 76, "body": "Each generated sheet should be inspected for visual hierarchy, repeated furniture and readable small print. Table pagination and text wrapping can change independently of whether the API accepts the report.", "fontSize": 12},
+        {"x": 50, "y": 705, "width": 385, "height": 26, "body": "With thanks,", "fontSize": 12},
+        {"x": 50, "y": 735, "width": 385, "height": 42, "body": "River County Team", "fontSize": 22},
+        {"x": 50, "y": 785, "width": 540, "height": 25, "body": "Illustrative contact    team@example.org", "fontSize": 10},
+        {"x": 50, "y": 842, "width": 655, "height": 35, "body": "Document generated for layout assessment only; no terms or values are authoritative.", "fontSize": 9}
+      ]
+    },
+    {
+      "sourcePage": "Regional orders", "name": "Summary", "removeSourceHeader": true,
+      "tableTitle": "Product revenue by line",
+      "tableBox": {"x": 48, "y": 265, "width": 670, "height": 455},
+      "watermark": {"text": "DRAFT", "color": "#f3c3bd", "opacity": 0.35, "angle": -32},
+      "imageBox": {"x": 48, "y": 225, "width": 630, "height": 540},
+      "blocks": [
+        {"x": 278, "y": 48, "width": 295, "height": 48, "body": "## Allocation information"},
+        {"x": 48, "y": 88, "width": 670, "height": 28, "body": "Recipient  /  River County Operations       Reference  /  Example 01", "fontSize": 11},
+        {"x": 48, "y": 130, "width": 670, "height": 28, "body": "Reporting period  /  Third quarter       Status  /  Illustrative", "fontSize": 11},
+        {"x": 48, "y": 175, "width": 670, "height": 62, "body": "Example allocation summary", "fontSize": 25},
+        {"x": 48, "y": 745, "width": 670, "height": 49, "body": "All values come from a demonstration model. Check totals, dates and labels against the source.", "fontSize": 11}
+      ]
+    },
+    {
+      "name": "Terms 1", "blocks": [
+        {"x": 160, "y": 48, "width": 490, "height": 40, "body": "Illustrative terms and review notes", "fontSize": 13},
+        {"x": 48, "y": 83, "width": 670, "height": 795, "fontSize": 9, "dense": true, "sampleFill": true,
+          "body": "1. SCOPE OF EXAMPLE\nThis specimen is provided solely to evaluate whether a multi-page report preserves line wrapping, readable footers, headers, page order and text density. It does not state a promise, price, entitlement or acceptance of any service. The categories and names are fictitious.\n\n2. SOURCE VERIFICATION\nEvery numeric value must be independently checked against the source report and the warehouse backing the destination report. Record the relevant dates, filters, grain and comparison method. Page-level similarities cannot establish the correctness of calculations or business rules.\n\n3. DOCUMENT REVIEW\nInspect the cover, correspondence page, tabular page and each terms page at the exported paper size. Check captions, document identifiers, footer repetition, final lines and section transitions. A valid API response is not a visual review.\n\n4. VERSION CONTROL\nRetain approved source content with the migration record. Changes to page width, margin, font family, point size or line spacing can move text and create extra sheets. Re-export after changing any of these settings.\n\n5. DATA PRESENTATION\nKeep a consistent distinction between informational labels and values derived from the warehouse. Align numerical cells by decimal place and ensure table headings remain associated with their columns. Note when the table represents a sample rather than a complete statement.\n\n6. REVIEW RESPONSIBILITY\nReaders should verify that each expected section exists and that no information was omitted, hidden or duplicated. A gap should be identified explicitly and corrected before describing the resulting report as equivalent to a source document.\n\n7. PAGE SEQUENCE\nPhysical order matters in a document prepared for printing. Check that the introductory pages lead into the summary and that subsequent notes continue in the intended reading order without blank or partial spill pages."}
+      ]
+    },
+    {
+      "name": "Terms 2", "blocks": [
+        {"x": 48, "y": 48, "width": 670, "height": 830, "fontSize": 9, "dense": true, "sampleFill": true,
+          "body": "8. REFERENCE INFORMATION\nReport identifiers in this fixture are examples. Replace them only with identifiers authorized for the actual migration. A reference code should remain consistent on every printed page and in any accompanying verification ledger.\n\n9. COMPARISON METHOD\nUse the same page dimensions and export settings when comparing two printed outputs. Normalize neither away the printed facts nor the layout features being assessed. Differences in pagination, hierarchy and visible numbers should remain visible in the comparison result.\n\n10. TEXT WRAPPING\nThe placement rectangle must contain the full paragraph. Inspect small print visually at the intended paper size; even when text extraction includes the paragraph, the last line can be clipped or covered by a footer. Avoid assuming that character count predicts line count.\n\n11. REPETITION\nA footer panel applies to each specified page. Its page numbers must reflect the physical export, including any continuation sheets. Header or footer content from a converted report should not overlap the authored replacement.\n\n12. IMAGE ASSETS\nDecorative artwork should not hide labels or values. Use bounded imagery where the report representation supports it; an oversized layer may generate an extra sheet even when the server accepts the code. Review whether opacity and contrast are appropriate after rasterization.\n\n13. APPROVAL STATUS\nThis specimen is illustrative and has no approval status outside the testing workflow. The source system remains the authority for approved business content. Do not represent this text as a contractual clause or a substitute for customer-supplied terms.\n\n14. AUDIT TRAIL\nRecord the identity of the source artifact, the target report version and a description of changes in a private migration record. Remove test previews that are no longer needed, while preserving the single working report for iteration."}
+      ]
+    },
+    {
+      "name": "Terms 3", "blocks": [
+        {"x": 48, "y": 48, "width": 670, "height": 830, "fontSize": 9, "dense": true, "sampleFill": true,
+          "body": "15. RENDERED OUTPUT\nA report is not complete until the exported PDF has been inspected page by page. A structurally sound code representation can still produce a sparse page, tiny table, awkward graphic or stray page. Treat every visual mismatch as a finding, not as an automatic pass.\n\n16. PAGINATED TABLES\nTables are sized for an expected row count. When more rows are present, continuation may push other elements or repeat headers unexpectedly. Inspect the first and last rows and every continuation page before signing off on the design.\n\n17. SOURCE DATA\nDemonstration rows are not evidence of correctness for a production statement. The test table confirms that the rendered report can show warehouse-backed data and that the column types read back without errors. Numerical parity requires separate source evidence.\n\n18. GAPS AND EXCEPTIONS\nIf a formula, filter, crosstab or interaction cannot be recreated faithfully, report the gap directly. Do not silently replace a visual with another kind or drop terms merely because they are difficult to reproduce in the current authoring interface.\n\n19. DYNAMIC CONTENT\nPage-number tokens should resolve at PDF export time. Check that the footer shows a consecutive sequence and the correct total on every physical sheet. An output containing literal template expressions is incomplete.\n\n20. READABILITY\nFine print needs enough contrast, line height and width to be legible at one hundred percent zoom and when printed. Titles and section headings should remain easy to scan without stealing the space intended for substantive text.\n\n21. RE-EXPORT\nAfter any targeted repair, run the verification and PDF export again. Compare the new PDF with the prior version so that fixing one page does not unintentionally damage another page or alter the data table."}
+      ]
+    },
+    {
+      "name": "Terms 4", "blocks": [
+        {"x": 48, "y": 48, "width": 670, "height": 830, "fontSize": 9, "dense": true, "sampleFill": true,
+          "body": "22. PAGE SETUP\nThe paper size, orientation and margins are part of the report contract. Content placed beyond the printable canvas may disappear or create an extra page. Confirm the print settings against the source artifact before declaring a visual match.\n\n23. TABLE HEADERS\nA repeated header must be distinguishable from the detail rows. Check column labels, sort direction and visible grouping, and verify that numeric totals are not accidentally calculated at a different grain from the source system.\n\n24. GRAPHIC TREATMENT\nA watermark is supplementary information. Keep its color light and its placement behind low-priority whitespace when possible; the meaningful text, table and footer should remain readable in grayscale and on screen.\n\n25. FOLLOW-UP\nWhen authentic source facts become available, replace the fictional text only after confirming ownership, correctness and intended disclosure. Preserve the page structure during this substitution, then remeasure wrapping and pagination.\n\n26. CONTROLLED CHANGE\nA full-document update should use the existing report identifier and a version check. Read back the complete result and confirm all old content intended to remain has survived. Do not create a new report for each iterative edit.\n\n27. QUALITY GATES\nOffline assertions establish placement and syntax. Server verification establishes that dependencies resolve. An exported PDF establishes actual render behavior. These checks answer different questions and none alone proves source parity.\n\n28. HUMAN REVIEW\nA person familiar with the reference document should inspect sections with unusually dense text, tabular structure or highly specific artwork. Record any limitations that cannot be resolved without original assets or data."}
+      ]
+    },
+    {
+      "name": "Terms 5", "blocks": [
+        {"x": 48, "y": 48, "width": 670, "height": 830, "fontSize": 9, "dense": true, "sampleFill": true,
+          "body": "29. EXPORTED PAGE COUNT\nCount the physical pages in the PDF, not only the logical pages in the report spec. A single oversize image can create an otherwise empty continuation sheet. Reject that result even if the text and data appear on earlier pages.\n\n30. PANEL OWNERSHIP\nA panel that applies to several pages should be edited with care. Removing a shared header on only one page could erase it elsewhere. Reject ambiguous replacements instead of silently changing other pages.\n\n31. NEUTRAL FIXTURE\nThis sample is intentionally disconnected from any customer's approved statements or terms. It is suitable for checking report composition, wrapping and export behavior. It is not a source record or a contract.\n\n32. VISUAL CHECK\nReview the top, center and bottom bands of every sheet. Look for clipped letters, conflicting layers, column misalignment, unexpected whitespace and an incorrect page total in the footer. Save measured findings outside the distributed fixture.\n\n33. VALUE CHECK\nThe sample summary is a short data-backed table. It demonstrates column binding and display only. To establish parity, select representative values from the source and compare them with results from the same reporting period in the destination.\n\n34. FORMAT CHANGE\nA revision to capitalization, numbering, punctuation or font style may shift line wrapping. Re-run a full PDF export after a change that touches any long-form block. Preserve a clear heading hierarchy in both versions.\n\n35. RETENTION\nKeep only the intended preview report while developing a layout. Remove disposable previews by verified identity when no longer needed and continue edits on the retained report."}
+      ]
+    },
+    {
+      "name": "Terms 6", "blocks": [
+        {"x": 48, "y": 48, "width": 670, "height": 830, "fontSize": 9, "dense": true, "sampleFill": true,
+          "body": "36. FINAL SEQUENCE\nThe cover introduces the document. A short letter explains its purpose. The data page presents the illustrative table. Remaining pages test a consistent fine-print rhythm with the same footer, inset and paper geometry.\n\n37. DISCLOSURE\nOnly approved source data may be described as factual in a migration deliverable. Replacing the sample text with genuine source copy is a separate review step and requires access to the authoritative content.\n\n38. DOCUMENT IDENTIFIERS\nPrinted identifiers should be stable across all pages. When a report is updated, confirm that the number, date and intended recipient reflect the current version. This demonstration deliberately uses fictional identifiers.\n\n39. BACKGROUND GRAPHICS\nThe cover and introductory pages may carry a restrained diagonal draft treatment. Text-heavy pages prioritize readability. If an image layer is supplied, its placement must be checked on the actual exported sheet, not inferred from coordinate bounds alone.\n\n40. CONTINUATION\nA legal-style text block can extend for multiple pages, but the template should not invent binding terms. The repeated structure in this fixture is a visual stand-in for that pattern. Customer-approved language must be inserted, reflowed and checked separately.\n\n41. CONCLUSION\nReview all pages side by side with the intended visual reference. Report which differences are structural, which are due to absent data or assets, and which are caused by unsupported product features.\n\n42. NOTIFICATION\nCommunicate any remaining gap honestly. A successful export confirms that Sigma can render a report; it does not establish that the resulting document is identical to an independent source."}
+      ]
+    }
+  ],
+  "footer": {
+    "height": 54, "x": 490, "y": 12, "width": 215, "textHeight": 28,
+    "brand": {"label": "RIVER COUNTY", "accent": "#c93024", "width": 320},
+    "body": "Example 01   |   {{CurrentPageNumber()}} of {{TotalPageCount()}}"
+  }
+}

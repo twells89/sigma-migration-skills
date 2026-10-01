@@ -37,6 +37,8 @@ Note the workbook references `<DM_ID>` — remap with the skill's
     {"path": "../../../plugins/cognos-to-sigma/skills/cognos-to-sigma/fixtures/sales-overview-charts.report.xml", "format": "xml"},
     {"path": "../../../plugins/cognos-to-sigma/skills/cognos-to-sigma/fixtures/go-sales-performance.report.xml", "format": "xml"},
     {"path": "../../../plugins/cognos-to-sigma/skills/cognos-to-sigma/fixtures/banking-risk-crosstab.report.xml", "format": "xml"},
+    {"path": "../../../plugins/cognos-to-sigma/skills/cognos-to-sigma/fixtures/print-list.report.xml", "format": "xml"},
+    {"path": "../../../plugins/cognos-to-sigma/skills/cognos-to-sigma/fixtures/print-layout-blueprint.json", "format": "json"},
     {"path": "checks.sh", "format": "shell"}
   ],
   "goldens": {
