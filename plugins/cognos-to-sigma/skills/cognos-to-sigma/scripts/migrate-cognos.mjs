@@ -59,6 +59,7 @@ import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as scoutGate from './lib/scout_gate.mjs';
 import { pythonArgv } from './lib/py_resolve.mjs';
+import { parityActuals } from './lib/parity-export.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONV = join(HERE, '..', 'converter');
@@ -162,30 +163,6 @@ async function resolveFolder() {
   return entry.id;
 }
 
-// Tiny CSV parser (quoted fields, no embedded newlines-in-quotes edge beyond basic).
-function parseCsv(text) {
-  const rows = [];
-  let row = [], field = '', inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQ) {
-      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
-      else field += c;
-    } else if (c === '"') inQ = true;
-    else if (c === ',') { row.push(field); field = ''; }
-    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
-    else if (c !== '\r') field += c;
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row); }
-  return rows.filter((r) => r.length > 1 || (r.length === 1 && r[0] !== ''));
-}
-
-const numish = (s) => {
-  if (s == null) return null;
-  const t = String(s).replace(/[$,%\s]/g, '');
-  return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
-};
-
 // ---------------------------------------------------------------------------
 // Parity (Phase 7) — shared by the straight-through path and --resume.
 // ---------------------------------------------------------------------------
@@ -205,9 +182,10 @@ async function runParity(state) {
   line('If the source tables changed since capture, deltas are STALENESS, not conversion errors —');
   line('re-run the Cognos report (or re-query the source DB) before calling a divergence a bug.');
 
-  // Auto-actuals: export every data-bearing workbook element to CSV via REST
-  // and aggregate to "<Element>/<Column>"=sum + "<Element>/rows"=count.
-  const els = (state.wbElements || []).filter((e) => !['control', 'text'].includes(String(e.kind)));
+  // Totals-bearing pivot CSV exports can 500; JSON returns the long-form rows.
+  // Skip non-data elements so a page break cannot silently block parity.
+  const dataKind = (k) => ['table', 'pivot-table'].includes(k) || /-(?:chart|map)$/.test(k);
+  const els = (state.wbElements || []).filter((e) => dataKind(String(e.kind)));
   // Duplicate display names (a Cognos report can render the same query twice —
   // e.g. two "Sheet 1 — qMain" tables) would collide on a name-only parity key
   // and only ONE would verify. Disambiguate dupes with an elementId suffix
@@ -222,10 +200,11 @@ async function runParity(state) {
   if (dupes.length) line(`duplicate element name(s) ${dupes.map(([n]) => `'${n}'`).join(', ')} — parity keys get an elementId suffix: "<Name> [<elementId>]"`);
   const actuals = {};
   for (const e of els) {
+    const format = e.kind === 'pivot-table' ? 'json' : 'csv';
     const post = await api('POST', `/v2/workbooks/${state.workbookId}/export`,
-      { elementId: e.id, format: { type: 'csv' } });
+      { elementId: e.id, format: { type: format } });
     const qid = post.json?.queryId;
-    if (!qid) { line(`WARN: export request failed for '${e.name}' (HTTP ${post.status})`); continue; }
+    if (!qid) die(`parity export request failed for '${e.name}' (HTTP ${post.status})`);
     let body = null;
     const deadline = Date.now() + 240e3;
     while (Date.now() < deadline) {
@@ -233,19 +212,13 @@ async function runParity(state) {
       if (dl.ok && dl.text && dl.text.trim()) { body = dl.text; break; }
       await new Promise((r) => setTimeout(r, 2000));
     }
-    if (!body) { line(`WARN: export never became ready for '${e.name}'`); continue; }
-    const rows = parseCsv(body);
-    const headers = rows[0] || [];
-    const data = rows.slice(1);
+    if (!body) die(`parity ${format} export never became ready for '${e.name}'`);
     const key = keyOf(e);
-    actuals[`${key}/rows`] = data.length;
-    headers.forEach((h, ci) => {
-      const vals = data.map((r) => numish(r[ci])).filter((v) => v != null);
-      if (vals.length === data.length && data.length > 0) {
-        actuals[`${key}/${h}`] = Number(vals.reduce((a, b) => a + b, 0).toFixed(6));
-      }
-    });
-    line(`'${key}': ${data.length} row(s), ${headers.length} col(s)`);
+    let parsed;
+    try { parsed = parityActuals(body, format, key); }
+    catch (error) { die(`parity ${format} export for '${e.name}' is unusable: ${error.message}`); }
+    Object.assign(actuals, parsed.actuals);
+    line(`'${key}': ${parsed.rows} row(s), ${parsed.columns} col(s) [${format}]`);
   }
   const actualsPath = join(WORK, 'sigma-actuals.json');
   writeFileSync(actualsPath, JSON.stringify(actuals, null, 2));

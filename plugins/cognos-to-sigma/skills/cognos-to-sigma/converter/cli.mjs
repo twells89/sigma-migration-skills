@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-// cli.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cli.ts
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// sigma-ids.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/sigma-ids.ts
 var SIGMA_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var _usedIds = /* @__PURE__ */ new Set();
 var SIGMA_LOWERCASE_WORDS = /* @__PURE__ */ new Set([
@@ -182,7 +182,7 @@ function buildDerivedElements(elements) {
   return derived;
 }
 
-// cognos.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos.ts
 function applyLearnedRules(expr, rules) {
   let s = expr || "";
   for (const r of rules || []) {
@@ -587,7 +587,7 @@ function parseJoinExpr(expr) {
 }
 var trunc = (s, n = 80) => s && s.length > n ? s.slice(0, n) + "\u2026" : s || "";
 
-// node_modules/fast-xml-parser/src/util.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/util.js
 var nameStartChar = ":A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
 var nameChar = nameStartChar + "\\-.\\d\\u00B7\\u0300-\\u036F\\u203F-\\u2040";
 var nameRegexp = "[" + nameStartChar + "][" + nameChar + "]*";
@@ -628,7 +628,7 @@ var DANGEROUS_PROPERTY_NAMES = [
 ];
 var criticalProperties = ["__proto__", "constructor", "prototype"];
 
-// node_modules/fast-xml-parser/src/validator.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/validator.js
 var defaultOptions = {
   allowBooleanAttributes: false,
   //A tag can have attributes without any value
@@ -934,7 +934,7 @@ function getPositionFromMatch(match) {
   return match.startIndex + match[1].length;
 }
 
-// node_modules/@nodable/entities/src/entities.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/@nodable/entities/src/entities.js
 var CURRENCY = {
   cent: "\xA2",
   pound: "\xA3",
@@ -982,7 +982,7 @@ var COMMON_HTML = {
   frac34: "\xBE"
 };
 
-// node_modules/@nodable/entities/src/EntityDecoder.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/@nodable/entities/src/EntityDecoder.js
 var ENTITY_ACTION = Object.freeze({
   /** Resolve and expand the entity normally. */
   ALLOW: "allow",
@@ -1426,7 +1426,7 @@ var EntityDecoder = class {
   }
 };
 
-// node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
 var defaultOnDangerousProperty = (name) => {
   if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
     return "__" + name;
@@ -1561,7 +1561,7 @@ var buildOptions = function(options) {
   return built;
 };
 
-// node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
 var METADATA_SYMBOL;
 if (typeof Symbol !== "function") {
   METADATA_SYMBOL = "@@xmlMetadata";
@@ -1595,7 +1595,7 @@ var XmlNode = class {
   }
 };
 
-// node_modules/xml-naming/src/index.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/xml-naming/src/index.js
 var nameStartChar10 = ":A-Za-z_\xC0-\xD6\xD8-\xF6\xF8-\u02FF\u0370-\u037D\u037F-\u0486\u0488-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD";
 var nameChar10 = nameStartChar10 + "\\-\\.\\d\xB7\u0300-\u036F\u203F-\u2040";
 var nameStartChar11 = ":A-Za-z_\xC0-\u02FF\u0370-\u037D\u037F-\u0486\u0488-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}";
@@ -1623,7 +1623,7 @@ var getRegexes = (xmlVersion = "1.0", asciiOnly = false) => {
 };
 var qName = (str, { xmlVersion = "1.0", asciiOnly = false } = {}) => getRegexes(xmlVersion, asciiOnly).qName.test(str);
 
-// node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
 var DocTypeReader = class {
   constructor(options, xmlVersion) {
     this.suppressValidationErr = !options;
@@ -1903,7 +1903,7 @@ function validateEntityName2(name, xmlVersion) {
     throw new Error(`Invalid entity name ${name}`);
 }
 
-// node_modules/anynum/digitTable.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/anynum/digitTable.js
 var SCRIPT_ZEROS = [
   // Basic Latin (ASCII) — included for completeness / pass-through
   48,
@@ -2053,7 +2053,7 @@ for (const zero of SCRIPT_ZEROS) {
   }
 }
 
-// node_modules/anynum/anynum.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/anynum/anynum.js
 var CHAR_0 = 48;
 var CHAR_9 = 57;
 var CHAR_MINUS = 45;
@@ -2131,7 +2131,7 @@ function anynum(str) {
 }
 var anynum_default = anynum;
 
-// node_modules/strnum/strnum.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/strnum/strnum.js
 var hexRegex = /^[-+]?0x[a-fA-F0-9]+$/;
 var binRegex = /^0b[01]+$/;
 var octRegex = /^0o[0-7]+$/;
@@ -2269,7 +2269,7 @@ function handleInfinity(str, num, options) {
   }
 }
 
-// node_modules/fast-xml-parser/src/ignoreAttributes.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/ignoreAttributes.js
 function getIgnoreAttributesFn(ignoreAttributes) {
   if (typeof ignoreAttributes === "function") {
     return ignoreAttributes;
@@ -2289,7 +2289,7 @@ function getIgnoreAttributesFn(ignoreAttributes) {
   return () => false;
 }
 
-// node_modules/path-expression-matcher/src/Expression.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/path-expression-matcher/src/Expression.js
 var Expression = class {
   /**
    * Create a new Expression
@@ -2452,7 +2452,7 @@ var Expression = class {
   }
 };
 
-// node_modules/path-expression-matcher/src/ExpressionSet.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/path-expression-matcher/src/ExpressionSet.js
 var ExpressionSet = class {
   constructor() {
     this._byDepthAndTag = /* @__PURE__ */ new Map();
@@ -2621,7 +2621,7 @@ var ExpressionSet = class {
   }
 };
 
-// node_modules/path-expression-matcher/src/Matcher.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/path-expression-matcher/src/Matcher.js
 var MatcherView = class {
   /**
    * @param {Matcher} matcher - The parent Matcher instance to read from.
@@ -3138,7 +3138,7 @@ var Matcher = class {
   }
 };
 
-// node_modules/is-unsafe/src/contexts/html.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/html.js
 var HTML_PATTERNS = [
   {
     id: "html-script-open",
@@ -3231,7 +3231,7 @@ var HTML_PATTERNS = [
 ];
 var html_default = HTML_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/xml.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/xml.js
 var XML_PATTERNS = [
   {
     id: "xml-cdata-injection",
@@ -3298,7 +3298,7 @@ var XML_PATTERNS = [
 ];
 var xml_default = XML_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/svg.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/svg.js
 var SVG_PATTERNS = [
   {
     id: "svg-script-element",
@@ -3370,7 +3370,7 @@ var SVG_PATTERNS = [
 ];
 var svg_default = SVG_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/sql.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/sql.js
 var SQL_PATTERNS = [
   {
     id: "sql-block-comment-open",
@@ -3452,7 +3452,7 @@ var SQL_PATTERNS = [
 ];
 var sql_default = SQL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/shell.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/shell.js
 var SHELL_PATTERNS = [
   {
     id: "shell-path-traversal-unix",
@@ -3550,7 +3550,7 @@ var SHELL_PATTERNS = [
 ];
 var shell_default = SHELL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/redos.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/redos.js
 var REDOS_PATTERNS = [
   {
     id: "redos-nested-quantifier-plus",
@@ -3599,7 +3599,7 @@ var REDOS_PATTERNS = [
 ];
 var redos_default = REDOS_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/nosql.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/nosql.js
 var sep = `["'\\s]*:`;
 var NOSQL_PATTERNS = [
   // ─── MongoDB $ operator injection ────────────────────────────────────────
@@ -3689,7 +3689,7 @@ var NOSQL_PATTERNS = [
 ];
 var nosql_default = NOSQL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/log.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/log.js
 var LOG_PATTERNS = [
   // ─── CRLF / newline injection ─────────────────────────────────────────────
   {
@@ -3763,7 +3763,7 @@ var LOG_PATTERNS = [
 ];
 var log_default = LOG_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/sql-strict.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/contexts/sql-strict.js
 var SQL_STRICT_EXTRA = [
   {
     id: "sql-line-comment",
@@ -3784,7 +3784,7 @@ var SQL_STRICT_EXTRA = [
 var SQL_STRICT_PATTERNS = [...sql_default, ...SQL_STRICT_EXTRA];
 var sql_strict_default = SQL_STRICT_PATTERNS;
 
-// node_modules/is-unsafe/src/index.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/is-unsafe/src/index.js
 html_default.label = "HTML";
 xml_default.label = "XML";
 svg_default.label = "SVG";
@@ -3858,7 +3858,7 @@ function isUnsafe(value, context) {
   return false;
 }
 
-// node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
 function extractRawAttributes(prefixedAttrs, options) {
   if (!prefixedAttrs) return {};
   const attrs = options.attributesGroupName ? prefixedAttrs[options.attributesGroupName] : prefixedAttrs;
@@ -4448,7 +4448,7 @@ function sanitizeName(name, options) {
   return name;
 }
 
-// node_modules/fast-xml-parser/src/xmlparser/node2json.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/node2json.js
 var METADATA_SYMBOL2 = XmlNode.getMetaDataSymbol();
 function stripAttributePrefix(attrs, prefix) {
   if (!attrs || typeof attrs !== "object") return {};
@@ -4467,11 +4467,11 @@ function stripAttributePrefix(attrs, prefix) {
 function prettify(node, options, matcher, readonlyMatcher) {
   return compress(node, options, matcher, readonlyMatcher);
 }
-function compress(arr3, options, matcher, readonlyMatcher) {
-  let text2;
+function compress(arr4, options, matcher, readonlyMatcher) {
+  let text3;
   const compressedObj = {};
-  for (let i = 0; i < arr3.length; i++) {
-    const tagObj = arr3[i];
+  for (let i = 0; i < arr4.length; i++) {
+    const tagObj = arr4[i];
     const property = propName(tagObj);
     if (property !== void 0 && property !== options.textNodeName) {
       const rawAttrs = stripAttributePrefix(
@@ -4481,8 +4481,8 @@ function compress(arr3, options, matcher, readonlyMatcher) {
       matcher.push(property, rawAttrs);
     }
     if (property === options.textNodeName) {
-      if (text2 === void 0) text2 = tagObj[property];
-      else text2 += "" + tagObj[property];
+      if (text3 === void 0) text3 = tagObj[property];
+      else text3 += "" + tagObj[property];
     } else if (property === void 0) {
       continue;
     } else if (tagObj[property]) {
@@ -4520,9 +4520,9 @@ function compress(arr3, options, matcher, readonlyMatcher) {
       }
     }
   }
-  if (typeof text2 === "string") {
-    if (text2.length > 0) compressedObj[options.textNodeName] = text2;
-  } else if (text2 !== void 0) compressedObj[options.textNodeName] = text2;
+  if (typeof text3 === "string") {
+    if (text3.length > 0) compressedObj[options.textNodeName] = text3;
+  } else if (text3 !== void 0) compressedObj[options.textNodeName] = text3;
   return compressedObj;
 }
 function propName(obj) {
@@ -4560,7 +4560,7 @@ function isLeafTag(obj, options) {
   return false;
 }
 
-// node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
 var XMLParser = class {
   constructor(options) {
     this.externalEntities = {};
@@ -4620,7 +4620,7 @@ var XMLParser = class {
   }
 };
 
-// metric-binding.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/metric-binding.ts
 var canon = (f) => (f || "").replace(/\s+/g, "");
 function metricRefOrInline(inline, masterName, metrics) {
   if (typeof inline !== "string" || !metrics || metrics.length === 0) return inline;
@@ -4631,7 +4631,7 @@ function metricRefOrInline(inline, masterName, metrics) {
   return inline;
 }
 
-// workbook-features.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/workbook-features.ts
 var VIZ_KIND = {
   "com.ibm.vis.clusteredbar": "bar-chart",
   "com.ibm.vis.stackedbar": "bar-chart",
@@ -4666,7 +4666,7 @@ function workbookGap(feature, detail) {
   return `\u26D4 WORKBOOK FEATURE GAP [${feature}]: ${detail}`;
 }
 
-// ../scripts/lib/code_rep.mjs
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/lib/code_rep.mjs
 var LEGACY_HORIZONTAL_ALIGN = { start: "left", middle: "center", end: "right" };
 var LEGACY_VERTICAL_ALIGN = { start: "top", middle: "center", end: "bottom" };
 var isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -4694,6 +4694,8 @@ function canonicalizeLayout(layoutXml) {
 }
 function canonicalizeElement(element) {
   if (!isObj(element)) return element;
+  const { visibleAsSource: _removedVisibleAsSource, ...workbookElement } = element;
+  element = workbookElement;
   if (element.kind === "text" && element.verticalAlign in LEGACY_VERTICAL_ALIGN) {
     return { ...element, verticalAlign: LEGACY_VERTICAL_ALIGN[element.verticalAlign] };
   }
@@ -4745,7 +4747,7 @@ function wrap(doc, extra = {}) {
   return { ...extra, document: canonical };
 }
 
-// cognos-report.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos-report.ts
 var xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -4863,7 +4865,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
       if (!dn) continue;
       const expr = txt(di.expression);
       const dataType = findAll(di, "XMLAttribute").find((x) => x["@_name"] === "RS_dataType")?.["@_value"];
-      items.set(dn, { name: dn, expression: expr, aggregate: di["@_aggregate"], dataType });
+      items.set(dn, { name: dn, expression: expr, aggregate: di["@_aggregate"], dataType, sort: di["@_sort"] });
       const m = expr.match(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[[^\]]+\]/);
       if (m && !subject) subject = m[1];
     }
@@ -4996,13 +4998,25 @@ function convertCognosReportToSigma(xml2, options = {}) {
     return void 0;
   };
   const reportPages = findAll(report.layouts || report, "reportPage").concat(findAll(report.layouts || report, "page"));
-  const pageNodes = reportPages.length ? reportPages : [{ "@_name": "Report" }];
-  const pages = pageNodes.map((p) => ({
+  const pageNodes2 = reportPages.length ? reportPages : [{ "@_name": "Report" }];
+  const pages = pageNodes2.map((p) => ({
     id: sigmaShortId(),
     name: p["@_name"] || "Report"
   }));
   const pageIdBySourceNode = /* @__PURE__ */ new WeakMap();
-  pageNodes.forEach((pageNode, i) => {
+  const sourceOrder = /* @__PURE__ */ new WeakMap();
+  let sourceOrdinal = 0;
+  const indexLayout = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(indexLayout);
+      return;
+    }
+    if (!sourceOrder.has(node)) sourceOrder.set(node, sourceOrdinal++);
+    Object.values(node).forEach(indexLayout);
+  };
+  if (options.captureLineage) pageNodes2.forEach(indexLayout);
+  pageNodes2.forEach((pageNode, i) => {
     if (!pageNode || typeof pageNode !== "object") return;
     for (const tag of ["singleton", "list", "crosstab", "vizControl", "pageBreak", "repeater", "repeaterTable", "block"]) {
       for (const node of findAll(pageNode, tag)) {
@@ -5012,6 +5026,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
   });
   const elementsByPage = new Map(pages.map((p) => [p.id, []]));
   const elementsBySourceNode = /* @__PURE__ */ new WeakMap();
+  const lineage = [];
   const containerChildren = /* @__PURE__ */ new Map();
   const lists = findAll(report, "list");
   const pageEls = [];
@@ -5022,6 +5037,15 @@ function convertCognosReportToSigma(xml2, options = {}) {
   const addElement = (sourceNode, element) => {
     const pageId = sourceNode && typeof sourceNode === "object" ? pageIdBySourceNode.get(sourceNode) || pages[0].id : pages[0].id;
     addToPage(pageId, element);
+    if (options.captureLineage && sourceNode && typeof sourceNode === "object") {
+      lineage.push({
+        elementId: element.id,
+        pageId,
+        source: sourceNode,
+        kind: element.kind,
+        order: sourceOrder.get(sourceNode) ?? 0
+      });
+    }
     if (sourceNode && typeof sourceNode === "object") {
       const current = elementsBySourceNode.get(sourceNode) || [];
       current.push(element);
@@ -5147,18 +5171,38 @@ function convertCognosReportToSigma(xml2, options = {}) {
       warnings.push(`<list> refQuery="${qName2}" has no matching query \u2014 skipped.`);
       continue;
     }
-    const colRefs = findAll(L, "dataItemValue").map((d) => d["@_refDataItem"]).filter(Boolean);
+    const colRefs = [];
+    const layoutColumns = arr2(L.listColumns?.listColumn);
+    for (const lc2 of layoutColumns) {
+      const body = findAll(lc2.listColumnBody || {}, "dataItemValue").map((d) => d["@_refDataItem"]).filter(Boolean);
+      if (!body.length) continue;
+      colRefs.push(body[0]);
+      if (new Set(body).size > 1) warnings.push(`list "${L["@_name"] || qName2}": a visible column combines ${[...new Set(body)].join(", ")} \u2014 used ${body[0]} as the data column; reproduce the compound cell in Sigma.`);
+    }
+    if (layoutColumns.length && !colRefs.length) {
+      warnings.push(`list "${L["@_name"] || qName2}": no visible dataItemValue resolved from its listColumnBody \u2014 cannot emit a faithful table.`);
+      continue;
+    }
     const refs = colRefs.length ? colRefs : [...q.items.keys()];
     const columns = [];
     const AGG = { total: "Sum", summary: "Sum", aggregate: "Sum", calculated: "Sum", average: "Avg", count: "Count", maximum: "Max", minimum: "Min" };
+    const sourceGroups = [...new Set(findAll(L, "listGroup").map((g) => g["@_refDataItem"]).filter(Boolean))];
+    const visibleDims = refs.filter((ref) => {
+      const item = q.items.get(ref);
+      return item && (!item.aggregate || item.aggregate === "none");
+    });
+    const detailGrain = visibleDims.some((ref) => /\b(?:call\s*id|transaction\s*id|row\s*id)\b/i.test(ref));
+    if (detailGrain && sourceGroups.length) {
+      warnings.push(`list "${L["@_name"] || qName2}": row-level identifier (${visibleDims.filter((ref) => /\b(?:call\s*id|transaction\s*id|row\s*id)\b/i.test(ref)).join(", ")}) appears with Cognos group headers \u2014 keep row-grain measures rather than rolling them up again; verify the source PDF.`);
+    }
     const isMeasureItem = (d) => !!d.aggregate && d.aggregate !== "none";
-    const grouped = refs.some((r) => {
+    const grouped = !detailGrain && refs.some((r) => {
       const d = q.items.get(r);
       return d && isMeasureItem(d);
-    }) && refs.some((r) => {
+    }) && (sourceGroups.length > 0 || refs.some((r) => {
       const d = q.items.get(r);
       return d && !isMeasureItem(d);
-    });
+    }));
     const dimIds = [];
     const measureIds = [];
     const footerRefs = [];
@@ -5194,9 +5238,6 @@ function convertCognosReportToSigma(xml2, options = {}) {
     if (footerRefs.length) {
       warnings.push(`list "${qName2}": footer total(s) ${footerRefs.join(", ")} \u2014 the grouped Sigma table already aggregates per group; add a grand-total via the table's totals UI (a duplicate Sum column would double-aggregate).`);
     }
-    for (const si of findAll(L, "sortItem")) {
-      if (si["@_refDataItem"]) warnings.push(`list "${qName2}" sorts by "${si["@_refDataItem"]}" (${si["@_sortOrder"] || "ascending"}) \u2014 table sort isn't part of the Sigma workbook spec; apply the sort in the UI.`);
-    }
     const condRefs = [...new Set(findAll(L, "conditionalStyleRef").map((c) => c["@_refConditionalStyle"]).filter(Boolean))];
     if (condRefs.length) warnings.push(`list "${qName2}" uses conditional style(s) ${condRefs.map((r) => `"${r}"`).join(", ")} \u2014 threshold-driven formats/styles aren't portable to the Sigma spec; set a column format (e.g. $,.3s) or conditional formatting in the UI.`);
     const el = {
@@ -5207,9 +5248,37 @@ function convertCognosReportToSigma(xml2, options = {}) {
       columns,
       order: columns.map((c) => c.id)
     };
-    if (grouped && dimIds.length && measureIds.length) {
-      el.groupings = [{ id: sigmaShortId(), groupBy: dimIds, calculations: measureIds }];
+    const groupCols = [];
+    for (const ref of sourceGroups) {
+      const id = columns.find((c) => c.name === sigmaDisplayName(ref))?.id || ensureFilterCol(el, q, ref);
+      if (id && !groupCols.includes(id)) groupCols.push(id);
+      else if (!id) warnings.push(`list "${L["@_name"] || qName2}": group key "${ref}" is not a query dataItem \u2014 grouping needs manual repair.`);
     }
+    if (grouped && (groupCols.length || dimIds.length) && measureIds.length) {
+      el.groupings = [{ id: sigmaShortId(), groupBy: [.../* @__PURE__ */ new Set([...groupCols, ...dimIds])], calculations: measureIds }];
+    } else if (sourceGroups.length && !detailGrain) {
+      warnings.push(`list "${L["@_name"] || qName2}": source group headers cannot be reproduced without an aggregate grouping \u2014 group keys were retained but review the presentation.`);
+    }
+    const sortItems = findAll(L.sortList || L.listSorts || {}, "sortItem").filter((si) => si["@_refDataItem"]);
+    if (!sortItems.length) {
+      for (const ref of refs) {
+        const dir = q.items.get(ref)?.sort;
+        if (dir) sortItems.push({ "@_refDataItem": ref, "@_sortOrder": dir });
+      }
+    }
+    const sorts = [];
+    for (const si of sortItems) {
+      const ref = si["@_refDataItem"];
+      const id = columns.find((c) => c.name === sigmaDisplayName(ref))?.id || ensureFilterCol(el, q, ref);
+      if (!id) {
+        warnings.push(`list "${L["@_name"] || qName2}": sort key "${ref}" not in query \u2014 apply manually.`);
+        continue;
+      }
+      const raw = String(si["@_sortOrder"] || si["@_direction"] || "ascending").toLowerCase();
+      sorts.push({ columnId: id, direction: raw.startsWith("desc") ? "descending" : "ascending" });
+    }
+    if (sorts.length && el.groupings) el.groupings[0].sort = sorts;
+    else if (sorts.length) el.sort = sorts;
     applyQueryFilters(el, q);
     addElement(L, el);
   }
@@ -5227,6 +5296,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
     let measRefs = [...new Set(findAll(X.crosstabCorner || {}, "dataItemLabel").map((d) => d["@_refDataItem"]).filter((r) => r && !isTotal(r)))];
     if (!measRefs.length) measRefs = [...q.items.keys()].filter((k) => !rowRefs.includes(k) && !colRefs.includes(k) && !isTotal(k));
     const cols = [];
+    const AGG = { total: "Sum", sum: "Sum", summary: "Sum", aggregate: "Sum", average: "Avg", avg: "Avg", count: "Count", countdistinct: "CountDistinct", maximum: "Max", minimum: "Min" };
     const mk = (ref, agg) => {
       const di = q.items.get(ref);
       if (!di) {
@@ -5236,12 +5306,36 @@ function convertCognosReportToSigma(xml2, options = {}) {
       const { formula, warns } = translate(di.expression, q);
       warns.forEach((w) => warnings.push(`"${qName2}.${ref}": ${w}`));
       const id = sigmaShortId();
-      cols.push({ id, name: sigmaDisplayName(di.name), formula: agg ? bindMeasure(`Sum(${formula})`, q) : formula });
+      let result = formula;
+      if (agg) {
+        const kind = String(di.aggregate || "total").toLowerCase();
+        const fn = AGG[kind];
+        if (!fn) warnings.push(`crosstab "${qName2}" measure "${ref}": aggregate '${di.aggregate}' is not mapped \u2014 left its formula for manual review (never silently Sum).`);
+        else result = bindMeasure(/^\s*(Sum|Avg|Min|Max|Count|CountDistinct)\s*\(/.test(formula) ? formula : `${fn}(${formula})`, q);
+      }
+      cols.push({ id, name: sigmaDisplayName(di.name), formula: result });
       return { id };
     };
     const rowsBy = rowRefs.map((r) => mk(r, false)).filter(Boolean);
     const columnsBy = colRefs.map((c) => mk(c, false)).filter(Boolean);
     const values = measRefs.map((m) => mk(m, true)).filter(Boolean).map((o) => o.id);
+    const addEdgeSorts = (subtree, edgeRefs, axis) => {
+      for (let i = 0; i < axis.length; i++) {
+        const member = findAll(subtree, "crosstabNodeMember").find((m) => m["@_refDataItem"] === edgeRefs[i]);
+        const si = findAll(member?.sortList || {}, "sortItem")[0];
+        if (!si) continue;
+        const byRef = si["@_refDataItem"] || edgeRefs[i];
+        const by = cols.find((c) => c.name === sigmaDisplayName(byRef))?.id;
+        if (!by) {
+          warnings.push(`crosstab "${qName2}" sort key "${byRef}" is not on an edge or a value \u2014 apply manually.`);
+          continue;
+        }
+        const raw = String(si["@_sortOrder"] || si["@_direction"] || "ascending").toLowerCase();
+        axis[i].sort = { by, direction: raw.startsWith("desc") ? "descending" : "ascending" };
+      }
+    };
+    addEdgeSorts(X.crosstabRows, rowRefs, rowsBy);
+    addEdgeSorts(X.crosstabColumns, colRefs, columnsBy);
     if (!values.length || !rowsBy.length && !columnsBy.length) warnings.push(`crosstab "${qName2}" missing a measure or both edges \u2014 review the pivot.`);
     const el = {
       id: sigmaShortId(),
@@ -5254,6 +5348,9 @@ function convertCognosReportToSigma(xml2, options = {}) {
       columnsBy,
       values
     };
+    if (findAll(X.crosstabRows, "crosstabNodeMember").some((m) => isTotal(m["@_refDataItem"])) || findAll(X.crosstabColumns, "crosstabNodeMember").some((m) => isTotal(m["@_refDataItem"]))) {
+      el.totals = { showGrandTotals: "shown" };
+    }
     applyQueryFilters(el, q);
     addElement(X, el);
   }
@@ -5326,12 +5423,12 @@ function convertCognosReportToSigma(xml2, options = {}) {
   };
   const styleFromNode = (node) => {
     const css = findAll(node, "CSS").map((x) => String(x["@_value"] || txt(x))).join(";");
-    const style = {};
+    const style2 = {};
     const background = css.match(/background(?:-color)?\s*:\s*(#[0-9a-f]{3,8})/i)?.[1];
-    if (background) style.backgroundColor = background;
+    if (background) style2.backgroundColor = background;
     const radius = css.match(/border-radius\s*:\s*([^;]+)/i)?.[1]?.trim();
-    if (radius && radius !== "0" && radius !== "0px") style.borderRadius = "round";
-    return Object.keys(style).length ? style : void 0;
+    if (radius && radius !== "0" && radius !== "0px") style2.borderRadius = "round";
+    return Object.keys(style2).length ? style2 : void 0;
   };
   const buildRefMarks = (V, q, vizName) => {
     const nodes = [...findAll(V, "baseline"), ...findAll(V, "vizBaseline")];
@@ -5751,10 +5848,10 @@ function convertCognosReportToSigma(xml2, options = {}) {
     if (fexpr) warnings.push(`summary filter: "${fexpr.slice(0, 80)}" \u2014 post-aggregation filter; re-create as a Sigma filter on the aggregated column.`);
   }
   const panels = [];
-  pageNodes.forEach((pageNode, i) => {
+  pageNodes2.forEach((pageNode, i) => {
     const header = findAll(pageNode, "pageHeader")[0];
     if (header) {
-      const style = styleFromNode(header);
+      const style2 = styleFromNode(header);
       panels.push({
         id: sigmaShortId(),
         type: "header",
@@ -5763,7 +5860,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
         config: {
           scroll: "none",
           borderStyle: "none",
-          ...style?.backgroundColor ? { backgroundColor: style.backgroundColor } : {}
+          ...style2?.backgroundColor ? { backgroundColor: style2.backgroundColor } : {}
         }
       });
     }
@@ -5805,11 +5902,209 @@ function convertCognosReportToSigma(xml2, options = {}) {
   return {
     workbook: wrap(document, { name: reportName }),
     warnings,
-    stats
+    stats,
+    ...options.captureLineage ? { lineage } : {}
   };
 }
 
-// cognos-fm.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos-print.ts
+var parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", trimValues: true });
+var arr3 = (value) => Array.isArray(value) ? value : value == null ? [] : [value];
+var findAll2 = (node, tag, out = []) => {
+  if (!node || typeof node !== "object") return out;
+  for (const [key, value] of Object.entries(node)) {
+    if (key === tag) out.push(...arr3(value));
+    for (const item of arr3(value)) findAll2(item, tag, out);
+  }
+  return out;
+};
+var text = (v) => String(typeof v === "object" ? v?.["#text"] || "" : v || "").trim();
+var esc = (value) => String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var style = (node) => findAll2(node?.style || {}, "CSS").map((s) => String(s["@_value"] || "")).join(";");
+var cssSize = (node, prop, base) => {
+  const match = style(node).match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([0-9.]+)\\s*(px|pt|%)`, "i"));
+  if (!match) return null;
+  const n = Number(match[1]);
+  return match[2] === "%" ? base * n / 100 : match[2].toLowerCase() === "pt" ? n * 4 / 3 : n;
+};
+var pageNodes = (report) => {
+  const pages = findAll2(report.layouts || {}, "reportPage").concat(findAll2(report.layouts || {}, "page"));
+  return pages.length ? pages : [report];
+};
+function convertCognosPrintToSigma(xml2, options = {}) {
+  const { workbook, warnings: original, lineage = [] } = convertCognosReportToSigma(
+    xml2,
+    { ...options, captureLineage: true }
+  );
+  const doc = workbook.document;
+  const report = parser.parse(xml2).report;
+  if (!report) throw new Error("input is not a Cognos report specification");
+  const sources = pageNodes(report);
+  const warnings = original.filter((warning) => !warning.includes("WORKBOOK FEATURE GAP [page footer panel]"));
+  const pageWidth = options.pageWidth ?? 816, pageHeight = options.pageHeight ?? 1056;
+  const margin = options.margin ?? 48;
+  if (![pageWidth, pageHeight, margin].every(Number.isFinite) || pageWidth < 200 || pageHeight < 200 || margin < 0 || margin * 2 >= Math.min(pageWidth, pageHeight)) {
+    throw new Error("invalid page geometry: provide positive pageWidth/pageHeight and a smaller margin");
+  }
+  const width = pageWidth - 2 * margin;
+  const elements = new Map(doc.elements.map((element) => [element.id, element]));
+  const placed = /* @__PURE__ */ new Set();
+  const content = [];
+  const panels = [];
+  const pageLines = [], panelLines = [];
+  const notPrintable = /* @__PURE__ */ new Set(["navigation", "page-break", "drill", "progress", "repeated-container", "container", "tabbed-container", "divider"]);
+  const slots = lineage.filter((slot) => !notPrintable.has(slot.kind) && slot.kind !== "control").sort((a, b) => a.pageId === b.pageId ? a.order - b.order : doc.pages.findIndex((p) => p.id === a.pageId) - doc.pages.findIndex((p) => p.id === b.pageId));
+  const used = /* @__PURE__ */ new Set();
+  const unsupported = slots.filter((slot) => slot.kind === "pivot-table");
+  if (unsupported.length) {
+    const names = unsupported.map((slot) => elements.get(slot.elementId)?.name || slot.elementId);
+    throw new Error(`${unsupported.length} Cognos crosstab(s) require Sigma Report pivot-table code support; the live Reports dry-run rejects pivot-table. ${names.join(", ")}. Use the workbook pivot until Report code supports it.`);
+  }
+  const unsupportedCharts = slots.filter((slot) => !["table", "kpi-chart", "bar-chart", "line-chart", "area-chart", "pie-chart", "scatter-chart", "donut-chart", "combo-chart", "point-map", "region-map"].includes(slot.kind));
+  if (unsupportedCharts.length) {
+    throw new Error(`Sigma Report code has no verified mapping for: ${unsupportedCharts.map((slot) => slot.kind).join(", ")}. Keep the workbook or re-author and validate those visuals explicitly.`);
+  }
+  const unsupportedSourceKinds = /* @__PURE__ */ new Set(["waterfall-chart", "progress", "repeated-container"]);
+  if (doc.elements.some((element) => unsupportedSourceKinds.has(element.kind))) {
+    throw new Error("Cognos report contains a workbook-only visual/layout element (waterfall, progress or repeated container) that has no direct Sigma Report mapping. Re-author explicitly before print migration.");
+  }
+  if (doc.elements.some((element) => element.kind === "control")) {
+    throw new Error("Cognos report uses parameter or drill controls; render and author a control-specific Sigma Report before printing. Omitting controls could change the reported values.");
+  }
+  if (original.some((warning) => /no grounded Sigma mapping|preserved its data as a table|emitted its data as a table/i.test(warning))) {
+    throw new Error("Cognos visual was degraded to a table by the workbook converter; cannot claim print fidelity until it is explicitly re-authored.");
+  }
+  if (original.some((warning) => /<list>|<crosstab>|<vizControl>|<singleton>|no visible dataItemValue/.test(warning) && /skipped|was not emitted|cannot emit/i.test(warning))) {
+    throw new Error("a Cognos report data visual could not be emitted by the workbook converter; refusing to create an incomplete Sigma Report");
+  }
+  if (original.some((warning) => /list column .*not found in query|crosstab .* member .*not in query|chart .* column .*not in query/i.test(warning))) {
+    throw new Error("a Cognos report data column was dropped because it was absent from the backing query; refusing an incomplete Sigma Report");
+  }
+  if (original.some((warning) => /unmapped Cognos aggregate|aggregate .* is not mapped|unmapped Cognos rollup/i.test(warning))) {
+    throw new Error("a Cognos measure has no grounded Sigma aggregate; refusing to publish a print report with potentially wrong values");
+  }
+  if (original.some((warning) => /filter .*re-create|summary filter:/.test(warning))) {
+    throw new Error("a Cognos report filter was not converted; a print report could display different values until its filter is authored");
+  }
+  const add = (element, x, y, w, h, flow = false) => {
+    if (!element || placed.has(element.id)) return "";
+    content.push(element);
+    placed.add(element.id);
+    return `  <Element elementId="${esc(element.id)}" x="${Math.round(x)}" y="${Math.round(y)}" width="${Math.round(w)}" height="${Math.round(h)}"${flow ? ' flow="paginated"' : ""}/>`;
+  };
+  const staticText = (node) => findAll2(node, "staticValue").map(text).filter(Boolean).find((s) => !/^<[^>]+>/.test(s) && !/^[A-Za-z ]{1,8}$/.test(s));
+  const headings = (node) => {
+    const out = [];
+    const visit = (part) => {
+      if (!part || typeof part !== "object") return;
+      for (const [key, value] of Object.entries(part)) {
+        if (["list", "crosstab", "vizControl", "singleton", "noDataHandler", "HTMLItem"].includes(key)) continue;
+        if (key === "staticValue") out.push(...arr3(value).map(text));
+        else arr3(value).forEach(visit);
+      }
+    };
+    visit(node);
+    return out.filter((s) => s && s.length < 100 && !s.startsWith("<"));
+  };
+  for (let i = 0; i < doc.pages.length; i++) {
+    const page = doc.pages[i];
+    const source = sources[i] || {};
+    const body = source.pageBody?.contents || source.contents || source;
+    const lines = [];
+    let y = margin;
+    const title = headings(body)[0];
+    if (title && !slots.some((s) => s.pageId === page.id && s.kind === "text")) {
+      const heading = { id: sigmaShortId(), kind: "text", body: title };
+      lines.push(add(heading, margin, y, width, 36));
+      y += 44;
+    }
+    const pageSlots = slots.filter((slot) => slot.pageId === page.id);
+    const staticValues = headings(body);
+    if (staticValues.length > 1) {
+      warnings.push(`page "${page.name}": ${staticValues.length} static text/layout cells need the Cognos PDF to position; only the first heading was retained.`);
+    }
+    if (!pageSlots.length && staticValues.length) {
+      warnings.push(`page "${page.name}": no data visuals resolved; review its static text/layout against the Cognos PDF.`);
+    }
+    const visualCount = pageSlots.length;
+    const heightPer = Math.min(390, Math.floor((pageHeight - margin - y - Math.max(0, visualCount - 1) * 16) / Math.max(1, visualCount)));
+    if (visualCount && heightPer < 120) {
+      warnings.push(`page "${page.name}": ${visualCount} elements cannot fit legibly in ${pageHeight}px; split or resize against the Cognos PDF.`);
+    }
+    for (const slot of pageSlots) {
+      if (used.has(slot.elementId)) continue;
+      used.add(slot.elementId);
+      const element = elements.get(slot.elementId);
+      if (!element) throw new Error(`source element ${slot.elementId} is missing from the converted workbook`);
+      const w = Math.min(width, cssSize(slot.source, "width", width) || width);
+      const isTable = ["table", "pivot-table"].includes(slot.kind);
+      const sourceHeight = cssSize(slot.source, "height", pageHeight - 2 * margin);
+      const remaining = pageHeight - margin - y;
+      const h = Math.max(1, Math.min(heightPer, sourceHeight || heightPer, remaining));
+      if (isTable && remaining < 160) {
+        warnings.push(`page "${page.name}": the ${slot.kind} at y=${Math.round(y)} may overflow the page; provide a Cognos PDF to calibrate pagination.`);
+      }
+      lines.push(add(element, margin, y, w, h, isTable));
+      if (isTable && slot.kind === "table" && slot.source?.["@_horizontalPagination"] === "true") {
+        warnings.push(`page "${page.name}": Cognos list "${slot.source?.["@_name"] || element?.name}" requests horizontal pagination; Sigma Reports paginate vertically only. Check wide columns against the source PDF.`);
+      }
+      if (isTable && Number(slot.source?.["@_rowsPerPage"]) > 1e4) {
+        warnings.push(`page "${page.name}": Cognos list "${slot.source?.["@_name"] || element?.name}" requests ${slot.source["@_rowsPerPage"]} rows/page; Sigma Report exports cap each table at 10,000 rendered rows.`);
+      }
+      y += h + 16;
+    }
+    pageLines.push(`  <Page id="${esc(page.id)}">${lines.length ? "\n" + lines.join("\n") + "\n  " : ""}</Page>`);
+    for (const [tag, type] of [["pageHeader", "header"], ["pageFooter", "footer"]]) {
+      const original2 = findAll2(source, tag)[0];
+      if (!original2) continue;
+      const textValue = staticText(original2);
+      const panelHeight = Math.min(130, cssSize(original2, "height", pageHeight) || 64);
+      const panelId = sigmaShortId();
+      const background = style(original2).match(/background(?:-color)?\s*:\s*(#[0-9a-f]{3,8})/i)?.[1];
+      panels.push({ id: panelId, type, title: `${page.name} ${type}`, pages: [page.id], config: {
+        height: panelHeight,
+        ...background ? { backgroundColor: background } : {}
+      } });
+      if (textValue) {
+        const part = { id: sigmaShortId(), kind: "text", body: textValue };
+        panelLines.push(`  <Panel id="${esc(panelId)}" type="${type}">
+${add(part, 12, 12, Math.max(40, width - 24), Math.max(20, panelHeight - 18))}
+  </Panel>`);
+      } else {
+        warnings.push(`page "${page.name}": ${type} panel contains layout or HTML that needs reference-PDF review.`);
+        panelLines.push(`  <Panel id="${esc(panelId)}" type="${type}"/>`);
+      }
+    }
+    if (findAll2(body, "HTMLItem").length) warnings.push(`page "${page.name}": embedded Cognos HTML requires manual Sigma Report re-authoring.`);
+  }
+  for (const element of doc.elements) {
+    if (placed.has(element.id)) continue;
+    if (["navigation", "page-break"].includes(element.kind)) continue;
+    if (!["container", "repeated-container", "text"].includes(element.kind)) {
+      warnings.push(`element "${element.name || element.id}" (${element.kind}) was not placed in the Sigma Report \u2014 inspect source XML.`);
+    }
+  }
+  if (!content.some((el) => ["table", "kpi-chart"].includes(el.kind) || /-(chart|map)$/.test(el.kind))) {
+    throw new Error("Cognos report contains no printable data elements; refusing an empty Sigma Report");
+  }
+  const layout = `<?xml version="1.0" encoding="utf-8"?>
+${[...pageLines, ...panelLines].join("\n")}`;
+  return {
+    contents: {
+      schemaVersion: 1,
+      kind: "report",
+      elements: content,
+      pages: doc.pages.map(({ id, name }) => ({ id, name })),
+      ...panels.length ? { panels } : {},
+      config: { pageWidth, pageHeight, margin },
+      layout
+    },
+    warnings,
+    stats: { pages: doc.pages.length, elements: content.length, panels: panels.length }
+  };
+}
+
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos-fm.ts
 var STOP_NODES = ["*.expression", "*.sql"];
 var ALWAYS_ARRAY = /* @__PURE__ */ new Set([
   "namespace",
@@ -5830,7 +6125,7 @@ var ALWAYS_ARRAY = /* @__PURE__ */ new Set([
   "set",
   "parameterMap"
 ]);
-var parser = new XMLParser({
+var parser2 = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   parseTagValue: false,
@@ -5841,13 +6136,13 @@ var parser = new XMLParser({
   isArray: (tag) => ALWAYS_ARRAY.has(tag)
 });
 var asArray = (x) => Array.isArray(x) ? x : x == null ? [] : [x];
-function text(v) {
+function text2(v) {
   if (v == null) return "";
   if (typeof v === "string") return v;
   if (typeof v === "object" && "#text" in v) return String(v["#text"] ?? "");
   return "";
 }
-var nameOf = (el) => text(el?.name).trim();
+var nameOf = (el) => text2(el?.name).trim();
 function isFrameworkManagerXml(xml2) {
   const head = (xml2 || "").slice(0, 4e3);
   return /<project[\s>]/.test(head) && /schemas\/bmt\//.test(head);
@@ -5891,7 +6186,7 @@ function resolve(index, path, depth = 0) {
   const o = index.get(path);
   if (!o) return null;
   if (o.kind === "shortcut") {
-    const target = text(o.el?.refobj?.[0] ?? o.el?.refobj);
+    const target = text2(o.el?.refobj?.[0] ?? o.el?.refobj);
     return target ? resolve(index, target.trim(), depth + 1) : null;
   }
   return o;
@@ -5943,7 +6238,7 @@ function readDataSources(project) {
   for (const ds of asArray(project?.dataSources?.dataSource)) {
     const n = nameOf(ds);
     if (!n) continue;
-    out.set(n, { name: n, catalog: text(ds.catalog) || void 0, schema: text(ds.schema) || void 0 });
+    out.set(n, { name: n, catalog: text2(ds.catalog) || void 0, schema: text2(ds.schema) || void 0 });
   }
   return out;
 }
@@ -5964,7 +6259,7 @@ function collectShortcuts(el, out = []) {
   return out;
 }
 function parseFm(xml2) {
-  const doc = parser.parse(xml2);
+  const doc = parser2.parse(xml2);
   const project = doc?.project;
   if (!project) throw new Error("not a Framework Manager project XML (no <project> root)");
   const root = asArray(project.namespace)[0];
@@ -6010,7 +6305,7 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
   };
   const { project, root, index } = parseFm(xml2);
   const dataSources = readDataSources(project);
-  const modelName = nameOf(root) || text(project.name) || "Cognos Framework Manager model";
+  const modelName = nameOf(root) || text2(project.name) || "Cognos Framework Manager model";
   const layer = pickPresentationLayer(root);
   let scopeEl;
   let scopeName;
@@ -6048,7 +6343,7 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
   }
   for (const sc of exposed) {
     const label2 = nameOf(sc);
-    const targetPath = text(sc.refobj?.[0] ?? sc.refobj).trim();
+    const targetPath = text2(sc.refobj?.[0] ?? sc.refobj).trim();
     if (!targetPath) continue;
     const target = resolve(index, targetPath);
     if (!target) {
@@ -6079,15 +6374,15 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
     for (const { el, isCalc } of rawItems) {
       const label22 = nameOf(el);
       if (!label22) continue;
-      const rawExpr = text(el.expression) || (typeof el.expression === "string" ? el.expression : "");
-      const usage = text(el.usage) || void 0;
-      const aggregate = text(el.regularAggregate) || void 0;
-      const hidden = text(el.hidden) === "true";
+      const rawExpr = text2(el.expression) || (typeof el.expression === "string" ? el.expression : "");
+      const usage = text2(el.usage) || void 0;
+      const aggregate = text2(el.regularAggregate) || void 0;
+      const hidden = text2(el.hidden) === "true";
       if (!isCalc && rawExpr && isPassthrough(rawExpr)) {
         const refs = expressionRefs(rawExpr);
         const physPath = refs[refs.length - 1] || "";
         const physItem = physPath ? resolve(index, physPath) : null;
-        const physName = physItem ? text(physItem.el.externalName) || nameOf(physItem.el) : leafOf(physPath);
+        const physName = physItem ? text2(physItem.el.externalName) || nameOf(physItem.el) : leafOf(physPath);
         const ownerPath2 = physItem ? parentOf(physItem.path) : parentOf(physPath);
         if (ownerPath2) tableVotes.set(ownerPath2, (tableVotes.get(ownerPath2) || 0) + 1);
         const viaAlias = firstViaAlias(rawExpr);
@@ -6097,7 +6392,7 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
           label: label22,
           usage,
           aggregate,
-          datatype: text(el.datatype) || void 0,
+          datatype: text2(el.datatype) || void 0,
           isCalculation: false,
           ...hidden ? { hidden: true } : {},
           ...ownerPath2 ? { __owner: ownerPath2 } : {}
@@ -6108,18 +6403,18 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
           label: label22,
           usage,
           aggregate,
-          datatype: text(el.datatype) || void 0,
+          datatype: text2(el.datatype) || void 0,
           expression: expressionText(rawExpr),
           isCalculation: true
         });
       } else {
-        const physName = text(el.externalName) || label22;
+        const physName = text2(el.externalName) || label22;
         items.push({
           identifier: physName,
           label: label22,
           usage,
           aggregate,
-          datatype: text(el.datatype) || void 0,
+          datatype: text2(el.datatype) || void 0,
           isCalculation: false
         });
         tableVotes.set(target.path, (tableVotes.get(target.path) || 0) + 1);
@@ -6164,12 +6459,12 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
   }
   const relationships = [];
   for (const relEl of allRelationships(root)) {
-    const leftPath = text(relEl.left?.refobj?.[0] ?? relEl.left?.refobj).trim();
-    const rightPath = text(relEl.right?.refobj?.[0] ?? relEl.right?.refobj).trim();
+    const leftPath = text2(relEl.left?.refobj?.[0] ?? relEl.left?.refobj).trim();
+    const rightPath = text2(relEl.right?.refobj?.[0] ?? relEl.right?.refobj).trim();
     const leftIr = anchorToIr.get(leftPath);
     const rightIr = anchorToIr.get(rightPath);
     if (!leftIr || !rightIr || leftIr === rightIr) continue;
-    const rawExpr = text(relEl.expression) || (typeof relEl.expression === "string" ? relEl.expression : "");
+    const rawExpr = text2(relEl.expression) || (typeof relEl.expression === "string" ? relEl.expression : "");
     const parsed = parseFmJoin(rawExpr, leftPath, rightPath);
     if (!parsed.keys.length) {
       warn(`relationship ${leafOf(leftPath)} \u2192 ${leafOf(rightPath)}: join condition is not a simple equi-join (${parsed.reason}) \u2014 add it by hand in Sigma.`);
@@ -6184,8 +6479,8 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
       leftKey: parsed.keys[0].leftKey,
       rightKey: parsed.keys[0].rightKey,
       keys: parsed.keys,
-      leftCard: text(relEl.left?.maxcard) || void 0,
-      rightCard: text(relEl.right?.maxcard) || void 0
+      leftCard: text2(relEl.left?.maxcard) || void 0,
+      rightCard: text2(relEl.right?.maxcard) || void 0
     });
   }
   const securityFilters = [];
@@ -6204,7 +6499,7 @@ function normalizeCognosFrameworkManager(xml2, opts = {}) {
     securityFilters.push({
       type: "framework-manager-security-view",
       name: nameOf(sv),
-      expression: sets.map((s) => `${s["@_includeRule"] || "include"}: ${asArray(s.refobj).map((r) => text(r)).join(", ")}`).join(" | ")
+      expression: sets.map((s) => `${s["@_includeRule"] || "include"}: ${asArray(s.refobj).map((r) => text2(r)).join(", ")}`).join(" | ")
     });
   }
   const paramMaps = asArray(project?.parameterMaps?.parameterMap).map((p) => nameOf(p)).filter(Boolean);
@@ -6227,9 +6522,9 @@ function firstViaAlias(raw) {
 function readPhysical(owner, dataSources, warn, subjectName) {
   const dbQuery = owner.el?.definition?.dbQuery;
   if (!dbQuery) return { table: leafOf(owner.path) };
-  const sqlRaw = text(dbQuery.sql) || (typeof dbQuery.sql === "string" ? dbQuery.sql : "");
+  const sqlRaw = text2(dbQuery.sql) || (typeof dbQuery.sql === "string" ? dbQuery.sql : "");
   const sql = decodeEntities(String(sqlRaw).replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
-  const dsRef = text(dbQuery.sources?.dataSourceRef);
+  const dsRef = text2(dbQuery.sources?.dataSourceRef);
   const dsName = leafOf(dsRef);
   const ds = dataSources.get(dsName);
   const simple = RE_SIMPLE_SELECT.exec(sql);
@@ -6252,8 +6547,8 @@ function readPhysical(owner, dataSources, warn, subjectName) {
 function readDeterminantGrain(el) {
   const out = [];
   for (const d of asArray(el?.determinants?.determinant ?? el?.determinant)) {
-    if (text(d.identifiesRow) !== "true" && !asArray(d.key?.refobj).length) continue;
-    for (const r of asArray(d.key?.refobj)) out.push(leafOf(text(r)));
+    if (text2(d.identifiesRow) !== "true" && !asArray(d.key?.refobj).length) continue;
+    for (const r of asArray(d.key?.refobj)) out.push(leafOf(text2(r)));
   }
   return [...new Set(out.filter(Boolean))];
 }
@@ -6261,9 +6556,9 @@ function readEmbeddedFilters(...els) {
   const out = [];
   for (const el of els) {
     for (const fd of asArray(el?.filters?.filterDefinition)) {
-      const raw = text(fd.expression) || (typeof fd.expression === "string" ? fd.expression : "");
+      const raw = text2(fd.expression) || (typeof fd.expression === "string" ? fd.expression : "");
       out.push({
-        name: text(fd.displayName) || nameOf(fd) || "filter",
+        name: text2(fd.displayName) || nameOf(fd) || "filter",
         expression: expressionText(raw),
         apply: fd["@_apply"] || void 0
       });
@@ -6327,14 +6622,14 @@ function belongsTo(side, endpointPath) {
   return side.owner === endpointPath || leafOf(side.owner) === leafOf(endpointPath);
 }
 
-// cli.ts
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cli.ts
 function loadLearnedRules() {
   try {
     const p = join(homedir(), ".cognos-to-sigma", "learned-rules.json");
     const rules = JSON.parse(readFileSync(p, "utf8"));
-    const arr3 = Array.isArray(rules) ? rules : rules.rules || [];
-    if (arr3.length) console.error(`[learned-rules] applying ${arr3.length} customer rule(s) from ${p}`);
-    return arr3;
+    const arr4 = Array.isArray(rules) ? rules : rules.rules || [];
+    if (arr4.length) console.error(`[learned-rules] applying ${arr4.length} customer rule(s) from ${p}`);
+    return arr4;
   } catch {
     return [];
   }
@@ -6349,6 +6644,7 @@ if (!file) {
   console.error("usage: cli.ts <module.json|report.xml|fm-model.xml> [--connection X --database DB --schema S --dm ID]");
   console.error("       Framework Manager: cli.ts <fm-model.xml> --list");
   console.error('                          cli.ts <fm-model.xml> --subject-area "<name>" [--connection X]');
+  console.error("       Print:             cli.ts <report.xml> --print [--dm ID --page-width PX --page-height PX --margin PX --out PATH]");
   process.exit(1);
 }
 function loadMetrics() {
@@ -6376,15 +6672,32 @@ if (isFm && args.includes("--list")) {
   process.exit(0);
 }
 var isReport = !isFm && (file.endsWith(".xml") || xml.trimStart().startsWith("<"));
+var print = args.includes("--print");
+if (print && (args.includes("--out") && !opt("out") || args.includes("--warnings-out") && !opt("warnings-out"))) {
+  console.error("--out and --warnings-out require a path");
+  process.exit(2);
+}
+if (print && !isReport) {
+  console.error("--print requires a Cognos report-spec XML, not a Data Module or Framework Manager model");
+  process.exit(2);
+}
 var res = isFm ? convertCognosIR(
   normalizeCognosFrameworkManager(xml, { subjectArea: opt("subject-area"), all: args.includes("--all") }),
   { connectionId: opt("connection", "<CONNECTION_ID>"), database: opt("database"), schema: opt("schema"), learnedRules: loadLearnedRules() }
-) : isReport ? convertCognosReportToSigma(xml, { dataModelId: opt("dm", "<DM_ID>"), metrics: loadMetrics() }) : convertCognosToSigma(xml, { connectionId: opt("connection", "<CONNECTION_ID>"), database: opt("database"), schema: opt("schema"), learnedRules: loadLearnedRules() });
-var payload = isReport ? res.workbook : res.model;
-var label = isReport ? "report\u2192workbook" : isFm ? "framework-manager\u2192data-model" : "module\u2192data-model";
-process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+) : isReport ? print ? convertCognosPrintToSigma(xml, {
+  dataModelId: opt("dm", "<DM_ID>"),
+  metrics: loadMetrics(),
+  ...opt("page-width") ? { pageWidth: Number(opt("page-width")) } : {},
+  ...opt("page-height") ? { pageHeight: Number(opt("page-height")) } : {},
+  ...opt("margin") ? { margin: Number(opt("margin")) } : {}
+}) : convertCognosReportToSigma(xml, { dataModelId: opt("dm", "<DM_ID>"), metrics: loadMetrics() }) : convertCognosToSigma(xml, { connectionId: opt("connection", "<CONNECTION_ID>"), database: opt("database"), schema: opt("schema"), learnedRules: loadLearnedRules() });
+var payload = isReport ? print ? res.contents : res.workbook : res.model;
+var label = isReport ? print ? "report\u2192print" : "report\u2192workbook" : isFm ? "framework-manager\u2192data-model" : "module\u2192data-model";
+if (print && opt("out")) writeFileSync(opt("out"), JSON.stringify(payload, null, 2) + "\n");
+else process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
 console.error(`
 [${label}] stats: ${JSON.stringify(res.stats)}`);
+if (print && opt("warnings-out")) writeFileSync(opt("warnings-out"), JSON.stringify(res.warnings, null, 2) + "\n");
 var security = res.security;
 if (security?.length) {
   const out = opt("security-out", "security.json");

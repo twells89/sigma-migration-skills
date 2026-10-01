@@ -28,3 +28,54 @@ assert any(element.get("kind") == "navigation" for element in elements), "multi-
 assert result["stats"]["pages"] == 2
 print("  ok   current workbook wrapper/flat-elements/layout contract")
 PY
+
+# Exercise the bundled production CLI, not just the TypeScript test harness.
+skill="../../../plugins/cognos-to-sigma/skills/cognos-to-sigma"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+node "$skill/converter/cli.mjs" "$skill/fixtures/print-list.report.xml" \
+  --print --dm example-model --out "$tmp/report.json" --warnings-out "$tmp/warnings.json"
+python3 - "$tmp/report.json" "$tmp/warnings.json" <<'PY'
+import json
+import sys
+
+report = json.load(open(sys.argv[1]))
+warnings = json.load(open(sys.argv[2]))
+assert report['kind'] == 'report' and report['schemaVersion'] == 1
+assert len(report['pages']) == 1
+assert [e['kind'] for e in report['elements']] == ['table', 'text', 'text']
+assert {p['type'] for p in report['panels']} == {'header', 'footer'}
+assert report['layout'].count('flow="paginated"') == 1
+assert 'gridRow=' not in report['layout']
+assert not warnings, warnings
+print('  ok   print CLI emits a paginated Sigma Report with header and footer')
+PY
+
+if node "$skill/converter/cli.mjs" "$skill/fixtures/banking-risk-crosstab.report.xml" \
+  --print --dm example-model > "$tmp/pivot.json" 2> "$tmp/pivot-error.log"; then
+  echo '  FAIL print CLI silently converted an unsupported Report pivot'
+  exit 1
+fi
+python3 - "$tmp/pivot-error.log" <<'PY'
+import sys
+message = open(sys.argv[1]).read()
+assert 'crosstab' in message and 'pivot-table' in message, message
+print('  ok   print CLI refuses unsupported Report pivots')
+PY
+
+node "$skill/converter/cli.mjs" "$skill/fixtures/banking-risk-crosstab.report.xml" \
+  --dm example-model > "$tmp/workbook.json"
+python3 - "$tmp/workbook.json" <<'PY'
+import json
+import sys
+workbook = json.load(open(sys.argv[1]))['document']
+pivots = [e for e in workbook['elements'] if e['kind'] == 'pivot-table']
+assert len(pivots) == 2
+for pivot in pivots:
+    measure = next(c for c in pivot['columns'] if c['name'] == 'Net Loss')
+    assert measure['formula'].startswith('Avg('), measure
+    assert pivot['totals']['showGrandTotals'] == 'shown'
+    assert pivot['rowsBy'][0]['sort']['direction'] == 'ascending'
+    assert pivot['columnsBy'][0]['sort']['direction'] == 'ascending'
+print('  ok   production workbook pivots retain Avg, grand totals and edge sorts')
+PY

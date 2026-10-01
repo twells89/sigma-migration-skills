@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { convertCognosToSigma, convertCognosIR } from './cognos.js';
 import { convertCognosReportToSigma } from './cognos-report.js';
+import { convertCognosPrintToSigma } from './cognos-print.js';
 import {
   isFrameworkManagerXml, listFrameworkManagerSubjectAreas, normalizeCognosFrameworkManager,
 } from './cognos-fm.js';
@@ -124,13 +125,13 @@ for (const [input, expected] of NAME_CASES) {
     ['legend settings grounded from viz properties', els.some((e: any) => e.kind === 'waterfall-chart' && e.legend?.visibility === 'shown' && e.legend?.position === 'right')],
     ['drillBehavior uses released drill control', els.some((e: any) => e.kind === 'control' && e.controlType === 'drill')],
     ['page break emitted', els.some((e: any) => e.kind === 'page-break')],
-    ['progress emitted with hidden aggregate source', els.some((e: any) => e.kind === 'progress' && typeof e.value === 'string')
-      && els.some((e: any) => e.name === 'Target progress (progress source)' && e.visibleAsSource === false)],
+    ['progress emitted with aggregate source', els.some((e: any) => e.kind === 'progress' && typeof e.value === 'string')
+      && els.some((e: any) => e.kind === 'table' && e.name === 'Target progress (progress source)' && e.columns?.some((c: any) => /^Sum\(/.test(c.formula)))],
     ['named block becomes styled panel', els.some((e: any) => e.kind === 'container' && e.name === 'Revenue Panel' && e.style?.backgroundColor === '#112233')],
     ['page header becomes document panel', doc.panels?.some((p: any) => p.type === 'header'
       && p.pages?.[0] === doc.pages[0].id && p.config?.backgroundColor === '#445566')],
     ['repeater becomes repeated-container with child binding', els.some((e: any) => e.kind === 'repeated-container')
-      && els.some((e: any) => e.name === 'Category cards source' && e.visibleAsSource === false)
+      && els.some((e: any) => e.kind === 'table' && e.name === 'Category cards source')
       && els.some((e: any) => e.kind === 'text' && /Category cards source repeated container/.test(e.body || ''))],
     ['box chart remains loud and data-preserving', els.some((e: any) => e.kind === 'table' && /was box plot/.test(e.name || '') && e.groupings?.length)
       && r.warnings.some((w) => w.includes('⛔ WORKBOOK FEATURE GAP [box-chart (workspace gated)]'))],
@@ -143,6 +144,158 @@ for (const [input, expected] of NAME_CASES) {
   for (const [label, ok] of checks) {
     if (ok) console.log(`✓ release: ${label}`);
     else { fail++; console.log(`✗ release: ${label}`); }
+  }
+}
+
+// ── Framework Manager ingest ─────────────────────────────────────────────────
+// ── Cognos list and crosstab fidelity ────────────────────────────────────────
+{
+  const xml = `<report><reportName>Agent activity</reportName><layouts><layout><reportPages>
+    <page name="Summary"><pageBody><contents><list name="Agents" refQuery="agents">
+      <listGroups><listGroup refDataItem="Site"/></listGroups>
+      <listColumns>
+        <listColumn><listColumnTitle><textItem><dataSource><staticValue>Agent</staticValue></dataSource></textItem></listColumnTitle><listColumnBody><textItem><dataSource><dataItemValue refDataItem="Agent"/></dataSource></textItem></listColumnBody></listColumn>
+        <listColumn><listColumnBody><textItem><dataSource><dataItemValue refDataItem="Calls"/></dataSource></textItem><textItem><dataSource><dataItemValue refDataItem="Target"/></dataSource></textItem></listColumnBody></listColumn>
+      </listColumns><sortList><sortItem refDataItem="Calls" sortOrder="descending"/></sortList>
+    </list></contents></pageBody></page>
+    <page name="Details"><pageBody><contents><list name="Call log" refQuery="log"><listColumns>
+      <listColumn><listColumnBody><textItem><dataSource><dataItemValue refDataItem="Call ID"/></dataSource></textItem></listColumnBody></listColumn>
+      <listColumn><listColumnBody><textItem><dataSource><dataItemValue refDataItem="Started"/></dataSource></textItem></listColumnBody></listColumn>
+    </listColumns><sortList><sortItem refDataItem="Started" sortOrder="descending"/></sortList></list>
+    </contents></pageBody></page></reportPages></layout></layouts><queries>
+    <query name="agents"><selection><dataItem name="Site" aggregate="none"><expression>[C].[M].[Agents].[Site]</expression></dataItem>
+      <dataItem name="Agent" aggregate="none"><expression>[C].[M].[Agents].[Agent]</expression></dataItem>
+      <dataItem name="Calls" aggregate="total"><expression>[C].[M].[Agents].[Calls]</expression></dataItem>
+      <dataItem name="Target" aggregate="none"><expression>[C].[M].[Agents].[Target]</expression></dataItem>
+    </selection></query>
+    <query name="log"><selection><dataItem name="Call ID" aggregate="none"><expression>[C].[M].[Calls].[Call_ID]</expression></dataItem>
+      <dataItem name="Started" aggregate="none"><expression>[C].[M].[Calls].[Started]</expression></dataItem>
+    </selection></query></queries></report>`;
+  const r = convertCognosReportToSigma(xml, { dataModelId: 'dm' });
+  const els = CodeRep.workbookElements(r.workbook) as any[];
+  const summary = els.find((e: any) => e.kind === 'table' && e.name.includes('agents'));
+  const log = els.find((e: any) => e.kind === 'table' && e.name.includes('log'));
+  const checks: Array<[string, boolean]> = [
+    ['only visible listColumnBody values become displayed columns', summary?.order?.length === 2],
+    ['non-visible group key is retained but hidden', summary?.columns?.some((c: any) => c.name === 'Site' && c.hidden && !summary.order.includes(c.id))],
+    ['grouping contains both visible and hidden dimensions', summary?.groupings?.[0]?.groupBy?.length === 2],
+    ['grouped list sorts by the source measure descending', summary?.groupings?.[0]?.sort?.[0]?.columnId === summary.columns.find((c: any) => c.name === 'Calls')?.id && summary.groupings[0].sort[0].direction === 'descending'],
+    ['detail list sorts without inventing an aggregate grouping', !log?.groupings && log?.sort?.[0]?.direction === 'descending'],
+    ['compound Cognos cell gets a named fidelity warning', r.warnings.some((w) => w.includes('visible column combines Calls, Target'))],
+  ];
+  for (const [label, ok] of checks) {
+    if (ok) console.log(`✓ lists: ${label}`);
+    else { fail++; console.log(`✗ lists: ${label}`); }
+  }
+}
+
+{
+  const xml = `<report><queries><query name="detail"><selection>
+    <dataItem name="Region" aggregate="none"><expression>[C].[M].[Calls].[Region]</expression></dataItem>
+    <dataItem name="Call ID" aggregate="none"><expression>[C].[M].[Calls].[Call_ID]</expression></dataItem>
+    <dataItem name="Talk Time" aggregate="total"><expression>[C].[M].[Calls].[Talk_Time]</expression></dataItem>
+  </selection></query></queries><layouts><layout><reportPages><page name="Log"><pageBody><contents>
+    <list name="Call log" refQuery="detail"><listGroups><listGroup refDataItem="Region"/></listGroups><listColumns>
+      <listColumn><listColumnBody><dataItemValue refDataItem="Call ID"/></listColumnBody></listColumn>
+      <listColumn><listColumnBody><dataItemValue refDataItem="Talk Time"/></listColumnBody></listColumn>
+    </listColumns></list>
+  </contents></pageBody></page></reportPages></layout></layouts></report>`;
+  const r = convertCognosReportToSigma(xml);
+  const table = (CodeRep.workbookElements(r.workbook) as any[]).find((e) => e.kind === 'table');
+  if (!table?.groupings && r.warnings.some((w) => /row-level identifier/.test(w))) console.log('✓ lists: detail-row call ID prevents accidental roll-up');
+  else { fail++; console.log('✗ lists: call log was wrongly rolled up despite its row identifier'); }
+}
+
+{
+  const r = convertCognosReportToSigma(readFileSync(join(FIX, 'banking-risk-crosstab.report.xml'), 'utf8'), { dataModelId: 'dm' });
+  const pivots = (CodeRep.workbookElements(r.workbook) as any[]).filter((e: any) => e.kind === 'pivot-table');
+  const checks: Array<[string, boolean]> = [
+    ['banking crosstabs remain two pivots', pivots.length === 2],
+    ['each Net Loss is averaged, never silently summed', pivots.every((p: any) => p.columns.some((c: any) => c.name === 'Net Loss' && /^Avg\(/.test(c.formula)))],
+    ['explicit row and column grand totals are retained', pivots.every((p: any) => p.totals?.showGrandTotals === 'shown')],
+    ['row and column source sort lists become pivot shelf sorts', pivots.every((p: any) => p.rowsBy?.[0]?.sort?.direction === 'ascending' && p.columnsBy?.[0]?.sort?.direction === 'ascending')],
+  ];
+  for (const [label, ok] of checks) {
+    if (ok) console.log(`✓ pivots: ${label}`);
+    else { fail++; console.log(`✗ pivots: ${label}`); }
+  }
+}
+
+{
+  const xml = `<report><queries><query name="q"><selection>
+    <dataItem name="Region" aggregate="none"><expression>[C].[M].[Sales].[Region]</expression></dataItem>
+    <dataItem name="Target" aggregate="none"><expression>[C].[M].[Sales].[Target]</expression></dataItem>
+    <dataItem name="Total" aggregate="total"><expression>[C].[M].[Sales].[Total]</expression></dataItem>
+  </selection></query></queries><layouts><layout><reportPages><page name="A"><pageBody><contents>
+    <list refQuery="q"><listGroups><listGroup refDataItem="Region"/></listGroups><listColumns>
+      <listColumn><listColumnBody><dataItemValue refDataItem="Total"/><dataItemValue refDataItem="Target"/></listColumnBody></listColumn>
+    </listColumns></list>
+  </contents></pageBody></page></reportPages></layout></layouts></report>`;
+  const result = convertCognosReportToSigma(xml);
+  const table = (CodeRep.workbookElements(result.workbook) as any[]).find((e) => e.kind === 'table');
+  if (table?.order.length === 1 && table?.groupings?.[0]?.groupBy.length === 1 && table.groupings[0].calculations.length === 1) console.log('✓ lists: measure-only visible table groups by the hidden source key');
+  else { fail++; console.log('✗ lists: measure-only visible table lost grouping'); }
+}
+
+// ── Sigma Report/PDF path — same query translations, pixel layout ───────────
+{
+  const xml = `<report><reportName>Quarterly statement</reportName><layouts><layout><reportPages>
+    <page name="Summary"><pageHeader><style><CSS value="background-color:#112233"/></style><contents><textItem><dataSource><staticValue>Quarterly statement</staticValue></dataSource></textItem></contents></pageHeader>
+      <pageBody><contents><list name="Revenue" refQuery="q"><listColumns>
+        <listColumn><listColumnBody><dataItemValue refDataItem="Region"/></listColumnBody></listColumn>
+        <listColumn><listColumnBody><dataItemValue refDataItem="Revenue"/></listColumnBody></listColumn>
+      </listColumns></list></contents></pageBody>
+      <pageFooter><contents><textItem><dataSource><staticValue>Confidential</staticValue></dataSource></textItem></contents></pageFooter>
+    </page><page name="By segment"><pageBody><contents><list refQuery="q"><listColumns>
+      <listColumn><listColumnBody><dataItemValue refDataItem="Segment"/></listColumnBody></listColumn>
+      <listColumn><listColumnBody><dataItemValue refDataItem="Revenue"/></listColumnBody></listColumn>
+    </listColumns></list></contents></pageBody></page></reportPages></layout></layouts><queries><query name="q"><selection>
+      <dataItem name="Region" aggregate="none"><expression>[C].[M].[Orders].[Region]</expression></dataItem>
+      <dataItem name="Segment" aggregate="none"><expression>[C].[M].[Orders].[Segment]</expression></dataItem>
+      <dataItem name="Revenue" aggregate="total"><expression>[C].[M].[Orders].[Revenue]</expression></dataItem>
+    </selection></query></queries></report>`;
+  const r = convertCognosPrintToSigma(xml, { dataModelId: 'dm', pageWidth: 816, pageHeight: 1056, margin: 48 });
+  const c = r.contents;
+  const checks: Array<[string, boolean]> = [
+    ['Sigma Report contents uses kind report, not workbook', c.kind === 'report' && c.schemaVersion === 1],
+    ['two report pages retain their Cognos names', c.pages.map((p) => p.name).join(' / ') === 'Summary / By segment'],
+    ['both report lists share the workbook query translation', c.elements.filter((e: any) => e.kind === 'table' && e.columns?.length === 2).length === 2],
+    ['page data tables flow into paginated PDF', (c.layout.match(/flow="paginated"/g) || []).length === 2],
+    ['print layout uses pixel coordinates, no grid rows', /x="48" y="/.test(c.layout) && !/gridRow=/.test(c.layout)],
+    ['Cognos header AND footer survive as report panels', !!c.panels?.some((p: any) => p.type === 'header') && !!c.panels?.some((p: any) => p.type === 'footer')],
+    ['every report element has exactly one placement', c.elements.every((e: any) => c.layout.split(`elementId="${e.id}"`).length === 2)],
+    ['print config reflects requested page dimensions', c.config.pageWidth === 816 && c.config.margin === 48],
+  ];
+  for (const [label, ok] of checks) {
+    if (ok) console.log(`✓ print: ${label}`);
+    else { fail++; console.log(`✗ print: ${label}`); }
+  }
+  try { convertCognosPrintToSigma('<report><reportName>Empty</reportName></report>'); fail++; console.log('✗ print: refuses an empty report'); }
+  catch { console.log('✓ print: refuses an empty report'); }
+  try { convertCognosPrintToSigma(readFileSync(join(FIX, 'banking-risk-crosstab.report.xml'), 'utf8')); fail++; console.log('✗ print: rejects unsupported pivot Report code'); }
+  catch (err: any) {
+    if (/crosstab\(s\).*pivot-table/.test(err.message)) console.log('✓ print: rejects unsupported pivot Report code');
+    else { fail++; console.log('✗ print: unexpected error for crosstab: ' + err.message); }
+  }
+  const missingQuery = `<report><layouts><layout><reportPages><page name="Missing"><pageBody><contents><list refQuery="unknown"/></contents></pageBody></page></reportPages></layout></layouts></report>`;
+  try { convertCognosPrintToSigma(missingQuery); fail++; console.log('✗ print: refuses an unresolved Cognos list'); }
+  catch (err: any) {
+    if (/could not be emitted|no printable data/.test(err.message)) console.log('✓ print: refuses an unresolved Cognos list');
+    else { fail++; console.log('✗ print: unexpected unresolved-list error: ' + err.message); }
+  }
+  const unresolvedBody = xml.replace('<dataItemValue refDataItem="Region"/>', '<staticValue>No query field</staticValue>')
+    .replace('<dataItemValue refDataItem="Revenue"/>', '<staticValue>No query field</staticValue>');
+  try { convertCognosPrintToSigma(unresolvedBody); fail++; console.log('✗ print: refuses a list with no resolvable visible columns'); }
+  catch (err: any) {
+    if (/data visual could not be emitted|no printable data/.test(err.message)) console.log('✓ print: refuses a list with no resolvable visible columns');
+    else { fail++; console.log('✗ print: unexpected unresolved-column error: ' + err.message); }
+  }
+  const prompted = xml.replace('<expression>[C].[M].[Orders].[Region]</expression>',
+    '<expression>prompt(\'period\')</expression>');
+  try { convertCognosPrintToSigma(prompted); fail++; console.log('✗ print: refuses prompt controls that change values'); }
+  catch (err: any) {
+    if (/prompt|parameter|control/.test(err.message)) console.log('✓ print: refuses prompt controls that change values');
+    else { fail++; console.log('✗ print: unexpected prompted-report error: ' + err.message); }
   }
 }
 
