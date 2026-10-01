@@ -90,7 +90,7 @@ jobs:
     env:
       SIGMA_CLIENT_ID: ci-offline-placeholder
       SIGMA_CLIENT_SECRET: ci-offline-placeholder
-      SIGMA_BASE_URL: https://aws-api.[REDACTED].com
+      SIGMA_BASE_URL: https://aws-api.sigmacomputing.com
       SIGMA_SKIP_CRED_SMOKE: "1"
       SIGMA_SKIP_VERSION_CHECK: "1"
     steps:

@@ -91,3 +91,9 @@ eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}
 (corpus|fixtures?)/([^[:space:]"']*/)?probe-artifacts\.jsonl
 # Customer-identifying guards live in tools/hygiene-patterns.local.txt (gitignored) —
 # committing them would itself disclose the customer. Sweep loads both files.
+#
+# --- redaction damage ---------------------------------------------------------
+# A redaction pass once replaced the Sigma domain with a placeholder in shipped
+# code, so setup.py rejected every real Sigma host. The placeholder must never
+# stand in for a real domain in a tracked file.
+\[REDACTED\]\.com
