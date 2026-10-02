@@ -52,6 +52,12 @@ GROUND RULES
   requires image input"; write nothing.
 - Judge the pixels against the rubric, not against plausibility. "Probably
   fine" is not evidence; every `pass` needs a sentence of visual evidence.
+- Your grade is IMMUTABLE once written. Never revise a `fail` to `pass` after
+  builder/user feedback, argument, or additional context. Feedback means the
+  blind context has been contaminated: a NEW target render must be produced
+  and a NEW fresh grader must grade it into a different output file. User
+  acceptance of a known visual difference is a separate residual/waiver
+  artifact, never a blind-grader `pass`.
 
 PROCEDURE
 

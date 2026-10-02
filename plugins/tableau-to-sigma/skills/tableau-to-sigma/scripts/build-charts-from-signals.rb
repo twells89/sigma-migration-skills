@@ -3680,6 +3680,17 @@ def build_pivot_element(z, meta, mmap, opts, warnings, data_elements = [])
     # no-visible-subtotals setting for expanded pivots (live-probed).
     'totals'    => { 'showGrandTotals' => 'hidden', 'showSubtotals' => 'when-collapsed' }
   }
+  # Tableau text tables/crosstabs render each discrete Rows-shelf field in its
+  # own visible header column. Sigma pivots default to a compact stepped
+  # hierarchy, which collapses Department / Line Item / Memo into one indented
+  # column and fails source composition despite exact numeric parity. The
+  # persisted Sigma code-representation equivalent of the UI's "Display as
+  # separate columns" toggle is display.rowLayout.
+  if rows_by.size >= 2
+    el['display'] = { 'rowLayout' => 'separate-columns' }
+    warnings << "'#{cap}' carries #{rows_by.size} Tableau row-header fields — emitted " \
+                'display.rowLayout=separate-columns to preserve the source crosstab columns'
+  end
   el['filters'] = pivot_filters unless pivot_filters.empty?
   # v5.1 defect-4 fix: heat scale from the SOURCE ramp (parser heat_scheme),
   # 3-point downsample; never a default accent. Value-format cascade: a

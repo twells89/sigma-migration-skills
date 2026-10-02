@@ -195,6 +195,44 @@ check(!st.success? && err.include?('target_sha256 does NOT match'),
       'render changed after grading (sha mismatch) → refused naming the binding', fails)
 check(!pf.key?('blind_grade'), 'hash-mismatch refusal writes nothing', fails)
 
+# RCF-bound pass: grade, selected screenshot, and latest budgeted render must
+# identify the same pixels. A direct post-budget export or stale intermediate
+# grade is not final evidence.
+rcf_match = lambda do |dir|
+  grade = BlindFixture.install(dir, stamp: false)
+  target = File.join(dir, 'sigma-render.png')
+  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.generate(
+    'workbook_id' => 'wb', 'page_id' => 'page', 'pass' => 1,
+    'max_passes' => 5,
+    'renders' => [{ 'pass' => 1, 'path' => target }],
+    'entries' => []
+  ))
+  ['--blind-grade', File.join(dir, 'blind-grade.json'), '--screenshot', target]
+end
+_out, _err, st, pf = run_case(PASS_ARGS, blind: rcf_match)
+check(st.success? && pf.dig('blind_grade', 'fidelity_render', 'pass') == 1,
+      'blind pass stamps the matching latest budgeted fidelity render', fails)
+
+rcf_stale = lambda do |dir|
+  BlindFixture.install(dir, stamp: false)
+  latest = File.join(dir, 'rcf-pass-2.png')
+  File.binwrite(latest, BlindFixture.png_bytes('L'))
+  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.generate(
+    'workbook_id' => 'wb', 'page_id' => 'page', 'pass' => 2,
+    'max_passes' => 5,
+    'renders' => [
+      { 'pass' => 1, 'path' => File.join(dir, 'sigma-render.png') },
+      { 'pass' => 2, 'path' => latest }
+    ],
+    'entries' => []
+  ))
+  ['--blind-grade', File.join(dir, 'blind-grade.json'), '--screenshot', latest]
+end
+_out, err, st, pf = run_case(PASS_ARGS, blind: rcf_stale)
+check(!st.success? && err.include?('do not identify the same pixels'),
+      'stale blind grade over an intermediate render is refused', fails)
+check(!pf.key?('blind_grade'), 'stale-render refusal writes nothing', fails)
+
 # fabricated shas (never computed from the files) → refused
 fake_sha = lambda do |dir|
   g = BlindFixture.install(dir, stamp: false)
