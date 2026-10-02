@@ -25,6 +25,7 @@ twb = <<~XML
     <datasources>
       <datasource caption='Fact' name='federated.primary'>
         <column caption='Partner Name' datatype='string' name='[Partner Name]' role='dimension' type='nominal' />
+        <column caption='Department' datatype='string' name='[Department]' role='dimension' type='nominal' />
         <column caption='Created FYQQ' datatype='string' name='[Created FYQQ]' role='dimension' type='nominal' />
         <column caption='Seed' datatype='string' name='[Seed]' role='measure' type='quantitative' />
       </datasource>
@@ -35,9 +36,11 @@ twb = <<~XML
           <view>
             <datasource-dependencies datasource='federated.primary'>
               <column caption='Partner Name' datatype='string' name='[Partner Name]' role='dimension' type='nominal' />
+              <column caption='Department' datatype='string' name='[Department]' role='dimension' type='nominal' />
               <column caption='Created FYQQ' datatype='string' name='[Created FYQQ]' role='dimension' type='nominal' />
               <column caption='Seed' datatype='string' name='[Seed]' role='measure' type='quantitative' />
               <column-instance column='[Partner Name]' derivation='None' name='[none:Partner Name:nk]' pivot='key' type='nominal' />
+              <column-instance column='[Department]' derivation='None' name='[none:Department:nk]' pivot='key' type='nominal' />
               <column-instance column='[Created FYQQ]' derivation='None' name='[none:Created FYQQ:nk]' pivot='key' type='nominal' />
               <column-instance column='[Seed]' derivation='CountD' name='[ctd:Seed:qk]' pivot='key' type='quantitative' />
               <column-instance column='[Seed]' derivation='CountD' name='[pcto:ctd:Seed:qk:2]' pivot='key' type='quantitative'>
@@ -50,7 +53,7 @@ twb = <<~XML
               <format attr='text-format' field='[federated.primary].[pcto:ctd:Seed:qk:2]' value='p0.0%' />
             </style-rule>
           </style>
-          <rows>[federated.primary].[none:Partner Name:nk]</rows>
+          <rows>([federated.primary].[none:Partner Name:nk] / [federated.primary].[none:Department:nk])</rows>
           <cols>[federated.primary].[none:Created FYQQ:nk]</cols>
           <panes>
             <pane>
@@ -71,6 +74,7 @@ XML
 
 master_map = {
   '(?i)^Partner Name$' => { 'id' => 'm-partner', 'name' => 'Partner Name' },
+  '(?i)^Department$' => { 'id' => 'm-department', 'name' => 'Department' },
   '(?i)^Created FYQQ$' => { 'id' => 'm-fyqq', 'name' => 'Created FYQQ' },
   '(?i)^Seed$' => { 'id' => 'm-seed', 'name' => 'Seed' }
 }
@@ -126,6 +130,10 @@ elements = if build_out.is_a?(Array)
            end
 pivot = elements.find { |element| element['kind'] == 'pivot-table' }
 check(!pivot.nil?, 'builder emits a pivot-table element', fails)
+check(pivot && Array(pivot['rowsBy']).size == 2,
+      "both Tableau row fields survive (got #{pivot && pivot['rowsBy'].inspect})", fails)
+check(pivot && pivot.dig('display', 'rowLayout') == 'separate-columns',
+      "multi-row pivot preserves separate source header columns (got #{pivot && pivot['display'].inspect})", fails)
 
 value_col = if pivot
               Array(pivot['columns']).find { |column| Array(pivot['values']).include?(column['id']) }

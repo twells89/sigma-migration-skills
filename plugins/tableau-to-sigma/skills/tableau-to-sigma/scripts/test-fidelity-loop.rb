@@ -314,8 +314,30 @@ Dir.mktmpdir do |dir|
   led = JSON.parse(File.read(File.join(dir, 'fidelity-ledger.json')))
   led['pass'] = 1
   File.write(File.join(dir, 'fidelity-ledger.json'), JSON.generate(led))
-  _, st = run('render', dir: dir)
+  out, st = run('render', dir: dir)
   ok(st.exitstatus == 3, 'render exits 3 when the pass budget is exhausted')
+  exhausted = JSON.parse(File.read(File.join(dir, 'rcf-exhausted.json')))
+  ok(exhausted['status'] == 'exhausted' && exhausted['pass'] == 1 &&
+     exhausted['max_passes'] == 1,
+     'budget exhaustion writes a terminal rcf-exhausted.json marker')
+  File.write(File.join(dir, 'live.json'), JSON.generate(
+    'document' => {
+      'schemaVersion' => 1, 'kind' => 'workbook',
+      'pages' => [{ 'id' => 'PG' }],
+      'elements' => [{ 'id' => 'k1', 'kind' => 'kpi-chart' }],
+      'layout' => '<Page id="PG"><Element elementId="k1"/></Page>'
+    }
+  ))
+  File.write(File.join(dir, 'patch.json'), JSON.generate(
+    'elements' => [{ 'id' => 'k1', 'style' => { 'backgroundColor' => '#fff' } }]
+  ))
+  out, st = run(
+    'apply-patch', '--patch', File.join(dir, 'patch.json'),
+    '--dry-run', '--live-spec', File.join(dir, 'live.json'),
+    '--out', File.join(dir, 'merged.json'), dir: dir
+  )
+  ok(st.exitstatus == 3 && out.include?('budget is exhausted'),
+     'rcf-exhausted marker blocks post-budget apply-patch attempts')
 end
 
 puts

@@ -220,6 +220,7 @@ return if $PROGRAM_NAME != __FILE__ && !ENV['FIDELITY_LOOP_CLI'] # allow `requir
 
 HERE = __dir__
 LEDGER_NAME = 'fidelity-ledger.json'
+EXHAUSTED_NAME = 'rcf-exhausted.json'
 
 def die(msg, code = 2)
   warn "FATAL: #{msg}"
@@ -228,6 +229,26 @@ end
 
 def ledger_path(dir)
   File.join(dir, LEDGER_NAME)
+end
+
+def exhausted_path(dir)
+  File.join(dir, EXHAUSTED_NAME)
+end
+
+def write_exhausted(dir, ledger)
+  latest = Array(ledger['renders']).last
+  File.write(
+    exhausted_path(dir),
+    JSON.pretty_generate(
+      'status' => 'exhausted',
+      'workbook_id' => ledger['workbook_id'],
+      'page_id' => ledger['page_id'],
+      'pass' => ledger['pass'],
+      'max_passes' => ledger['max_passes'],
+      'latest_render' => latest,
+      'recorded_at' => Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    )
+  )
 end
 
 def load_ledger(dir)
@@ -372,6 +393,7 @@ when 'init'
       source_image: opts[:src], max_passes: opts[:max] || 5
     )
     save_ledger(opts[:dir], ledger)
+    File.delete(exhausted_path(opts[:dir])) if File.exist?(exhausted_path(opts[:dir]))
     puts "[OK] initialized #{ledger_path(opts[:dir])} (page #{page}, max_passes=#{ledger['max_passes']})"
   end
 
@@ -379,6 +401,7 @@ when 'render'
   ledger = load_ledger(opts[:dir])
   max = ledger['max_passes'].to_i
   if ledger['pass'] >= max && max.positive?
+    write_exhausted(opts[:dir], ledger)
     warn "[STOP] pass budget exhausted (#{ledger['pass']}/#{max} passes run)."
     warn '       Record any remaining deltas as ui-only / sigma-capability / accepted residuals'
     warn '       and exit — do not keep rendering. See refs/fidelity-rubric.md.'
@@ -398,11 +421,18 @@ when 'render'
   end
   ledger['renders'] << { 'pass' => n, 'path' => out_png }
   save_ledger(opts[:dir], ledger)
+  exhausted = max.positive? && n >= max
+  write_exhausted(opts[:dir], ledger) if exhausted
   puts "[OK] pass #{n}/#{max}: rendered #{out_png} (#{(File.size(out_png) / 1024.0).round} KB)"
   puts "     SOURCE to compare against: #{ledger['source_image'] || '(set --source-image at init; else use visual-qa/<dash>.source.png)'}"
   print_rubric
-  puts "NEXT: Read both PNGs, then `record` each delta (classify spec-fixable/ui-only/sigma-capability/data),"
-  puts "      `apply-patch` the spec-fixable ones (recipes: refs/fidelity-recipes.md), then `render` again."
+  if exhausted
+    warn "[STOP] this was the final budgeted render (#{n}/#{max}). #{EXHAUSTED_NAME} written."
+    warn '       Record residuals and stop; do not patch or export another fidelity render.'
+  else
+    puts "NEXT: Read both PNGs, then `record` each delta (classify spec-fixable/ui-only/sigma-capability/data),"
+    puts "      `apply-patch` the spec-fixable ones (recipes: refs/fidelity-recipes.md), then `render` again."
+  end
 
 when 'record'
   die '--dimension, --delta, --class required' unless opts[:dim] && opts[:delta] && opts[:cls]
@@ -458,6 +488,10 @@ when 'resolve'
 
 when 'apply-patch'
   ledger = load_ledger(opts[:dir])
+  if File.exist?(exhausted_path(opts[:dir]))
+    die "RCF pass budget is exhausted (#{ledger['pass']}/#{ledger['max_passes']}); " \
+        "#{EXHAUSTED_NAME} blocks further patches. Record residuals and stop.", 3
+  end
   wb = ledger['workbook_id']
   die '--patch or --full-spec required' unless opts[:patch] || opts[:full]
 
