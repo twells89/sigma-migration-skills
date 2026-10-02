@@ -1,0 +1,5 @@
+access_grants:
+  region_access:
+    user_attribute: region
+    allowed_values: ["West"]
+    access_boostable: false

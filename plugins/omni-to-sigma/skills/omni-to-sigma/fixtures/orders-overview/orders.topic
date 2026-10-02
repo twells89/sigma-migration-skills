@@ -1,0 +1,8 @@
+base_view: orders
+label: Orders
+joins:
+  users: {}
+access_filters:
+  - field: users.region
+    user_attribute: region
+    values_for_unfiltered: ["all"]

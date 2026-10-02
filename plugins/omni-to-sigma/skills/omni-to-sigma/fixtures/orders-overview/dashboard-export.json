@@ -1,0 +1,63 @@
+{
+  "exportVersion": "0.1",
+  "document": {
+    "name": "Orders Overview",
+    "identifier": "orders-overview"
+  },
+  "workbookModel": {},
+  "dashboard": {
+    "queryPresentations": [
+      {
+        "id": "1",
+        "name": "Revenue by month",
+        "query": {
+          "table": "orders",
+          "fields": ["orders.created_at[month]", "orders.total_revenue"],
+          "filters": {},
+          "sorts": [{"column_name": "orders.created_at[month]", "sort_descending": false}],
+          "limit": 500,
+          "calculations": [],
+          "pivots": [],
+          "join_paths_from_topic_name": "Orders",
+          "modelId": "11111111-1111-1111-1111-111111111111"
+        },
+        "visConfig": {"chartType": "line", "visType": "basic"}
+      },
+      {
+        "id": "2",
+        "name": "Total revenue",
+        "query": {
+          "table": "orders",
+          "fields": ["orders.total_revenue"],
+          "filters": {},
+          "sorts": [],
+          "limit": 1,
+          "calculations": [],
+          "pivots": [],
+          "join_paths_from_topic_name": "Orders",
+          "modelId": "11111111-1111-1111-1111-111111111111"
+        },
+        "visConfig": {"chartType": "kpi", "visType": "omni-kpi"}
+      }
+    ],
+    "metadata": {
+      "layouts": {
+        "lg": [
+          {"i": "1", "x": 0, "y": 0, "w": 12, "h": 8},
+          {"i": "2", "x": 12, "y": 0, "w": 12, "h": 4}
+        ]
+      },
+      "tileFilterMap": {
+        "1": {"date_filter": "orders.created_at[date]"},
+        "2": {"date_filter": "orders.created_at[date]"}
+      }
+    }
+  },
+  "filterConfig": {
+    "date_filter": {
+      "type": "date",
+      "label": "Created",
+      "field": "orders.created_at"
+    }
+  }
+}
