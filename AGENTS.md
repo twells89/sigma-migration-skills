@@ -158,3 +158,23 @@ they're absent.
   via the Ruby libs, which auto-refresh.
 - **No legacy `sigma-skills/` paths** — use the companion `sigma-authoring`
   skills in this repo (see [`docs/agent-entry.md`](docs/agent-entry.md)).
+
+## Cursor Cloud specific instructions
+
+There is no dev server. Prove the checkout with the creds-free corpus
+(`./corpus/run-corpus.sh --check`) plus `ruby tools/check-shared.rb` and
+`ruby tools/lint-skills.rb`. Live Sigma credentials are only for a real
+migration, not for that loop.
+
+- Use Ubuntu Ruby 3.2 (`ruby`, `ruby-dev`, `ruby-webrick`). Its bundled `json`
+  gem is 2.6.x and pretty-prints empty containers as `[\n\n]`. A Ruby whose
+  `json` gem is >= 2.8 prints `[]` instead and fails every corpus golden
+  byte-compare (see `.github/workflows/corpus-check.yml`).
+- `python3-pil`, `python3-numpy`, and `python3-yaml` (apt) cover offline
+  image analysis and LookML parsing. Pillow is not on the base image.
+- `npm ci` then `npm test` in
+  `plugins/metabase-to-sigma/skills/metabase-to-sigma/converter` and
+  `plugins/cognos-to-sigma/skills/cognos-to-sigma/converter`.
+- Export `LANG=en_US.UTF-8` and `LC_ALL=en_US.UTF-8` before Ruby tests.
+  `corpus/run-corpus.sh` pins this itself; a case `checks.sh` run by hand does not.
+- Once per clone: `git config core.hooksPath .githooks`.
