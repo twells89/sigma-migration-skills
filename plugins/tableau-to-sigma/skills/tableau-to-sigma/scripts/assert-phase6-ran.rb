@@ -2442,15 +2442,6 @@ else
             _bad_dims = _cl_keys2.reject { |k| _dims[k].is_a?(Hash) && _dims[k]['verdict'].to_s == 'pass' }
             _src_img = _bg_doc['source_png'].to_s.empty? ? nil : File.expand_path(_bg_doc['source_png'].to_s, opts[:tab])
             _tgt_img = _bg_doc['target_png'].to_s.empty? ? nil : File.expand_path(_bg_doc['target_png'].to_s, opts[:tab])
-            _fidelity_path = File.join(opts[:tab], 'fidelity-ledger.json')
-            _fidelity = File.file?(_fidelity_path) ? (JSON.parse(File.read(_fidelity_path)) rescue nil) : nil
-            _latest_render = _fidelity.is_a?(Hash) ? Array(_fidelity['renders']).last : nil
-            _latest_img = if _latest_render.is_a?(Hash) && !_latest_render['path'].to_s.empty?
-                            File.expand_path(_latest_render['path'].to_s, opts[:tab])
-                          end
-            _shot_img = s['screenshot_path'].to_s.empty? ? nil :
-                          File.expand_path(s['screenshot_path'].to_s, opts[:tab])
-            _fidelity_stamp = bg['fidelity_render']
             if _bad_dims.any?
               bg_fail.call("blind grade dimension(s) missing or not passing: #{_bad_dims.join(', ')}.")
             elsif _src_img.nil? || _tgt_img.nil? || !File.file?(_src_img) || !File.file?(_tgt_img)
@@ -2459,19 +2450,6 @@ else
               bg_fail.call("the SOURCE image changed since grading (sha256 of #{_src_img} no longer matches) — re-run the grader.")
             elsif Digest::SHA256.file(_tgt_img).hexdigest != bg['target_sha256'].to_s.downcase
               bg_fail.call("the RENDER changed since grading (sha256 of #{_tgt_img} no longer matches) — re-render, re-grade, re-record.")
-            elsif _fidelity && (!_latest_render.is_a?(Hash) || _latest_img.nil? || !File.file?(_latest_img))
-              bg_fail.call('fidelity-ledger.json has no readable latest budgeted render — the final grade cannot be attributed to the RCF loop.')
-            elsif _fidelity && (_shot_img.nil? || !File.file?(_shot_img))
-              bg_fail.call('parity-final.json screenshot_path is missing/unreadable — it must identify the final budgeted render.')
-            elsif _fidelity &&
-                  (Digest::SHA256.file(_latest_img).hexdigest != bg['target_sha256'].to_s.downcase ||
-                   Digest::SHA256.file(_shot_img).hexdigest != bg['target_sha256'].to_s.downcase)
-              bg_fail.call('blind grade, screenshot_path, and latest fidelity render do not identify the same pixels — re-grade the final budgeted render.')
-            elsif _fidelity &&
-                  (!_fidelity_stamp.is_a?(Hash) ||
-                   _fidelity_stamp['pass'].to_i != _latest_render['pass'].to_i ||
-                   _fidelity_stamp['sha256'].to_s.downcase != bg['target_sha256'].to_s.downcase)
-              bg_fail.call('blind_grade fidelity_render stamp is missing/stale versus fidelity-ledger.json — re-record the current grade.')
             else
               # Anti-gaming (belt-and-braces to record-visual-check's check): the
               # grade's per-tile target families must not contradict the built

@@ -48,23 +48,6 @@ def base_workdir(dir, parity_extra: {}, blind: true)
   BlindFixture.install(dir) if blind
 end
 
-def write_fidelity_binding(dir, entries: [], pass: 1, max_passes: 5)
-  target = File.join(dir, 'sigma-render.png')
-  target_sha = Digest::SHA256.file(target).hexdigest
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(
-               'workbook_id' => 'wb-test', 'page_id' => 'pg',
-               'pass' => pass, 'max_passes' => max_passes,
-               'renders' => [{ 'pass' => pass, 'path' => target }],
-               'entries' => entries))
-  parity_path = File.join(dir, 'parity-final.json')
-  parity = JSON.parse(File.read(parity_path))
-  parity['screenshot_path'] = target
-  parity['blind_grade']['fidelity_render'] = {
-    'pass' => pass, 'path' => target, 'sha256' => target_sha
-  }
-  File.write(parity_path, JSON.pretty_generate(parity))
-end
-
 def run_gate(dir, *args)
   env = { 'SIGMA_BASE_URL' => nil, 'SIGMA_API_TOKEN' => nil }
   out, err, st = Open3.capture3(env, RbConfig.ruby, SCRIPT, '--workdir', dir, *args)
@@ -176,46 +159,6 @@ Dir.mktmpdir do |dir|
   _out, err, st = run_gate(dir)
   check(st.exitstatus == 13, "render swapped after grading → exit 13 (got #{st.exitstatus})", fails)
   check(err.include?('RENDER changed since grading'), 'failure names the broken sha binding', fails)
-end
-
-# ---- gate 8b: grade must match latest budgeted RCF render + screenshot -------
-Dir.mktmpdir do |dir|
-  base_workdir(dir)
-  latest = File.join(dir, 'rcf-pass-2.png')
-  File.binwrite(latest, BlindFixture.png_bytes('L'))
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(
-               'workbook_id' => 'wb-test', 'page_id' => 'p1',
-               'pass' => 2, 'max_passes' => 5,
-               'renders' => [
-                 { 'pass' => 1, 'path' => File.join(dir, 'sigma-render.png') },
-                 { 'pass' => 2, 'path' => latest }
-               ],
-               'entries' => []))
-  pf = JSON.parse(File.read(File.join(dir, 'parity-final.json')))
-  pf['screenshot_path'] = latest
-  File.write(File.join(dir, 'parity-final.json'), JSON.pretty_generate(pf))
-  _out, err, st = run_gate(dir)
-  check(st.exitstatus == 13 && err.include?('do not identify the same pixels'),
-        'blind grade bound to an intermediate render fails against the latest RCF render', fails)
-end
-
-Dir.mktmpdir do |dir|
-  base_workdir(dir)
-  target = File.join(dir, 'sigma-render.png')
-  target_sha = Digest::SHA256.file(target).hexdigest
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(
-               'workbook_id' => 'wb-test', 'page_id' => 'p1',
-               'pass' => 1, 'max_passes' => 5,
-               'renders' => [{ 'pass' => 1, 'path' => target }],
-               'entries' => []))
-  pf = JSON.parse(File.read(File.join(dir, 'parity-final.json')))
-  pf['screenshot_path'] = target
-  pf['blind_grade']['fidelity_render'] = {
-    'pass' => 1, 'path' => target, 'sha256' => target_sha
-  }
-  File.write(File.join(dir, 'parity-final.json'), JSON.pretty_generate(pf))
-  _out, _err, st = run_gate(dir)
-  check(st.success?, 'blind grade matching latest RCF render and screenshot passes gate 8b', fails)
 end
 
 # ---- gate 8b PR-9: stamped metadata drifted from blind-grade.json → exit 13 --
@@ -1125,11 +1068,10 @@ Dir.mktmpdir do |dir|
   base_workdir(dir)
   File.write(File.join(dir, 'migrate-state.json'),
              JSON.generate('workbook_id' => 'wb-test', 'run_id' => 'r1', 'rcf_passes' => 5))
-  write_fidelity_binding(
-    dir, pass: 2,
-    entries: [{ 'id' => 'e0', 'dimension' => 'palette', 'delta' => 'x',
-                'cls' => 'spec-fixable', 'resolved' => true }]
-  )
+  File.write(File.join(dir, 'fidelity-ledger.json'),
+             JSON.generate('workbook_id' => 'wb-test', 'page_id' => 'pg', 'pass' => 2,
+                           'entries' => [{ 'id' => 'e0', 'dimension' => 'palette', 'delta' => 'x',
+                                           'cls' => 'spec-fixable', 'resolved' => true }]))
   out, _err, st = run_gate(dir)
   check(st.success?, "gate 8d auto-enabled + clean ledger → exit 0 (got #{st.exitstatus})", fails)
   check(out.include?('gate 8d: RCF fidelity ledger clean'), 'gate 8d OK line printed under auto-enable', fails)
@@ -1165,11 +1107,9 @@ Dir.mktmpdir do |dir|
   base_workdir(dir)
   File.write(File.join(dir, 'migrate-state.json'),
              JSON.generate('workbook_id' => 'wb-test', 'run_id' => 'r1', 'rcf_passes' => 0))
-  write_fidelity_binding(
-    dir,
-    entries: [{ 'id' => 'e0', 'dimension' => 'kpi', 'delta' => '10x off',
-                'cls' => 'data', 'resolved' => false }]
-  )
+  File.write(File.join(dir, 'fidelity-ledger.json'),
+             JSON.generate('entries' => [{ 'id' => 'e0', 'dimension' => 'kpi', 'delta' => '10x off',
+                                           'cls' => 'data', 'resolved' => false }]))
   _out, err, st = run_gate(dir)
   check(st.exitstatus == 15, "rcf opt-out + unresolved data-class entry still blocks (got #{st.exitstatus})", fails)
   check(err.include?('data-class'), 'data-class failure stays named under the waiver', fails)

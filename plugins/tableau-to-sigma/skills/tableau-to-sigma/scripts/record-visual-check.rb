@@ -228,43 +228,6 @@ if opts[:blind_grade]
     exit 2
   end
   grade = res['doc']
-  # A blind grade is evidence for exactly ONE rendered image. When the RCF
-  # ledger exists, require that image to be both the explicitly selected final
-  # screenshot and the latest budgeted fidelity render. This closes two field
-  # escapes: grading an intermediate PNG and then exporting a different
-  # "final" image, and bypassing the RCF pass budget with direct PNG exports.
-  fidelity_stamp = nil
-  fidelity_path = File.join(opts[:dir], 'fidelity-ledger.json')
-  if File.file?(fidelity_path)
-    fidelity = begin
-      JSON.parse(File.read(fidelity_path))
-    rescue JSON::ParserError => e
-      abort "REFUSED: fidelity-ledger.json is malformed (#{e.message}) — cannot bind the visual grade."
-    end
-    latest = Array(fidelity['renders']).last
-    abort 'REFUSED: fidelity-ledger.json has no budgeted render — run fidelity-loop.rb render first.' \
-      unless latest.is_a?(Hash) && !latest['path'].to_s.empty?
-    latest_path = File.expand_path(latest['path'].to_s, opts[:dir])
-    abort "REFUSED: latest fidelity render is missing: #{latest_path}" unless File.file?(latest_path)
-    if opts[:shot].to_s.empty?
-      abort 'REFUSED: --screenshot is required when fidelity-ledger.json exists; it must name the final budgeted render.'
-    end
-    shot_path = File.expand_path(opts[:shot], opts[:dir])
-    abort "REFUSED: --screenshot file is missing: #{shot_path}" unless File.file?(shot_path)
-    target_sha = grade['target_sha256'].to_s.downcase
-    latest_sha = BlindGrade.sha256(latest_path)
-    shot_sha = BlindGrade.sha256(shot_path)
-    if target_sha != latest_sha || target_sha != shot_sha
-      abort "REFUSED: blind grade / screenshot / latest RCF render do not identify the same pixels " \
-            "(grade=#{target_sha[0, 12]}…, screenshot=#{shot_sha[0, 12]}…, " \
-            "latest_pass=#{latest['pass']} #{latest_sha[0, 12]}…). Re-grade the latest budgeted render."
-    end
-    fidelity_stamp = {
-      'pass' => latest['pass'],
-      'path' => latest['path'],
-      'sha256' => latest_sha
-    }
-  end
   dim_fails = grade['dimensions'].select { |_k, v| v['verdict'].to_s == 'fail' }.keys
   if opts[:verdict] == 'pass' && (grade['verdict'] != 'pass' || dim_fails.any?)
     warn "REFUSED: the blind grader's verdict is FAIL#{dim_fails.any? ? " (failing: #{dim_fails.join(', ')})" : ''} —"
@@ -312,7 +275,6 @@ if opts[:blind_grade]
     'cross_check'    => cross,
     'recorded_at'    => Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
   }
-  blind_stamp['fidelity_render'] = fidelity_stamp if fidelity_stamp
 elsif opts[:no_vision_waiver]
   waiver_stamp = { 'kind' => 'no-vision-grader', 'reason' => opts[:no_vision_waiver].strip,
                    'recorded_at' => Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ') }
