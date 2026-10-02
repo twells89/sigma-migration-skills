@@ -40,6 +40,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require 'rbconfig'
+require 'digest'
 require_relative 'lib/blind_fixture'
 
 SCRIPT = File.join(__dir__, 'assert-phase6-ran.rb')
@@ -89,6 +90,22 @@ FAIL_VERDICT = { 'checked' => 5, 'matched' => 3, 'pass' => false,
 def run_gate(dir, *args, env_extra: {})
   env = { 'SIGMA_BASE_URL' => nil, 'SIGMA_API_TOKEN' => nil }.merge(env_extra)
   Open3.capture3(env, RbConfig.ruby, SCRIPT, '--workdir', dir, *args)
+end
+
+def write_fidelity_ledger(dir, ledger)
+  bound = JSON.parse(JSON.generate(ledger))
+  target = File.join(dir, 'sigma-render.png')
+  target_sha = Digest::SHA256.file(target).hexdigest
+  bound['renders'] = [{ 'pass' => bound['pass'], 'path' => target }]
+  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(bound))
+
+  parity_path = File.join(dir, 'parity-final.json')
+  parity = JSON.parse(File.read(parity_path))
+  parity['screenshot_path'] = target
+  parity['blind_grade']['fidelity_render'] = {
+    'pass' => bound['pass'], 'path' => target, 'sha256' => target_sha
+  }
+  File.write(parity_path, JSON.pretty_generate(parity))
 end
 
 # ---- baseline: no source PNG → anchors gate stated SKIP, exit 0 ---------------
@@ -223,7 +240,7 @@ DATA_LEDGER = { 'workbook_id' => 'wb', 'page_id' => 'pg', 'max_passes' => 5, 'pa
 
 Dir.mktmpdir do |dir|
   base_workdir(dir)
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(DATA_LEDGER))
+  write_fidelity_ledger(dir, DATA_LEDGER)
   _out, err, st = run_gate(dir)
   check(st.exitstatus == 15, "unresolved data-class delta (no opt-in flag) → exit 15 (got #{st.exitstatus})")
   check(err.include?('can never be waved through') && err.include?('the numbers are wrong'),
@@ -232,7 +249,7 @@ end
 
 Dir.mktmpdir do |dir|
   base_workdir(dir)
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(DATA_LEDGER))
+  write_fidelity_ledger(dir, DATA_LEDGER)
   _out, err, st = run_gate(dir, '--accept-residuals', 'e0')
   check(st.exitstatus == 15, "--accept-residuals e0 does NOT accept a data-class id → exit 15 (got #{st.exitstatus})")
   check(err.include?('REJECTED for data-class'), 'the rejected accept is named')
@@ -242,14 +259,14 @@ Dir.mktmpdir do |dir|
   base_workdir(dir)
   resolved = JSON.parse(JSON.generate(DATA_LEDGER))
   resolved['entries'][0]['resolved'] = true
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(resolved))
+  write_fidelity_ledger(dir, resolved)
   _out, _err, st = run_gate(dir)
   check(st.success?, "RESOLVED data-class delta → exit 0 (got #{st.exitstatus})")
 end
 
 Dir.mktmpdir do |dir|
   base_workdir(dir)
-  File.write(File.join(dir, 'fidelity-ledger.json'), JSON.pretty_generate(DATA_LEDGER))
+  write_fidelity_ledger(dir, DATA_LEDGER)
   _out, err, st = run_gate(dir, '--require-fidelity-ledger')
   check(st.exitstatus == 15, 'data-class also blocks under --require-fidelity-ledger')
   check(err.include?('data-class'), 'opt-in path names data-class too')
