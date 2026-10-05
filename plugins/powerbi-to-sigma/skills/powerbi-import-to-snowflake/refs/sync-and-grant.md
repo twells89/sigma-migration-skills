@@ -31,6 +31,18 @@ POST /v2/connections/<connectionId>/sync
 Body: {"path": ["<DB>", "<SCHEMA>", "<TABLE>"]}
 ```
 
-The tool calls this for every landed table (`sigma_sync`, using
-`SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET`). Note the endpoint is `/sync` and it
-takes a `path` body — there is no separate `/lookup` route (404).
+The tool calls this for every landed table. `sigma_sync` delegates auth to the
+co-located `scripts/lib/sigma_rest.py`: it reuses a valid caller token, refreshes
+a stored browser session before falling back to client credentials, proactively
+refreshes tokens with known stale age, and retries one HTTP 401.
+
+Set `SIGMA_BASE_URL` and use one of:
+
+- a current `SIGMA_API_TOKEN`;
+- a browser session saved once with `scripts/browser-login.sh`; or
+- `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` for unattended runs.
+
+Sigma sync is optional. If no usable Sigma auth is available, the tool prints a
+skip and leaves the completed Snowflake landing intact. A failed table sync is
+reported while later tables continue. The endpoint is `/sync` and takes a
+`path` body — there is no separate `/lookup` route (404).
