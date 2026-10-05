@@ -98,6 +98,23 @@ Alternative reuse decisions:
 The orchestrator never declares completion. It writes `parity-final.json` with
 `status: not-run`; Phase 6 must turn that evidence GREEN.
 
+### Sigma authentication for live posting
+
+Set `SIGMA_BASE_URL`, then prefer a one-time interactive browser login:
+
+```bash
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
+```
+
+The refresh session is stored in the OS keychain. Later orchestrator runs reuse
+a valid caller/browser token, refresh a token whose known age exceeds 50
+minutes, and refresh/retry once after a 401. They do not open a browser
+implicitly. For unattended hosts, set `SIGMA_CLIENT_ID` and
+`SIGMA_CLIENT_SECRET`; the same provider falls back to client credentials when
+no browser session is available. A valid pre-minted `SIGMA_API_TOKEN` is also
+honored.
+
 ## Phase 0 — Assess (C1)
 
 For one project, run discovery and review:
