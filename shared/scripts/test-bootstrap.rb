@@ -168,6 +168,8 @@ Dir.mktmpdir do |t|
              "export SIGMA_BASE_URL='https://api.sigmacomputing.com'\n")
   keychain_stub = File.join(t, 'keychain-bin')
   FileUtils.mkdir_p(keychain_stub)
+  write_stub(keychain_stub, 'security',
+             '[ "$1" = find-generic-password ] && printf browser-refresh-token')
   write_stub(keychain_stub, 'secret-tool',
              '[ "$1" = lookup ] && [ "$2 $3 $4 $5" = "service sigma-api key refresh-token" ]')
   st, out = run_bootstrap(browser_home, [keychain_stub, stub] + SYS, '--check')
