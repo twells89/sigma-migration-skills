@@ -40,6 +40,10 @@ try:
 except Exception:
     from requests.packages.urllib3.util.retry import Retry
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+import sigma_rest
+
 # Corp TLS inspection resets long connections intermittently -> retry POST/GET.
 SESS = requests.Session()
 _retry = Retry(total=5, connect=5, read=5, backoff_factor=1.5,
@@ -332,19 +336,31 @@ def gen_load_sql(db, schema, plan, outdir, grant_role="PUBLIC"):
 
 def sigma_sync(plan, db, schema, connection_id):
     """Register newly-landed tables with the Sigma connection so a DM POST can
-    resolve them. Uses SIGMA_CLIENT_ID/SECRET from the environment."""
-    cid, sec = os.environ.get("SIGMA_CLIENT_ID"), os.environ.get("SIGMA_CLIENT_SECRET")
-    if not (cid and sec):
-        print("[sigma-sync] SIGMA_CLIENT_ID/SECRET not set — skipping sync", file=sys.stderr)
+    resolve them. Authentication and one 401 refresh/retry are owned by the
+    co-located lib/sigma_rest.py. Sync remains optional: unavailable Sigma auth
+    skips the step, and a per-table API error is reported without aborting the
+    completed Snowflake landing."""
+    try:
+        sigma_rest.base_url()
+        # Reuse a valid caller token. Known-stale tokens refresh proactively;
+        # browser keychain state is preferred before client credentials.
+        sigma_rest.auth_token()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        detail = str(exc).splitlines()[0]
+        print(f"[sigma-sync] Sigma auth unavailable — skipping sync: {detail}", file=sys.stderr)
         return
-    base = "https://aws-api.sigmacomputing.com"
-    tok = SESS.post(f"{base}/v2/auth/token", data={
-        "grant_type": "client_credentials", "client_id": cid, "client_secret": sec}).json()["access_token"]
-    H = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
+
     for t in plan:
-        r = SESS.post(f"{base}/v2/connections/{connection_id}/sync", headers=H,
-                      json={"path": [db, schema, t["sf_name"]]})
-        print(f"[sigma-sync] {t['sf_name']} -> {r.status_code}", file=sys.stderr)
+        try:
+            sigma_rest.request(
+                "post",
+                f"/v2/connections/{connection_id}/sync",
+                body=json.dumps({"path": [db, schema, t["sf_name"]]}),
+            )
+            status = "ok"
+        except (sigma_rest.SigmaError, SystemExit) as exc:
+            status = str(exc).splitlines()[0]
+        print(f"[sigma-sync] {t['sf_name']} -> {status}", file=sys.stderr)
 
 # ---- main ----------------------------------------------------------------
 def main():
@@ -358,7 +374,7 @@ def main():
     ap.add_argument("--grant-role", default="PUBLIC", help="Snowflake role to GRANT SELECT (empty to skip)")
     ap.add_argument("--sigma-connection", default=None,
                     help="Sigma connection UUID — if set, auto-sync landed tables into Sigma after load "
-                         "(uses SIGMA_CLIENT_ID/SECRET env)")
+                         "(uses a valid token/browser session or client-credential fallback)")
     ap.add_argument("--only", default=None, help="comma-separated PBI table names to include")
     ap.add_argument("--limit-rows", type=int, default=None, help="TOPN per table (cheap testing)")
     ap.add_argument("--dry-run", action="store_true", help="extract + gen SQL, do not execute in Snowflake")
