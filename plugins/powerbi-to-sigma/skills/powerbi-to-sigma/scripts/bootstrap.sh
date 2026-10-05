@@ -14,9 +14,10 @@
 #
 # Contract:
 #   * IDEMPOTENT — a complete environment no-ops straight into a doctor run.
-#   * NON-INTERACTIVE / no-TTY-safe — never prompts; the creds flow runs only
-#     when SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (and Tableau PAT vars, where the
-#     tableau scripts ship) are already exported (setup.rb --from-env).
+#   * NON-INTERACTIVE / no-TTY-safe — never prompts and never opens a browser.
+#     A current token or existing browser-keychain session is reused. The
+#     one-time browser-login command is explained when auth is missing; client
+#     flags/env remain the unattended fallback (setup.rb --from-env).
 #   * NEVER requires admin — activates runtimes already installed via version
 #     managers (rbenv/nvm/fnm/asdf/pyenv, Homebrew keg-only) by prepending
 #     their bin dirs, installs via user-scoped Homebrew where present (apt-get
@@ -691,6 +692,25 @@ fi
 
 # ── credentials (non-interactive only — setup.rb is the single writer) ──────
 NEUTRAL_ENV="$STATE_DIR/env"
+sigma_env_file_has() {
+  local key="$1" file="${2:-$HOME/.sigma-migration/env}"
+  [ -f "$file" ] && grep -Eq "^[[:space:]]*(export[[:space:]]+)?${key}=.+" "$file" 2>/dev/null
+}
+sigma_base_configured() {
+  [ -n "${SIGMA_BASE_URL:-}" ] || sigma_env_file_has SIGMA_BASE_URL
+}
+sigma_browser_session_present() {
+  sigma_base_configured || return 1
+  if command -v security >/dev/null 2>&1; then
+    security find-generic-password -a "${USER:-$(id -un 2>/dev/null)}" \
+      -s "sigma-api:refresh-token" >/dev/null 2>&1
+  elif command -v secret-tool >/dev/null 2>&1; then
+    secret-tool lookup service sigma-api key refresh-token >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
 SETUP_RUN=()
 SETUP_LABEL=""
 if [ "$SKIP_RUBY" = true ] && [ -n "$PY_RUN" ] && [ -f "$HERE/setup.py" ]; then
@@ -714,9 +734,18 @@ if [ "${#CRED_ARGS[@]}" -gt 0 ]; then
       INSTALL_FAILED=1; note "credential setup (flag form) FAILED — check the flag values and selected runtime profile"
     fi
   fi
-elif [ -f "$NEUTRAL_ENV" ] && grep -q 'SIGMA_CLIENT_ID' "$NEUTRAL_ENV" 2>/dev/null; then
-  okay "Sigma credentials present ($NEUTRAL_ENV)"
-elif [ -n "${SIGMA_CLIENT_ID:-}" ] && [ -n "${SIGMA_CLIENT_SECRET:-}" ]; then
+elif sigma_base_configured \
+     && { [ -n "${SIGMA_API_TOKEN:-}" ] || sigma_env_file_has SIGMA_API_TOKEN "$NEUTRAL_ENV"; }; then
+  okay "Sigma current API token configuration present (bootstrap will not replace it)"
+elif [ "${SIGMA_AUTH_MODE:-auto}" != "client-credentials" ] && sigma_browser_session_present; then
+  okay "Sigma browser refresh session present in the OS keychain (bootstrap stays noninteractive)"
+elif [ "${SIGMA_AUTH_MODE:-auto}" != "browser" ] \
+     && sigma_base_configured \
+     && sigma_env_file_has SIGMA_CLIENT_ID "$NEUTRAL_ENV" \
+     && sigma_env_file_has SIGMA_CLIENT_SECRET "$NEUTRAL_ENV"; then
+  okay "Sigma client credentials present ($NEUTRAL_ENV)"
+elif [ "${SIGMA_AUTH_MODE:-auto}" != "browser" ] \
+     && [ -n "${SIGMA_CLIENT_ID:-}" ] && [ -n "${SIGMA_CLIENT_SECRET:-}" ]; then
   plan "Sigma credentials not yet persisted (env vars ARE exported)" \
        "$SETUP_LABEL --from-env (persists them; values never echoed)"
   if [ "$MODE" = full ]; then
@@ -728,8 +757,8 @@ elif [ -n "${SIGMA_CLIENT_ID:-}" ] && [ -n "${SIGMA_CLIENT_SECRET:-}" ]; then
     fi
   fi
 else
-  plan "Sigma credentials MISSING (no $NEUTRAL_ENV, no SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET in the env)" \
-       "export SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL) and re-run bootstrap — or run the selected profile's setup script once in a real terminal"
+  plan "Sigma authentication MISSING (need SIGMA_BASE_URL plus a current token, browser-keychain session, or client credentials)" \
+       "in an interactive terminal, set SIGMA_BASE_URL and run: eval \"\$(bash scripts/browser-login.sh)\" (one-time browser sign-in; bootstrap never opens it). Unattended fallback: re-run bootstrap with --client-id ID --client-secret SECRET [--base-url URL], or export the client values and use --from-env"
   # Not an install failure: bootstrap cannot invent credentials. Doctor will
   # fail-close on them below, keeping the run honestly red until they exist.
 fi

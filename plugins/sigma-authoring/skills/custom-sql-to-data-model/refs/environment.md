@@ -21,6 +21,31 @@ prompts (no-TTY-safe), and never echoes credential values. `intake.rb` and the
 orchestrators refuse to start until the bootstrap sentinel + a passing
 `doctor.json` exist — so run it once per machine, before anything else.
 
+## Sigma authentication at preflight
+
+Bootstrap is deliberately noninteractive and never opens a browser. It accepts
+an already-current `SIGMA_API_TOKEN`, a browser refresh session already stored
+in the OS keychain, or complete client credentials. Each route also needs
+`SIGMA_BASE_URL`. The doctor verifies the route with
+`GET /v2/whoami` through the shared `sigma_rest` client: it tries a current
+token first, then retries one 401 through the browser-first/client-fallback
+provider. `doctor.json` records only the smoke status and auth method, never a
+token or refresh secret.
+
+For the preferred one-time human login, run this explicitly from an interactive
+terminal (Git Bash on Windows):
+
+```bash
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
+```
+
+Later bootstrap/doctor runs reuse the keychain session without opening the
+browser. For unattended hosts, keep using bootstrap's `--client-id`,
+`--client-secret`, and optional `--base-url` flags (PowerShell:
+`-ClientId`, `-ClientSecret`, `-BaseUrl`), or export the client values and use
+`--from-env` / `-FromEnv`.
+
 **Agents: NEVER hand-install a runtime.** Do not `brew install` / `apt-get` /
 `winget install` / download binaries or edit PATH yourself — run the bootstrap
 and show the user its output. If the bootstrap reports no admin-free route on

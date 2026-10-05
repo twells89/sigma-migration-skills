@@ -13,7 +13,10 @@
 #     -FromEnv    (persist from already-set env vars)
 #
 # Contract (same as bootstrap.sh):
-#   * IDEMPOTENT and NON-INTERACTIVE (no prompts, no-TTY-safe).
+#   * IDEMPOTENT and NON-INTERACTIVE (no prompts, no browser launch, no-TTY-
+#     safe). A current token or browser-keychain session is reused; when auth
+#     is missing the script prints the one-time interactive browser-login
+#     command. Client flags/env remain the unattended fallback.
 #   * NEVER requires admin: installs are user-scoped only -- winget with
 #     --scope user where the package supports it, scoop (itself a no-admin
 #     user-dir install; self-installed from get.scoop.sh when neither manager
@@ -544,7 +547,37 @@ else {
 
 # --- credentials (non-interactive only; values never echoed) ----------------
 $envFile = Join-Path $StateDir 'env'
-$hasSigmaFile = (Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'SIGMA_CLIENT_ID')
+function Test-SigmaEnvFileKey([string]$key, [string]$file) {
+  if (-not (Test-Path $file)) { return $false }
+  $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
+  return [bool]($content -match "(?m)^\s*(?:export\s+)?$([regex]::Escape($key))=.+$")
+}
+function Test-SigmaBaseConfigured([string]$file) {
+  return [bool]($env:SIGMA_BASE_URL -or (Test-SigmaEnvFileKey 'SIGMA_BASE_URL' $file))
+}
+function Test-SigmaBrowserSession([string]$file) {
+  if (-not (Test-SigmaBaseConfigured $file)) { return $false }
+  if (Get-Command security -ErrorAction SilentlyContinue) {
+    $account = if ($env:USER) { $env:USER } else { $env:USERNAME }
+    & security find-generic-password -a $account -s 'sigma-api:refresh-token' 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  }
+  if (Get-Command secret-tool -ErrorAction SilentlyContinue) {
+    & secret-tool lookup service sigma-api key refresh-token 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  }
+  return $false
+}
+
+$hasSigmaToken = (Test-SigmaBaseConfigured $envFile) -and `
+  ($env:SIGMA_API_TOKEN -or (Test-SigmaEnvFileKey 'SIGMA_API_TOKEN' $envFile))
+$hasSigmaBrowser = $false
+if ((-not $hasSigmaToken) -and ($env:SIGMA_AUTH_MODE -ne 'client-credentials')) {
+  $hasSigmaBrowser = Test-SigmaBrowserSession $envFile
+}
+$hasSigmaClientFile = (Test-SigmaBaseConfigured $envFile) -and `
+  (Test-SigmaEnvFileKey 'SIGMA_CLIENT_ID' $envFile) -and `
+  (Test-SigmaEnvFileKey 'SIGMA_CLIENT_SECRET' $envFile)
 $setupPy = Join-Path $PSScriptRoot 'setup.py'
 $setupRb = Join-Path $PSScriptRoot 'setup.rb'
 $setupLabel = if ($skipRuby) { 'python scripts/setup.py' } else { 'ruby scripts/setup.rb' }
@@ -576,15 +609,23 @@ if ($credArgs.Count -gt 0) {
     else { $script:InstallFailed = $true; Note 'credential setup (flag form) FAILED -- check the values and selected runtime profile' }
   }
 }
-elseif ($hasSigmaFile) { Okay "Sigma credentials present ($envFile)" }
-elseif ($env:SIGMA_CLIENT_ID -and $env:SIGMA_CLIENT_SECRET) {
+elseif ($hasSigmaToken) {
+  Okay 'Sigma current API token configuration present (bootstrap will not replace it)'
+}
+elseif (($env:SIGMA_AUTH_MODE -ne 'client-credentials') -and $hasSigmaBrowser) {
+  Okay 'Sigma browser refresh session present in the OS keychain (bootstrap stays noninteractive)'
+}
+elseif (($env:SIGMA_AUTH_MODE -ne 'browser') -and $hasSigmaClientFile) {
+  Okay "Sigma client credentials present ($envFile)"
+}
+elseif (($env:SIGMA_AUTH_MODE -ne 'browser') -and $env:SIGMA_CLIENT_ID -and $env:SIGMA_CLIENT_SECRET) {
   Plan "Sigma credentials not yet persisted (env vars ARE set)" "$setupLabel --from-env"
   if (-not $Check) {
     if (Invoke-SigmaSetup @('--from-env')) { $script:Actions += "creds: $setupLabel --from-env"; Okay 'Sigma credentials persisted from the environment' }
     else { $script:InstallFailed = $true; Note 'credential setup --from-env FAILED -- check SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET' }
   }
 } else {
-  Plan "Sigma credentials MISSING (no $envFile, no SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET)" "set SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL) and re-run bootstrap - or run the selected profile's setup script once in a real terminal"
+  Plan "Sigma authentication MISSING (need SIGMA_BASE_URL plus a current token, browser-keychain session, or client credentials)" 'from an interactive Git Bash terminal, set SIGMA_BASE_URL and run: eval "$(bash scripts/browser-login.sh)" (one-time browser sign-in; bootstrap never opens it). Unattended fallback: re-run bootstrap.ps1 with -ClientId ID -ClientSecret SECRET [-BaseUrl URL], or set the client values and use -FromEnv'
 }
 $tableauSetupRb = Join-Path $PSScriptRoot 'setup-tableau.rb'
 $tableauSetupPy = Join-Path $PSScriptRoot 'setup-tableau.py'

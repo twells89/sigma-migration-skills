@@ -933,6 +933,12 @@
       ]
     },
     {
+      "canonical": "shared/scripts/test-doctor-json.sh",
+      "targets": [
+        "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-doctor-json.sh"
+      ]
+    },
+    {
       "canonical": "shared/scripts/test-bootstrap-lockstep.sh",
       "targets": [
         "plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-bootstrap-lockstep.sh",

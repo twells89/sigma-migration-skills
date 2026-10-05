@@ -11,6 +11,8 @@
 #   Part B — the py_real probe body (bash twins), ignoring only the success
 #            line (doctor records PY_DESC/PY_VER/PY_ARGV; bootstrap PY_RUN)
 #   Part C — Test-RealPython (ps1 twins), ignoring comments/blank lines
+#   Part D — Sigma auth-configuration probes (shell twins and PowerShell twins)
+#   Part E — doctor smoke uses sigma_rest GET /v2/whoami, never direct mint
 #
 # Usage:  bash scripts/test-bootstrap-lockstep.sh
 set -u
@@ -79,6 +81,47 @@ check $? "both Test-RealPython bodies extracted (non-empty)"
 diff -u "$TMP/ps.bootstrap" "$TMP/ps.doctor" > "$TMP/ps.diff"
 check $? "Test-RealPython bodies are identical"
 [ -s "$TMP/ps.diff" ] && sed 's/^/    /' "$TMP/ps.diff"
+
+echo "Part D — Sigma auth-configuration probes (bootstrap vs doctor)"
+shell_auth_funcs() {
+  for fn in sigma_env_file_has sigma_base_configured sigma_browser_session_present; do
+    awk "/^${fn}\\(\\) \\{/,/^\\}/" "$1"
+  done | norm
+}
+shell_auth_funcs "$HERE/bootstrap.sh" > "$TMP/auth.bootstrap.sh"
+shell_auth_funcs "$HERE/doctor.sh"    > "$TMP/auth.doctor.sh"
+[ -s "$TMP/auth.bootstrap.sh" ] && [ -s "$TMP/auth.doctor.sh" ]
+check $? "both shell auth-probe blocks extracted (non-empty)"
+diff -u "$TMP/auth.bootstrap.sh" "$TMP/auth.doctor.sh" > "$TMP/auth-shell.diff"
+check $? "shell auth-configuration probes are identical"
+[ -s "$TMP/auth-shell.diff" ] && sed 's/^/    /' "$TMP/auth-shell.diff"
+
+ps_auth_funcs() {
+  for fn in Test-SigmaEnvFileKey Test-SigmaBaseConfigured Test-SigmaBrowserSession; do
+    awk "/^function ${fn}/,/^\\}/" "$1"
+  done | grep -v '^[[:space:]]*#' | norm
+}
+ps_auth_funcs "$HERE/bootstrap.ps1" > "$TMP/auth.bootstrap.ps1"
+ps_auth_funcs "$HERE/doctor.ps1"    > "$TMP/auth.doctor.ps1"
+[ -s "$TMP/auth.bootstrap.ps1" ] && [ -s "$TMP/auth.doctor.ps1" ]
+check $? "both PowerShell auth-probe blocks extracted (non-empty)"
+diff -u "$TMP/auth.bootstrap.ps1" "$TMP/auth.doctor.ps1" > "$TMP/auth-ps.diff"
+check $? "PowerShell auth-configuration probes are identical"
+[ -s "$TMP/auth-ps.diff" ] && sed 's/^/    /' "$TMP/auth-ps.diff"
+
+echo "Part E — live Sigma smoke contract"
+sigma_sh="$(awk '/^# --- Sigma authentication /,/^# --- Tableau credentials /' "$HERE/doctor.sh")"
+sigma_ps="$(awk '/^# --- Sigma authentication /,/^# --- Tableau credentials /' "$HERE/doctor.ps1")"
+printf '%s\n' "$sigma_sh" | grep -F 'Sigma.request(:get,%q{/v2/whoami})' >/dev/null
+check $? "doctor.sh live smoke calls shared Sigma.request GET /v2/whoami"
+printf '%s\n' "$sigma_ps" | grep -F 'Sigma.request(:get,%q{/v2/whoami})' >/dev/null
+check $? "doctor.ps1 live smoke calls shared Sigma.request GET /v2/whoami"
+if printf '%s\n%s\n' "$sigma_sh" "$sigma_ps" | grep -Eq 'Sigma\.refresh_token!|sigma_rest\.refresh_token\('; then
+  smoke_direct_mint=1
+else
+  smoke_direct_mint=0
+fi
+check $smoke_direct_mint "doctor live smokes never invoke a token mint directly"
 
 echo
 if [ "$fails" -eq 0 ]; then
