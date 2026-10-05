@@ -75,6 +75,23 @@ ok('Sigma dual-mode auth provider/browser/refresh/helper fan out as one closure'
   auth_runtime_drift.empty?
 end
 
+# Python entry points that import the shared REST/auth provider must carry its
+# library beside every fanned-out copy.
+python_sigma_consumers = %w[
+  shared/scripts/pick_destination.py
+  shared/scripts/sigma-export-png.py
+]
+missing_python_sigma_rest = python_sigma_consumers.flat_map do |canonical|
+  ENTRIES.fetch(canonical, []).map do |target|
+    expected = File.join(File.dirname(target), 'lib', 'sigma_rest.py')
+    "#{canonical} -> #{expected}" unless ENTRIES.fetch('shared/lib/sigma_rest.py', []).include?(expected)
+  end.compact
+end
+ok('shared Python Sigma API consumers fan out with lib/sigma_rest.py') do
+  missing_python_sigma_rest.each { |missing| warn "    MISSING REGISTRATION #{missing}" }
+  missing_python_sigma_rest.empty?
+end
+
 # Qlik hard-gate adoption is deliberately all-or-nothing. In particular,
 # degradation_ledger is loaded behind a compatibility rescue, so the behavioural
 # --help check below cannot detect its absence: the script would load but derive

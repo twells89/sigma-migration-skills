@@ -549,6 +549,7 @@ jobs:
             shared/lib/test_phase_metrics.rb
             shared/scripts/test-intake-triage.rb
             shared/scripts/test-assert-phase6.rb
+            shared/scripts/test-assert-phase6-auth.rb
             shared/scripts/test-cleanup-orphan-workbooks.rb
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-intake-triage.rb
             plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/test-validate-sigma-formula-cleanup.rb
@@ -684,7 +685,9 @@ jobs:
             shared/lib/test_metric_binding.py
             shared/lib/test_sigma_rest_auth.py
             shared/scripts/test_get_token.py
+            shared/scripts/test_harvest_theme_registry.py
             shared/scripts/test_pick_destination.py
+            shared/scripts/test_sigma_export_png.py
             # powerbi-to-sigma uses HYPHENATED test-*.py names, which is why these were
             # never picked up by the test_*.py convention above. Listed explicitly.
             plugins/powerbi-to-sigma/skills/powerbi-to-sigma/scripts/test-extract-viz-signals.py
