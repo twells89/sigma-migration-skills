@@ -53,8 +53,16 @@ globalThis.fetch = async (url, init = {}) => {
   return new Response('unsupported method', { status: 405 });
 };
 
+const authKeys = [
+  'SIGMA_BASE_URL', 'SIGMA_API_TOKEN', 'SIGMA_TOKEN_MINTED_AT',
+  'SIGMA_AUTH_METHOD', 'SIGMA_ALLOW_INSECURE_BASE_URL',
+];
+const savedAuthEnv = Object.fromEntries(authKeys.map((key) => [key, process.env[key]]));
 process.env.SIGMA_BASE_URL = 'http://stub.invalid';
 process.env.SIGMA_API_TOKEN = 'dummy-test-token';
+process.env.SIGMA_ALLOW_INSECURE_BASE_URL = '1';
+delete process.env.SIGMA_TOKEN_MINTED_AT;
+delete process.env.SIGMA_AUTH_METHOD;
 process.argv = ['node', 'apply-layout.mjs', '--workbook', 'wb-test', '--skip-layout-lint', '--skip-visual-qa'];
 
 const logs = [];
@@ -76,6 +84,10 @@ try {
 console.log = realLog;
 process.exit = realExit;
 globalThis.fetch = realFetch;
+for (const [key, value] of Object.entries(savedAuthEnv)) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}
 
 check(exitCode === null && !threw,
   `apply-layout.mjs runs to completion without exiting/throwing (exit=${exitCode}, threw=${threw ? threw.message : 'no'})`);
