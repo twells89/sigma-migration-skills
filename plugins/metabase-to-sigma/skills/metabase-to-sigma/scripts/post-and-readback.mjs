@@ -10,7 +10,7 @@
 // up the control-scope.json sidecar next to --spec (or --control-scope PATH).
 //
 // Usage:
-//   eval "$(scripts/get-token.sh)"
+//   # Set SIGMA_BASE_URL; auth is browser-first and automatic.
 //   node scripts/post-and-readback.mjs --type datamodel|workbook --spec spec.json --folder <folderId> \
 //     [--name N] [--out map.json] [--control-scope scope.json]
 //     [--keep-rejected-bindings]   # legacy behavior: if the org rejects
