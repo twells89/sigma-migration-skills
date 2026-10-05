@@ -9,9 +9,11 @@ import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "lib"))
+import sigma_rest  # noqa: E402
 
 
 class PostError(Exception):
@@ -156,32 +158,31 @@ def write_json(path, value):
 
 
 class Client:
-    def __init__(self, base_url, token):
-        if not base_url or not token:
-            raise PostError("SIGMA_BASE_URL and SIGMA_API_TOKEN are required")
-        self.base = base_url.rstrip("/")
+    def __init__(self, base_url=None, token=None, transport=sigma_rest):
+        if base_url:
+            os.environ["SIGMA_BASE_URL"] = base_url
+        if token:
+            os.environ["SIGMA_API_TOKEN"] = token
+        self.transport = transport
+        try:
+            self.base = transport.base_url().rstrip("/")
+        except transport.SigmaError as exc:
+            raise PostError(
+                "%s; run scripts/browser-login.sh once or configure "
+                "SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET for unattended auth" % exc
+            ) from exc
         self.token = token
 
     def request(self, method, path, body=None):
-        data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = urllib.request.Request(
-            self.base + path,
-            data=data,
-            method=method,
-            headers={
-                "Authorization": "Bearer " + self.token,
-                "Accept": "application/json, application/yaml, text/yaml",
-                **({"Content-Type": "application/json"} if data is not None else {}),
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                return parse_payload(response.read())
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:500]
-            raise PostError("Sigma %s %s returned %s: %s" %
-                            (method, path, exc.code, detail)) from exc
-        except urllib.error.URLError as exc:
+            raw = self.transport.request(
+                method.lower(),
+                path,
+                body=json.dumps(body) if body is not None else None,
+                accept="application/json, application/yaml, text/yaml",
+            )
+            return parse_payload(raw)
+        except (self.transport.SigmaError, SystemExit) as exc:
             raise PostError("Sigma %s %s failed: %s" % (method, path, exc)) from exc
 
 
@@ -229,6 +230,8 @@ def main(argv=None):
 
     workdir = Path(args.workdir).expanduser().resolve()
     workdir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("SIGMA_WORKDIR", str(workdir))
+    sigma_rest.bootstrap_credentials(cwd=str(workdir))
     spec_path = Path(args.spec).expanduser().resolve()
     if not spec_path.is_file():
         parser.error("--spec does not exist: %s" % spec_path)

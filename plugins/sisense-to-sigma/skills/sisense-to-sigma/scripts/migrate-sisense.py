@@ -19,6 +19,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SKILL = HERE.parent
+sys.path.insert(0, str(HERE / "lib"))
+import sigma_rest  # noqa: E402
 
 
 class MigrationError(Exception):
@@ -67,16 +69,26 @@ def load_local_env():
 
 
 def load_sigma_env(workdir):
+    """Resolve Sigma auth through the browser-first shared provider.
+
+    A valid bearer is reused. Known-old tokens refresh proactively, and a
+    browser keychain session is tried before the unattended client fallback.
+    The resolved values stay in the environment for Ruby and child-Python
+    phases, including their one-refresh-on-401 transports.
+    """
     load_local_env()
-    if not os.environ.get("SIGMA_API_TOKEN") and os.environ.get("SIGMA_CLIENT_ID"):
-        rc, _ = run([sys.executable, HERE / "get_token.py", "--workdir", workdir],
-                    check=False)
-        auth = workdir / "auth.json"
-        if rc == 0 and auth.is_file():
-            values = read_json(auth)
-            for key in ("SIGMA_API_TOKEN", "SIGMA_BASE_URL"):
-                if values.get(key):
-                    os.environ[key] = values[key]
+    resolved = Path(workdir).expanduser().resolve()
+    os.environ.setdefault("SIGMA_WORKDIR", str(resolved))
+    sigma_rest.bootstrap_credentials(cwd=str(resolved))
+    try:
+        sigma_rest.base_url()
+        os.environ["SIGMA_API_TOKEN"] = sigma_rest.auth_token()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        raise MigrationError(
+            "Sigma authentication failed: %s. Run scripts/browser-login.sh "
+            "once, or configure SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET for "
+            "unattended auth." % exc
+        ) from exc
 
 
 def prepare_discovery(args, workdir):
