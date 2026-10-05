@@ -72,9 +72,10 @@ user-invocable: true
 >   control-lint wholesale — the #1 way this handoff spirals; prefer
 >   `--master-col` for master-level calcs). Full handoff discipline:
 >   `refs/gates.md` §Exit-4.
-> - **Credentials:** the orchestrator stops at step 0 telling you to run the
->   selected runtime's `scripts/setup.rb` or `scripts/setup.py` once — do that
->   rather than working around auth
+> - **Credentials:** the orchestrator stops at step 0 with both supported
+>   routes: preferred one-time `scripts/browser-login.sh`, or the selected
+>   runtime's `scripts/setup.rb` / `scripts/setup.py` for unattended client
+>   credentials. Use one of those rather than working around auth
 >   (`refs/environment.md` §Credentials).
 
 > ## Runtime selection

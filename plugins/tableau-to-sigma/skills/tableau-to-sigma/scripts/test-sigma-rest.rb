@@ -124,13 +124,14 @@ tok = Sigma.auth_token
 check(tok == "minted-#{before + 1}" && $mints == before + 1,
       'stale stamped token + creds → proactive re-mint', fails)
 
-# 5. Stale stamp but NO creds → stale token returned (401 path handles it).
+# 5. Stale stamp without client creds → provider refresh still runs (browser
+#    auth may be the only refresh route).
 reset_state!
 ENV['SIGMA_API_TOKEN'] = 'oldtok'
 ENV['SIGMA_TOKEN_MINTED_AT'] = (Time.now - (Sigma::TOKEN_TTL_SECONDS + 60)).utc.iso8601
 before = $mints
-check(Sigma.auth_token == 'oldtok' && $mints == before,
-      'stale stamp without creds → token returned as-is (no mint attempt)', fails)
+check(Sigma.auth_token == "minted-#{before + 1}" && $mints == before + 1,
+      'stale stamp without client creds → browser-first provider refreshes', fails)
 
 # 6. Garbage stamp → treated as age-unknown.
 reset_state!
@@ -208,19 +209,20 @@ rescue Sigma::Error => e
 end
 check(raised, 'second 401 after re-mint raises Sigma::Error (fail loudly)', fails)
 
-# 12. request(): 401 with NO creds → no retry, immediate loud failure.
+# 12. request(): 401 without client creds still refreshes once — browser auth
+#     must not be gated on SIGMA_CLIENT_ID.
 reset_state!
 ENV['SIGMA_BASE_URL'] = 'https://sigma.example'
 ENV['SIGMA_API_TOKEN'] = 'tok'
-http = FakeHttp.new([http_res(Net::HTTPUnauthorized, 401, 'unauthorized')])
-raised = false
-begin
-  Sigma.request(:get, '/v2/x', http: http)
-rescue Sigma::Error
-  raised = true
-end
-check(raised && http.reqs.length == 1,
-      '401 without client creds → no retry, loud failure', fails)
+http = FakeHttp.new([
+  http_res(Net::HTTPUnauthorized, 401, 'unauthorized'),
+  http_res(Net::HTTPOK, 200, '{"ok":"browser"}')
+])
+before = $mints
+out = Sigma.request(:get, '/v2/x', http: http)
+check(out == { 'ok' => 'browser' } && $mints == before + 1 &&
+        http.reqs.length == 2,
+      '401 without client creds → provider refresh + one retry', fails)
 
 # 13. Stale token + request() → proactive re-mint means NO 401 roundtrip.
 reset_state!

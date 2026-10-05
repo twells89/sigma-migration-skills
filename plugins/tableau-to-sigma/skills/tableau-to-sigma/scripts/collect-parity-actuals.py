@@ -108,11 +108,7 @@ def _request_raw(
             body,
             max(0.05, min(120.0, deadline.remaining)),
         )
-        if (
-            response.status == 401
-            and attempts == 1
-            and os.environ.get("SIGMA_CLIENT_ID")
-        ):
+        if response.status == 401 and attempts == 1:
             with _REFRESH_LOCK:
                 current = sigma_rest.auth_token()
                 if current == token:
