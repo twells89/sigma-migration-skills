@@ -46,15 +46,16 @@ Other flags:
   --dry-run                  no Sigma POSTs: discovery + DM-reuse scan + local
                              convert (or the MCP convert-request) only
 
-Env: TS_HOST/TS_TOKEN (live mode), SIGMA_BASE_URL + SIGMA_API_TOKEN (or
-SIGMA_CLIENT_ID/SECRET via ~/.sigma-migration/env — the script mints a token),
+Env: TS_HOST/TS_TOKEN (live mode), SIGMA_BASE_URL plus a valid caller token,
+browser-login keychain session, or SIGMA_CLIENT_ID/SECRET fallback;
 SIGMA_CONNECTION_ID, TS_DB, TS_SCHEMA, optional SIGMA_FOLDER_ID (auto-resolved
-and PRINTED when unset), optional CONVERTER_PATH (auto-located).
+and PRINTED when unset), optional CONVERTER_PATH (auto-located). Live Sigma
+calls use the co-located shared client with proactive aging and one 401 retry.
 
 Exit codes: 0 = done, all gates GREEN; 3 = MCP convert request emitted (resume
 with --converted); 2 = built but a parity/hard gate FAILED; other = error.
 """
-import argparse, csv, io, json, os, re, subprocess, sys, time
+import argparse, csv, io, json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import yaml, ts_common
 import migrate  # the per-phase pipeline (sigma() REST helper reused)
@@ -92,34 +93,12 @@ def run(cmd, env=None, check=True):
 
 
 def ensure_sigma_env(workdir=None):
-    """Make the command truly one-command: load ~/.sigma-migration/env and mint a
-    bearer when SIGMA_API_TOKEN isn't already exported.
+    """Load neutral credentials/auth.json without forcing a token mint.
 
-    Shell-neutral (no bash, no `eval`): shells out to the co-located
-    get_token.py with the SAME interpreter already running this script
-    (sys.executable — no PATH/py-launcher guessing needed), which writes
-    <workdir>/auth.json; read the token back from there. Works identically on
-    macOS/Linux/Windows."""
-    env_file = os.path.expanduser("~/.sigma-migration/env")
-    if os.path.exists(env_file):
-        for line in open(env_file):
-            m = re.match(r"\s*export\s+(\w+)=['\"]?([^'\"\n]+)", line)
-            if m and not os.environ.get(m.group(1)):
-                os.environ[m.group(1)] = m.group(2)
-    if not os.environ.get("SIGMA_API_TOKEN") and os.environ.get("SIGMA_CLIENT_ID"):
-        wd = workdir or os.getcwd()
-        os.makedirs(wd, exist_ok=True)
-        p = subprocess.run([sys.executable, os.path.join(HERE, "get_token.py"),
-                            "--workdir", wd], capture_output=True, text=True)
-        if p.returncode != 0:
-            print(p.stderr or p.stdout, file=sys.stderr)
-        auth_path = os.path.join(wd, "auth.json")
-        if os.path.exists(auth_path):
-            auth = json.load(open(auth_path))
-            if auth.get("SIGMA_API_TOKEN"):
-                os.environ["SIGMA_API_TOKEN"] = auth["SIGMA_API_TOKEN"]
-            if auth.get("SIGMA_BASE_URL") and not os.environ.get("SIGMA_BASE_URL"):
-                os.environ["SIGMA_BASE_URL"] = auth["SIGMA_BASE_URL"]
+    Offline conversion and --dry-run remain credentials-free. The first live
+    Sigma request resolves auth through the browser-first shared provider.
+    """
+    migrate.ensure_sigma_env(workdir)
 
 
 def resolve_folder():
@@ -336,7 +315,7 @@ def main():
     wd = migrate.resolve_workdir(a.workdir)
     ensure_sigma_env(wd)
     if not a.dry_run:
-        missing = [v for v in ("SIGMA_BASE_URL", "SIGMA_API_TOKEN") if not os.environ.get(v)]
+        missing = [v for v in ("SIGMA_BASE_URL",) if not os.environ.get(v)]
         if not a.reuse_dm and not os.environ.get("SIGMA_CONNECTION_ID"):
             missing.append("SIGMA_CONNECTION_ID (full warehouse-connection UUID)")
         if missing:

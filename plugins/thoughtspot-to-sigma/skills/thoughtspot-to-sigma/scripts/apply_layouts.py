@@ -15,28 +15,30 @@ Geometry mapping (ThoughtSpot layout.tiles → Sigma grid):
 
 Usage: python3 apply_layouts.py [--workdir DIR]   # all workbooks in <workdir>/migrate_out.json
        python3 apply_layouts.py <wbId> ...        # specific workbooks (auto grid)
-Env: SIGMA_BASE_URL, SIGMA_API_TOKEN, TS_WORKDIR (default for --workdir), TS_ROW_SCALE
+Env: SIGMA_BASE_URL plus caller/browser/client auth; TS_WORKDIR (default for
+--workdir), TS_ROW_SCALE
 """
-import argparse, json, os, re, ssl, sys, urllib.request, urllib.error
+import argparse, json, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import code_rep  # workbook code-rep document-wrapper adapter (nested GET/PUT shape)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import ts_lib
-_SSL = ts_lib.ssl_context()
+import sigma_rest
 
 TS_GRID_COLS = 12                                   # ThoughtSpot Liveboard grid
 COL_SCALE = 24 // TS_GRID_COLS                      # → Sigma's 24-col grid
 ROW_SCALE = max(2, int(os.environ.get("TS_ROW_SCALE", "2") or 2))
 
 def req(method, path, body=None):
-    base = os.environ["SIGMA_BASE_URL"]; tok = os.environ["SIGMA_API_TOKEN"]
-    r = urllib.request.Request(base + path, data=(body.encode() if body else None), method=method,
-        headers={"Authorization": "Bearer " + tok, "Accept": "application/json",
-                 **({"Content-Type": "application/json"} if body else {})})
     try:
-        return urllib.request.urlopen(r, context=_SSL).read().decode()
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"{method} {path} -> {e.code}: {e.read().decode()[:300]}")
+        raw = sigma_rest.request(
+            method.lower(),
+            path,
+            body=body,
+            accept="application/json",
+            binary=True,
+        )
+        return raw.decode()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        raise RuntimeError(f"{method} {path}: {exc}") from exc
 
 # ---- container-banded layout (layout-playbook.md, verified 2026-06-10) -----
 # Spec side: a `kind: container` placeholder element per band + a header text
