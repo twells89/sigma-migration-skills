@@ -12,8 +12,6 @@
 //   node orchestrate.mjs --workdir <W>
 //       Real run: shell-neutral auth (env or <W>/auth.json) → a live Sigma GET.
 //
-// Compare with cognos-to-sigma/scripts/migrate-cognos.mjs, which is the same shape but
-// still shells to bash for its token (migrate-cognos.mjs:102) — the one thing to fix.
 import { spawnSync } from 'node:child_process';
 import { writeFileSync, existsSync } from 'node:fs';
 import { makeClient, parseArgs } from './lib/sigma-rest.mjs';

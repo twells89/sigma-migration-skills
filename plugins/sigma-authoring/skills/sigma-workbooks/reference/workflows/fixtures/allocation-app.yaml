@@ -1,0 +1,222 @@
+# Best-practice fixture for an allocation app.
+# Replace <FOLDER_ID>, <WRITE_CONNECTION_ID>, <SOURCE_CONNECTION_ID>, and
+# [Source/…] column names from live discovery before POST.
+# Published data entry is UI-only: element kebab → Set data entry permission
+# → Only in published version. That setting is absent from GET /spec.
+# Architecture: ../allocation-apps.md. Intake: ../generate-apps.md.
+name: Allocation app
+folderId: "<FOLDER_ID>"
+document:
+  schemaVersion: 1
+  kind: workbook
+  elements:
+  - id: source-alloc
+    kind: table
+    name: Source
+    source:
+      kind: warehouse-table
+      connectionId: "<SOURCE_CONNECTION_ID>"
+      path:
+      - "<SOURCE_DATABASE>"
+      - "<SOURCE_SCHEMA>"
+      - Source
+    columns:
+    - id: src-period
+      formula: "[Source/Period]"
+      name: Period
+    - id: src-dim
+      formula: "[Source/Department]"
+      name: Department
+    - id: src-headcount
+      formula: "[Source/Baseline Headcount]"
+      name: Baseline Headcount
+    - id: src-cost
+      formula: "[Source/Baseline Loaded Cost]"
+      name: Baseline Loaded Cost
+    - id: src-budget
+      formula: "[Source/Budget]"
+      name: Budget
+    - id: src-hire-cost
+      formula: "[Source/Monthly Loaded Cost per Hire]"
+      name: Monthly Loaded Cost per Hire
+  - id: alloc-base
+    kind: table
+    name: Allocation Base
+    source:
+      kind: table
+      elementId: source-alloc
+    columns:
+    - id: ab-period
+      formula: "[Source/Period]"
+      name: Period
+    - id: ab-dim
+      formula: "[Source/Department]"
+      name: Department
+    - id: ab-headcount
+      formula: "[Source/Baseline Headcount]"
+      name: Baseline Headcount
+    - id: ab-cost
+      formula: "[Source/Baseline Loaded Cost]"
+      name: Baseline Loaded Cost
+    - id: ab-budget
+      formula: "[Source/Budget]"
+      name: Budget
+    - id: ab-hire-cost
+      formula: "[Source/Monthly Loaded Cost per Hire]"
+      name: Monthly Loaded Cost per Hire
+  - id: alloc-grid
+    kind: input-table
+    inputMode: view
+    name: Allocation Grid
+    source:
+      kind: linked
+      from: alloc-base
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: ag-period
+      key: ab-period
+      name: Period
+    - id: ag-dim
+      key: ab-dim
+      name: Department
+    - id: ag-headcount
+      key: ab-headcount
+      name: Baseline Headcount
+    - id: ag-cost
+      key: ab-cost
+      name: Baseline Loaded Cost
+    - id: ag-budget
+      key: ab-budget
+      name: Budget
+    - id: ag-hire-cost
+      key: ab-hire-cost
+      name: Monthly Loaded Cost per Hire
+    - id: ag-hires
+      type: number
+      name: Added Hires
+    - id: ag-uplift
+      type: number
+      name: Cost Uplift %
+    - id: ag-note
+      type: text
+      name: Rationale
+    - id: ag-plan-hc
+      formula: "[Baseline Headcount] + Coalesce([Added Hires], 0)"
+      name: Plan Headcount
+    - id: ag-plan-cost
+      formula: "[Baseline Loaded Cost] * (1 + Coalesce([Cost Uplift %], 0)) + Coalesce([Added Hires], 0) * [Monthly Loaded Cost per Hire]"
+      name: Plan Cost
+    - id: ag-variance
+      formula: "[Plan Cost] - [Budget]"
+      name: Vs Budget
+  - id: request-log
+    kind: input-table
+    inputMode: view
+    name: Request log
+    source:
+      kind: empty
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: ID
+    - id: rl-period
+      type: text
+      name: Period
+    - id: rl-dim
+      type: text
+      name: Department
+    - id: rl-request
+      type: text
+      name: Request
+    - id: rl-note
+      type: text
+      name: Comment
+    - id: CREATED_AT
+    - id: CREATED_BY
+  - id: btn-request
+    kind: button
+    text: Log request
+    appearance: filled
+    actions:
+    - id: a-alloc-request
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: request-log
+        values:
+          rl-period: { type: control, control: periodControl }
+          rl-dim: { type: control, control: dimControl }
+          rl-request: { type: control, control: requestControl }
+          rl-note: { type: control, control: noteControl }
+      - effect: clear-control
+        scope: { type: page, pageId: page-app }
+        usePublishedValue: true
+  - id: kpi-variance
+    kind: kpi-chart
+    name: Vs Budget
+    source:
+      kind: table
+      elementId: alloc-grid
+    columns:
+    - id: kpi-var-val
+      formula: Sum([Allocation Grid/Vs Budget])
+      name: Vs Budget
+    value:
+      columnId: kpi-var-val
+  - id: ctrl-period
+    kind: control
+    controlId: periodControl
+    name: Period
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctrl-dim
+    kind: control
+    controlId: dimControl
+    name: Department
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctrl-request
+    kind: control
+    controlId: requestControl
+    name: Request
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctrl-note
+    kind: control
+    controlId: noteControl
+    name: Comment
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  pages:
+  - id: page-source
+    name: Source
+    visibility: hidden
+  - id: page-app
+    name: Allocation
+  layout: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-source">
+      <Element elementId="source-alloc" gridColumn="1 / 25" gridRow="1 / 10"/>
+      <Element elementId="alloc-base" gridColumn="1 / 25" gridRow="10 / 19"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-app">
+      <Element elementId="ctrl-period" gridColumn="1 / 7" gridRow="1 / 3"/>
+      <Element elementId="ctrl-dim" gridColumn="7 / 13" gridRow="1 / 3"/>
+      <Element elementId="ctrl-request" gridColumn="13 / 19" gridRow="1 / 3"/>
+      <Element elementId="ctrl-note" gridColumn="19 / 25" gridRow="1 / 3"/>
+      <Element elementId="kpi-variance" gridColumn="1 / 9" gridRow="3 / 9"/>
+      <Element elementId="alloc-grid" gridColumn="9 / 25" gridRow="3 / 18"/>
+      <Element elementId="request-log" gridColumn="1 / 19" gridRow="18 / 27"/>
+      <Element elementId="btn-request" gridColumn="19 / 25" gridRow="18 / 21"/>
+    </Page>

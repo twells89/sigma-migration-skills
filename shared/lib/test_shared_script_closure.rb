@@ -49,6 +49,32 @@ ok('every shared-manifest target file exists') do
   missing_targets.empty?
 end
 
+# The browser-first Sigma auth runtime is one atomic closure. A get-token.sh
+# without get_token.py silently falls back to a different protocol on Python-free
+# hosts; a browser-login.sh without its sourced platform helper dies at startup.
+# Keep every existing outlier (the authoring helper and legacy assessment copy)
+# and Qlik's documented vendor/ location in exact lockstep.
+sigma_auth_entries = %w[
+  shared/scripts/get-token.sh
+  shared/scripts/get_token.py
+  shared/scripts/browser-login.sh
+  shared/scripts/refresh-token.sh
+  shared/scripts/lib/browser-login-platform.sh
+]
+sigma_auth_roots = sigma_auth_entries.each_with_object({}) do |canonical, roots|
+  roots[canonical] = ENTRIES.fetch(canonical, []).map do |target|
+    target.end_with?('/lib/browser-login-platform.sh') ? File.dirname(File.dirname(target)) : File.dirname(target)
+  end.to_set
+end
+auth_reference = sigma_auth_roots.fetch('shared/scripts/get-token.sh')
+auth_runtime_drift = sigma_auth_roots.reject { |_canonical, roots| roots == auth_reference }
+ok('Sigma dual-mode auth provider/browser/refresh/helper fan out as one closure') do
+  auth_runtime_drift.each do |canonical, roots|
+    warn "    #{canonical}: missing=#{(auth_reference - roots).to_a.sort.join(',')} extra=#{(roots - auth_reference).to_a.sort.join(',')}"
+  end
+  auth_runtime_drift.empty?
+end
+
 # Qlik hard-gate adoption is deliberately all-or-nothing. In particular,
 # degradation_ledger is loaded behind a compatibility rescue, so the behavioural
 # --help check below cannot detect its absence: the script would load but derive

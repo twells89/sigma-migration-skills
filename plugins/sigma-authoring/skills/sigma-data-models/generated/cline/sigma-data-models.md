@@ -11,7 +11,11 @@ Build a Sigma data model spec — the JSON definition of pages, sources, columns
 
 This skill is for **authoring from existing warehouse tables**: a user knows their warehouse, wants to expose specific tables as a Sigma data model with the right joins, metrics, and governance, and needs help composing the spec. Conversions from other BI-tool formats (dbt schema.yml, LookML views, Tableau TDS, Power BI PBIT, Alteryx YXMD, etc.) are **not in this skill** — direct users to the Sigma data-model converter MCP / browser tool, which already handles those mappings.
 
-**Auth:** Authenticate via the `sigma-api` skill first to set `$SIGMA_BASE_URL` and `$SIGMA_API_TOKEN`. This skill assumes both are already exported.
+**Auth:** Authenticate via the `sigma-api` skill first to set
+`$SIGMA_BASE_URL` and `$SIGMA_API_TOKEN`. Its common `get-token.sh` path
+prefers a saved interactive browser session and falls back to
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` for unattended use. This skill
+assumes the resulting token is already present.
 
 **Requirements:** `curl`, `jq`, `base64`. Your Sigma API credentials must have permission to create or edit data models, plus "Can edit" access on the destination folder (for create) or the existing data model (for update). If a request returns 403, ask your Sigma admin to confirm the credential's permissions.
 
@@ -36,7 +40,7 @@ Feature-specific JSON patterns live in `reference/`. Load each file when you ide
 
 | File | When to load |
 |------|--------------|
-| `reference/workflows/discover.md` | **Read first when starting a new model.** Find the user's connection, resolve a table path → inodeId, list columns. Without this, you'll guess column names and the spec will fail. |
+| `reference/workflows/discover.md` | **Read first when starting a new model.** Find the connection, resolve table paths, fetch every paginated column-metadata page, declare the expected grain, and prove source/join cardinality before drafting. Without this, columns after the API's default first 50 can appear missing and a spec can compile while every aggregate is wrong. |
 | `reference/workflows/authoring.md` | Composition judgment calls — one big model vs many small, SQL source vs warehouse-table, joins in the model vs in workbooks, naming conventions, where to put metrics, folder placement, when to materialize. |
 | `reference/workflows/crud.md` | `POST` / `GET` / `PUT` against `/v2/dataModels` endpoints. Always load before any API call. Contains the ID-semantics contrast (CREATE remap vs GET source-of-truth vs UPDATE preserve), full step-by-step recipes, and the mixed-ID rule for relationships in updates. |
 | `reference/workflows/validate.md` | Pre-submit checklist + decoding common errors (400 / 403 / 409) + the "pull a known-working model and diff" pattern when guessing isn't working. |
@@ -62,12 +66,7 @@ Call out any of these before presenting the final spec:
 
 ## Cross-Skill References
 
-- **Building a workbook on top of this model** → load the `sigma-workbooks`
-  skill. Its `sources.md` documents the
-  `{ "kind": "data-model", "dataModelId": "...", "elementId": "..." }`
-  source shape. Governed metrics flow through that source as
-  `[Metrics/<metric name>]` (name, not ID); do not treat them as
-  `[<element>/<column>]` references.
+- **Building a workbook on top of this model** → load the `sigma-workbooks` skill. Its `sources.md` documents the `{ "kind": "data-model", "dataModelId": "...", "elementId": "..." }` source shape.
 - **Repointing existing workbooks to a newly-created model** → see `sigma-workbooks/reference/workflows/crud.md` and the swap-sources endpoint.
 - **Auth, base URLs, regions, token refresh** → always defer to the `sigma-api` skill rather than restating. For automatic 401-retry-with-refresh in Ruby long-running scripts (DM-build loops that outlive the 1-hour token TTL), see `sigma-workbooks/SKILL.md` "401 Unauthorized" — same pattern applies here.
 

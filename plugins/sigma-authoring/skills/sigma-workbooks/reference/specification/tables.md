@@ -58,22 +58,165 @@ groupings:
 >
 > **Multiple `groupings` on one element NEST hierarchically** (array order = levels: `[by-region, by-flag]` ⇒ region→flag, not two independent rollups). For two *independent* group-bys (e.g. one table by Region and another by Flag) give each its **own source element**, or let a chart aggregate the second one by axis. (Verified 2026-06-15.)
 >
+> **Hide support/detail columns that are not on a grouping shelf.** A visible
+> row-level measure outside `groupBy` / `calculations` can expose expandable
+> detail alongside the grouped result, making a summary table appear to have
+> hundreds of thousands of rows even though the aggregate cell is correct.
+> Keep the raw measure for formulas when needed, but set `hidden: true`; show
+> only grouping dimensions and aggregate calculations.
+>
 > **Exclude a NULL/unwanted bucket** with an element list filter on the dimension — this is how a Tableau view filter maps: `filters: [{ id: f, columnId: col-flag, kind: list, mode: include, values: ["Cur FYTD", "Prior FYTD"] }]`. (A grouped bar that includes the NULL bucket is the classic "giant first bar" artifact.)
 
-### `filters` (top-N, element-level row filters)
+### Visible-column budget
+
+For an on-page lookup or operational list, keep roughly ten or fewer columns
+visible. Put the stable key/name first, retain only decision-critical fields,
+and move secondary attributes to a row-selection-driven detail table or
+`single-row-container`. Above that width the first column and scan path tend to
+truncate; cut columns rather than widening the page. This is an editorial
+default, not an API limit—wide exact-detail exports and source-parity
+migrations can be legitimate exceptions.
+
+### `filters` — element-level column filters
+
+`filters` is an **element-owned** array on `table`, `pivot-table`, `input-table`, charts, KPIs, and maps. Each entry scopes that element's rows. This is **not** the same as a `kind: control` element's `filters[]` (which is only `{ source, columnId }` wiring — see `controls.md`).
+
+OpenAPI kinds (compiled workbook spec / Create workbook spec → Table.filters):
+
+| `kind` | Typical column type | Purpose |
+|---|---|---|
+| `list` | text / number / date / boolean | Include or exclude discrete values |
+| `top-n` | text / number / date | Rank and keep top/bottom N or percentile |
+| `number-range` | number | Inclusive numeric bounds |
+| `date-range` | date | Fixed or relative date window (same `mode` family as date-range **controls**) |
+| `text-match` | text | String compare / contains / like / regexp |
+| `hierarchy` | hierarchy | Include/exclude hierarchy paths (beta in product UI) |
+
+Common fields on every entry: required `id` + `columnId` + `kind`; optional `state: enabled | disabled`. Most kinds also take `includeNulls: always | never | when-no-value-is-selected`.
+
+> **One element filter per column.** To filter the same column twice, combine with a control or a quick filter in the UI — do not stack two `filters[]` entries on one `columnId`.
+>
+> Prefer a **control** when the user should change the predicate interactively. Prefer an **element filter** when the cut is fixed (migration view filters, top-N caps, scrubbing NULL buckets).
+
+#### `list`
+
+```yaml
+filters:
+  - id: f-flag
+    columnId: col-flag
+    kind: list
+    mode: include            # include | exclude
+    values: ["Cur FYTD", "Prior FYTD"]   # string | number | boolean | ISO date; null allowed
+```
+
+#### `top-n`
+
+Two shapes (OpenAPI oneOf) — **row count** vs **percentile**:
 
 ```yaml
 filters:
   - id: top-20
     columnId: col-revenue
     kind: top-n
-    rankingFunction: rank
-    mode: top-n
-    rowCount: 20
+    rankingFunction: rank          # rank | rank-dense | row-number
+    mode: top-n                    # top-n | bottom-n
+    rowCount: 20                   # number literal only — not a control binding
+    includeNulls: when-no-value-is-selected
+  - id: top-decile
+    columnId: col-revenue
+    kind: top-n
+    rankingFunction: rank-percentile   # rank-percentile | cume-dist
+    mode: top-percentile               # top-percentile | bottom-percentile
+    percentile: 10
     includeNulls: when-no-value-is-selected
 ```
 
-> **`rowCount` takes a number literal only** — it cannot be parametrized by a control. `rowCount: "[TopN]"` is rejected. Control bindings apply to filter **values**, not to structural fields like `rowCount`, `rankingFunction`, `mode`, or `kind`. To vary the cap interactively, duplicate the element per cap.
+> **`rowCount` / `percentile` take number literals only** — `rowCount: "[TopN]"` is rejected. Control bindings apply to filter **values**, not structural fields (`rowCount`, `percentile`, `rankingFunction`, `mode`, `kind`). To vary the cap interactively, use a `controlType: top-n` control (`controls.md`) or duplicate the element per cap.
+>
+> A `top-n` (or other element filter) on a **parent directory does not flow
+> through to a linked input table** (live generate-app verification). Cap the
+> warehouse or SQL source — or a child table — *before* the `kind: linked`
+> queue. See `input-tables.md`.
+
+#### `number-range`
+
+```yaml
+filters:
+  - id: f-qty
+    columnId: col-quantity
+    kind: number-range
+    min: 4
+    max: 10
+    includeNulls: when-no-value-is-selected
+```
+
+Bounds are inclusive. Either bound may be omitted.
+
+#### `date-range`
+
+Same `mode` vocabulary as date-range **controls** (`between` | `on` | `before` | `after` | `last` | `next` | `current` | `custom`) with the same flat fields (`startDate`/`endDate`, `date`, `value`+`unit`+`includeToday`, relative `{ op, unit, value }` objects). See `controls.md` → Date Range for the mode table and examples; on an element filter they sit on the filter object (with `kind: date-range`), not on a control:
+
+```yaml
+filters:
+  - id: f-last-90
+    columnId: col-order-date
+    kind: date-range
+    mode: last
+    value: 90
+    unit: day
+    includeToday: true
+    includeNulls: when-no-value-is-selected
+  - id: f-fy
+    columnId: col-order-date
+    kind: date-range
+    mode: between
+    startDate: "2026-01-01"
+    endDate: "2026-03-31"
+```
+
+#### `text-match`
+
+```yaml
+filters:
+  - id: f-name
+    columnId: col-product-name
+    kind: text-match
+    mode: contains    # equals | does-not-equal | contains | does-not-contain |
+                      # starts-with | does-not-start-with | ends-with | does-not-end-with |
+                      # like | not-like | matches-regexp | does-not-match-regexp
+    value: "Geek Squad"
+    case: insensitive               # sensitive | insensitive
+    includeNulls: when-no-value-is-selected
+```
+
+> OpenAPI uses `equals` / `does-not-equal` (not the Help UI labels "Equal to" / "Not equal to").
+
+#### `hierarchy`
+
+```yaml
+filters:
+  - id: f-geo
+    columnId: col-geo-hierarchy
+    kind: hierarchy
+    mode: include                   # include | exclude
+    values:
+      - ["West"]
+      - ["East", "New York"]        # each entry is a root→leaf path
+```
+
+Requires a real hierarchy-typed column. For interactive hierarchy picking across elements, prefer `controlType: hierarchy` (`controls.md`).
+
+#### Inspect live shapes
+
+```bash
+# After fetching the compiled OpenAPI to /tmp/sigma-api.json (see SKILL.md):
+jq --arg k table '
+  first(.. | objects | select(.properties?.kind?.enum==[$k]))
+  | .properties.filters
+' /tmp/sigma-api.json
+```
+
+Human reference: Create workbook spec → Table.filters on the help site (`/reference/create-workbook-spec`). Product behavior overview: Data element filters (`/docs/data-element-filters`).
 
 ### `conditionalFormats` — cell coloring, gradients, and **data bars**
 
@@ -175,17 +318,32 @@ conditionalFormats:
 
 Condition operators include `=`, `!=`, `>`, `>=`, `<`, `<=`, `IsNull`, `IsNotNull`, `Contains`, `NotContains`, `StartsWith`, `EndsWith`, `Between`, `NotBetween`, and `formula` (arbitrary boolean). Style block supports `backgroundColor`, `color`, `bold`, `italic`, `underline`, and column-level `format` override.
 
+GET may stringify `value` (`"0"`). Later PUTs sometimes want a number `0`
+and sometimes the string — re-type from the 400 rather than echoing
+readback blindly.
+
 ---
 
 # Input tables
 
 The `input-table` element is an editable table — users type values directly into cells, backed by a provisioned warehouse table. Required fields: `id`, `kind`, `source`, `inputMode`.
 
-`inputMode` controls who can edit and where:
+`inputMode` is required and accepts `edit`, `explore`, or `view`. It does
+**not** decide whether users can type into the published workbook.
 
-- `edit` — workbook editors only, in draft mode
-- `explore` — users with explore permission or greater, in published view
-- `view` — all users, in published view
+Published data entry is a separate UI-only setting on each input table:
+
+```text
+element kebab → Set data entry permission
+              → Only in draft              # default
+              → Only in published version
+```
+
+Live verification found that all three `inputMode` values remained inert in
+published view while the permission stayed at its default. Flipping one table
+made only that table editable, while `GET /spec` stayed byte-identical. Code
+Rep therefore cannot set or inspect this permission. Every spec-built
+writeback app needs this manual step per input table before handoff.
 
 `source` is one of:
 
@@ -230,3 +388,8 @@ columns:
 ```
 
 `input-table` also supports `filters`, `conditionalFormats` (see above), `sort`, `summary`, and the styled title-section `name`/`noDataText`. Fetch the full schema with the `kind`-form recipe at the top of this doc.
+
+Creating this element defines its structure; it does not bulk-populate rows.
+For the supported population decision tree—and why unions, joins, and actions
+are not interchangeable seeding strategies—read `input-tables.md` before
+building a writeback workflow.

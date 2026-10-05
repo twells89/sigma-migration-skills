@@ -30,7 +30,7 @@ columns:
 
 > **`<SourceName>` is the element's `name`, not its `id`.** An element with `id: master` but `name: Orders` is referenced as `[Orders/Net Revenue]` — `[Master/Net Revenue]` resolves to nothing. The trap: **a wrong element-name prefix is NOT caught at POST** — the spec saves `200` and the error only appears in the rendered output as `Invalid Query: Unknown column`. So if you rename an element (or set `id` ≠ `name`), update every formula that references it, and **always render-check after POST** — a clean `200` is not proof the formulas resolve. (Live-verified 2026-06-26.)
 
-Before publishing, run `./scripts/validate-spec.sh <spec.yaml>` — it catches the missing-prefix mistake, including the common passthrough-shaped self-reference (`name: Region`, `formula: "[Region]"`). It cannot prove that a qualified prefix names the right source; compile verification and a render do that.
+Before publishing, run `./scripts/validate-spec.sh <spec.yaml>` — it catches the missing-prefix mistake (but not a wrong-name prefix; only a render does).
 
 ---
 
@@ -114,41 +114,14 @@ The prefix depends on the source type:
 - **Custom SQL source**: prefix is the literal `Custom SQL`; column is the
   query's exact output alias.
 
-- **Data-model source**: prefix is the data-model element's own `name`.
+- **Data-model source**: prefix is the data-model element's own `name`. The column half must be that element's **exposed** column name, as listed by `GET /v2/dataModels/{id}/elements` — relationship-derived columns include a join-leg suffix, so `[Order Fact View/Region (CUSTOMER_DIM)]` rather than `[Order Fact View/Region]`. See `reference/workflows/discover.md`.
 
 - **Union source**: `SourceName` = the union's `name` field. References resolve against the union's `matches[].outputColumnName` values, not the underlying tables' columns.
   - Union with `name: "All Sales"` → `[All Sales/Order Number]`.
   - If you omit `name`, Sigma assigns `"Union of N Sources"`; **a bare reference like `[Order Number]` to a column the consuming element also defines named `Order Number` is a circular reference and the SQL won't compile.** Set the `name` explicitly to avoid this.
+  - After POST, GET the consuming element's formulas. Sigma may drop `source.name` and rewrite prefixes to `[Union of N Sources/…]`. Later PUTs must use the readback prefix, not the authored name.
 
-- Column names must match exactly what the describe endpoint returns. **Never invent column names.**
-
-### Data-model metrics — use `[Metrics/<metric name>]`
-
-A metric in a data-model table's `metrics[]` is not a normal source column.
-Workbook elements sourcing that data-model element reference it through the
-reserved `Metrics` namespace:
-
-```yaml
-source:
-  kind: data-model
-  dataModelId: <data-model-id>
-  elementId: <element-id>
-columns:
-  - id: c-total-revenue
-    name: Total Revenue
-    formula: "[Metrics/Total Revenue]"
-```
-
-The segment after `Metrics/` is the metric's display `name`, not its `id`.
-`[Base/Total Revenue]`, `[Base/<metric-id>]`, and
-`[<data-model-element-name>/Total Revenue]` try to resolve columns and can
-return `400 Dependency not found`; that does not mean data-model metrics are
-unavailable to workbooks.
-
-GET the data-model spec after its write and bind only metrics present in the
-readback. If a metric and column on the same data-model element have identical
-names, rename the metric or use the inline aggregate: Sigma can accept that
-collision-shaped model and omit its metrics from readback.
+- Column names must match exactly what the describe endpoint returns. **Never invent column names.** Do not rename a formula column to a display label that contains `$` (`Plan $`, `Loaded $`) — sibling refs like `[Plan $]` compile as `Unknown column`.
 
 ## Control references
 
@@ -170,7 +143,7 @@ References a column already defined in this element by its `name` field.
 Sum([Revenue])           // valid — aggregation over a sibling column
 ```
 
-**A column cannot reference itself** — that is a circular reference error. This trips up copy-paste and source passthroughs: `name: Region` plus `formula: "[Region]"` does not bind the source's Region column; it refers back to the column being defined. Use the qualified source form (`[Orders/Region]`), or rename one side when you truly intended another sibling.
+**A column cannot reference itself** — that is a circular reference error. This trips up copy-paste: if a column's `name` field matches any bracketed reference inside its own `formula`, the server treats it as circular even when you meant to reference a different column. Rename one side to break the cycle.
 
 ### Common mistakes
 
@@ -230,7 +203,7 @@ The trap: `Not(...)` parses successfully (the parens become grouping), so the fa
 | Function | Example |
 |----------|---------|
 | `DateTrunc(<part>, <date>)` | `DateTrunc("month", [Date])` |
-| `DateDiff(<part>, <start>, <end>)` | `DateDiff("day", [Start], [End])` |
+| `DateDiff(<part>, <start>, <end>)` | `DateDiff("day", [Start], [End])` — signed `end − start`; past due dates go negative |
 | `DateAdd(<part>, <units>, <date>)` | `DateAdd("month", 3, [Date])` |
 | `DateFormat(<date>, <fmt>)` | `DateFormat([Date], "%Y-%m-%d")` |
 
@@ -248,6 +221,12 @@ If([Status] = "Active", "Active", [Status] = "Pending", "Pending", "Other")
 ```
 
 **Do not use** `Case` — use `If` instead.
+
+Do not string-replace a control handle inside an existing `If(...)` with
+`Coalesce([control], "default")`. `If` is comma-split; the extra commas become
+new arguments and the formula silently miscompiles. Add a boolean column on
+the source (`[src/name] = Coalesce([control], "default")`) and filter on that
+flag, or create the default row so the control is never empty.
 
 ## Text Functions
 

@@ -113,16 +113,17 @@ module Sigma
         end
       end
 
-      # { page_id => [element_id, ...] }, in layout order.
+      # { region_id => [element_id, ...] }, in layout order. Pages, panels, and
+      # overlays each own a top-level layout block with the same node shapes.
       def workbook_page_element_ids(spec)
         doc = document(spec)
         doc['layout'].to_s
-                     .scan(%r{<Page\b[^>]*\bid="([^"]*)"[^>]*>(.*?)</Page>}m)
-                     .each_with_object({}) do |(page_id, body), out|
+                     .scan(%r{<(Page|Panel|Overlay)\b[^>]*\bid="([^"]*)"[^>]*>(.*?)</\1>}m)
+                     .each_with_object({}) do |(_tag, region_id, body), out|
           # Restrict ownership to actual layout nodes. A generic elementId
           # scan can accidentally claim ids from unrelated nested attributes.
           # Legacy aliases remain readable, but all writes canonicalize them.
-          out[page_id] = body.scan(
+          out[region_id] = body.scan(
             %r{<(?:Element|Container|TabbedContainer|LayoutElement|GridContainer)\b[^>]*\belementId="([^"]*)"}
           ).flatten.uniq
         end

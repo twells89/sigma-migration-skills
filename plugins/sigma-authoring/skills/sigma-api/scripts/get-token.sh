@@ -1,28 +1,68 @@
 #!/usr/bin/env bash
-# Exchange a Sigma OAuth client_id/client_secret for a bearer token.
-#
-# Reads credentials from environment variables:
-#   SIGMA_BASE_URL      e.g. the published AWS US West API host
-#   SIGMA_CLIENT_ID     OAuth client ID from Sigma admin settings
-#   SIGMA_CLIENT_SECRET OAuth client secret
-#
-# Prints:
-#   export SIGMA_API_TOKEN=<token>
+# Mint a Sigma bearer token. Browser-keychain auth is preferred; OAuth client
+# credentials are the fallback. Existing valid caller tokens are intentionally
+# handled by callers rather than re-emitted here.
 #
 # Usage:
 #   eval "$(./get-token.sh)"
+#   eval "$(./get-token.sh --auth-mode browser)"
 #
-# or:
-#   ./get-token.sh > /tmp/sigma-token.env && source /tmp/sigma-token.env
+# Auth mode: --auth-mode or SIGMA_AUTH_MODE = auto (default), browser, or
+# client-credentials. With Python, the canonical get_token.py provider handles
+# every mode. Without Python, this retains a safe client-credentials fallback.
+#
+# Prints SIGMA_API_TOKEN, SIGMA_TOKEN_MINTED_AT, and SIGMA_AUTH_METHOD exports.
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AUTH_MODE="${SIGMA_AUTH_MODE:-auto}"
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -eq 2 ] && [ "$1" = "--auth-mode" ]; then
+    AUTH_MODE="$2"
+  elif [ "$#" -eq 1 ] && [[ "$1" == --auth-mode=* ]]; then
+    AUTH_MODE="${1#--auth-mode=}"
+  else
+    echo "Usage: get-token.sh [--auth-mode auto|browser|client-credentials]" >&2
+    exit 64
+  fi
+fi
+case "$AUTH_MODE" in
+  auto|browser|client-credentials) ;;
+  *) echo "Error: auth mode must be auto, browser, or client-credentials" >&2; exit 64 ;;
+esac
+
+# Prefer the canonical dual-mode provider whenever any common Python launcher
+# is available (python3 on POSIX, python/py on Windows Git Bash).
+PYTHON=()
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON=(python3)
+elif command -v python >/dev/null 2>&1; then
+  PYTHON=(python)
+elif command -v py >/dev/null 2>&1; then
+  PYTHON=(py -3)
+fi
+if [ "${#PYTHON[@]}" -gt 0 ]; then
+  exec "${PYTHON[@]}" "$SCRIPT_DIR/get_token.py" \
+    --print-export --auth-mode "$AUTH_MODE"
+fi
+
+# Browser refresh requires the Python provider. In auto mode, client
+# credentials still work on a Python-free host.
+if [ "$AUTH_MODE" = "browser" ]; then
+  echo "Error: browser auth requires Python 3 for the canonical token provider." >&2
+  exit 1
+fi
+
 : "${SIGMA_BASE_URL:?SIGMA_BASE_URL is not set}"
-: "${SIGMA_CLIENT_ID:?SIGMA_CLIENT_ID is not set}"
-: "${SIGMA_CLIENT_SECRET:?SIGMA_CLIENT_SECRET is not set}"
+: "${SIGMA_CLIENT_ID:?SIGMA_CLIENT_ID is not set (Python is unavailable, so browser auth cannot be used)}"
+: "${SIGMA_CLIENT_SECRET:?SIGMA_CLIENT_SECRET is not set (Python is unavailable, so browser auth cannot be used)}"
 
 for bin in curl jq base64; do
-  command -v "$bin" >/dev/null 2>&1 || { echo "Error: $bin is required" >&2; exit 1; }
+  command -v "$bin" >/dev/null 2>&1 || {
+    echo "Error: $bin is required for the Python-free client-credentials fallback" >&2
+    exit 1
+  }
 done
 
 # Pin to known Sigma cloud hosts. The script's stdout is intended to be eval'd,
@@ -73,3 +113,5 @@ if ! [[ "$TOKEN" =~ ^[A-Za-z0-9._~+/=-]+$ ]]; then
 fi
 
 printf 'export SIGMA_API_TOKEN=%q\n' "$TOKEN"
+printf 'export SIGMA_TOKEN_MINTED_AT=%q\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+printf 'export SIGMA_AUTH_METHOD=%q\n' "client-credentials"

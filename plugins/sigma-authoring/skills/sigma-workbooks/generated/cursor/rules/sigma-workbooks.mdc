@@ -1,5 +1,5 @@
 ---
-description: "Build, edit, and iterate on Sigma workbook specs — the JSON definition you POST to /v2/workbooks/spec, covering pages, layout, controls, charts, KPIs, tables, formulas, and sources. The Sigma OpenAPI is the source of truth for every shape and field; this skill adds navigation, style guidance, and proven recipes for effective dashboards. Use when the user wants to construct a dashboard from a spec, add or modify pages / elements / controls / formulas, validate a spec before submission, or work through the workbook spec lifecycle programmatically. Requires an SIGMA_API_TOKEN — obtain via the sigma-api skill first."
+description: "Build, edit, and iterate on Sigma workbook specs — the JSON definition you POST to /v2/workbooks/spec, covering pages, layout, controls, charts, KPIs, tables, formulas, and sources. The Sigma OpenAPI is the source of truth for every shape and field; this skill adds navigation, style guidance, and proven recipes for effective dashboards and operational apps. Use when the user wants to construct a dashboard from a spec, generate a Sigma app (planning, approval, allocation, or exception), reproduce a screenshot/mockup/Claude design artifact as a native Sigma app, add or modify pages / elements / controls / formulas, validate a spec before submission, or work through the workbook spec lifecycle programmatically. Requires an SIGMA_API_TOKEN — obtain via the sigma-api skill first."
 alwaysApply: false
 ---
 
@@ -8,7 +8,7 @@ Auto-generated from SKILL.md by tools/gen-agent-variants.rb.
 Do not edit by hand — edit SKILL.md and re-run: ruby tools/gen-agent-variants.rb --all
 -->
 
-> Build, edit, and iterate on Sigma workbook specs — the JSON definition you POST to /v2/workbooks/spec, covering pages, layout, controls, charts, KPIs, tables, formulas, and sources. The Sigma OpenAPI is the source of truth for every shape and field; this skill adds navigation, style guidance, and proven recipes for effective dashboards. Use when the user wants to construct a dashboard from a spec, add or modify pages / elements / controls / formulas, validate a spec before submission, or work through the workbook spec lifecycle programmatically. Requires an SIGMA_API_TOKEN — obtain via the sigma-api skill first.
+> Build, edit, and iterate on Sigma workbook specs — the JSON definition you POST to /v2/workbooks/spec, covering pages, layout, controls, charts, KPIs, tables, formulas, and sources. The Sigma OpenAPI is the source of truth for every shape and field; this skill adds navigation, style guidance, and proven recipes for effective dashboards and operational apps. Use when the user wants to construct a dashboard from a spec, generate a Sigma app (planning, approval, allocation, or exception), reproduce a screenshot/mockup/Claude design artifact as a native Sigma app, add or modify pages / elements / controls / formulas, validate a spec before submission, or work through the workbook spec lifecycle programmatically. Requires an SIGMA_API_TOKEN — obtain via the sigma-api skill first.
 
 # Sigma Workbooks (Spec via REST API)
 
@@ -99,7 +99,11 @@ ruby scripts/wb-rep.rb capabilities --kind bar-chart --field source  # one field
 
 ## Auth
 
-Authenticate via the `sigma-api` skill first to populate `$SIGMA_BASE_URL` and `$SIGMA_API_TOKEN`.
+Authenticate via the `sigma-api` skill first to populate `$SIGMA_BASE_URL` and
+`$SIGMA_API_TOKEN`. Its common `get-token.sh` path prefers a saved interactive
+browser session and falls back to `SIGMA_CLIENT_ID` /
+`SIGMA_CLIENT_SECRET` for unattended use. Either method yields the same token;
+the rest of this skill is identical.
 
 ## Recommended Workflow
 
@@ -117,20 +121,44 @@ HOME_FOLDER_ID=$(curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
   "$SIGMA_BASE_URL/v2/members/$USER_ID" | jq -r '.homeFolderId')
 ```
 
-If the user provided a **target image** (a screenshot, mockup, or PDF of a dashboard they want reproduced), pause here and load `reference/workflows/from-image.md` — it adds explicit observation, description, and validation steps that have to happen *before* normal data discovery. The standard workflow alone tends to produce workbooks with the right vibe but the wrong shape when the input is visual.
+If the user provided a **target image or design artifact** (a screenshot,
+mockup, PDF, or Claude-generated app design they want reproduced), pause here
+and load `reference/workflows/from-image.md` — it adds mandatory whole-screen
+inventory, behavior classification, design-manifest, native-first routing,
+render-diff, and iteration gates that happen *before and alongside* normal data
+discovery. The standard workflow alone tends to reproduce the data visuals
+while missing the app shell and behavior.
 
-### Step 1 — Find a reference workbook to study
+If the user asked to generate / build / scaffold a Sigma **app** (planning,
+approval, allocation, exception, or an unspecified “app”) and did **not**
+supply a target image, pause here and load
+`reference/workflows/generate-apps.md` — it classifies the app type,
+**interviews** before it builds (which fields users may edit, whether the
+workflow needs approvals, whether to add a Sigma Agent and what it is
+for), records an intake manifest, states a build plan, and clones a
+best-practice **architecture** fixture.
+Design is a separate pass: load `styling.md` as a library and compose for
+this type (do not stamp the five-recipe dashboard *or* the navy-hero
+command-center example). A
+target image still wins: load `from-image.md` instead.
 
-Any existing workbook on the user's org doubles as a template. List and pick one with similar content:
+### Step 1 — Optional: choose one relevant reference workbook
+
+Use a live reference only when the OpenAPI and this skill do not answer a
+specific shape question, or when the user explicitly wants to match an
+existing workbook. Do not browse unrelated workbooks speculatively. If a
+reference is needed, list once and choose one relevant workbook:
 
 ```bash
 curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
   "$SIGMA_BASE_URL/v2/workbooks?limit=50" | jq '.entries[] | {workbookId, name}'
 ```
 
-If no relevant workbook exists, pick any — the goal is studying spec structure, not matching content. If the org has no workbooks at all, draft from scratch using the OpenAPI shapes + this skill's recipes.
+Save the chosen workbook ID for the session. If no relevant workbook exists,
+draft from the compiled OpenAPI and this skill's fixtures—do not pick a random
+workbook. Read only the one reference needed for the unresolved shape.
 
-### Step 2 — Study the reference spec
+### Step 2 — Cache the reference spec, if Step 1 selected one
 
 YAML is the canonical format for workbook specs in this skill — easier to read, diff, and review than JSON. Sigma's API accepts both (`Content-Type: application/yaml` or `application/json`); `Accept: application/yaml` is the default on `GET /v2/workbooks/<id>/spec`. Use `yq` to inspect spec YAML the same way you'd use `jq` on JSON.
 
@@ -141,27 +169,68 @@ curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
 ```
 
 Look at source structure, column IDs, formulas, flat `document.elements`, page
-metadata, and layout XML. Do not copy an obsolete `pages[].elements` shape.
+metadata, and layout XML. Reuse this cached file for the session instead of
+re-listing or re-fetching workbooks. Do not copy an obsolete
+`pages[].elements` shape.
 
 ### Step 3 — Discover data sources
 
 Load `reference/workflows/discover.md`. Quick summary:
 
-1. `GET /v2/connections` — find the user's connection by name or type.
-2. Ask the user for the table path; verify with `POST /v2/connection/<id>/lookup`.
-3. Discover columns directly via `GET /v2/connections/tables/{inodeId}/columns` (full mechanics in `reference/workflows/discover.md`). Only fall back to asking the user when the endpoint doesn't return what's needed.
+1. Prefer Sigma MCP `search` / `describe` (or a warehouse-native MCP) when it is already connected.
+2. Otherwise list connections and browse `/v2/connections/paths`, including pagination, before asking for an exact table path.
+3. Verify the selected path with `POST /v2/connection/<id>/lookup`, then use the `sigma-api` paginated column helper to exhaust `GET /v2/connections/tables/{inodeId}/columns`; its default raw response contains only 50 columns.
+4. Ask one focused question only when semantic search/browse leaves multiple plausible sources or the endpoint cannot return what is needed.
 
 **Never invent column names** — only use names returned by the API or supplied by the user.
 
 **Verify literal values before writing predicates.** If your task involves filtering on a categorical column (e.g., `CountIf([Status] = "active")`, `If([Type] = "sale", ...)`), you need to know what values that column *actually* contains — the `/v2/connections/tables/{inodeId}/columns` endpoint gives you names and types but not values. Run a `SELECT DISTINCT <col>` via any tool that reaches the warehouse — an MCP server (warehouse or [Sigma](https://help.sigmacomputing.com/docs/use-sigma-mcp-server)), a SQL CLI, or just ask the user. Don't guess literals. See `reference/workflows/discover.md`.
 
+**Verify the composed source grain before drafting.** Name the expected grain
+key (or composite key), then prove that the source as the workbook will read it
+has one row per key. For a single key, assert
+`COUNT(*) = COUNT(DISTINCT <grain-key>)`; for a composite key, group by all key
+columns and require zero duplicate groups. For a 1:1 or many:1 join intended to
+preserve the left grain, compare row count and distinct left-grain count before
+and after the join and require both to stay unchanged. Inner joins and
+intentional 1:many joins need a written expected shrink/expansion instead.
+Do not draft plausible-looking counts over an unproven fanout. See
+`reference/workflows/discover.md`.
+
 ### Step 4 — Identify features and load only what you need
 
 Map the user's request to the **Reference Index** below. State the features you identified, then read the listed reference files before drafting. **If the user asks for a feature this skill doesn't cover**, fetch the OpenAPI and inspect the relevant schema.
 
+When choosing a visualization, use the data-shape selector at the top of
+`reference/specification/charts.md` before copying a chart recipe. A ranked
+categorical comparison defaults to a horizontal bar, not a sorted table used
+as the primary visualization.
+
+If the user asked to generate an app, run `generate-apps.md` first (Step 0)
+before choosing an input-table architecture here. That interview already
+recorded which fields users may edit, whether the workflow needs
+approvals, and whether to include a workbook agent. Load
+`reference/specification/styling.md` as a library and compose for this
+app's job — do not stamp the five-pattern exec-dashboard stack or the
+navy-hero command-center example.
+
+If the request includes an input table, writeback, “populate,” “seed,” planning,
+approval, allocation, or exception workflow, load
+`reference/specification/input-tables.md` before choosing an architecture.
+Creating an input-table element, loading initial rows, composing a downstream
+read path, and submitting a runtime action are four different operations. Do
+not substitute actions, unions, or joins for one another when the first
+approach leaves the table empty.
+
 ### Step 5 — Draft the spec to a local file
 
 Write the spec YAML to disk (e.g., `/tmp/workbook-spec.yaml`). YAML is preferred over JSON in this skill — easier to read, diff, and comment for human review. The API accepts either; pick YAML unless something downstream specifically needs JSON. Key rules:
+
+For a build expected to exceed one page or roughly ten elements, start with
+the element rep now (`reference/workflows/element-rep.md`): scaffold/import the
+local spec, split it, and work in per-element files before the first POST.
+Do not wait until the first large whole-spec iteration has already consumed
+the context budget.
 
 - Every element needs a unique `id` and a descriptive `name`.
 - Every column needs a unique `id`, a `name`, and a `formula`.
@@ -171,7 +240,8 @@ Write the spec YAML to disk (e.g., `/tmp/workbook-spec.yaml`). YAML is preferred
 - Emit `<Element>` for layout leaves and `<Container>` for nested grids,
   including repeated-container elements. `<TabbedContainer>` / `<Tab>` remain
   valid. Never emit the legacy `<LayoutElement>` / `<GridContainer>` aliases;
-  live verification rejects `<LayoutElement>` with HTTP 400.
+  live verification rejects `<LayoutElement>` (`valid:false`; some API
+  versions returned HTTP 400 instead).
 - Start with 1–2 pages. Add more later via update.
 
 For **create**, include outer `name`/`folderId` and `document` with required
@@ -188,7 +258,7 @@ This skill requires `layout` whenever `elements` is non-empty. See
 ./scripts/validate-spec.sh /tmp/workbook-spec.yaml
 ```
 
-Then do the manual formula pass and final shape checks per `reference/workflows/validate.md`. The validator rejects bare self-references such as `name: Region` + `formula: "[Region]"`, and list/segmented controls that have `filters` but no value-list `source` (the API accepts that control shape, but the picker renders empty). Fix everything reported before continuing.
+Then do the manual formula pass and final shape checks per `reference/workflows/validate.md`. Fix everything reported before continuing.
 
 ### Step 7 — Create the workbook
 
@@ -205,7 +275,12 @@ cp /tmp/workbook-spec.yaml "/tmp/workbook-spec-${WORKBOOK_ID}.yaml"
 
 Persist the spec after a successful create so subsequent `PUT` updates can start from it. Report **both** the workbook URL **and** the saved spec path.
 
-If creation fails, read the error, fix the spec, re-validate, retry. See `reference/workflows/validate.md` for decoding cryptic errors.
+If creation fails, classify the error before changing anything. Correct the
+local spec, rerun all offline checks, and make at most one corrected write for
+the same error class. For a shape/schema error, inspect the live schema rather
+than submitting alternative guesses. If the same error persists after the
+corrected write, stop and report the unresolved contract mismatch. See
+`reference/workflows/validate.md` for error classification.
 
 ### Step 7b — Verify the workbook actually compiles
 
@@ -217,15 +292,15 @@ If creation fails, read the error, fix the spec, re-validate, retry. See `refere
 
 If any element reports `[FAIL]`, fix the column formulas in the spec (most often a missing source prefix, a self-referencing column, or a friendly-name mismatch with the warehouse — see `reference/specification/formulas.md`), `PUT` the corrected spec, and re-verify.
 
-Also run `./scripts/validate-spec.sh` against the GET readback. This catches a
-list/segmented value-list `source` that is absent from the live document after
-the write; a surviving `filters` target does not populate the picker.
-
 ### Step 8 — Iterate
 
 After initial creation, use `PUT /v2/workbooks/<id>/spec` to add pages or refine the workbook.
 
-**For anything beyond ~1 page / ~10 elements, switch to the element rep** (`reference/workflows/element-rep.md`): `scripts/wb-rep.rb pull <id> <dir>` explodes the spec into one file per element so each edit touches a ~½KB file instead of the whole spec, `push` handles drift-check + validation + PUT, and `render` exports page PNGs you can actually look at. The raw GET/PUT flow below remains fine for small workbooks and one-off tweaks.
+**Continue with the element rep for anything beyond ~1 page / ~10 elements**
+(`reference/workflows/element-rep.md`): `scripts/wb-rep.rb pull <id> <dir>`
+explodes an existing spec into one file per element, `push` handles drift-check
++ validation + PUT, and `render` exports page PNGs. The raw GET/PUT flow below
+remains fine for small workbooks and one-off tweaks.
 
 > **IDs are preserved on CREATE.** The `id` values you POST (pages, elements, columns) are kept verbatim, and `layout` `elementId` references stay valid — so you can edit your saved spec and `PUT` it back, re-wrapped as just `{document: {...}}` (see below — PUT does not take the outer `name`/`folderId`). `GET` the current spec first only if you don't have your latest copy. See `reference/workflows/crud.md`.
 
@@ -238,7 +313,7 @@ curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
 # overlays, panels, layout, settings, and agents.
 # then PUT only the document object — see reference/workflows/crud.md for why
 # sending the outer name/folderId/response-only fields alongside it 400s:
-yq '{document: .document}' /tmp/current-spec.yaml > /tmp/current-spec-put.yaml
+yq '{"document": .document}' /tmp/current-spec.yaml > /tmp/current-spec-put.yaml
 curl -s -X PUT -H "Authorization: Bearer $SIGMA_API_TOKEN" \
   -H "Content-Type: application/yaml" \
   -H "Accept: application/yaml" \
@@ -268,15 +343,15 @@ The reference is feature-sliced — don't read every file up-front. The index ha
 
 | File | When to load |
 |------|--------------|
-| `reference/specification/tables.md` | Table element, tabular data, data grid, spreadsheet-style list. Also element-level filters (top N, limit, rank), groupings (pivot, group by), the `pivot-table` and editable `input-table` element kinds, and `conditionalFormats` (threshold-based cell coloring, on pivot/input tables). |
-| `reference/specification/charts.md` | Chart, graph, visualization, line / bar / column / stacked / grouped / combo / donut / pie / scatter / waterfall / share-of / breakdown. Cartesian axes, color, trellis, legend, trendlines, reference marks. Box chart is unsupported/pending because it is absent from the live OpenAPI. |
+| `reference/specification/tables.md` | Table element, tabular data, data grid, spreadsheet-style list. Also **element-level filters** (`list`, `top-n`, `number-range`, `date-range`, `text-match`, `hierarchy`), groupings (pivot, group by), the `pivot-table` and editable `input-table` element kinds, and `conditionalFormats` (threshold-based cell coloring, on pivot/input tables). |
+| `reference/specification/charts.md` | **Load before choosing a visualization.** Data-shape → chart selection, then chart/graph recipes for line / bar / column / stacked / grouped / combo / donut / pie / scatter / waterfall / share-of / breakdown. Cartesian axes, color, trellis, legend, trendlines, reference marks. |
 | `reference/specification/maps.md` | Map visualizations — `geography-map` (GeoJSON shapes), `point-map` (lat/long bubbles), `region-map` (states / counties / countries). |
 | `reference/specification/kpis.md` | KPI, stat, big number, single value, metric card — including layout / value styling, the comparison Δ badge (`comparisonColumn` + `comparison:{display:"delta"}` — spec-authorable and readback-stable; the house default), and the trend/sparkline block (still UI-bound). |
 | `reference/specification/controls.md` | Filter, dropdown, picker, multi-select, date range, date picker, text filter, number range, slider, segmented, hierarchy, legend, and drill controls. Also entry controls and formula handles. |
 | `reference/specification/content-elements.md` | The non-data elements — `text` (Markdown + inline styling), `image`, `divider`, `embed` (external URLs), `page-break` (PDF/print pagination), `form`, `progress`, `navigation`, `plugin`. Titles, callouts, logos, rules, embedded content. |
-| `reference/specification/input-tables.md` | Operational supplement for `input-table` (spec shape lives in `tables.md`): write-connection requirement, the publish gate, reading data back via warehouse views, element endpoints for auditing, and migration patterns (Excel/planning models). |
-| `reference/specification/styling.md` | **Load when building a dashboard from scratch.** Design recipe library — vetted color palette, hero header strip, gradient header/KPI cards + composite sparkline, KPI card row, section headers, divider rhythm, categorical chart colors. Turns a default-arrange workbook into a designed-looking one without UI editing. |
-| `reference/specification/agents.md` | Workbook AI agent, chat with your data, agent, chatbot, AI assistant. The workbook-top-level `agents:[]` array + page-level `chat` element; read-only analyst vs. write/action agent; the four `tools[]` kinds (`action`, `mcp-connector`, `warehouse-agent`, `search-service`), `greeting`, `requiresApproval`, why action sequences are referenceable but not authorable; org-feature gate + graceful degrade. |
+| `reference/specification/input-tables.md` | **Load for every input-table or “populate/seed” request.** Operational supplement for `input-table`: supported row-arrival decision tree, write connection, UI-only published permission, publish gate, linked-key correlation, warehouse views, and why actions/unions/joins are not bulk seeding mechanisms. |
+| `reference/specification/styling.md` | **Load when composing a look from spec.** A library of options (hero bands, KPI cards, gradients, section headers, chart color, formats) plus an anti-pattern checklist. Not a house style — do not stamp the five-pattern exec dashboard onto every app. PNG fail: skill chrome, invisible entry controls, Dark-by-default on data-entry, 3-KPI status on operational apps. |
+| `reference/specification/agents.md` | Workbook AI agent, chat with your data, agent, chatbot, AI assistant. The workbook-top-level `agents:[]` array + page-level `chat` element; Analyze / Configure / Navigate / Act capability profiles; direct control/navigation/write action tools; read-only analyst vs. operator; the four `tools[]` kinds (`action`, `mcp-connector`, `warehouse-agent`, `search-service`), `greeting`, `requiresApproval`, why action sequences are referenceable but not authorable; org-feature gate + graceful degrade. |
 
 ### Sources
 
@@ -301,11 +376,18 @@ The reference is feature-sliced — don't read every file up-front. The index ha
 | File | When to load |
 |------|--------------|
 | `reference/workflows/discover.md` | Finding connections, tables, and column names. Load before composing a new spec. |
-| `reference/workflows/composition.md` | Open-ended design decisions — calibrating workbook complexity to the request, when to ask the user, what to ask, surfacing structural choices in the final summary, and a few safe defaults (hidden source pages, ranked-table sort direction). Load before drafting anything when the prompt leaves significant design choices unmade. |
+| `reference/workflows/composition.md` | Open-ended design decisions, named asymmetric splits/mosaic, and the content-prescriptive `ledger` record-lookup archetype. Covers when to ask, chart-vs-table defaults, editorial sizing, and hidden source pages. Load before drafting when the prompt leaves design choices unmade or asks users to find/browse records. |
+| `reference/workflows/app-compositions.md` | **Operational app visual composition.** Load with `generate-apps.md`: keeps semantic architecture separate from appearance, selects `workbench` / `queue-rail` / `builder-preview`, requires a local design manifest, emits asymmetric work-surface-first layout via `Composition.compose`, and adds a two-render PNG polish gate. |
 | `reference/workflows/actions.md` | Buttons, write-back, and **all twelve** action effects — insert/update/delete-rows, clear-control, set-control-value, open/close-overlay (modal **and** drawer), open-url, open-document (incl. passing `targetControls` into another workbook), navigate, select-tab, refresh-element — plus the append-only-log pattern and the masked-error catalog. Load when the user wants a button, a "log/save/submit" action, tab/page navigation, a deep link, or a write-back workflow. |
+| `reference/workflows/generate-apps.md` | **Generate a Sigma app.** Load first when the user asks to build a planning, approval, allocation, or exception app (and did not supply a target image). Classifies the type, **interviews** for editable fields / approvals / an Analyze–Configure–Navigate–Act workbook-agent contract, clones an architecture fixture (planning is a multi-page studio shell), then **composes** an app shell + `workbench` / `queue-rail` / `builder-preview` look. Fail the PNG pass on skill chrome, invisible entry controls, Dark-by-default on data-entry, a 3-KPI status strip, an empty work surface, or `Unknown column` / `Invalid Query` on a page measure. |
+| `reference/workflows/planning-apps.md` | **Scenario planning, budgeting, and forecasting apps.** Scenario × Period × Planning Line grain, governed baseline, scenario matrix, linked override grid, financial sign, filter-propagation choices, approval/audit, and runtime gates. |
+| `reference/workflows/allocation-apps.md` | **Allocation and capacity apps.** Budget/target vs. baseline at Period × Allocation Dimension grain, linked editable units/uplifts, working allocation, request queue, and exact variance gates. |
+| `reference/workflows/approval-apps.md` | **Approval and decision apps.** Stable entity-key queues, counter-values, immutable audit logs, one-row status updates, agent boundaries, and runtime tests. |
+| `reference/workflows/exception-apps.md` | **Exception command centers.** Stable operational-key queues, deterministic recommendations, overrides, ownership, resolution logs, and exact KPI-delta tests. |
 | `reference/workflows/crud.md` | POST / GET / PUT against the workbook spec endpoints. Load when creating, retrieving, or updating a workbook. |
-| `reference/workflows/validate.md` | Pre-submit + post-create validation. Load before any POST or PUT. |
-| `reference/workflows/from-image.md` | The user supplied a target image (screenshot, mockup, BI-tool export) to reproduce. Load *before* discovery — it adds explicit observation and validation steps. |
+| `reference/workflows/validate.md` | Pre-submit + post-create structural validation. Load before any POST or PUT; for joins, controls, writeback, agents, or numeric claims continue to `runtime-verification.md`. |
+| `reference/workflows/runtime-verification.md` | **Runtime evidence loop:** compile, render, export, cardinality, numeric oracle, published writeback, linked-row correlation, control scope, approval scope, and agent tests. |
+| `reference/workflows/from-image.md` | The user supplied a target image or Claude design artifact to reproduce. Load *before* discovery — it inventories the entire app shell and behavior, routes native Sigma vs plugin/UI-only surfaces, requires a local design manifest, and enforces first-render → diff → final-render acceptance. |
 | `reference/workflows/element-rep.md` | **Large or multi-page workbooks, parallel element work, or iterative refinement.** `scripts/wb-rep.rb` explodes the spec into one small file per element (pull/status/push/render) so edits never drag the whole spec through context — element-level semantics over the whole-spec API, plus PNG renders to inspect what you built. |
 
 ## Quick Formula Rules
@@ -337,6 +419,11 @@ Fetch the OpenAPI. The skill documents stable, common surface area; the API has 
 
 A 400 about request *shape* — `invalid argument`, `unknown field`, `unexpected property`, `missing required field` — usually means the API moved past the skill. Fetch the OpenAPI (see **Consulting the shapes**), diff the live shape for that `kind`, and retry **once** with the correction. Tell the user it looks like the skill is out of date and worth updating through whatever channel they installed it from; don't loop on retries.
 
+`columnId` is case-sensitive camelCase. `columnID`, `columnid`, and
+`{id: <column>}` are not aliases for chart channels or pivot shelves. Run
+`validate-spec.sh` / `wb-rep.rb lint` before POST; both reject these forms and
+unknown local column pointers.
+
 ### 401 Unauthorized
 
 Sigma OAuth tokens expire after ~1 hour. Long workbook-building sessions (orchestrated batch conversions, multi-step iterations, anything that runs >50 minutes) will hit this mid-flight.
@@ -348,7 +435,9 @@ require_relative 'lib/sigma_rest'
 spec = Sigma.request(:get, "/v2/workbooks/#{id}/spec")   # auto-refreshes on 401
 ```
 
-**Bash / curl callers**: re-run `eval "$(scripts/get-token.sh)"` to refresh manually. For long shell loops, wrap the curl in a small helper that retries once on 401:
+**Bash / curl callers**: re-run the `sigma-api` skill's browser-first
+`get-token.sh` to refresh manually. For long shell loops, wrap the curl in a
+small helper that retries once on 401:
 
 ```bash
 sigma_curl() {
@@ -356,14 +445,17 @@ sigma_curl() {
   resp=$(curl -sS -w '\n%{http_code}' -H "Authorization: Bearer $SIGMA_API_TOKEN" "$@")
   code=$(echo "$resp" | tail -1)
   if [ "$code" = "401" ]; then
-    eval "$(scripts/get-token.sh)"
+    eval "$(bash ../sigma-api/scripts/get-token.sh)"
     resp=$(curl -sS -w '\n%{http_code}' -H "Authorization: Bearer $SIGMA_API_TOKEN" "$@")
   fi
   echo "$resp" | sed '$d'  # strip trailing status code
 }
 ```
 
-If 401 persists after refresh, re-authenticate via `sigma-api` and verify `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, `SIGMA_CLIENT_SECRET`.
+If 401 persists after refresh, re-authenticate via `sigma-api`: rerun
+`browser-login.sh` if the keychain refresh token was revoked, or verify
+`SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, and `SIGMA_CLIENT_SECRET` for the
+client-credentials fallback.
 
 ### 403 Forbidden on workbook create
 

@@ -1,0 +1,7 @@
+  <Element elementId="title" gridColumn="1 / 25" gridRow="1 / 4"/>
+  <Element elementId="controls" gridColumn="1 / 25" gridRow="4 / 7"/>
+  <Element elementId="context" gridColumn="1 / 9" gridRow="7 / 25"/>
+  <Element elementId="grid" gridColumn="9 / 25" gridRow="7 / 25"/>
+  <Element elementId="s1" gridColumn="1 / 13" gridRow="25 / 33"/>
+  <Element elementId="s2" gridColumn="13 / 25" gridRow="25 / 33"/>
+  <Element elementId="submit" gridColumn="1 / 25" gridRow="33 / 37"/>

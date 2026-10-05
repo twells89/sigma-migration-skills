@@ -1,0 +1,217 @@
+# Best-practice fixture for an approval app.
+# Replace <FOLDER_ID>, <WRITE_CONNECTION_ID>, <SOURCE_CONNECTION_ID>, and
+# [Source/…] column names from live discovery before POST.
+# Published data entry is UI-only: element kebab → Set data entry permission
+# → Only in published version. That setting is absent from GET /spec.
+# Architecture: ../approval-apps.md. Intake: ../generate-apps.md.
+name: Approval app
+folderId: "<FOLDER_ID>"
+document:
+  schemaVersion: 1
+  kind: workbook
+  elements:
+  - id: source-approval
+    kind: table
+    name: Source
+    source:
+      kind: warehouse-table
+      connectionId: "<SOURCE_CONNECTION_ID>"
+      path:
+      - "<SOURCE_DATABASE>"
+      - "<SOURCE_SCHEMA>"
+      - Source
+    columns:
+    - id: src-deal
+      formula: "[Source/Deal ID]"
+      name: Deal ID
+    - id: src-amount
+      formula: "[Source/List Amount]"
+      name: List Amount
+    - id: src-discount
+      formula: "[Source/Submitted Discount]"
+      name: Submitted Discount
+    - id: src-status
+      formula: "[Source/Status]"
+      name: Status
+    - id: src-age
+      formula: "[Source/Age Days]"
+      name: Age Days
+  - id: deal-directory
+    kind: table
+    name: Deal Directory
+    source:
+      kind: table
+      elementId: source-approval
+    columns:
+    - id: dd-deal
+      formula: "[Source/Deal ID]"
+      name: Deal ID
+    - id: dd-amount
+      formula: "[Source/List Amount]"
+      name: List Amount
+    - id: dd-discount
+      formula: "[Source/Submitted Discount]"
+      name: Submitted Discount
+    - id: dd-status
+      formula: "[Source/Status]"
+      name: Status
+    - id: dd-age
+      formula: "[Source/Age Days]"
+      name: Age Days
+  - id: review-queue
+    kind: input-table
+    inputMode: view
+    name: Review Queue
+    source:
+      kind: linked
+      from: deal-directory
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: rq-deal
+      key: dd-deal
+      name: Deal ID
+    - id: rq-amount
+      key: dd-amount
+      name: List Amount
+    - id: rq-discount
+      key: dd-discount
+      name: Submitted Discount
+    - id: rq-status
+      key: dd-status
+      name: Source Status
+    - id: rq-age
+      key: dd-age
+      name: Age Days
+    - id: rq-decision
+      type: text
+      name: Decision
+      values: [Pending, Approved, Rejected, Counter]
+      pills: color-by-option
+    - id: rq-counter
+      type: number
+      name: Approved Discount
+    - id: rq-reviewer
+      type: text
+      name: Reviewer
+    - id: rq-note
+      type: text
+      name: Decision Note
+    - id: rq-approved-net
+      formula: "[List Amount] * (1 - Coalesce([Approved Discount], [Submitted Discount]))"
+      name: Approved Net
+    - id: rq-submitted-net
+      formula: "[List Amount] * (1 - [Submitted Discount])"
+      name: Submitted Net
+    - id: rq-impact
+      formula: "[Approved Net] - [Submitted Net]"
+      name: Revenue Impact
+  - id: decision-log
+    kind: input-table
+    inputMode: view
+    name: Decision log
+    source:
+      kind: empty
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: ID
+    - id: dl-deal
+      type: text
+      name: Deal ID
+    - id: dl-decision
+      type: text
+      name: Decision
+    - id: dl-note
+      type: text
+      name: Comment
+    - id: CREATED_AT
+    - id: CREATED_BY
+  - id: btn-submit
+    kind: button
+    text: Record decision
+    appearance: filled
+    actions:
+    - id: a-approval-submit
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: decision-log
+        values:
+          dl-deal: { type: control, control: dealControl }
+          dl-decision: { type: control, control: decisionControl }
+          dl-note: { type: control, control: noteControl }
+      - effect: update-rows
+        tableElementId: review-queue
+        whichRows:
+          type: formula
+          formula: "[Deal ID] = [dealControl]"
+        values:
+          rq-decision: { type: control, control: decisionControl }
+          rq-note: { type: control, control: noteControl }
+      - effect: clear-control
+        scope: { type: page, pageId: page-app }
+        usePublishedValue: true
+  - id: kpi-impact
+    kind: kpi-chart
+    name: Revenue Impact
+    source:
+      kind: table
+      elementId: review-queue
+    columns:
+    - id: kpi-impact-val
+      formula: Sum([Review Queue/Revenue Impact])
+      name: Revenue Impact
+    value:
+      columnId: kpi-impact-val
+  - id: ctrl-deal
+    kind: control
+    controlId: dealControl
+    name: Deal
+    controlType: list
+    mode: include
+    selectionMode: single
+    values: []
+    source:
+      kind: source
+      source:
+        kind: table
+        elementId: deal-directory
+      columnId: dd-deal
+  - id: ctrl-decision
+    kind: control
+    controlId: decisionControl
+    name: Decision
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctrl-note
+    kind: control
+    controlId: noteControl
+    name: Comment
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  pages:
+  - id: page-source
+    name: Source
+    visibility: hidden
+  - id: page-app
+    name: Approvals
+  layout: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-source">
+      <Element elementId="source-approval" gridColumn="1 / 25" gridRow="1 / 10"/>
+      <Element elementId="deal-directory" gridColumn="1 / 25" gridRow="10 / 19"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-app">
+      <Element elementId="ctrl-deal" gridColumn="1 / 9" gridRow="1 / 3"/>
+      <Element elementId="ctrl-decision" gridColumn="9 / 17" gridRow="1 / 3"/>
+      <Element elementId="ctrl-note" gridColumn="17 / 25" gridRow="1 / 3"/>
+      <Element elementId="kpi-impact" gridColumn="1 / 9" gridRow="3 / 9"/>
+      <Element elementId="review-queue" gridColumn="9 / 25" gridRow="3 / 18"/>
+      <Element elementId="decision-log" gridColumn="1 / 19" gridRow="18 / 27"/>
+      <Element elementId="btn-submit" gridColumn="19 / 25" gridRow="18 / 21"/>
+    </Page>

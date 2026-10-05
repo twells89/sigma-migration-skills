@@ -5,8 +5,8 @@
 # routinely outlive a single token and would otherwise fail mid-run.
 #
 # This module mirrors the shape of `tableau_rest.rb`. It provides:
-#   - `Sigma.refresh_token!`         — re-do client_credentials exchange,
-#                                       update in-memory token under a mutex
+#   - `Sigma.refresh_token!`         — invoke the browser-first dual-mode token
+#                                       provider under a mutex
 #   - `Sigma.auth_token`             — age-aware: re-mints automatically when
 #                                       the token is older than TOKEN_TTL_SECONDS
 #   - `Sigma.request(method, path)`  — catches 401, refreshes once, retries
@@ -17,14 +17,15 @@
 #     it ages past TOKEN_TTL_SECONDS (50 min), auth_token re-mints proactively.
 #   - The mint time is also surfaced as SIGMA_TOKEN_MINTED_AT (iso8601) so
 #     child processes inherit the token's AGE along with the token itself.
-#   - A token loaded from <WORK>/auth.json is aged by the file's mtime
-#     (get_token.py writes it at mint time, so mtime == mint time).
+#   - A token loaded from <WORK>/auth.json uses its mint metadata, with the
+#     file's mtime retained as a backward-compatible fallback.
 #   - A bare env SIGMA_API_TOKEN with no known age is honored as-is
 #     (age-unknown) — the request helper's 401 handler re-mints ONCE and
 #     retries, then fails loudly.
 #
-# Required env: SIGMA_BASE_URL, SIGMA_CLIENT_ID, SIGMA_CLIENT_SECRET.
-# Optional env: SIGMA_API_TOKEN (initial token; refreshed on demand).
+# Required env: SIGMA_BASE_URL.
+# Optional env: SIGMA_API_TOKEN (initial token), browser-login keychain state,
+# SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET fallback, and SIGMA_AUTH_MODE.
 #
 # Usage:
 #   require_relative 'lib/sigma_rest'
@@ -36,7 +37,7 @@
 require 'net/http'
 require 'uri'
 require 'json'
-require 'base64'
+require 'open3'
 require 'time'
 
 # Agent-neutral credential bootstrap. Claude Code injects creds from
@@ -59,7 +60,7 @@ end
 # <WORK>/auth.json = {"SIGMA_API_TOKEN": ..., "SIGMA_BASE_URL": ...}. Read it
 # here so any shell/agent can mint once (python) and every downstream Ruby
 # script picks the token up. Precedence: explicit env ALWAYS wins → auth.json →
-# (later) client-credential self-mint via refresh_token!. auth.json is
+# (later) dual-mode provider refresh. auth.json is
 # .gitignored and holds a live bearer token — never print it.
 if ENV['SIGMA_API_TOKEN'].nil?
   _auth_candidates = [ENV['SIGMA_WORKDIR'], Dir.pwd].compact
@@ -70,12 +71,13 @@ if ENV['SIGMA_API_TOKEN'].nil?
       _auth = JSON.parse(File.read(_auth_path, encoding: 'bom|utf-8'))
       if _auth['SIGMA_API_TOKEN']
         ENV['SIGMA_API_TOKEN'] ||= _auth['SIGMA_API_TOKEN']
-        # get_token.py writes auth.json at mint time, so the file's mtime IS
-        # the token's mint time — record it so auth_token can age the token
-        # out proactively instead of discovering staleness via a mid-phase 401.
-        ENV['SIGMA_TOKEN_MINTED_AT'] ||= File.mtime(_auth_path).utc.iso8601
+        # Current providers include mint metadata. Older auth.json files do
+        # not, so retain the file-mtime fallback for backward compatibility.
+        ENV['SIGMA_TOKEN_MINTED_AT'] ||= _auth['SIGMA_TOKEN_MINTED_AT'] ||
+                                         File.mtime(_auth_path).utc.iso8601
       end
       ENV['SIGMA_BASE_URL'] ||= _auth['SIGMA_BASE_URL'] if _auth['SIGMA_BASE_URL']
+      ENV['SIGMA_AUTH_METHOD'] ||= _auth['SIGMA_AUTH_METHOD'] if _auth['SIGMA_AUTH_METHOD']
     rescue JSON::ParserError
       # A corrupt auth.json must not wedge the run — fall through to self-mint.
     end
@@ -119,14 +121,13 @@ module Sigma
   #   - No token anywhere → mint one.
   #   - Known mint time (this process minted it, a parent surfaced
   #     SIGMA_TOKEN_MINTED_AT, or auth.json's mtime) and age > TTL → re-mint
-  #     (requires SIGMA_CLIENT_ID; without creds the stale token is returned
-  #     and the 401 path surfaces the failure loudly).
+  #     through the dual-mode provider.
   #   - Age unknown (bare env SIGMA_API_TOKEN) → honored as-is; the request
   #     helper's 401 handler re-mints once and retries.
   def auth_token
     tok = @token_mutex.synchronize { @token_override } || ENV['SIGMA_API_TOKEN']
     return refresh_token! if tok.nil? || tok.empty?
-    return refresh_token! if token_stale? && ENV['SIGMA_CLIENT_ID']
+    return refresh_token! if token_stale?
     tok
   end
 
@@ -151,38 +152,84 @@ module Sigma
     !minted.nil? && (Time.now - minted) > TOKEN_TTL_SECONDS
   end
 
-  # Re-do the OAuth client_credentials exchange and store the new token.
+  # Invoke sigma-api's canonical dual-mode provider. In auto mode it checks the
+  # browser keychain first, then falls back to client credentials, and verifies
+  # the result with redirect-disabled /v2/whoami. All provider output is parsed
+  # as data; no shell output is eval'd.
+  def token_provider_result
+    provider_paths = [
+      ENV['SIGMA_TOKEN_PROVIDER'],
+      File.expand_path('../get_token.py', __dir__),
+      File.expand_path('../vendor/get_token.py', __dir__),
+      File.expand_path('../scripts/get_token.py', __dir__),
+      File.expand_path('../../../sigma-api/scripts/get_token.py', __dir__)
+    ].compact
+    provider = provider_paths.find { |path| File.file?(path) }
+    raise AuthError, 'Sigma get_token.py provider not found' unless provider
+
+    python_commands = []
+    python_commands << [ENV['SIGMA_PYTHON']] unless ENV['SIGMA_PYTHON'].to_s.empty?
+    python_commands.concat([['python3'], ['python'], ['py', '-3']])
+    output = error = status = nil
+    python_commands.each do |command|
+      begin
+        output, error, status = Open3.capture3(*command, provider, '--print-export')
+      rescue Errno::ENOENT
+        next
+      end
+      break
+    end
+
+    if status.nil?
+      shell_paths = [
+        File.expand_path('../get-token.sh', __dir__),
+        File.expand_path('../vendor/get-token.sh', __dir__),
+        File.expand_path('../scripts/get-token.sh', __dir__),
+        File.expand_path('../../../sigma-api/scripts/get-token.sh', __dir__)
+      ]
+      shell = shell_paths.find { |path| File.file?(path) }
+      raise AuthError, 'Python and Sigma get-token.sh are unavailable' unless shell
+      begin
+        output, error, status = Open3.capture3('bash', shell)
+      rescue Errno::ENOENT
+        raise AuthError, 'Python and bash are unavailable; cannot refresh the Sigma token'
+      end
+    end
+
+    unless status.success?
+      detail = error.to_s.strip
+      raise AuthError, "Sigma token provider failed#{detail.empty? ? '' : ": #{detail}"}"
+    end
+
+    values = {}
+    output.each_line do |line|
+      match = line.chomp.match(/\Aexport (SIGMA_API_TOKEN|SIGMA_TOKEN_MINTED_AT|SIGMA_AUTH_METHOD)=([A-Za-z0-9._~+\/=:-]+)\z/)
+      values[match[1]] = match[2] if match
+    end
+    required = %w[SIGMA_API_TOKEN SIGMA_TOKEN_MINTED_AT SIGMA_AUTH_METHOD]
+    missing = required.reject { |key| values[key] && !values[key].empty? }
+    raise AuthError, "Sigma token provider omitted #{missing.join(', ')}" unless missing.empty?
+
+    values
+  end
+
+  # Store a fresh dual-mode provider result.
   # Thread-safe and single-flight: concurrent callers all wait for one
-  # exchange and share the result. Returns the new token.
+  # provider invocation and share the result. Returns the new token.
   def refresh_token!
     @token_mutex.synchronize do
       return @token_override if @refresh_inflight
       @refresh_inflight = true
     end
     begin
-      cid    = ENV.fetch('SIGMA_CLIENT_ID')     { raise AuthError, 'SIGMA_CLIENT_ID not set' }
-      secret = ENV.fetch('SIGMA_CLIENT_SECRET') { raise AuthError, 'SIGMA_CLIENT_SECRET not set' }
-      Sigma.validate_base_url!(base_url)
-      creds = Base64.strict_encode64("#{cid}:#{secret}")
-      uri = URI("#{base_url}/v2/auth/token")
-      req = Net::HTTP::Post.new(uri)
-      req['Authorization'] = "Basic #{creds}"
-      req['Content-Type']  = 'application/x-www-form-urlencoded'
-      req.body = 'grant_type=client_credentials'
-      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, read_timeout: 30) { |h| h.request(req) }
-      raise AuthError, "token exchange -> #{res.code} #{res.body}" unless res.is_a?(Net::HTTPSuccess)
-      tok = JSON.parse(res.body)['access_token']
-      raise AuthError, "token exchange returned no access_token: #{res.body}" if tok.nil? || tok.empty?
-      now = Time.now
+      values = token_provider_result
+      tok = values.fetch('SIGMA_API_TOKEN')
+      minted_at = Time.parse(values.fetch('SIGMA_TOKEN_MINTED_AT'))
       @token_mutex.synchronize do
         @token_override = tok
-        @minted_at = now
+        @minted_at = minted_at
       end
-      # Surface the refreshed token — and its mint time, so child processes
-      # inherit the token's AGE and re-mint on schedule too — to child
-      # processes / shell evals.
-      ENV['SIGMA_API_TOKEN'] = tok
-      ENV['SIGMA_TOKEN_MINTED_AT'] = now.utc.iso8601
+      values.each { |key, value| ENV[key] = value }
       tok
     ensure
       @token_mutex.synchronize { @refresh_inflight = false }
@@ -289,7 +336,7 @@ module Sigma
 
       # Sigma returns 401 with code:"unauthorized" when the bearer expires.
       # Refresh once and retry; on a second 401, surface the error.
-      if res.code.to_i == 401 && attempts == 1 && ENV['SIGMA_CLIENT_ID']
+      if res.code.to_i == 401 && attempts == 1
         refresh_token!
         next
       end

@@ -17,6 +17,17 @@ Always write explicit layout for authored workbooks. In particular:
 - There's a `kind: "container"` element on the page. Containers without a matching `<Container>` are functionally no-ops.
 - The workbook has more than ~4 elements on a page. Auto-arrange becomes a long scroll.
 
+For operational apps, do not evenly split the primary row by default. Load
+`reference/workflows/app-compositions.md` and use the tested
+`Composition.compose` patterns:
+
+- `:workbench` — supporting context 8/24, editable work surface 16/24;
+- `:queue_rail` — queue 17/24, rail 7/24;
+- `:builder_preview` — input builder 7/24, result preview 17/24.
+
+The asymmetry encodes priority. If a supporting side is omitted, the primary
+surface expands to full width.
+
 Although the OpenAPI marks the string optional, the current API rejects a flat
 element that has no placement. Do not rely on auto-arrange, and do not derive
 membership from the order of `document.elements`.
@@ -25,7 +36,8 @@ membership from the order of `document.elements`.
 
 Live GET specs and `/verify` use `<Element>` for leaves and `<Container>` for
 nested grids (confirmed 2026-08-08). Emit those exact names.
-`<LayoutElement>` is not a synonym on the wire—it causes HTTP 400.
+`<LayoutElement>` is not a synonym on the wire—`/verify` rejects it as
+`valid:false` (some API versions returned HTTP 400 instead).
 `<GridContainer>` is likewise a legacy captured-artifact alias, not authoring
 syntax. Local parsers may read those aliases only to migrate old snapshots.
 
@@ -174,7 +186,7 @@ A `kind: "tabbed-container"` element packs several views into one region — swi
     - name: Overview
     - name: Detail
   tabBar:
-    alignment: start
+    alignment: left
 ```
 
 The actual content for each tab is ordinary flat elements; layout places them.
@@ -197,7 +209,7 @@ in `document.elements[]`; `<Tab>` order ties them to the labels above.
 
 - **Gotcha (verified):** inside a `<Tab>`, use **bare `<Element>` children only** — never nest a `<Container>` inside a `<Tab>`. A `<Tab>` is already a mini-grid (its own `gridTemplateColumns` / `gridTemplateRows`), so elements position directly in it; a nested `<Container>` scrambles tab render order.
 - **When to use it:** several views that are alternates of each other (a summary + a detail table, one view per region/segment) rather than sequential reading — pack them into one region instead of a long scroll or extra pages.
-- **Building it:** hand-authoring the position-mapped `<Tab>` block is error-prone. Use `Composition.tabbed_container(id:, tabs:, grid_column:, grid_row:, tab_bar_alignment: 'start')` in `scripts/lib/composition.rb` — `tabs:` is `[{name:, inner:}]`, where `inner` is the tab's bare-`<Element>` XML (built with `Composition.band`/`Composition.le` or by hand). It returns `{element:, layout:}`, ready to add to `document.elements[]` and `document.layout`.
+- **Building it:** hand-authoring the position-mapped `<Tab>` block is error-prone. Use `Composition.tabbed_container(id:, tabs:, grid_column:, grid_row:, tab_bar_alignment: 'left')` in `scripts/lib/composition.rb` — `tabs:` is `[{name:, inner:}]`, where `inner` is the tab's bare-`<Element>` XML (built with `Composition.band`/`Composition.le` or by hand). It returns `{element:, layout:}`, ready to add to `document.elements[]` and `document.layout`.
 
 ## `gridTemplateRows`: always `"auto"`
 
@@ -236,14 +248,34 @@ Use stacked rows when you want a section header above a row of charts inside the
 
 ## Element height heuristics — give tables room to breathe
 
-A table element's `gridRow` span controls how many data rows are visible before it scrolls. The recurring mistake is **under-sizing tables** — a detail/raw-row table given a 5–8 row span shows only ~2 data rows, which defeats the point of a "see the underlying data" table. Size by role:
+A table element's `gridRow` span controls how many data rows are visible before
+it scrolls. A data row is roughly 32px against a roughly 24px grid-row pitch, so
+use this deterministic starting point:
 
-- **Detail / raw-row tables** (the bottom-of-page "drill into the data" table): give a **tall** span — **~14–20 grid rows** (e.g. `gridRow="32 / 50"`). The user should see 6–10+ rows without scrolling. When a detail table is the last element on the page, err on the side of *too tall* — trailing whitespace below it is cheaper than a cramped 2-row table.
-- **Summary / aggregated tables** (a handful of grouped rows): size to roughly the row count + header, ~6–10 grid rows.
+```text
+table grid-row span = ceil(3 + visible_data_rows × 4/3)
+```
+
+`Composition.table_height(rows)` implements the same formula. Seven visible
+rows recommend a 13-row span; an 11-row span clips them. Rendered fonts, wrapping,
+and headers can still require more height.
+
+- **Detail / raw-row tables** (the bottom-of-page "drill into the data" table):
+  target 7–12 visible rows, normally **13–19 grid rows**. When a detail table is
+  last, trailing whitespace is cheaper than a cramped result.
+- **Summary / aggregated tables**: apply the formula to the actual grouped row
+  count; a handful of rows normally lands around 7–10 grid rows.
 - **KPIs**: short — ~5–6 rows; they're a single number.
 - **Charts**: ~8–12 rows so axes and labels aren't crushed.
 
 Heights are relative grid units (tracks are `auto`), so these are rules of thumb, not pixels — but the asymmetry holds: **tables are the element most often made too short.** If you're unsure, render the page (PNG export) and count visible rows.
+
+Width has a separate limit: above roughly **10 visible columns**, the first
+column and the row's scan path tend to truncate or become unreadable. Cut
+columns; do not widen the page to preserve every field. Keep the identifying
+column plus decision-critical measures in the list, and move the rest to a
+selection-driven detail table or `single-row-container`. This is an editorial
+warning, not a schema limit—an exact-detail export may legitimately be wider.
 
 ## Page backgrounds and width
 
@@ -281,15 +313,110 @@ errors.
 
 ## Panels, headers, sidebars, and navigation
 
-`document.panels` stores panel metadata; panel content is placed by a
-`<Page id="<panel-id>">` layout block just like overlay content. Preserve panel
-metadata from readback and consult the live `panels` schema for the current
-header/sidebar variants.
+> **LIVE-CONFIRMED 2026-08-10** on a workspace with navigation enabled: a
+> workbook with a header panel and a sidebar panel round-trips through
+> `GET /v2/workbooks/{id}/spec` with both `document.panels[]` entries, the
+> `document.settings.navigation` block, and `<Panel>` layout nodes intact, and
+> the panels render. The shapes below match `components.schemas.WorkbookSpec`
+> → `document.panels` / `document.settings.navigation`.
+>
+> **Workspace entitlement gate (still applies).** `document.settings.navigation`
+> is rejected on a workspace where the feature is **not** enabled:
+>
+> ```
+> 400 settings.navigation: workbook navigation settings are not enabled for this workspace.
+> ```
+>
+> The identical spec with `settings.navigation` omitted returns 200. That is a
+> **per-workspace entitlement gate**, not a payload error — if you hit this
+> exact message, recognize it as "this org lacks the feature," not a spec
+> mistake to debug. Panels only render on an org where the workspace setting is
+> enabled.
 
-Workbook chrome is configured separately under `document.settings.navigation`.
-It controls built-in page headers, page tabs, and sidebar navigation; the
-`kind: navigation` canvas element is an independent in-layout menu. Use
-settings navigation for workbook-wide chrome and a navigation element when the
-menu must occupy a grid region or provide curated destinations.
+`document.panels[]` holds page **headers** and page **sidebars** — chrome
+that sits outside the scrolling page grid. Each entry is a `oneOf` of two
+variants, discriminated by `type`:
+
+| | `PageHeader` (`type: "header"`) | `PageSidebar` (`type: "sidebar"`) |
+|---|---|---|
+| Required | `id`, `type` | `id`, `type` |
+| `title` | name shown in the workbook's manage-headers list | name shown in the manage-sidebars list |
+| `pages[]` | page ids this panel applies to; omit when defined but unassigned | same |
+| `config.scroll` | `sticky` (default) \| `none` | `sticky` (default) \| `none` |
+| `config.borderStyle` | `line` \| `shadow` \| `none` — **`shadow` requires a sticky header** | `line` \| `none` |
+| `config.backgroundColor` | hex; omit to follow the theme | hex; omit to follow the theme |
+| `width` | — (headers have no width) | `small` (200px) \| `medium` (260px, default) \| `large` (400px) |
+
+Constraint from the OpenAPI (`pages[]` description): **a page may have at
+most one header and one sidebar, and only normal pages can carry panels —
+not modals or drawers.**
+
+```yaml
+document:
+  panels:
+    - id: main-header
+      type: header
+      title: Main Header
+      pages: [overview, detail]
+      config:
+        scroll: sticky
+        borderStyle: shadow
+    - id: nav-sidebar
+      type: sidebar
+      title: Navigation
+      pages: [overview, detail]
+      width: medium
+      config:
+        borderStyle: line
+```
+
+Panel *content* is placed by a dedicated layout **`<Panel>`** block whose
+`id` matches the panel's `id` (NOT a `<Page>` block — that was the pre-2026-08
+guess; live readback uses its own `<Panel>` tag). The block carries the same
+`type="grid"` / `gridTemplateColumns` / `gridTemplateRows` attributes as a
+`<Page>` and holds `<Element>` children the same way. Live-confirmed shape
+(`GET /v2/workbooks/{id}/spec`, 2026-08-10):
+
+```xml
+<Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="kchtzPvp2c"/>
+<Panel type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="main-header">
+  <Element elementId="header-text" gridColumn="3 / 15" gridRow="1 / 3"/>
+</Panel>
+<Panel type="grid" gridTemplateColumns="repeat(6, 1fr)" gridTemplateRows="auto" id="nav-sidebar">
+  <Element elementId="sidebar-text" gridColumn="3 / 6" gridRow="5 / 11"/>
+</Panel>
+```
+
+Every `<Panel id>` must match a `document.panels[].id`, and every element it
+places must exist in the flat `document.elements` array (same
+place-each-element-exactly-once rule as pages/overlays). A sidebar panel's grid
+is commonly narrower (`repeat(6, 1fr)`) than the 24-column page grid. Preserve
+panel metadata from readback and re-check the live `panels` schema before
+adding fields not shown here — panel variants evolve.
+
+### `document.settings.navigation` — the on/off switch
+
+A panel renders **only** when its corresponding setting is `enabled`.
+Defining a panel in `document.panels[]` without enabling it here is inert,
+not an error — the panel is saved but never shown.
+
+```yaml
+document:
+  settings:
+    navigation:
+      pageHeader: enabled          # enabled | disabled
+      pageSidebar: enabled         # enabled | disabled
+      primary: sidebar             # sidebar (default) | header — which one
+                                    # owns the top corner when a page has both
+      pageTabsInViewMode: shown    # shown (default) | hidden — viewers only;
+                                    # editors always see page tabs
+```
+
+This is workbook-wide, always-on chrome — distinct from the `kind:
+navigation` canvas *element*, which is an independent in-layout menu that
+occupies a grid region and can carry curated destinations. Use
+`settings.navigation` + `document.panels` for built-in header/sidebar chrome;
+use a `navigation` element when the menu needs to live inside the page grid
+alongside other content.
 
 To study real grid-container idioms, fetch an existing multi-page workbook's spec (`GET /v2/workbooks/{id}/spec`, see SKILL.md Steps 1–2). The OpenAPI doesn't model the `layout` XML string, so a live spec is the way to see production layout.

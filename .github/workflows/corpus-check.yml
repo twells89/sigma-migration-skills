@@ -561,6 +561,7 @@ jobs:
             shared/lib/test_composition_lint.rb
             shared/lib/tests/test_code_rep.rb
             shared/lib/test_shared_script_closure.rb
+            shared/lib/test_sigma_rest_auth.rb
             shared/lib/test_styling.rb
             shared/lib/test_coverage_catalog.rb
             shared/lib/test_kpi_card.rb
@@ -568,6 +569,7 @@ jobs:
             shared/lib/test_enhance_options.rb
             shared/scripts/test-enhance-select.rb
             shared/scripts/test-enhance-app-plan.rb
+            shared/scripts/test-browser-login-platform.rb
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-kpi-comparison-wiring.rb
             plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/test-kpi-comparison-emit.rb
             plugins/domo-to-sigma/skills/domo-to-sigma/test/test-build-dm.rb
@@ -680,6 +682,8 @@ jobs:
             plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_grounding.py
             plugins/qlik-to-sigma/skills/qlik-to-sigma/tests/test_completion_contract.py
             shared/lib/test_metric_binding.py
+            shared/lib/test_sigma_rest_auth.py
+            shared/scripts/test_get_token.py
             shared/scripts/test_pick_destination.py
             # powerbi-to-sigma uses HYPHENATED test-*.py names, which is why these were
             # never picked up by the test_*.py convention above. Listed explicitly.
@@ -766,6 +770,7 @@ jobs:
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-metric-reference.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-warehouse-column-refs.mjs
             shared/lib/tests/test_code_rep.mjs
+            shared/examples/node-orchestration-template/lib/test-auth.mjs
           )
           fail=0
           for t in "${tests[@]}"; do

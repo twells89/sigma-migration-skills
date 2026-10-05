@@ -65,13 +65,27 @@ ANNOTATION_COLUMNS = [
   { 'id' => 'CREATED_AT' }, { 'id' => 'CREATED_BY' }
 ].freeze
 
-check('input_table_empty: inputMode:"edit" is present (masked-error fix) + source.kind:"empty"') do
+check('input_table_empty: inputMode defaults to "view" + source.kind:"empty"') do
   el = Actions.input_table_empty(id: 'annotations', connection_id: 'write-conn-1', columns: ANNOTATION_COLUMNS)
   el == {
-    'id' => 'annotations', 'kind' => 'input-table', 'inputMode' => 'edit',
+    'id' => 'annotations', 'kind' => 'input-table', 'inputMode' => 'view',
     'source' => { 'kind' => 'empty', 'connectionId' => 'write-conn-1' },
     'columns' => ANNOTATION_COLUMNS
   }
+end
+check('input_table_empty: input_mode override is honored') do
+  el = Actions.input_table_empty(id: 'annotations', connection_id: 'write-conn-1',
+                                 columns: ANNOTATION_COLUMNS, input_mode: 'edit')
+  el['inputMode'] == 'edit'
+end
+check('input_table_empty: invalid input_mode rejected') do
+  begin
+    Actions.input_table_empty(id: 'annotations', connection_id: 'write-conn-1',
+                              columns: ANNOTATION_COLUMNS, input_mode: 'published')
+    false
+  rescue ArgumentError
+    true
+  end
 end
 check('input_table_empty: name: omitted entirely when not given') do
   el = Actions.input_table_empty(id: 'annotations', connection_id: 'write-conn-1', columns: ANNOTATION_COLUMNS)
@@ -118,10 +132,24 @@ check('input_table_linked: source.kind:"linked" carries from + connectionId') do
   el = Actions.input_table_linked(id: 'targets', from: 'fam-pivot', connection_id: 'write-conn-1',
                                    columns: TARGET_COLUMNS)
   el == {
-    'id' => 'targets', 'kind' => 'input-table', 'inputMode' => 'edit',
+    'id' => 'targets', 'kind' => 'input-table', 'inputMode' => 'view',
     'source' => { 'kind' => 'linked', 'from' => 'fam-pivot', 'connectionId' => 'write-conn-1' },
     'columns' => TARGET_COLUMNS
   }
+end
+check('input_table_linked: input_mode override is honored') do
+  el = Actions.input_table_linked(id: 'targets', from: 'fam-pivot', connection_id: 'write-conn-1',
+                                  columns: TARGET_COLUMNS, input_mode: 'explore')
+  el['inputMode'] == 'explore'
+end
+check('input_table_linked: invalid input_mode rejected') do
+  begin
+    Actions.input_table_linked(id: 'targets', from: 'fam-pivot', connection_id: 'write-conn-1',
+                               columns: TARGET_COLUMNS, input_mode: 'published')
+    false
+  rescue ArgumentError
+    true
+  end
 end
 check('input_table_linked: id required') do
   begin; Actions.input_table_linked(id: '', from: 'f', connection_id: 'c', columns: TARGET_COLUMNS); false
@@ -183,8 +211,13 @@ check('set_control_value_effect: control required') do
   begin; Actions.set_control_value_effect(control: '', text: 'West'); false
   rescue ArgumentError; true; end
 end
+check('set_control_value_effect: empty text is accepted for wizard resets') do
+  Actions.set_control_value_effect(control: 'NewName', text: '') ==
+    { 'effect' => 'set-control-value', 'control' => 'NewName',
+      'value' => { 'type' => 'constant', 'value' => { 'type' => 'text', 'value' => '' } } }
+end
 check('set_control_value_effect: text required') do
-  begin; Actions.set_control_value_effect(control: 'RegionF', text: ''); false
+  begin; Actions.set_control_value_effect(control: 'RegionF', text: nil); false
   rescue ArgumentError; true; end
 end
 check('set_control_value_effect: NO-GO surface -> {}') do

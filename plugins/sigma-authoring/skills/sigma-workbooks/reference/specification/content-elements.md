@@ -11,7 +11,7 @@ These are flat `document.elements[]` entries and are assigned by layout.
 
 ## text
 
-A Markdown block — titles, descriptions, section headers, callouts. Required `id`, `kind`, `body`; optional `verticalAlign` (`start` / `middle` / `end`) and `overflow` (`clip` / `scroll`). No `name`, no `source`.
+A Markdown block — titles, descriptions, section headers, callouts. Required `id`, `kind`, `body`; optional `verticalAlign` (`top` / `center` / `bottom`, default `top`) and `overflow` (`clip` / `scroll`). No `name`, no `source`.
 
 ```yaml
 id: text-header
@@ -63,6 +63,8 @@ url: https://cdn.example.com/logo.png
 
 A rule for separating sections. Required `id`, `kind`; optional `direction` (`horizontal` / `vertical`), `align`, and `style` (`color` / `width` / `strokeStyle`).
 
+`align` is direction-specific: horizontal dividers, including dividers with no `direction`, accept `top` / `center` / `bottom`; vertical dividers accept `left` / `center` / `right`.
+
 ```yaml
 id: section-rule
 kind: divider
@@ -110,7 +112,19 @@ fields:
     label: Subscribe
 ```
 
-Verified live: `form` elements can be gated behind a per-workspace feature flag — a correctly-shaped spec can still fail `/v2/workbooks/spec/verify` with `` `form` elements are not enabled for this workspace``. That's an entitlement error, not a shape error; the field shape above round-tripped past validation to reach that gate. **Unlike `progress`/`navigation` below, this means `form`'s actual create/render/behavior is unverified in the available test org/workspace** — the entitlement gate blocks even a real `POST /v2/workbooks/spec` create, so there's no readback or screenshot to check against. Re-run this verification (real create, not just `/verify`) if a workspace with `form` enabled becomes available.
+Preflight a minimal `form` with `/v2/workbooks/spec/verify` before building the
+rest of a form-driven workbook. Workspace behavior varies: unavailable
+workspaces have returned both `` `form` elements are not enabled for this
+workspace`` and the generic `Invalid kind: "form"` (live-observed
+2026-09-18). Treat either as an entitlement/capability stop, not an invitation
+to guess alternate field names.
+
+**Unlike `progress`/`navigation` below, `form` create/render/behavior remains
+unverified in the available test workspace.** If the preflight fails, tell the
+user that native form is unavailable. Offer an `input-table` + controls
+workflow only when it matches the requested behavior and the user accepts the
+different writeback architecture; do not silently substitute decorative text
+fields.
 
 ## progress
 
@@ -195,7 +209,11 @@ config:                                            # plugin-defined bindings + s
   binCount: "10"
 ```
 
-- **Data bindings** inside `config`: `{ kind: element, elementId }` selects a source element; `{ kind: column, columnId, source }` selects one of its columns (`{ kind: column, columnIds: [...], source }` for several); `source: source` points at the `config.source` element. A plugin can also read a control's value — bind the control the same way the plugin's input expects.
-- **`config` is half-opaque** — bare **literals** (strings/booleans/string-arrays) pass through unvalidated and are handed to the plugin at render time (a literal round-tripping does **not** mean Sigma supports it). But **`kind`-tagged references are resolved and validated**: a `{kind: element, ...}` / `{kind: column, ...}` / `{kind: control, ...}` pointing at something that doesn't exist is a hard 400 (`Dependency not found`). The literal keys are per-plugin — harvest them from a working spec.
-- **Element background:** use element-level `style.backgroundColor` (same shape as a container `style`) — a plugin renders on its own white canvas otherwise, which looks wrong inside a dark theme. A bare top-level `background` key is stripped.
+- **Data bindings** inside `config`: `{ kind: element, elementId }` selects a source element (optional `groupingId` reads a grouping on that element instead of ungrouped/base data); `{ kind: column, columnId, source }` selects one of its columns (`{ kind: column, columnIds: [...], source }` for several) — `source` must **name another `config` entry that is a `kind: element` reference** (e.g. `source: source` points at a sibling `config.source: { kind: element, ... }`); `{ kind: control, controlId }` binds a control's current value. Confirmed against the live OpenAPI (`CommonElement` plugin variant, `config.additionalProperties`): the literal/element/column/control shapes above are exactly the four `config`-value alternatives it models — no fifth kind exists today.
+- **`config` is half-opaque** — bare **literals** (strings/booleans/string-arrays) pass through unvalidated and are handed to the plugin at render time (a literal round-tripping does **not** mean Sigma supports it). But **`kind`-tagged references are resolved and validated**: a `{kind: element, ...}` / `{kind: column, ...}` / `{kind: control, ...}` pointing at something that doesn't exist is a hard 400 (`Dependency not found`). A `column.source` that resolves but doesn't name an element-reference entry is a different failure mode — it binds to nothing and renders empty rather than erroring, same as a broken `pluginId` (below). The literal keys are per-plugin — harvest them from a working spec, not from this doc or the OpenAPI (the spec stores only chosen values, never the plugin's own config schema).
+- **Element background:** use element-level `style.backgroundColor` (same shape as a container `style`) — a plugin renders on its own white canvas otherwise, which looks wrong inside a dark theme. A bare top-level `background` key is stripped. Per the live schema, `style.backgroundColor` accepts either a hex string or a `{ kind: theme, ref }` theme reference (same tagged shape used elsewhere — see `styling.md`).
 - **Discover available plugins with `GET /v2/plugins`** ("List custom plugins", paginated `pageSize`/`pageToken`; needs `Accept: application/json`). Each entry is `{ pluginId, name, description, url, devUrl, type }` — list them to pick the right `pluginId` instead of guessing. A **bogus `pluginId` is not validated at POST** (200, then renders as a broken "missing plugin"), so always source it from `/v2/plugins`. The endpoint returns id + name only — the per-plugin **`config` shape** still has to come from a workbook spec that uses the plugin (or the plugin's source). See `twells89/sigma-workbook-spec-findings` finding #27 + Plugin-ID catalog.
+- **Pull the exact shape straight from the codec** rather than trusting any doc (including this one) to stay current:
+  ```bash
+  jq --arg k plugin 'first(.. | objects | select((.allOf? and any(.allOf[]?; .properties?.kind?.enum==[$k])) or .properties?.kind?.enum==[$k]))' /tmp/sigma-api.json
+  ```

@@ -1,30 +1,51 @@
-// sigma-rest.mjs — fetch-based Sigma REST helper. Zero unix-CLI dependency:
-// no curl (uses global fetch), no jq (uses native JSON). Cross-platform as-is.
-//
-// Improves on cognos-to-sigma/scripts/lib/sigma-rest.mjs by taking creds from the
-// shell-neutral auth.mjs loader instead of assuming an already-`eval`-ed env.
-import { loadSigmaAuth } from './auth.mjs';
+// Fetch-based Sigma REST helper with the same refresh contract as the Ruby and
+// Python adapters: preserve a valid caller token, refresh known-stale tokens,
+// and refresh/retry exactly once after any 401 (including browser-only auth).
+import { loadSigmaAuth, refreshSigmaAuth } from './auth.mjs';
 
-export function makeClient(workdir) {
-  const { base, token } = loadSigmaAuth(workdir);
+function validateBase(base) {
+  const url = new URL(base);
+  const host = url.hostname.toLowerCase();
+  const insecure = process.env.SIGMA_ALLOW_INSECURE_BASE_URL === '1';
+  if (!insecure && (url.protocol !== 'https:' ||
+      !(host === 'sigmacomputing.com' || host.endsWith('.sigmacomputing.com')))) {
+    throw new Error(`refusing to send a Sigma bearer token to untrusted base URL: ${base}`);
+  }
+  if (insecure && !['https:', 'http:'].includes(url.protocol)) {
+    throw new Error(`refusing non-HTTP Sigma base URL: ${base}`);
+  }
+}
+
+export function makeClient(workdir, options = {}) {
+  const loadAuth = options.loadAuth || loadSigmaAuth;
+  const refreshAuth = options.refreshAuth || refreshSigmaAuth;
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  let auth = loadAuth(workdir);
+  validateBase(auth.base);
 
   async function api(method, path, body) {
-    const res = await fetch(base + path, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
-    });
+    let res;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      res = await fetchImpl(auth.base + path, {
+        method,
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
+      });
+      if (res.status !== 401 || attempt === 1) break;
+      auth = refreshAuth(workdir);
+      validateBase(auth.base);
+    }
     const text = await res.text();
     let json = null;
     try { json = JSON.parse(text); } catch { /* Sigma /spec POST can return YAML or empty */ }
     return { status: res.status, ok: res.ok, text, json };
   }
 
-  return { base, api };
+  return { base: auth.base, api };
 }
 
 // Sigma POST /spec returns JSON ({"workbookId":...}) OR YAML (workbookId: ...). Pull either.

@@ -1,8 +1,17 @@
 # Interactive Browser Login (OAuth authorization-code + PKCE)
 
-Use this when a human is at the keyboard and would rather sign in through the browser than provision a client ID/secret. It needs no pre-issued credentials — the client registers itself. The **client-credentials** flow in `SKILL.md` remains the right fit for headless automation.
+Use this for the preferred interactive setup when a human is at the keyboard.
+It needs no pre-issued credentials—the client registers itself. After this
+one-time login, the canonical `scripts/get_token.py` provider refreshes the
+keychain session headlessly and falls back to client credentials when
+available. Client credentials remain useful for unattended hosts.
 
-> **Just want to log in?** `scripts/browser-login.sh` performs every step below end to end (`eval "$(bash <repo-root>/skills/sigma-api/scripts/browser-login.sh)"`), including capturing the redirect automatically (§D) — no callback URL to copy or paste anywhere. The walkthrough here explains what it does and how to customize or run the flow by hand.
+> **Just want to log in?** `scripts/browser-login.sh` performs every step below
+> end to end
+> (`eval "$(bash <repo-root>/skills/sigma-api/scripts/browser-login.sh)"`),
+> including capturing the redirect automatically (§D). Later, rerun
+> `get-token.sh` (default `auto` mode) to use the cached/refreshable browser
+> session first. The walkthrough here explains the underlying flow.
 
 The flow is **discovery-driven**: you don't hardcode any endpoints — you read them from `/v2/whoami`. If `SIGMA_BASE_URL` is unset, ask the user which cloud they're on (see the Base URL table in `SKILL.md`).
 
@@ -55,16 +64,23 @@ CLIENT_ID=$(curl -sS -X POST "$REGISTER_URL" \
 ## C. Generate PKCE + a CSRF state
 
 ```sh
-VERIFIER=$(openssl rand -base64 96 | tr -d '\n=+/' | cut -c1-64)                 # 43–128 unreserved chars
-CHALLENGE=$(printf '%s' "$VERIFIER" | openssl dgst -binary -sha256 | openssl base64 | tr '+/' '-_' | tr -d '=\n')
-STATE=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=\n')                    # ≥22 chars
+VERIFIER=$(openssl rand -base64 96 | tr -d '\r\n=+/' | cut -c1-64)                 # 43–128 unreserved chars
+CHALLENGE=$(printf '%s' "$VERIFIER" | openssl dgst -binary -sha256 | openssl base64 | tr '+/' '-_' | tr -d '=\r\n')
+STATE=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=\r\n')                    # ≥22 chars
 ```
+
+Strip both CR and LF. Windows-native OpenSSL emits CRLF; leaving the CR in
+`state` or `code_challenge` URL-encodes it as `%0D` and breaks authorization.
+The bundled script validates every generated component before opening the
+browser.
 
 ## D. Authorize in the browser and capture the code
 
 ```sh
 OPEN_URL="$AUTHORIZE_URL?response_type=code&client_id=$CLIENT_ID&redirect_uri=$REDIRECT_URI&state=$STATE&code_challenge=$CHALLENGE&code_challenge_method=S256&scope=$SCOPE"
-open "$OPEN_URL"   # macOS; use xdg-open on Linux, or have the user paste it into a browser
+open "$OPEN_URL"   # macOS
+# Linux: xdg-open "$OPEN_URL"
+# Windows/Git Bash: powershell.exe Start-Process, cmd.exe //c start, or explorer.exe
 ```
 
 After signing in, the browser is redirected to `http://127.0.0.1:<port>/oauth/callback?code=…&state=…`.
@@ -72,6 +88,21 @@ After signing in, the browser is redirected to `http://127.0.0.1:<port>/oauth/ca
 **Preferred: capture it automatically.** Start a one-shot loopback listener on the port _before_ opening the browser, and read `code`/`state` straight from the single request it receives — no callback URL ever has to be typed, pasted, or shown to anyone. `scripts/browser-login.sh` does exactly this with a short Python HTTP handler (bind → accept once matching `/oauth/callback`, ignoring stray requests like a browser's speculative `/favicon.ico` → respond with a plain "you can close this tab" page → exit), bounded by a 2-minute timeout.
 
 **Fallback: manual copy.** If `python3` isn't available, the listener can't bind, or nothing arrives before the timeout, fall back to the zero-dependency path: with no local server listening the redirect page just fails to load — that's expected. Have the user copy the full address-bar URL back to you.
+
+For a noninteractive coding agent, set an absolute temporary callback path
+before launching:
+
+```sh
+export SIGMA_OAUTH_CALLBACK_FILE=/tmp/sigma-oauth-callback
+export SIGMA_OAUTH_CALLBACK_TIMEOUT=300  # optional
+eval "$(bash scripts/browser-login.sh)"
+```
+
+The script skips the loopback listener, opens/logs the authorization URL, and
+waits for another process to write the full callback URL as one line. It
+applies mode `0600` where supported (Windows NTFS access is governed by its
+ACLs) and removes the file immediately after reading or timeout. Treat the
+callback as a one-time credential and keep this path outside the workspace.
 
 Either way, verify the returned `state` equals the `$STATE` you sent (mismatch ⇒ abort, possible CSRF) before exchanging `code`.
 
@@ -90,13 +121,25 @@ export SIGMA_API_TOKEN=$(printf '%s' "$TOKENS" | jq -r '.access_token')
 REFRESH_TOKEN=$(printf '%s' "$TOKENS" | jq -r '.refresh_token')   # long-lived — persist this
 ```
 
-Verify with the `GET /v2/whoami` check in `SKILL.md` ("Verify the Token").
+Because `browser-login.sh` emits this one-time exchange directly, verify it
+with the `GET /v2/whoami` check in `SKILL.md` ("Verify the Token"). Subsequent
+cached/refresh flows through `get_token.py` perform the same check
+automatically and refuse redirects.
 
 ## F. Persist the refresh token (encrypted) and refresh on demand
 
-> `scripts/refresh-token.sh` packages everything in this section — cached-token reuse, refresh-token redemption, and rotation. Reach for the manual steps below only to understand or customize it. **Refresh tokens are single-use and rotate:** each redemption may return a new one, so you must persist the replacement or the next redemption fails — the script does this for you.
+> `scripts/get_token.py` is the canonical implementation of cached-token reuse,
+> refresh-token redemption, and rotation; `scripts/get-token.sh` invokes it
+> automatically. `scripts/refresh-token.sh` remains a browser-only shell
+> compatibility helper. Reach for the manual steps below only to understand or
+> customize the flow. **Refresh tokens are single-use and rotate:** each
+> redemption may return a new one, so the replacement must be persisted before
+> returning success.
 
-The access token still expires in ~1 hour, but the **refresh token** lets you mint a new one without another browser login. Store it — plus the `client_id` and `token_endpoint` you'll need to redeem it — in the OS keychain, never a workspace file:
+The access token still expires in ~1 hour, but the **refresh token** lets you
+mint a new one without another browser login. Store it—plus the `client_id` and
+`token_endpoint` needed to redeem it—in the OS keychain, never `auth.json` or
+another workspace file:
 
 ```sh
 # macOS

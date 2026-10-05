@@ -25,7 +25,7 @@ tools/lint-twin-parity.rb.
 
 Sigma OAuth bearer tokens expire after ~1 hour; long runs outlive a single
 token. This module provides:
-  - refresh_token()        — re-do the client_credentials exchange, cache token
+  - refresh_token()        — invoke the browser-first dual-mode provider
   - auth_token()           — age-aware: re-mints automatically when the token
                              is older than TOKEN_TTL_SECONDS
   - request(method, path)  — catches 401, refreshes once, retries
@@ -36,14 +36,15 @@ Token-freshness semantics (field lesson: sessions repeatedly hit 401s at
     TOKEN_TTL_SECONDS (50 min), auth_token re-mints proactively.
   - The mint time is also surfaced as SIGMA_TOKEN_MINTED_AT (iso8601) so child
     processes inherit the token's AGE along with the token itself.
-  - A token loaded from <WORK>/auth.json is aged by the file's mtime
-    (get_token.py writes it at mint time, so mtime == mint time).
+  - A token loaded from <WORK>/auth.json uses its mint metadata, with the
+    file's mtime retained as a backward-compatible fallback.
   - A bare env SIGMA_API_TOKEN with no known age is honored as-is
     (age-unknown) — the request helper's 401 handler re-mints ONCE and
     retries, then fails loudly.
 
-Required env: SIGMA_BASE_URL, SIGMA_CLIENT_ID, SIGMA_CLIENT_SECRET.
-Optional env: SIGMA_API_TOKEN (initial token; refreshed on demand).
+Required env: SIGMA_BASE_URL.
+Optional env: SIGMA_API_TOKEN (initial token), browser-login keychain state,
+SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET fallback, and SIGMA_AUTH_MODE.
 
 Usage:
     import sigma_rest
@@ -53,12 +54,13 @@ Usage:
 All methods return parsed dict/list (or raw bytes for binary endpoints).
 """
 
-import base64
 import datetime as _dt
 import json
 import os
 import re
+import shlex
 import ssl
+import subprocess
 import sys
 import threading
 import time
@@ -128,7 +130,7 @@ def _load_auth_json(env=None, cwd=None):
     """File-based token handoff (shell-neutral). get_token.py writes
     <WORK>/auth.json = {"SIGMA_API_TOKEN": ..., "SIGMA_BASE_URL": ...}; read it
     when SIGMA_API_TOKEN is absent. Precedence: explicit env ALWAYS wins ->
-    auth.json -> client-credential self-mint. A corrupt/BOM'd file must never
+    auth.json -> dual-mode provider refresh. A corrupt/BOM'd file must never
     wedge the run."""
     env = os.environ if env is None else env
     if "SIGMA_API_TOKEN" in env:
@@ -147,16 +149,20 @@ def _load_auth_json(env=None, cwd=None):
             return  # fall through to self-mint
         if auth.get("SIGMA_API_TOKEN"):
             env.setdefault("SIGMA_API_TOKEN", auth["SIGMA_API_TOKEN"])
-            # get_token.py writes auth.json at mint time, so the file's mtime
-            # IS the token's mint time — record it so auth_token can age the
-            # token out proactively instead of discovering staleness via a
-            # mid-phase 401.
-            try:
-                env.setdefault("SIGMA_TOKEN_MINTED_AT", _iso_z(os.path.getmtime(p)))
-            except OSError:
-                pass
+            # Current providers include mint metadata. Older auth.json files do
+            # not, so retain the file-mtime fallback for backward compatibility.
+            minted_at = auth.get("SIGMA_TOKEN_MINTED_AT")
+            if not minted_at:
+                try:
+                    minted_at = _iso_z(os.path.getmtime(p))
+                except OSError:
+                    minted_at = None
+            if minted_at:
+                env.setdefault("SIGMA_TOKEN_MINTED_AT", minted_at)
         if auth.get("SIGMA_BASE_URL"):
             env.setdefault("SIGMA_BASE_URL", auth["SIGMA_BASE_URL"])
+        if auth.get("SIGMA_AUTH_METHOD"):
+            env.setdefault("SIGMA_AUTH_METHOD", auth["SIGMA_AUTH_METHOD"])
         return
 
 
@@ -229,8 +235,7 @@ def auth_token():
       - No token anywhere -> mint one.
       - Known mint time (this process minted it, a parent surfaced
         SIGMA_TOKEN_MINTED_AT, or auth.json's mtime) and age > TTL -> re-mint
-        (requires SIGMA_CLIENT_ID; without creds the stale token is returned
-        and the 401 path surfaces the failure loudly).
+        through the dual-mode provider.
       - Age unknown (bare env SIGMA_API_TOKEN) -> honored as-is; the request
         helper's 401 handler re-mints once and retries."""
     with _token_mutex:
@@ -238,7 +243,7 @@ def auth_token():
     tok = tok or os.environ.get("SIGMA_API_TOKEN")
     if not tok:
         return refresh_token()
-    if _token_stale() and os.environ.get("SIGMA_CLIENT_ID"):
+    if _token_stale():
         return refresh_token()
     return tok
 
@@ -310,47 +315,90 @@ def _send(method, url, headers, body, timeout):
         return _Resp(e.code, e.read(), e.reason)
 
 
+def token_provider_result():
+    """Invoke the canonical browser-first provider and parse its exports as data.
+
+    The provider itself owns keychain refresh, client-credentials fallback,
+    endpoint validation, and /v2/whoami verification. Shell output is never
+    evaluated.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.environ.get("SIGMA_TOKEN_PROVIDER"),
+        os.path.join(here, "..", "get_token.py"),
+        os.path.join(here, "..", "vendor", "get_token.py"),
+        os.path.join(here, "..", "scripts", "get_token.py"),
+        os.path.join(here, "..", "..", "..", "sigma-api", "scripts", "get_token.py"),
+    ]
+    provider = next(
+        (os.path.abspath(path) for path in candidates if path and os.path.isfile(path)),
+        None,
+    )
+    if provider is None:
+        raise SigmaAuthError("Sigma get_token.py provider not found")
+
+    commands = []
+    configured = os.environ.get("SIGMA_PYTHON")
+    if configured:
+        commands.append(shlex.split(configured, posix=os.name != "nt"))
+    commands.extend([[sys.executable], ["python3"], ["python"], ["py", "-3"]])
+
+    completed = None
+    for command in commands:
+        if not command:
+            continue
+        try:
+            completed = subprocess.run(
+                command + [provider, "--print-export"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            continue
+        break
+    if completed is None:
+        raise SigmaAuthError("Python is unavailable; cannot refresh the Sigma token")
+    if completed.returncode != 0:
+        detail = completed.stderr.strip()
+        suffix = f": {detail}" if detail else ""
+        raise SigmaAuthError(f"Sigma token provider failed{suffix}")
+
+    values = {}
+    export_re = re.compile(
+        r"\Aexport (SIGMA_API_TOKEN|SIGMA_TOKEN_MINTED_AT|SIGMA_AUTH_METHOD)="
+        r"([A-Za-z0-9._~+/=:-]+)\Z"
+    )
+    for line in completed.stdout.splitlines():
+        match = export_re.fullmatch(line)
+        if match:
+            values[match.group(1)] = match.group(2)
+    required = ("SIGMA_API_TOKEN", "SIGMA_TOKEN_MINTED_AT", "SIGMA_AUTH_METHOD")
+    missing = [key for key in required if not values.get(key)]
+    if missing:
+        raise SigmaAuthError(f"Sigma token provider omitted {', '.join(missing)}")
+    return values
+
+
 def refresh_token():
-    """Re-do the OAuth client_credentials exchange and cache the new token.
+    """Invoke the dual-mode provider and cache the new token.
     Single-flight: a re-entrant call while a refresh is in progress returns the
-    current override rather than launching a second exchange."""
+    current override rather than launching a second provider process."""
     global _refresh_inflight, _token_override, _minted_at
     with _token_mutex:
         if _refresh_inflight:
             return _token_override
         _refresh_inflight = True
     try:
-        cid = os.environ.get("SIGMA_CLIENT_ID")
-        if not cid:
-            raise SigmaAuthError("SIGMA_CLIENT_ID not set")
-        secret = os.environ.get("SIGMA_CLIENT_SECRET")
-        if not secret:
-            raise SigmaAuthError("SIGMA_CLIENT_SECRET not set")
-        validate_base_url(base_url())
-        creds = base64.b64encode(f"{cid}:{secret}".encode()).decode()
-        resp = _send(
-            "POST",
-            f"{base_url()}/v2/auth/token",
-            {
-                "Authorization": f"Basic {creds}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            "grant_type=client_credentials",
-            30,
-        )
-        if not (200 <= resp.status < 300):
-            raise SigmaAuthError(f"token exchange -> {resp.status} {resp.body.decode(errors='replace')}")
-        tok = (json.loads(resp.body or b"{}") or {}).get("access_token")
-        if not tok:
-            raise SigmaAuthError(f"token exchange returned no access_token: {resp.body.decode(errors='replace')}")
-        now = time.time()
+        values = token_provider_result()
+        tok = values["SIGMA_API_TOKEN"]
+        minted_at = _parse_iso_epoch(values["SIGMA_TOKEN_MINTED_AT"])
+        if minted_at is None:
+            raise SigmaAuthError("Sigma token provider returned an invalid mint timestamp")
         with _token_mutex:
             _token_override = tok
-            _minted_at = now
-        # Surface the refreshed token — and its mint time, so child processes
-        # inherit the token's AGE and re-mint on schedule too.
-        os.environ["SIGMA_API_TOKEN"] = tok
-        os.environ["SIGMA_TOKEN_MINTED_AT"] = _iso_z(now)
+            _minted_at = minted_at
+        os.environ.update(values)
         return tok
     finally:
         with _token_mutex:
@@ -373,8 +421,9 @@ def request(method, path, body=None, content_type="application/json",
         resp = _send(method, url, headers, body, 120)
 
         # Sigma returns 401 when the bearer expires. Refresh once and retry; on a
-        # second 401, surface the error. (Only retry when we can self-mint.)
-        if resp.status == 401 and attempts == 1 and os.environ.get("SIGMA_CLIENT_ID"):
+        # second 401, surface the error. Provider auth may be browser-only, so
+        # the retry must not be gated on SIGMA_CLIENT_ID.
+        if resp.status == 401 and attempts == 1:
             refresh_token()
             continue
         if not (200 <= resp.status < 300):

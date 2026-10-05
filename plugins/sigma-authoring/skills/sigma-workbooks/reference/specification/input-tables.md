@@ -24,13 +24,18 @@ table, and a data model can read it through a warehouse view.
    fails with the generic **`Invalid kind: "input-table"`**, which reads like
    the element kind itself is rejected. If you hit that error on an
    input-table, check `inputMode` first before suspecting anything else about
-   the shape.
-3. **Data lands in `SIGDS_`-prefixed tables** in the connection's write schema.
+   the shape. `inputMode` does not enable published-view data entry.
+3. **Published data entry is a UI-only element setting.** Use *kebab → Set
+   data entry permission → Only in published version*. The default is “Only in
+   draft.” The setting is absent from `GET /spec`, so Code Rep cannot set or
+   inspect it. Until flipped, a published cell can take selection but silently
+   swallow keystrokes.
+4. **Data lands in `SIGDS_`-prefixed tables** in the connection's write schema.
    Don't query or modify those directly — see "Reading the data" below.
-4. **Data is invisible until Publish.** A query of an input table before the
+5. **Data is invisible until Publish.** A query of an input table before the
    workbook is published returns **0 rows** — the query layer reads the
    published version. Publish, then re-query.
-5. **System columns take no `type`** (`ID`, `CREATED_AT`, `CREATED_BY`,
+6. **System columns take no `type`** (`ID`, `CREATED_AT`, `CREATED_BY`,
    `UPDATED_AT`, `UPDATED_BY`) — adding one breaks the column. They're also
    never included in an `insert-rows` action effect's `values` — Sigma
    auto-fills them at insert time (see `reference/workflows/actions.md`).
@@ -70,6 +75,11 @@ so after the first real rows land, **query the table** (don't just inspect
 versions linked tables were also dropped from `/spec` entirely; if inherited
 columns misbehave, suspect an older org/API first.
 
+A `top-n` (or other element filter) on the **parent** did not flow through
+to the linked input table in live generate-app verification. Cap the
+warehouse or SQL source, or insert a child table, *before* linking. Do not
+expect `filters: [{ kind: top-n, … }]` on the directory to cap the queue.
+
 **Column validation is now spec-authorable (2026-06-18 release)** — see the
 "Editable data column" shapes in `tables.md`. Confirmed round-tripping live:
 - **Single-select** dropdown — a scalar column (`type: text|number|datetime`) plus
@@ -90,6 +100,42 @@ columns misbehave, suspect an older org/API first.
 `values`, `valuesFrom`, and `range` share **one** validation slot — they're
 mutually exclusive on a column (combining them 400s). Still UI-only: **column
 protection** and **data-entry permissions**.
+
+## Choose how rows arrive before composing the workbook
+
+Creating an input-table element and populating it are different operations.
+Code Rep defines the table's structure; it is not a general bulk row-loading
+API. Route the requirement before adding actions, unions, or joins:
+
+| Requirement | Supported pattern |
+|---|---|
+| User starts with a blank table and enters rows | Empty input table; type, paste, or upload through Sigma |
+| Existing governed rows need editable fields beside them | Linked input table with stable parent key bindings |
+| A file must pre-populate the table | CSV upload through Sigma's supported UI flow |
+| A user submits one record from controls | Empty input table + `insert-rows` action |
+| Baseline data plus sparse planning changes | Governed baseline + linked/empty override input table; calculate the working result downstream |
+| Automated initial or bulk load | Load through a supported warehouse/Sigma ingestion path, then expose it to the workbook |
+
+**Unions, joins, and lookups do not populate an input table.** They compose a
+read path. Use them after the write surface exists—for example to combine a
+governed baseline with overrides—not as retries when the input table is empty.
+
+**Actions are not a seeding mechanism.** `insert-rows` is appropriate when a
+user intentionally submits a record, such as a note, request, or scenario
+header. Do not generate hundreds of button effects to initialize planning
+grain.
+
+If the request says only “populate the input table,” establish these facts
+before building:
+
+1. desired row grain and expected row count;
+2. whether rows already exist in a governed source;
+3. whether users edit whole rows or sparse override columns;
+4. one-time file load versus ongoing interactive entry;
+5. whether UI loading or warehouse loading is acceptable.
+
+For scenario planning, allocation, approval, or exception workflows, load the
+matching app recipe in `../workflows/` before choosing the table shape.
 
 ## Reading an input table's data & structure
 
@@ -114,3 +160,7 @@ GET /v2/workbooks/{workbookId}/elements/{elementId}/columns
 For data-entry migrations (Excel/planning models) the end-to-end pattern is
 input table → publish → warehouse view → data model `FROM` that view. The
 `excel-to-sigma` skill covers it in depth.
+
+For a scenario planning app, do not stop at “add an input table.” Load
+`../workflows/planning-apps.md`; it defines the scenario grain, baseline,
+writeback, control scope, and runtime tests.

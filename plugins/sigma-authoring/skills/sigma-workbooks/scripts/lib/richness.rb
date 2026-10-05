@@ -86,6 +86,7 @@ module Richness
   DEFAULT_MODEL = 'llama3.1-8b'
   GRAIN_VALUES = %w[Week Month Day].freeze
   DEFAULT_GRAIN = 'Month'
+  WRITE_EFFECTS = %w[insert-rows update-rows delete-rows].freeze
 
   # Returns a `text` element whose body is a CallText/Cortex formula:
   # {{ Replace(CallText("SNOWFLAKE.CORTEX.COMPLETE","<model>", "<prompt>") , '"', "") }}
@@ -210,6 +211,48 @@ module Richness
       'columnsBy' => [],
       'values' => values
     }
+  end
+
+  # Builds one granular direct-effect action tool for a workbook agent.
+  # `effects` are normal action effect Hashes (without `kind`); this helper
+  # adds `kind:"effect"` and deliberately rejects sequence references because
+  # action sequences cannot be authored in a workbook spec. Writes default to
+  # requiresApproval:true and cannot opt out. Control/navigation-only tools
+  # omit requiresApproval unless the caller explicitly requests it.
+  def self.agent_action_tool(tool_id:, name:, description:, effects:,
+                             requires_approval: nil, surfaces: SURFACES)
+    raise ArgumentError, 'agent_action_tool: tool_id required' if tool_id.to_s.empty?
+    raise ArgumentError, 'agent_action_tool: name required' if name.to_s.empty?
+    raise ArgumentError, 'agent_action_tool: description required' if description.to_s.empty?
+    raise ArgumentError, 'agent_action_tool: effects required' if effects.nil? || effects.empty?
+    return { 'opt_in' => true, 'toolId' => tool_id } unless surfaces[:agent]
+
+    steps = effects.map do |raw|
+      raise ArgumentError, 'agent_action_tool: each effect must be an object' unless raw.is_a?(Hash)
+      kind = raw['kind'] || raw[:kind]
+      if kind && kind.to_s != 'effect'
+        raise ArgumentError, 'agent_action_tool: sequence steps are reference-only; inline direct effects'
+      end
+      effect_name = raw['effect'] || raw[:effect]
+      raise ArgumentError, 'agent_action_tool: each effect requires effect' if effect_name.to_s.empty?
+      copy = Marshal.load(Marshal.dump(raw))
+      copy = copy.each_with_object({}) { |(key, value), out| out[key.to_s] = value }
+      { 'kind' => 'effect' }.merge(copy)
+    end
+    writes = steps.any? { |step| WRITE_EFFECTS.include?(step['effect']) }
+    if writes && requires_approval == false
+      raise ArgumentError, 'agent_action_tool: write effects require approval'
+    end
+    approval = requires_approval.nil? ? writes : requires_approval
+    out = {
+      'toolId' => tool_id,
+      'kind' => 'action',
+      'name' => name,
+      'description' => description,
+      'steps' => steps
+    }
+    out['requiresApproval'] = true if approval
+    out
   end
 
   # Returns a workbook-level `agents[]` entry (NOT a page element — the

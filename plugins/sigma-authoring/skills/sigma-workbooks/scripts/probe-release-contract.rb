@@ -11,9 +11,6 @@ require 'json'
 require 'net/http'
 require 'time'
 require 'uri'
-# Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
-# method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
-require_relative 'lib/ruby_compat'
 
 BASE_URL = ENV.fetch('SIGMA_BASE_URL').sub(%r{/$}, '')
 TOKEN = ENV.fetch('SIGMA_API_TOKEN')
@@ -68,7 +65,7 @@ def home_folder_id
   member_code, member = json_request(:get, "/v2/members/#{member_id}")
   candidates = [whoami]
   candidates << member if member_code.between?(200, 299)
-  candidates.filter_map { |entry| entry['homeFolderId'] || entry['homeFolder'] }.first
+  candidates.map { |entry| entry['homeFolderId'] || entry['homeFolder'] }.compact.first
 end
 
 def layout(element_ids = elements.map { |element| element.fetch('id') })
@@ -102,6 +99,17 @@ def layout(element_ids = elements.map { |element| element.fetch('id') })
     rows += 10
   end
 
+  if ids['record-detail']
+    xml << %(  <Container elementId="record-detail" type="grid" gridColumn="1 / 25" gridRow="#{rows} / #{rows + 6}" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto">)
+    if ids['detail-text']
+      xml << '    <Element elementId="detail-text" gridColumn="1 / 25" gridRow="1 / 4"/>'
+      placed['detail-text'] = true
+    end
+    xml << '  </Container>'
+    placed['record-detail'] = true
+    rows += 6
+  end
+
   if ids['details-tabs']
     xml << %(  <TabbedContainer elementId="details-tabs" type="tabbed-container" gridColumn="1 / 25" gridRow="#{rows} / #{rows + 10}">)
     %w[tab-summary tab-detail].each do |tab_id|
@@ -128,6 +136,13 @@ def layout(element_ids = elements.map { |element| element.fetch('id') })
   "#{xml.join("\n")}\n"
 end
 
+def warehouse_source
+  {
+    'kind' => 'warehouse-table', 'connectionId' => CONNECTION_ID,
+    'path' => TABLE_PATH
+  }
+end
+
 def elements(repeater_binding: false)
   [
     {
@@ -137,10 +152,7 @@ def elements(repeater_binding: false)
     },
     {
       'id' => 'warehouse-table', 'kind' => 'table', 'name' => 'F_POINT_OF_SALE',
-      'source' => {
-        'kind' => 'warehouse-table', 'connectionId' => CONNECTION_ID,
-        'path' => TABLE_PATH
-      },
+      'source' => warehouse_source,
       'columns' => [
         {
           'id' => 'raw-sales-amount', 'name' => 'Sales Amount',
@@ -199,7 +211,7 @@ def elements(repeater_binding: false)
     {
       'id' => 'details-tabs', 'kind' => 'tabbed-container',
       'tabs' => [{ 'name' => 'Summary' }, { 'name' => 'Detail' }],
-      'tabBar' => { 'alignment' => 'start' }
+      'tabBar' => { 'alignment' => 'left' }
     },
     { 'id' => 'tab-summary', 'kind' => 'text', 'body' => 'Summary tab' },
     { 'id' => 'tab-detail', 'kind' => 'text', 'body' => 'Detail tab' },
@@ -218,6 +230,148 @@ def elements(repeater_binding: false)
     },
     { 'id' => 'print-break', 'kind' => 'page-break' }
   ]
+end
+
+# Non-persistent capability probes for the strengthen-workbook-authoring plan.
+# Kept separate from the main create/readback workbook so a gated surface cannot
+# fail the established release contract.
+def capability_probe_elements
+  search_source = {
+    'id' => 'search-source', 'kind' => 'table', 'name' => 'Search Source',
+    'source' => {
+      'kind' => 'data-model', 'dataModelId' => REPEATER_DATA_MODEL_ID,
+      'elementId' => REPEATER_ELEMENT_ID
+    },
+    'columns' => [
+      {
+        'id' => 'repo-name', 'name' => 'Repo Name',
+        'formula' => '[GITHUB_STAR_EVENTS/Repo Name]'
+      }
+    ]
+  }
+  contains_search = {
+    'id' => 'name-search', 'kind' => 'control', 'controlId' => 'NameSearch',
+    'controlType' => 'text', 'name' => 'Search',
+    'mode' => 'contains', 'case' => 'insensitive',
+    'includeNulls' => 'when-no-value-is-selected',
+    'showOperators' => false,
+    'filters' => [
+      {
+        'source' => { 'kind' => 'table', 'elementId' => 'search-source' },
+        'columnId' => 'repo-name'
+      }
+    ]
+  }
+  heatmap_table = {
+    'id' => 'heatmap-table', 'kind' => 'table', 'name' => 'Heatmap Table',
+    'source' => warehouse_source,
+    'columns' => [
+      {
+        'id' => 'hm-product', 'name' => 'Product Key',
+        'formula' => '[F_POINT_OF_SALE/PRODUCT_KEY]'
+      },
+      {
+        'id' => 'hm-sales', 'name' => 'Sales Amount',
+        'formula' => '[F_POINT_OF_SALE/SALES_AMOUNT]'
+      }
+    ],
+    'conditionalFormats' => [
+      {
+        'type' => 'backgroundScale',
+        'columnIds' => ['hm-sales'],
+        'scheme' => ['#fef3c7', '#f59e0b', '#b45309']
+      }
+    ]
+  }
+  heatmap_pivot = {
+    'id' => 'heatmap-pivot', 'kind' => 'pivot-table', 'name' => 'Heatmap Pivot',
+    'source' => { 'kind' => 'table', 'elementId' => 'heatmap-table' },
+    'columns' => [
+      {
+        'id' => 'pv-product', 'name' => 'Product Key',
+        'formula' => '[Heatmap Table/Product Key]'
+      },
+      {
+        'id' => 'pv-sales', 'name' => 'Sales Amount',
+        'formula' => 'Sum([Heatmap Table/Sales Amount])'
+      }
+    ],
+    'values' => ['pv-sales'],
+    'rowsBy' => [{ 'columnId' => 'pv-product' }],
+    'conditionalFormats' => [
+      {
+        'type' => 'backgroundScale',
+        'columnIds' => ['pv-sales'],
+        'scheme' => ['#eff6ff', '#2563eb']
+      }
+    ]
+  }
+  selected_key = {
+    'id' => 'selected-product', 'kind' => 'control',
+    'controlId' => 'SelectedProduct', 'controlType' => 'number',
+    'name' => 'Selected product', 'mode' => '=', 'value' => 0
+  }
+  select_table = {
+    'id' => 'select-table', 'kind' => 'table', 'name' => 'Select Table',
+    'source' => warehouse_source,
+    'columns' => [
+      {
+        'id' => 'sel-product', 'name' => 'Product Key',
+        'formula' => '[F_POINT_OF_SALE/PRODUCT_KEY]'
+      },
+      {
+        'id' => 'sel-sales', 'name' => 'Sales Amount',
+        'formula' => '[F_POINT_OF_SALE/SALES_AMOUNT]',
+        'hidden' => true
+      }
+    ],
+    'actions' => [
+      {
+        'id' => 'select-record',
+        'trigger' => 'on-select',
+        'effects' => [
+          {
+            'effect' => 'set-control-value',
+            'control' => 'SelectedProduct',
+            'selectionMode' => 'replace',
+            'value' => {
+              'type' => 'formula',
+              'formula' => '[Selection/Product Key]'
+            }
+          },
+          {
+            'effect' => 'set-single-row-container',
+            'target' => {
+              'type' => 'container',
+              'containerElementId' => 'record-detail'
+            },
+            'value' => {
+              'type' => 'formula',
+              'formula' => '[Selection/Product Key]'
+            }
+          }
+        ]
+      }
+    ]
+  }
+  record_detail = {
+    'id' => 'record-detail', 'kind' => 'single-row-container',
+    'source' => { 'kind' => 'table', 'elementId' => 'select-table' },
+    'keyColumnId' => 'sel-product'
+  }
+  detail_text = {
+    'id' => 'detail-text', 'kind' => 'text',
+    'body' => 'Selected: {{[SelectedProduct]}}'
+  }
+
+  {
+    'text contains search' => [search_source, contains_search],
+    'table backgroundScale heatmap' => [heatmap_table],
+    'pivot backgroundScale heatmap' => [heatmap_table, heatmap_pivot],
+    'table on-select to control and single-row detail' => [
+      selected_key, select_table, record_detail, detail_text
+    ]
+  }
 end
 
 def create_spec(folder_id, probe_elements: elements, probe_layout: :auto)
@@ -291,8 +445,9 @@ legacy_layout = create_spec(
 legacy_layout['document']['layout'] =
   legacy_layout.dig('document', 'layout').sub('<Element ', '<LayoutElement ')
 code, result = json_request(:post, '/v2/workbooks/spec/verify', legacy_layout)
-check_response!('verify rejects legacy <LayoutElement> with HTTP 400', code, result) do
-  code == 400
+check_response!('verify rejects legacy <LayoutElement>', code, result) do
+  rejected = code == 400 || (code.between?(200, 299) && result['valid'] == false)
+  rejected && JSON.generate(result).include?('LayoutElement')
 end
 
 all_elements = elements(repeater_binding: false)
@@ -312,6 +467,20 @@ scenarios = {
 failed_scenarios = []
 scenarios.each do |description, ids|
   scenario_elements = ids.map { |id| by_id.fetch(id) }
+  scenario_spec = create_spec(folder_id, probe_elements: scenario_elements)
+  code, result = json_request(:post, '/v2/workbooks/spec/verify', scenario_spec)
+  valid = code.between?(200, 299) && result['valid'] == true
+  if valid
+    puts "PASS — #{description} verifies"
+  else
+    warn "FAIL — #{description} verify response (HTTP #{code}): #{JSON.generate(result)}"
+    failed_scenarios << description
+  end
+end
+
+# Capability probes from the strengthen-workbook-authoring plan. Verify-only —
+# never create — so they cannot pollute the main release workbook.
+capability_probe_elements.each do |description, scenario_elements|
   scenario_spec = create_spec(folder_id, probe_elements: scenario_elements)
   code, result = json_request(:post, '/v2/workbooks/spec/verify', scenario_spec)
   valid = code.between?(200, 299) && result['valid'] == true

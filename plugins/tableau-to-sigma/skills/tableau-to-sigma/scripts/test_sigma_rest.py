@@ -3,14 +3,15 @@
 
 Creds-free, network-free: the HTTP layer (sigma_rest._send) is monkeypatched.
 Encodes the observable behaviour of sigma_rest.rb — credential-bootstrap
-precedence, auth.json + BOM handling, the token-exchange request shape, and the
-401 refresh-once-then-retry loop — so the twin can't silently drift.
+precedence, auth.json + BOM handling, dual-mode provider refresh, and the 401
+refresh-once-then-retry loop — so the twin can't silently drift.
 """
 import json
 import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 # sigma_rest.py lives in scripts/lib/ once fanned out; fall back to shared/lib
@@ -32,7 +33,8 @@ class Base(unittest.TestCase):
     # env keys we mutate — snapshot + restore so cases don't bleed.
     KEYS = ["SIGMA_BASE_URL", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET",
             "SIGMA_API_TOKEN", "SIGMA_TOKEN_MINTED_AT", "SIGMA_WORKDIR",
-            "SIGMA_INSECURE_TLS", "SIGMA_ALLOW_INSECURE_BASE_URL"]
+            "SIGMA_AUTH_METHOD", "SIGMA_INSECURE_TLS",
+            "SIGMA_ALLOW_INSECURE_BASE_URL"]
 
     def setUp(self):
         self._saved = {k: os.environ.get(k) for k in self.KEYS}
@@ -68,6 +70,19 @@ class Base(unittest.TestCase):
 
     def enqueue(self, status, body):
         self._queue.append((status, body if isinstance(body, (bytes, str)) else json.dumps(body)))
+
+    def provider(self, token="fresh", auth_method="browser"):
+        return mock.patch.object(
+            sigma_rest,
+            "token_provider_result",
+            return_value={
+                "SIGMA_API_TOKEN": token,
+                "SIGMA_TOKEN_MINTED_AT": sigma_rest._iso_z(
+                    __import__("time").time()
+                ),
+                "SIGMA_AUTH_METHOD": auth_method,
+            },
+        )
 
 
 class BaseUrl(Base):
@@ -212,10 +227,8 @@ class AuthTokenPrecedence(Base):
 
     def test_refresh_when_neither(self):
         os.environ["SIGMA_BASE_URL"] = "https://b"
-        os.environ["SIGMA_CLIENT_ID"] = "id"
-        os.environ["SIGMA_CLIENT_SECRET"] = "sec"
-        self.enqueue(200, {"access_token": "minted"})
-        self.assertEqual(sigma_rest.auth_token(), "minted")
+        with self.provider("minted"):
+            self.assertEqual(sigma_rest.auth_token(), "minted")
 
 
 class TokenFreshness(Base):
@@ -243,16 +256,15 @@ class TokenFreshness(Base):
         self._creds()
         os.environ["SIGMA_API_TOKEN"] = "oldtok"
         self._stamp(sigma_rest.TOKEN_TTL_SECONDS + 60)
-        self.enqueue(200, {"access_token": "fresh"})
-        self.assertEqual(sigma_rest.auth_token(), "fresh")
-        self.assertEqual(self._sends[0]["url"], "https://b/v2/auth/token")
+        with self.provider("fresh"):
+            self.assertEqual(sigma_rest.auth_token(), "fresh")
 
-    def test_stale_stamp_without_creds_returns_token_as_is(self):
+    def test_stale_stamp_without_client_creds_refreshes_via_provider(self):
         os.environ["SIGMA_BASE_URL"] = "https://b"
-        os.environ["SIGMA_API_TOKEN"] = "oldtok"  # no client creds → can't mint
+        os.environ["SIGMA_API_TOKEN"] = "oldtok"
         self._stamp(sigma_rest.TOKEN_TTL_SECONDS + 60)
-        self.assertEqual(sigma_rest.auth_token(), "oldtok")
-        self.assertEqual(len(self._sends), 0)
+        with self.provider("browser-fresh"):
+            self.assertEqual(sigma_rest.auth_token(), "browser-fresh")
 
     def test_age_unknown_env_token_honored(self):
         self._creds()
@@ -271,13 +283,13 @@ class TokenFreshness(Base):
         self._creds()
         sigma_rest._token_override = "mintedlongago"
         sigma_rest._minted_at = __import__("time").time() - (sigma_rest.TOKEN_TTL_SECONDS + 60)
-        self.enqueue(200, {"access_token": "fresh2"})
-        self.assertEqual(sigma_rest.auth_token(), "fresh2")
+        with self.provider("fresh2"):
+            self.assertEqual(sigma_rest.auth_token(), "fresh2")
 
     def test_refresh_stamps_mint_time(self):
         self._creds()
-        self.enqueue(200, {"access_token": "T"})
-        sigma_rest.refresh_token()
+        with self.provider("T"):
+            sigma_rest.refresh_token()
         self.assertIsNotNone(sigma_rest._minted_at)
         self.assertIn("SIGMA_TOKEN_MINTED_AT", os.environ)
         # the surfaced stamp round-trips and reads as FRESH
@@ -301,58 +313,49 @@ class TokenFreshness(Base):
         self._creds()
         os.environ["SIGMA_API_TOKEN"] = "oldtok"
         self._stamp(sigma_rest.TOKEN_TTL_SECONDS + 60)
-        self.enqueue(200, {"access_token": "fresh3"})  # proactive mint FIRST
-        self.enqueue(200, {"ok": True})                # then the actual request
-        out = sigma_rest.request("get", "/v2/x")
+        self.enqueue(200, {"ok": True})
+        with self.provider("fresh3"):
+            out = sigma_rest.request("get", "/v2/x")
         self.assertEqual(out, {"ok": True})
-        self.assertEqual(len(self._sends), 2)
-        self.assertIn("/v2/auth/token", self._sends[0]["url"])
-        self.assertEqual(self._sends[1]["headers"]["Authorization"], "Bearer fresh3")
+        self.assertEqual(len(self._sends), 1)
+        self.assertEqual(self._sends[0]["headers"]["Authorization"], "Bearer fresh3")
 
 
 class RefreshToken(Base):
-    def _creds(self):
-        os.environ["SIGMA_BASE_URL"] = "https://b"
-        os.environ["SIGMA_CLIENT_ID"] = "myid"
-        os.environ["SIGMA_CLIENT_SECRET"] = "mysecret"
-
-    def test_exchange_request_shape(self):
-        self._creds()
-        self.enqueue(200, {"access_token": "T"})
-        tok = sigma_rest.refresh_token()
-        self.assertEqual(tok, "T")
-        s = self._sends[0]
-        self.assertEqual(s["method"], "POST")
-        self.assertEqual(s["url"], "https://b/v2/auth/token")
-        self.assertEqual(s["body"], "grant_type=client_credentials")
-        self.assertEqual(s["headers"]["Content-Type"], "application/x-www-form-urlencoded")
-        import base64
-        self.assertEqual(s["headers"]["Authorization"],
-                         "Basic " + base64.b64encode(b"myid:mysecret").decode())
-
-    def test_caches_to_override_and_env(self):
-        self._creds()
-        self.enqueue(200, {"access_token": "T2"})
-        sigma_rest.refresh_token()
+    def test_caches_provider_result_to_override_and_env(self):
+        with self.provider("T2"):
+            sigma_rest.refresh_token()
         self.assertEqual(sigma_rest._token_override, "T2")
         self.assertEqual(os.environ["SIGMA_API_TOKEN"], "T2")
+        self.assertEqual(os.environ["SIGMA_AUTH_METHOD"], "browser")
 
-    def test_non_2xx_raises(self):
-        self._creds()
-        self.enqueue(401, "nope")
-        with self.assertRaises(sigma_rest.SigmaAuthError):
-            sigma_rest.refresh_token()
+    def test_provider_failure_raises(self):
+        with mock.patch.object(
+            sigma_rest, "token_provider_result",
+            side_effect=sigma_rest.SigmaAuthError("provider failed"),
+        ):
+            with self.assertRaises(sigma_rest.SigmaAuthError):
+                sigma_rest.refresh_token()
 
-    def test_missing_access_token_raises(self):
-        self._creds()
-        self.enqueue(200, {"nope": 1})
-        with self.assertRaises(sigma_rest.SigmaAuthError):
-            sigma_rest.refresh_token()
+    def test_provider_missing_metadata_raises(self):
+        incomplete = {"SIGMA_API_TOKEN": "token"}
+        with mock.patch.object(
+            sigma_rest, "token_provider_result", return_value=incomplete
+        ):
+            with self.assertRaises((sigma_rest.SigmaAuthError, KeyError)):
+                sigma_rest.refresh_token()
 
-    def test_missing_creds_raises(self):
-        os.environ["SIGMA_BASE_URL"] = "https://b"  # no client id/secret
-        with self.assertRaises(sigma_rest.SigmaAuthError):
-            sigma_rest.refresh_token()
+    def test_provider_invalid_mint_timestamp_raises(self):
+        invalid = {
+            "SIGMA_API_TOKEN": "token",
+            "SIGMA_TOKEN_MINTED_AT": "not-a-time",
+            "SIGMA_AUTH_METHOD": "browser",
+        }
+        with mock.patch.object(
+            sigma_rest, "token_provider_result", return_value=invalid
+        ):
+            with self.assertRaises(sigma_rest.SigmaAuthError):
+                sigma_rest.refresh_token()
 
 
 class Request(Base):
@@ -396,33 +399,31 @@ class Request(Base):
     def test_401_refreshes_once_then_retries(self):
         os.environ["SIGMA_BASE_URL"] = "https://b"
         os.environ["SIGMA_API_TOKEN"] = "stale"
-        os.environ["SIGMA_CLIENT_ID"] = "id"
-        os.environ["SIGMA_CLIENT_SECRET"] = "sec"
-        self.enqueue(401, "unauthorized")            # first request
-        self.enqueue(200, {"access_token": "fresh"})  # refresh exchange
-        self.enqueue(200, {"ok": True})               # retried request
-        out = sigma_rest.request("get", "/v2/x")
+        self.enqueue(401, "unauthorized")
+        self.enqueue(200, {"ok": True})
+        with self.provider("fresh"):
+            out = sigma_rest.request("get", "/v2/x")
         self.assertEqual(out, {"ok": True})
-        self.assertEqual(len(self._sends), 3)
-        self.assertEqual(self._sends[2]["headers"]["Authorization"], "Bearer fresh")
+        self.assertEqual(len(self._sends), 2)
+        self.assertEqual(self._sends[1]["headers"]["Authorization"], "Bearer fresh")
 
     def test_second_401_raises(self):
         os.environ["SIGMA_BASE_URL"] = "https://b"
         os.environ["SIGMA_API_TOKEN"] = "stale"
-        os.environ["SIGMA_CLIENT_ID"] = "id"
-        os.environ["SIGMA_CLIENT_SECRET"] = "sec"
         self.enqueue(401, "unauthorized")
-        self.enqueue(200, {"access_token": "fresh"})
         self.enqueue(401, "still unauthorized")
-        with self.assertRaises(sigma_rest.SigmaError):
-            sigma_rest.request("get", "/v2/x")
+        with self.provider("fresh"):
+            with self.assertRaises(sigma_rest.SigmaError):
+                sigma_rest.request("get", "/v2/x")
 
-    def test_401_without_client_id_not_retried(self):
-        self._ready()  # token but no client creds -> cannot self-mint
+    def test_401_without_client_id_still_refreshes(self):
+        self._ready()
         self.enqueue(401, "unauthorized")
-        with self.assertRaises(sigma_rest.SigmaError):
-            sigma_rest.request("get", "/v2/x")
-        self.assertEqual(len(self._sends), 1)
+        self.enqueue(200, {"ok": True})
+        with self.provider("browser-fresh"):
+            out = sigma_rest.request("get", "/v2/x")
+        self.assertEqual({"ok": True}, out)
+        self.assertEqual(len(self._sends), 2)
 
     def test_non_2xx_raises_with_context(self):
         self._ready()

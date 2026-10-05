@@ -1,0 +1,708 @@
+# Best-practice fixture for a planning app — sanitized Planning Studio shell.
+# Replace <FOLDER_ID>, <WRITE_CONNECTION_ID>, <SOURCE_CONNECTION_ID>,
+# <SOURCE_DATABASE>, <SOURCE_SCHEMA>, and [Actuals/…] / [PlanBase/…] column
+# names from live discovery before POST. If the org has a governed data model,
+# rebind source-actual and source-base to kind: data-model (see sources.md).
+# Published data entry is UI-only: element kebab → Set data entry permission
+# → Only in published version. That setting is absent from GET /spec.
+# Architecture: ../planning-apps.md. Intake: ../generate-apps.md.
+# Look/theme/agent are composed after clone — this file stays unthemed and
+# agent-free. Layout reserves the Review agent rail for generate-apps Step D.5.
+name: Planning app
+folderId: "<FOLDER_ID>"
+document:
+  schemaVersion: 1
+  kind: workbook
+  overlays:
+  - id: ov-new
+    type: modal
+    name: New Scenario
+    modal:
+      width: medium
+      header:
+        title: New scenario
+        showCloseIcon: shown
+      footer:
+        primaryCta:
+          visible: hidden
+        secondaryCta:
+          visible: hidden
+  elements:
+  - id: source-actual
+    kind: table
+    name: Actuals
+    source:
+      kind: warehouse-table
+      connectionId: "<SOURCE_CONNECTION_ID>"
+      path:
+      - "<SOURCE_DATABASE>"
+      - "<SOURCE_SCHEMA>"
+      - Actuals
+    columns:
+    - id: ac-src-month
+      formula: "[Actuals/Month]"
+      name: Month
+    - id: ac-src-line
+      formula: "[Actuals/Line Item]"
+      name: Line Item
+    - id: ac-src-section
+      formula: "[Actuals/Section]"
+      name: Section
+    - id: ac-src-amount
+      formula: "[Actuals/Amount]"
+      name: Amount
+  - id: source-base
+    kind: table
+    name: PlanBase
+    source:
+      kind: warehouse-table
+      connectionId: "<SOURCE_CONNECTION_ID>"
+      path:
+      - "<SOURCE_DATABASE>"
+      - "<SOURCE_SCHEMA>"
+      - PlanBase
+    columns:
+    - id: pb-src-month
+      formula: "[PlanBase/Month]"
+      name: Month
+    - id: pb-src-line
+      formula: "[PlanBase/Line Item]"
+      name: Line Item
+    - id: pb-src-section
+      formula: "[PlanBase/Section]"
+      name: Section
+    - id: pb-src-base
+      formula: "[PlanBase/Baseline]"
+      name: Baseline
+  - id: actual-lines
+    kind: table
+    name: Actual Lines
+    source:
+      kind: table
+      elementId: source-actual
+    columns:
+    - id: ac-month
+      formula: "[Actuals/Month]"
+      name: Month
+    - id: ac-line
+      formula: "[Actuals/Line Item]"
+      name: Line Item
+    - id: ac-section
+      formula: "[Actuals/Section]"
+      name: Section
+    - id: ac-amount
+      formula: "[Actuals/Amount]"
+      name: Amount
+    - id: ac-period
+      formula: '"Actual"'
+      name: Period Type
+    - id: ac-scn
+      formula: '"(actual)"'
+      name: Scenario Name
+    - id: ac-impact
+      formula: "0"
+      name: Profit Impact
+  - id: plan-base
+    kind: table
+    name: Plan Base
+    source:
+      kind: table
+      elementId: source-base
+    columns:
+    - id: pb-month
+      formula: "[PlanBase/Month]"
+      name: Month
+    - id: pb-line
+      formula: "[PlanBase/Line Item]"
+      name: Line Item
+    - id: pb-section
+      formula: "[PlanBase/Section]"
+      name: Section
+    - id: pb-base
+      formula: "[PlanBase/Baseline]"
+      name: Baseline
+    - id: pb-key
+      formula: "1"
+      name: Join Key
+      hidden: true
+  - id: scenarios
+    kind: input-table
+    inputMode: view
+    name: Scenarios
+    source:
+      kind: empty
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: ID
+    - id: sc-name
+      type: text
+      name: Scenario Name
+    - id: sc-status
+      type: text
+      name: Status
+      values: [Draft, In Review, Approved]
+      pills: color-by-option
+    - id: sc-strategy
+      type: text
+      name: Strategy
+      values: ["Baseline hold", "Growth push", "Cost discipline", "Stress test"]
+    - id: sc-owner
+      type: text
+      name: Owner
+    - id: sc-notes
+      type: text
+      name: Notes
+  - id: scenario-list
+    kind: table
+    name: Scenario List
+    source:
+      kind: table
+      elementId: scenarios
+    columns:
+    - id: sl-name
+      formula: "[Scenarios/Scenario Name]"
+      name: Scenario Name
+    - id: sl-status
+      formula: "[Scenarios/Status]"
+      name: Status
+    - id: sl-strategy
+      formula: "[Scenarios/Strategy]"
+      name: Strategy
+    - id: sl-owner
+      formula: "[Scenarios/Owner]"
+      name: Owner
+    - id: sl-notes
+      formula: "[Scenarios/Notes]"
+      name: Notes
+    - id: sl-key
+      formula: "1"
+      name: Join Key
+      hidden: true
+  - id: plan-matrix
+    kind: table
+    name: Plan Matrix
+    source:
+      kind: join
+      name: Plan Matrix
+      primarySource:
+        kind: table
+        elementId: scenario-list
+      joins:
+      - name: Base
+        joinType: inner
+        left:
+          kind: table
+          elementId: scenario-list
+        right:
+          kind: table
+          elementId: plan-base
+        columns:
+        - left: "[Join Key]"
+          right: "[Join Key]"
+    columns:
+    - id: mx-scenario
+      formula: "[Plan Matrix/Scenario Name]"
+      name: Scenario
+    - id: mx-period
+      formula: "[Base/Month]"
+      name: Period
+    - id: mx-line
+      formula: "[Base/Line Item]"
+      name: Line Item
+    - id: mx-section
+      formula: "[Base/Section]"
+      name: Section
+    - id: mx-baseline
+      formula: "[Base/Baseline]"
+      name: Baseline
+  - id: plan-grid
+    kind: input-table
+    inputMode: view
+    name: Plan Grid
+    source:
+      kind: linked
+      from: plan-matrix
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: pg-scenario
+      key: mx-scenario
+      name: Scenario
+    - id: pg-period
+      key: mx-period
+      name: Period
+    - id: pg-line
+      key: mx-line
+      name: Line Item
+    - id: pg-section
+      key: mx-section
+      name: Section
+    - id: pg-baseline
+      key: mx-baseline
+      name: Baseline
+    - id: pg-method
+      type: text
+      name: Method
+      values: ["Grow %", "Adjust $", "Set amount"]
+    - id: pg-percent
+      type: number
+      name: Pct Change
+    - id: pg-dollars
+      type: number
+      name: Dollar Change
+    - id: pg-new
+      type: number
+      name: New Amount
+    - id: pg-plan
+      formula: If([Method] = "Grow %", [Baseline] * (1 + Coalesce([Pct Change], 0)), If([Method] = "Adjust $", [Baseline] + Coalesce([Dollar Change], 0), If([Method] = "Set amount", Coalesce([New Amount], [Baseline]), [Baseline])))
+      name: Plan Amount
+    - id: pg-delta
+      formula: "[Plan Amount] - [Baseline]"
+      name: Plan Delta
+    - id: pg-impact
+      formula: If([Section] = "Revenue", [Plan Delta], -[Plan Delta])
+      name: Profit Impact
+    - id: pg-note
+      type: text
+      name: Rationale
+  - id: plan-lines
+    kind: table
+    name: Plan Lines
+    source:
+      kind: table
+      elementId: plan-grid
+    columns:
+    - id: pl-scn
+      formula: "[Plan Grid/Scenario]"
+      name: Scenario Name
+    - id: pl-month
+      formula: "[Plan Grid/Period]"
+      name: Month
+    - id: pl-line
+      formula: "[Plan Grid/Line Item]"
+      name: Line Item
+    - id: pl-section
+      formula: "[Plan Grid/Section]"
+      name: Section
+    - id: pl-amount
+      formula: "[Plan Grid/Plan Amount]"
+      name: Amount
+    - id: pl-period
+      formula: '"Plan"'
+      name: Period Type
+    - id: pl-impact
+      formula: "[Plan Grid/Profit Impact]"
+      name: Profit Impact
+  - id: plan-ledger
+    kind: table
+    name: Plan Ledger
+    source:
+      kind: union
+      name: Ledger Union
+      sources:
+      - kind: table
+        elementId: actual-lines
+      - kind: table
+        elementId: plan-lines
+      matches:
+      - outputColumnName: Month
+        sourceColumns: ["[Month]", "[Month]"]
+      - outputColumnName: Line Item
+        sourceColumns: ["[Line Item]", "[Line Item]"]
+      - outputColumnName: Section
+        sourceColumns: ["[Section]", "[Section]"]
+      - outputColumnName: Amount
+        sourceColumns: ["[Amount]", "[Amount]"]
+      - outputColumnName: Period Type
+        sourceColumns: ["[Period Type]", "[Period Type]"]
+      - outputColumnName: Scenario Name
+        sourceColumns: ["[Scenario Name]", "[Scenario Name]"]
+      - outputColumnName: Profit Impact
+        sourceColumns: ["[Profit Impact]", "[Profit Impact]"]
+    columns:
+    - id: lg-month
+      formula: "[Ledger Union/Month]"
+      name: Month
+    - id: lg-line
+      formula: "[Ledger Union/Line Item]"
+      name: Line Item
+    - id: lg-section
+      formula: "[Ledger Union/Section]"
+      name: Section
+    - id: lg-amount
+      formula: "[Ledger Union/Amount]"
+      name: Amount
+    - id: lg-period
+      formula: "[Ledger Union/Period Type]"
+      name: Period Type
+    - id: lg-scn
+      formula: "[Ledger Union/Scenario Name]"
+      name: Scenario Name
+    - id: lg-impact
+      formula: "[Ledger Union/Profit Impact]"
+      name: Profit Impact
+  - id: decision-log
+    kind: input-table
+    inputMode: view
+    name: Decision log
+    source:
+      kind: empty
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: ID
+    - id: dl-scenario
+      type: text
+      name: Scenario
+    - id: dl-decision
+      type: text
+      name: Decision
+      values: [Submitted, Approved, Changes requested]
+    - id: dl-note
+      type: text
+      name: Comment
+    - id: CREATED_AT
+    - id: CREATED_BY
+  - id: txt-home
+    kind: text
+    body: |
+      # Workspace
+
+      Select a scenario, read the plan, then open the grid to edit.
+  - id: ctl-scenario
+    kind: control
+    controlId: scenario
+    name: Active scenario
+    controlType: list
+    mode: include
+    selectionMode: single
+    values: []
+    source:
+      kind: source
+      source:
+        kind: table
+        elementId: scenario-list
+      columnId: sl-name
+    filters:
+    - source:
+        kind: table
+        elementId: plan-grid
+      columnId: pg-scenario
+  - id: btn-open-grid
+    kind: button
+    text: Open plan grid
+    appearance: outline
+    actions:
+    - id: a-open-grid
+      trigger: on-click
+      effects:
+      - effect: navigate
+        target:
+          type: page
+          page: pg-build
+  - id: btn-new-home
+    kind: button
+    text: "+ New scenario"
+    appearance: filled
+    actions:
+    - id: a-new-home
+      trigger: on-click
+      effects:
+      - effect: open-overlay
+        overlayId: ov-new
+  - id: kpi-rev
+    kind: kpi-chart
+    name: Plan revenue
+    source:
+      kind: table
+      elementId: plan-ledger
+    columns:
+    - id: kpi-rev-val
+      formula: Sum(If(([Plan Ledger/Scenario Name] = "(actual)" or [Plan Ledger/Scenario Name] = [scenario]) and [Plan Ledger/Section] = "Revenue", [Plan Ledger/Amount], 0))
+      name: Plan revenue
+    value:
+      columnId: kpi-rev-val
+  - id: kpi-ebitda
+    kind: kpi-chart
+    name: Plan EBITDA
+    source:
+      kind: table
+      elementId: plan-ledger
+    columns:
+    - id: kpi-ebitda-val
+      formula: Sum(If([Plan Ledger/Scenario Name] = "(actual)" or [Plan Ledger/Scenario Name] = [scenario], If([Plan Ledger/Section] = "Revenue", [Plan Ledger/Amount], -[Plan Ledger/Amount]), 0))
+      name: Plan EBITDA
+    value:
+      columnId: kpi-ebitda-val
+  - id: kpi-impact
+    kind: kpi-chart
+    name: Profit impact
+    source:
+      kind: table
+      elementId: plan-grid
+    columns:
+    - id: kpi-impact-val
+      formula: Sum([Plan Grid/Profit Impact])
+      name: Profit impact
+    value:
+      columnId: kpi-impact-val
+  - id: chart-trend
+    kind: line-chart
+    name: Amount by month
+    source:
+      kind: table
+      elementId: plan-ledger
+    columns:
+    - id: tr-month
+      formula: "[Plan Ledger/Month]"
+      name: Month
+    - id: tr-amount
+      formula: Sum(If([Plan Ledger/Scenario Name] = "(actual)" or [Plan Ledger/Scenario Name] = [scenario], [Plan Ledger/Amount], 0))
+      name: Amount
+    xAxis:
+      columnId: tr-month
+    yAxis:
+      columnIds:
+      - tr-amount
+  - id: chart-bridge
+    kind: bar-chart
+    name: Profit impact by section
+    source:
+      kind: table
+      elementId: plan-grid
+    columns:
+    - id: br-section
+      formula: "[Plan Grid/Section]"
+      name: Section
+    - id: br-impact
+      formula: Sum([Plan Grid/Profit Impact])
+      name: Profit Impact
+    xAxis:
+      columnId: br-section
+    yAxis:
+      columnIds:
+      - br-impact
+  - id: txt-scn
+    kind: text
+    body: |
+      # Scenarios
+
+      Each row is a direction. Create one, then build its plan on the grid.
+  - id: btn-new-scn
+    kind: button
+    text: "+ New scenario"
+    appearance: filled
+    actions:
+    - id: a-new-scn
+      trigger: on-click
+      effects:
+      - effect: open-overlay
+        overlayId: ov-new
+  - id: txt-build
+    kind: text
+    body: |
+      # Build the plan
+
+      Pick a method per line and type one number. The grid is keyed Scenario × Period × Line Item.
+  - id: btn-to-review
+    kind: button
+    text: Review and approve
+    appearance: outline
+    actions:
+    - id: a-to-review
+      trigger: on-click
+      effects:
+      - effect: navigate
+        target:
+          type: page
+          page: pg-review
+  - id: txt-review
+    kind: text
+    body: |
+      # Review and approve
+
+      Submit, approve, or request changes. The log is append-only; status updates the selected scenario only.
+  - id: ctl-comment
+    kind: control
+    controlId: reviewComment
+    name: Reviewer comment
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: btn-submit
+    kind: button
+    text: Submit for review
+    appearance: outline
+    actions:
+    - id: a-submit
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: decision-log
+        values:
+          dl-scenario: { type: control, control: scenario }
+          dl-decision: { type: constant, value: { type: text, value: Submitted } }
+          dl-note: { type: control, control: reviewComment }
+      - effect: update-rows
+        tableElementId: scenarios
+        whichRows: { type: formula, formula: "[Scenario Name] = [scenario]" }
+        values:
+          sc-status: { type: constant, value: { type: text, value: In Review } }
+  - id: btn-approve
+    kind: button
+    text: Approve plan
+    appearance: filled
+    actions:
+    - id: a-approve
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: decision-log
+        values:
+          dl-scenario: { type: control, control: scenario }
+          dl-decision: { type: constant, value: { type: text, value: Approved } }
+          dl-note: { type: control, control: reviewComment }
+      - effect: update-rows
+        tableElementId: scenarios
+        whichRows: { type: formula, formula: "[Scenario Name] = [scenario]" }
+        values:
+          sc-status: { type: constant, value: { type: text, value: Approved } }
+  - id: btn-changes
+    kind: button
+    text: Request changes
+    appearance: outline
+    actions:
+    - id: a-changes
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: decision-log
+        values:
+          dl-scenario: { type: control, control: scenario }
+          dl-decision: { type: constant, value: { type: text, value: Changes requested } }
+          dl-note: { type: control, control: reviewComment }
+      - effect: update-rows
+        tableElementId: scenarios
+        whichRows: { type: formula, formula: "[Scenario Name] = [scenario]" }
+        values:
+          sc-status: { type: constant, value: { type: text, value: Draft } }
+  - id: txt-agent-rail
+    kind: text
+    body: |
+      **Planning agent**
+
+      Intake Step B asked whether to add a workbook agent. If yes, compose `document.agents` and a `chat` element here (generate-apps Step D.5). Do not POST a cosmetic chat when the org gate is off.
+  - id: ctl-new-name
+    kind: control
+    controlId: newName
+    name: Scenario name
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctl-new-owner
+    kind: control
+    controlId: newOwner
+    name: Owner
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctl-new-notes
+    kind: control
+    controlId: newNotes
+    name: What is this scenario testing?
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctl-new-strategy
+    kind: control
+    controlId: newStrategy
+    name: Strategy
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: btn-create
+    kind: button
+    text: Create scenario
+    appearance: filled
+    actions:
+    - id: a-create-scn
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: scenarios
+        values:
+          sc-name: { type: control, control: newName }
+          sc-owner: { type: control, control: newOwner }
+          sc-strategy: { type: control, control: newStrategy }
+          sc-notes: { type: control, control: newNotes }
+          sc-status: { type: constant, value: { type: text, value: Draft } }
+      - effect: close-overlay
+  pages:
+  - id: pg-home
+    name: Workspace
+  - id: pg-scenarios
+    name: Scenarios
+  - id: pg-build
+    name: Build the Plan
+  - id: pg-review
+    name: Review & Approve
+  - id: pg-data
+    name: Data
+    visibility: hidden
+  layout: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="pg-home">
+      <Element elementId="txt-home" gridColumn="1 / 13" gridRow="1 / 4"/>
+      <Element elementId="ctl-scenario" gridColumn="13 / 19" gridRow="1 / 4"/>
+      <Element elementId="btn-new-home" gridColumn="19 / 22" gridRow="1 / 4"/>
+      <Element elementId="btn-open-grid" gridColumn="22 / 25" gridRow="1 / 4"/>
+      <Element elementId="kpi-rev" gridColumn="1 / 9" gridRow="4 / 10"/>
+      <Element elementId="kpi-ebitda" gridColumn="9 / 17" gridRow="4 / 10"/>
+      <Element elementId="kpi-impact" gridColumn="17 / 25" gridRow="4 / 10"/>
+      <Element elementId="chart-trend" gridColumn="1 / 13" gridRow="10 / 20"/>
+      <Element elementId="chart-bridge" gridColumn="13 / 25" gridRow="10 / 20"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="pg-scenarios">
+      <Element elementId="txt-scn" gridColumn="1 / 19" gridRow="1 / 4"/>
+      <Element elementId="btn-new-scn" gridColumn="19 / 25" gridRow="1 / 4"/>
+      <Element elementId="scenario-list" gridColumn="1 / 25" gridRow="4 / 18"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="pg-build">
+      <Element elementId="txt-build" gridColumn="1 / 19" gridRow="1 / 4"/>
+      <Element elementId="btn-to-review" gridColumn="19 / 25" gridRow="1 / 4"/>
+      <Element elementId="plan-grid" gridColumn="1 / 25" gridRow="4 / 22"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="pg-review">
+      <Element elementId="txt-review" gridColumn="1 / 25" gridRow="1 / 4"/>
+      <Element elementId="ctl-comment" gridColumn="1 / 13" gridRow="4 / 7"/>
+      <Element elementId="btn-submit" gridColumn="13 / 17" gridRow="4 / 7"/>
+      <Element elementId="btn-approve" gridColumn="17 / 21" gridRow="4 / 7"/>
+      <Element elementId="btn-changes" gridColumn="21 / 25" gridRow="4 / 7"/>
+      <Element elementId="decision-log" gridColumn="1 / 17" gridRow="7 / 18"/>
+      <Element elementId="txt-agent-rail" gridColumn="17 / 25" gridRow="7 / 18"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="pg-data">
+      <Element elementId="source-actual" gridColumn="1 / 25" gridRow="1 / 8"/>
+      <Element elementId="source-base" gridColumn="1 / 25" gridRow="8 / 15"/>
+      <Element elementId="actual-lines" gridColumn="1 / 25" gridRow="15 / 22"/>
+      <Element elementId="plan-base" gridColumn="1 / 25" gridRow="22 / 29"/>
+      <Element elementId="scenarios" gridColumn="1 / 25" gridRow="29 / 36"/>
+      <Element elementId="plan-matrix" gridColumn="1 / 25" gridRow="36 / 43"/>
+      <Element elementId="plan-lines" gridColumn="1 / 25" gridRow="43 / 50"/>
+      <Element elementId="plan-ledger" gridColumn="1 / 25" gridRow="50 / 57"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="ov-new">
+      <Element elementId="ctl-new-name" gridColumn="1 / 25" gridRow="1 / 4"/>
+      <Element elementId="ctl-new-owner" gridColumn="1 / 13" gridRow="4 / 7"/>
+      <Element elementId="ctl-new-strategy" gridColumn="13 / 25" gridRow="4 / 7"/>
+      <Element elementId="ctl-new-notes" gridColumn="1 / 25" gridRow="7 / 11"/>
+      <Element elementId="btn-create" gridColumn="17 / 25" gridRow="11 / 14"/>
+    </Page>
