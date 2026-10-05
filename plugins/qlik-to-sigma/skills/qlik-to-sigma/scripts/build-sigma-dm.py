@@ -29,9 +29,13 @@ metricsKept, metricsDropped, columnsDropped, denormOnlyColumns}. With --dry-run 
      (dataModelId=null) and the spec lands in --spec-out. Calculated LOAD fields
      are denorm-only because warehouse-table elements can reference only physical columns.
 
-Env (live mode): SIGMA_BASE_URL + SIGMA_API_TOKEN (eval "$(scripts/vendor/get-token.sh)").
+Env (live mode): SIGMA_BASE_URL plus a valid caller token, a browser-login
+keychain session, or SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 """
-import json, os, re, sys, time, argparse, urllib.request
+import json, os, re, sys, time, argparse
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import sigma_rest
 
 # Sigma's display-name rule (verified live 2026-06-10): lowercase particles
 # unless first word — DAYS_TO_SHIP -> "Days to Ship".
@@ -53,25 +57,31 @@ def rewrite_metric_refs(formula, denorm_by_norm):
     return re.sub(r"\[([^\]]+)\]", replace, formula)
 
 def api(method, path, body=None):
-    BASE = os.environ["SIGMA_BASE_URL"]; TOK = os.environ["SIGMA_API_TOKEN"]
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE + path, data=data, method=method,
-        headers={"Authorization": "Bearer " + TOK, "Content-Type": "application/json",
-                 "Accept": "application/json"})
     raw = None
     for attempt in range(6):
         try:
-            with urllib.request.urlopen(req) as r:
-                raw = r.read().decode()
+            # Keep the historical raw-text contract (spec POSTs may return
+            # YAML) while delegating bearer reuse, browser/client refresh, URL
+            # validation, and the one-401 retry to the co-located shared client.
+            raw = sigma_rest.request(
+                method.lower(),
+                path,
+                body=json.dumps(body) if body is not None else None,
+                accept="application/json",
+                binary=True,
+            ).decode()
             break
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode()
-            if e.code == 429 and attempt < 5:  # Cloudflare 1015 rate limit: transient, retryable
+        except sigma_rest.SigmaError as exc:
+            detail = str(exc)
+            status = re.search(r" -> (\d+)", detail)
+            if status and status.group(1) == "429" and attempt < 5:
+                # Cloudflare 1015 rate limit: transient, retryable.
                 wait = min(120, 30 * (2 ** attempt))
                 print(f"HTTP 429 on {method} {path} -- backing off {wait}s (attempt {attempt+1}/6)", file=sys.stderr)
                 time.sleep(wait)
                 continue
-            print("HTTP", e.code, "on", method, path, "->", detail[:800], file=sys.stderr); raise
+            print(detail[:800], file=sys.stderr)
+            raise
     try:
         return json.loads(raw or "{}")
     except json.JSONDecodeError:

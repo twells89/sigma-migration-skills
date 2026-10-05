@@ -43,9 +43,10 @@ Also writes workbook-coverage.json and refuses to POST (or pass a dry run) when
 there are zero queryable elements or any authored queryable source visual was
 not rebuilt. With --dry-run nothing is POSTed.
 
-Env (live mode): SIGMA_BASE_URL + SIGMA_API_TOKEN.
+Env (live mode): SIGMA_BASE_URL plus a valid caller token, a browser-login
+keychain session, or SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 """
-import json, os, re, sys, time, argparse, urllib.parse, urllib.request
+import json, os, re, sys, time, argparse
 
 MASTER_ID, MASTER = "m-master", "Master"
 _SCATTER_SRC = []   # hidden grouped source tables emitted for scatter-charts (added to the Data page)
@@ -63,6 +64,7 @@ TEMPORAL = re.compile(r"DATE|MONTH|YEAR|QUARTER|WEEK|DAY", re.I)
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _SCRIPT_DIR)
 sys.path.insert(0, os.path.join(_SCRIPT_DIR, "lib"))
+import sigma_rest              # noqa: E402  browser-first auth + one-401 retry
 import coverage_catalog as _cc  # noqa: E402
 import trellis_emit as _te      # noqa: E402  shared native-trellis emitter (supported-kind gate + fallbacks)
 import metric_binding as _mb    # noqa: E402  shared DM-metric binder ([Metrics/<name>] over inline re-derive)
@@ -99,68 +101,50 @@ def nid(prefix):
     return f"{prefix}{_ids[prefix]}"
 
 def _sigma_api():
-    """lib/sigma_rest, imported lazily: importing it bootstraps saved credentials
-    into the environment, which only live POST/PUT calls should trigger."""
-    import sigma_rest
+    """Return the co-located browser-first Sigma REST client."""
     return sigma_rest
 
 
-def _sigma_url(path):
-    """A2: the bearer token only goes to a validated https://*.sigmacomputing.com
-    base (lib/sigma_rest's check, SIGMA_ALLOW_INSECURE_BASE_URL=1 to opt out),
-    and only to a relative API path on it."""
-    base = os.environ["SIGMA_BASE_URL"]
+def _sigma_path(path):
+    """Only relative API paths may reach the authenticated transport."""
     if not path.startswith("/") or path.startswith("//") or "://" in path:
         raise ValueError(f"Sigma API path must be relative (got {path!r})")
-    _sigma_api()._validate_once(base)
-    url = base.rstrip("/") + path
-    # The insecure override relaxes only the host check: still https, or plain
-    # http for a self-hosted/dev base, never file:// or any other scheme.
-    scheme = urllib.parse.urlsplit(url).scheme.lower()
-    insecure = os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") == "1"
-    if scheme != "https" and not (scheme == "http" and insecure):
-        raise SystemExit(f"FATAL: refusing non-https Sigma API URL (scheme {scheme!r})")
-    return url
+    return path
 
 
-def _sigma_open(request):
-    """Open via sigma_rest's http(s)-only opener: unlike urllib.request.urlopen it
-    has no file:// handler, so even under the insecure-host override a poisoned
-    base URL cannot read a local file."""
-    return _sigma_api()._http_opener().open(request).read().decode()
+def _sigma_raw(method, path, body, retry_rate_limit=False):
+    """Send JSON while preserving the builder's historical raw response text."""
+    path = _sigma_path(path)
+    attempts = 6 if retry_rate_limit else 1
+    for attempt in range(attempts):
+        try:
+            return sigma_rest.request(
+                method.lower(),
+                path,
+                body=json.dumps(body),
+                accept="application/json",
+                binary=True,
+            ).decode()
+        except sigma_rest.SigmaError as exc:
+            detail = str(exc)
+            status = re.search(r" -> (\d+)", detail)
+            if status and status.group(1) == "429" and attempt < attempts - 1:
+                # Cloudflare 1015 rate limit: transient, retryable.
+                wait = min(120, 30 * (2 ** attempt))
+                print(f"HTTP 429 on {method.upper()} {path} -- backing off {wait}s "
+                      f"(attempt {attempt+1}/{attempts})", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            print(detail[:800], file=sys.stderr)
+            raise
 
 
 def api_post(path, body):
-    TOK = os.environ["SIGMA_API_TOKEN"]
-    req = urllib.request.Request(_sigma_url(path), data=json.dumps(body).encode(), method="POST",
-        headers={"Authorization": "Bearer " + TOK, "Content-Type": "application/json",
-                 "Accept": "application/json"})
-    for attempt in range(6):
-        try:
-            return _sigma_open(req)
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode()
-            if e.code == 429 and attempt < 5:  # Cloudflare 1015 rate limit: transient, retryable
-                wait = min(120, 30 * (2 ** attempt))
-                print(f"HTTP 429 on POST {path} -- backing off {wait}s (attempt {attempt+1}/6)", file=sys.stderr)
-                time.sleep(wait)
-                continue
-            print("HTTP", e.code, detail[:800], file=sys.stderr); raise
+    return _sigma_raw("post", path, body, retry_rate_limit=True)
 
 
 def api_put(path, body):
-    token = os.environ["SIGMA_API_TOKEN"]
-    request = urllib.request.Request(
-        _sigma_url(path),
-        data=json.dumps(body).encode(),
-        method="PUT",
-        headers={
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-    )
-    return _sigma_open(request)
+    return _sigma_raw("put", path, body)
 
 def sigma_fmt(qfmt, name="", warnings=None):
     """Qlik qNumFormat.qFmt (an Excel-style mask) -> Sigma format object, or None.

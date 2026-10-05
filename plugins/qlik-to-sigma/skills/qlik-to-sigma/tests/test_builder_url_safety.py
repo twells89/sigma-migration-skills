@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""A2 on the workbook builder's own REST helpers (api_post / api_put).
+"""A2 on the workbook builder's shared REST transport (api_post / api_put).
 
-build-sigma-workbook.py talks to Sigma directly instead of through
-lib/sigma_rest.request, so it must enforce the same rules itself: the bearer
-token only goes to a validated https://*.sigmacomputing.com base, the path must
-be a relative API path, and the transport can never open a file:// URL — even
-under SIGMA_ALLOW_INSECURE_BASE_URL=1, which relaxes only the host check.
+The builder delegates live requests to lib/sigma_rest, while retaining its
+relative-path guard. The bearer token only goes to a validated
+https://*.sigmacomputing.com base and the transport can never open file://.
 
-Creds-free and network-free: urllib.request.urlopen is replaced with a recorder,
-so a request that slips past validation is caught without leaving the process.
+Creds-free and network-free: direct urlopen is forbidden, and the shared
+client's safe opener is replaced with a recorder for the successful request.
 """
 import importlib.util
 import os
@@ -78,16 +76,25 @@ class BuilderUrlSafety(unittest.TestCase):
         self.assertEqual(self.opened, [])
 
     def test_sigma_host_goes_through_the_safe_opener(self):
-        os.environ["SIGMA_BASE_URL"] = "https://aws-api.sigmacomputing.com/"
+        os.environ["SIGMA_BASE_URL"] = "https://aws-api.sigmacomputing.com"
         sigma_rest = self.builder._sigma_api()
         sent = []
 
         class FakeResponse:
+            status = 200
+            reason = "OK"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
             def read(self):
                 return b'{"workbookId": "wb-1"}'
 
         class FakeOpener:
-            def open(self, request):
+            def open(self, request, timeout=None):
                 sent.append((request.get_method(), request.full_url,
                              request.get_header("Authorization")))
                 return FakeResponse()
