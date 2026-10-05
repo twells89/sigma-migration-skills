@@ -5,8 +5,6 @@
 # Usage:
 #   ruby post-and-readback.rb --type datamodel|workbook --spec <spec.json> --out <id-map.json>
 
-require 'net/http'
-require 'uri'
 require 'json'
 require 'yaml'
 require 'date'
@@ -36,36 +34,30 @@ require 'code_rep'
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
 
-BASE = ENV.fetch('SIGMA_BASE_URL')
-
 POST_PATH = opts[:type] == 'datamodel' ? '/v2/dataModels/spec'              : '/v2/workbooks/spec'
 GET_PATH  = opts[:type] == 'datamodel' ? '/v2/dataModels/%s/spec'           : '/v2/workbooks/%s/spec'
 ID_FIELD  = opts[:type] == 'datamodel' ? 'dataModelId'                      : 'workbookId'
 
-# Wraps a single Sigma REST call with automatic 401-retry-after-refresh
-# (tokens last ~1 hour; long conversions outlive a single token). Returns
-# the raw Net::HTTPResponse so existing .body / .is_a?(Net::HTTPSuccess)
-# checks below keep working unchanged.
-def http(method, path, body = nil, accept_json: false)
-  attempts = 0
-  loop do
-    attempts += 1
-    uri = URI("#{BASE}#{path}")
-    req = case method
-          when :post then r = Net::HTTP::Post.new(uri); r.body = body; r['Content-Type'] = 'application/json'; r
-          when :put  then r = Net::HTTP::Put.new(uri);  r.body = body; r['Content-Type'] = 'application/json'; r
-          when :get  then Net::HTTP::Get.new(uri)
-          end
-    req['Authorization'] = "Bearer #{Sigma.auth_token}"
-    req['Accept']        = 'application/json' if accept_json
-    res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, read_timeout: 120) { |h| h.request(req) }
-    if res.code.to_i == 401 && attempts == 1 && ENV['SIGMA_CLIENT_ID']
-      warn '  [auth] Sigma token expired mid-run, refreshing and retrying...'
-      Sigma.refresh_token!
-      next
-    end
-    return res
+# Preserve the script's response-oriented control flow while delegating host
+# validation, browser/client token resolution, proactive aging, and the single
+# 401 refresh/retry to the co-located shared client.
+SigmaResponse = Struct.new(:code, :body, :message) do
+  def success?
+    code.to_i.between?(200, 299)
   end
+end
+
+def http(method, path, body = nil, accept_json: false)
+  raw = Sigma.request(method, path, body: body,
+                      accept: accept_json ? 'application/json' : '*/*',
+                      binary: true)
+  SigmaResponse.new(200, raw.to_s, 'OK')
+rescue Sigma::Error => e
+  head, response_body = e.message.split("\n", 2)
+  code = head[/->\s+(\d{3})\b/, 1]
+  raise unless code
+  message = head.sub(/\A.*->\s+\d{3}\s*/, '')
+  SigmaResponse.new(code.to_i, response_body.to_s, message)
 end
 
 # Orphan-prevention pre-check: workbook POSTs are create-only. If this is a
@@ -100,7 +92,7 @@ if update_id
   resp = http(:put, format(GET_PATH, update_id), spec_body)
   parsed = YAML.safe_load(resp.body, permitted_classes: [Date, Time])
   oid = parsed[ID_FIELD] || update_id
-  abort("PUT failed (HTTP #{resp.code}): #{parsed.inspect}") unless resp.is_a?(Net::HTTPSuccess)
+  abort("PUT failed (HTTP #{resp.code}): #{parsed.inspect}") unless resp.success?
   warn "PUT ok: #{ID_FIELD}=#{oid}"
 else
   resp = http(:post, POST_PATH, spec_body)
@@ -133,7 +125,7 @@ columns_path = opts[:type] == 'datamodel' ?
   "/v2/dataModels/#{oid}/columns" :
   "/v2/workbooks/#{oid}/columns"
 cols_res = http(:get, columns_path, accept_json: true)
-cols_json = cols_res.is_a?(Net::HTTPSuccess) ? (JSON.parse(cols_res.body) rescue { 'entries' => [] }) : nil
+cols_json = cols_res.success? ? (JSON.parse(cols_res.body) rescue { 'entries' => [] }) : nil
 labels_by_el = Hash.new { |h, k| h[k] = [] }
 (cols_json && cols_json['entries'] || []).each do |c|
   labels_by_el[c['elementId']] << c['label'] if c['elementId'] && c['label']
@@ -188,7 +180,7 @@ puts JSON.pretty_generate(out)
 # column with `type.type` resolved. Scan for type == "error".
 
 res = cols_res
-if res.is_a?(Net::HTTPSuccess)
+if res.success?
   error_columns = (cols_json['entries'] || []).select { |c| c.dig('type', 'type') == 'error' }
   if error_columns.any?
     warn "\n========================================"
