@@ -72,9 +72,12 @@ widgets) — never emit confidently-wrong logic.
   `SISENSE_EMAIL`/`SISENSE_PASSWORD` (or a stored `SISENSE_API_TOKEN`) from the
   env or `~/.sigma-migration/sisense.env`. **Use a bearer token, not an
   access-key public key** (that's for SSO/embed — see `refs/sisense-rest-api.md`).
-- **Sigma API token** — `eval "$(scripts/get-token.sh)"` (uses
-  `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET`/`SIGMA_BASE_URL` or
-  `~/.sigma-migration/env`).
+- **Sigma authentication** — set `SIGMA_BASE_URL`, then preferably run
+  `eval "$(bash scripts/browser-login.sh)"` once from an interactive terminal.
+  The co-located `scripts/lib/sigma_rest.py` reuses a current bearer or the
+  keychain refresh session; `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` are the
+  unattended fallback. Known-old tokens refresh proactively, and live requests
+  refresh and retry once on HTTP 401. See `refs/environment.md`.
 - **A Sigma connection to the warehouse holding the source data.** Parity only
   means something when Sigma reads the same data Sisense did. For ElastiCube
   (ECCloud) sources this means **landing the data in Snowflake first** and
