@@ -24,6 +24,9 @@
 #         (migrate-*.rb → lib/scout_gate.rb#classify). A genuine Python-recorded
 #         `validated` row (signed by scout_gate.py) MUST verify under the Ruby
 #         gate — otherwise the fix would break the real scout flow.
+#   (viii) the Python scout + RLS live transports delegate to sigma_rest.py,
+#          preserving valid-token reuse, browser-only auth, proactive age
+#          refresh, and exactly one retry after 401.
 # Deterministic + offline (no Sigma creds / network).
 #
 # Usage: ruby scripts/test-scout-ledger-integrity.rb
@@ -153,6 +156,133 @@ else
     check(b2[:validated] == ['PY_MEASURE'] && b2[:escalated] == ['PY_FORGE'],
           '(vii) a hand-written "validated" beside the Python row still falls to :escalated')
   end
+end
+
+# (viii) PYTHON SIGMA AUTH: no credentials or network --------------------------
+if PY.nil?
+  puts '  SKIP  (viii) Python Sigma auth check — no python3 interpreter found'
+else
+  scripts = __dir__
+  code = <<~PY
+    import importlib.util
+    import json
+    import os
+    import sys
+    import time
+
+    scripts = #{scripts.dump}
+    sys.path.insert(0, os.path.join(scripts, "lib"))
+    import sigma_rest
+
+    def load(name, filename):
+        spec = importlib.util.spec_from_file_location(name, os.path.join(scripts, filename))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    scout = load("pbi_scout_auth_test", "scout-validate.py")
+    rls = load("pbi_rls_auth_test", "apply_sigma_rls.py")
+    env_keys = (
+        "SIGMA_BASE_URL", "SIGMA_API_TOKEN", "SIGMA_TOKEN_MINTED_AT",
+        "SIGMA_AUTH_METHOD", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET",
+        "SIGMA_WORKDIR", "SIGMA_ALLOW_INSECURE_BASE_URL",
+    )
+    sigma_rest.NEUTRAL_ENV = "/nonexistent/pbi-auth-test-env"
+    calls = []
+    queue = []
+    provider_calls = 0
+
+    def reset(extra=None):
+        global calls, queue, provider_calls
+        for key in env_keys:
+            os.environ.pop(key, None)
+        os.environ["SIGMA_BASE_URL"] = "https://api.sigmacomputing.com"
+        os.environ.update(extra or {})
+        sigma_rest._token_override = None
+        sigma_rest._minted_at = None
+        sigma_rest._refresh_inflight = False
+        sigma_rest._validated_bases.clear()
+        calls = []
+        queue = []
+        provider_calls = 0
+
+    def send(method, url, headers, body, timeout):
+        calls.append(dict(method=method, url=url, headers=dict(headers), body=body))
+        status, payload = queue.pop(0)
+        return sigma_rest._Resp(status, payload)
+
+    def provider(token="browser-token"):
+        global provider_calls
+        provider_calls += 1
+        return {
+            "SIGMA_API_TOKEN": token,
+            "SIGMA_TOKEN_MINTED_AT": sigma_rest._iso_z(time.time()),
+            "SIGMA_AUTH_METHOD": "browser",
+        }
+
+    sigma_rest._send = send
+
+    # A valid caller token is reused without invoking any provider.
+    reset({"SIGMA_API_TOKEN": "caller-token"})
+    queue[:] = [(200, '{"ok":true}')]
+    sigma_rest.token_provider_result = lambda: (_ for _ in ()).throw(
+        AssertionError("provider called for a valid token")
+    )
+    assert rls.api("GET", "/v2/test") == {"ok": True}
+    assert calls[0]["headers"]["Authorization"] == "Bearer caller-token"
+
+    # Browser-only auth works without client credentials.
+    reset()
+    queue[:] = [(200, '{"ok":true}')]
+    sigma_rest.token_provider_result = provider
+    status, body = scout.api("GET", "/v2/test")
+    assert status == 200 and json.loads(body) == {"ok": True}
+    assert calls[0]["headers"]["Authorization"] == "Bearer browser-token"
+    assert provider_calls == 1 and "SIGMA_CLIENT_ID" not in os.environ
+
+    # A known-old token refreshes before the request is sent.
+    reset({
+        "SIGMA_API_TOKEN": "known-old",
+        "SIGMA_TOKEN_MINTED_AT": sigma_rest._iso_z(
+            time.time() - sigma_rest.TOKEN_TTL_SECONDS - 1
+        ),
+    })
+    queue[:] = [(200, '{"ok":true}')]
+    sigma_rest.token_provider_result = lambda: provider("age-refreshed")
+    assert rls.api("GET", "/v2/test") == {"ok": True}
+    assert calls[0]["headers"]["Authorization"] == "Bearer age-refreshed"
+    assert provider_calls == 1
+
+    # One 401 refreshes through the browser provider and retries once.
+    reset({"SIGMA_API_TOKEN": "expired-token"})
+    queue[:] = [(401, "expired"), (200, '{"ok":true}')]
+    sigma_rest.token_provider_result = lambda: provider("retry-token")
+    status, body = scout.api("GET", "/v2/test")
+    assert status == 200 and json.loads(body) == {"ok": True}
+    assert [c["headers"]["Authorization"] for c in calls] == [
+        "Bearer expired-token", "Bearer retry-token"
+    ]
+    assert provider_calls == 1
+
+    # A second 401 is surfaced: no second refresh and no third request.
+    reset({"SIGMA_API_TOKEN": "expired-token"})
+    queue[:] = [(401, "expired"), (401, "still unauthorized")]
+    sigma_rest.token_provider_result = lambda: provider("retry-token")
+    status, body = scout.api("GET", "/v2/test")
+    assert status == 401 and "still unauthorized" in body
+    assert len(calls) == 2 and provider_calls == 1
+
+    # Wiring guard: neither plugin-local Python live path owns a static bearer.
+    for filename in ("scout-validate.py", "apply_sigma_rls.py"):
+        source = open(os.path.join(scripts, filename), encoding="utf-8").read()
+        assert "import sigma_rest" in source and "sigma_rest.request(" in source
+        assert 'os.environ["SIGMA_API_TOKEN"]' not in source
+        assert "urllib.request" not in source
+        assert '"Authorization": "Bearer "' not in source
+  PY
+  auth_ok = system(PY, '-c', code)
+  check(auth_ok,
+        '(viii) Python scout/RLS transports reuse, age-refresh, browser-refresh, and retry one 401')
 end
 
 puts

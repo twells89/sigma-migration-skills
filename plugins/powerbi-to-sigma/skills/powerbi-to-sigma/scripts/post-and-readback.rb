@@ -57,8 +57,8 @@ def http(method, path, body = nil, accept_json: false)
     req['Authorization'] = "Bearer #{Sigma.auth_token}"
     req['Accept']        = 'application/json' if accept_json
     res = Net::HTTP.start(uri.host, uri.port, use_ssl: true, read_timeout: 120) { |h| h.request(req) }
-    if res.code.to_i == 401 && attempts == 1 && ENV['SIGMA_CLIENT_ID']
-      warn '  [auth] Sigma token expired mid-run, refreshing and retrying...'
+    if res.code.to_i == 401 && attempts == 1
+      warn '  [auth] Sigma token expired mid-run; refreshing through the browser/client provider and retrying...'
       Sigma.refresh_token!
       next
     end

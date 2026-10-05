@@ -23,6 +23,20 @@ def ok(label, value)
   $fail += 1 unless value
 end
 
+put_layout_src = File.read(File.join(__dir__, 'put-layout.rb'))
+ok('layout writer delegates auth, token aging, and one-401 retry to sigma_rest',
+   put_layout_src.include?("require 'sigma_rest'") &&
+     put_layout_src.include?('Sigma.request('))
+ok('layout writer has no static bearer transport',
+   !put_layout_src.include?("ENV.fetch('SIGMA_API_TOKEN')") &&
+     !put_layout_src.include?("req['Authorization']"))
+
+post_src = File.read(File.join(__dir__, 'post-and-readback.rb'))
+ok('post/readback retries one 401 through browser or client auth',
+   post_src.match?(/res\.code\.to_i == 401 && attempts == 1\b/) &&
+     post_src.include?('Sigma.refresh_token!') &&
+     !post_src.match?(/401 && attempts == 1 && ENV\['SIGMA_CLIENT_ID'\]/))
+
 master = {
   'masters' => {
     'S' => {

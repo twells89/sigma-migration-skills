@@ -492,10 +492,13 @@ Row/column security is **never silently dropped and never silently ported** — 
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + username-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   eval "$(scripts/get-token.sh)"
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
    ```
+   The helper uses the co-located browser-first `lib/sigma_rest.py`: it reuses
+   valid caller tokens, refreshes stored browser sessions before falling back
+   to client credentials, refreshes known-age tokens proactively, and retries
+   one HTTP 401. No manual token mint is required.
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 

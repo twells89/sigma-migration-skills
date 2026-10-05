@@ -31,7 +31,8 @@
 #       [--name "Workforce KitchenSink (from Power BI)"]
 #       [--folder-id <uuid> --owner-id <id>]   # skip ref-dm harvest if both given
 #
-# Env (mode B harvest): SIGMA_BASE_URL + SIGMA_API_TOKEN.
+# Env (mode B harvest): SIGMA_BASE_URL plus a valid caller token, stored browser
+# session, or SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 
 require 'json'
 require 'optparse'
@@ -98,13 +99,13 @@ dm = dm['model'] if dm.is_a?(Hash) && dm['model']
 folder, owner = opts[:folder], opts[:owner]
 if (folder.nil? || owner.nil?)
   abort('need --ref-dm (or both --folder-id and --owner-id)') unless opts[:ref_dm]
-  base = ENV.fetch('SIGMA_BASE_URL'); tok = ENV.fetch('SIGMA_API_TOKEN')
-  require 'net/http'; require 'uri'
-  uri = URI("#{base}/v2/dataModels/#{opts[:ref_dm]}/spec")
-  req = Net::HTTP::Get.new(uri); req['Authorization'] = "Bearer #{tok}"; req['Accept'] = 'application/json'
-  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
-  abort("ref-dm spec fetch -> #{res.code}: #{res.body[0, 300]}") unless res.code.to_i == 200
-  ref = JSON.parse(res.body)
+  require_relative 'lib/sigma_rest'
+  begin
+    ref = Sigma.request(:get, "/v2/dataModels/#{opts[:ref_dm]}/spec")
+  rescue Sigma::Error => e
+    abort("ref-dm spec fetch -> #{e.message}")
+  end
+  abort("ref-dm spec fetch returned #{ref.class}, expected JSON object") unless ref.is_a?(Hash)
   folder ||= ref['folderId']; owner ||= ref['ownerId']
   warn "[convert-model] harvested folderId=#{folder} ownerId=#{owner} from ref-dm #{opts[:ref_dm]}"
 end

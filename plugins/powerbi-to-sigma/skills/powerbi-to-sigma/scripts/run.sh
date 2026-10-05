@@ -18,7 +18,8 @@
 # resume from with --from.
 #
 # Usage:
-#   eval "$(scripts/get-token.sh)"          # Sigma token in env first
+#   # Sigma auth resolves from a caller token, stored browser session, or
+#   # unattended client credentials.
 #   scripts/run.sh \
 #     --work-dir /tmp/pbir \
 #     --workspace <wsId> --report <reportId> --dataset <datasetId> \
