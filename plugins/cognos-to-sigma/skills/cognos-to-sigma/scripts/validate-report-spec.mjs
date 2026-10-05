@@ -72,6 +72,8 @@ const id = args.update || verified.json?.reportId;
 if (!id) throw new Error(`create succeeded but no reportId was returned: ${verified.text.slice(0, 300)}`);
 const get = await api('GET', `/v2/reports/${id}?includeContents=true`);
 if (!get.ok || !get.json?.contents) throw new Error(`report ${id} written, but readback failed: HTTP ${get.status}`);
+const readbackErrors = reportSpecErrors(get.json.contents);
+if (readbackErrors.length) throw new Error(`report ${id} written but readback preflight failed: ${readbackErrors.join('; ')}`);
 const sourceElements = new Map(contents.elements.map((e) => [e.id, e.kind]));
 const observedElements = new Map(get.json.contents.elements.map((e) => [e.id, e.kind]));
 if (sourceElements.size !== observedElements.size || [...sourceElements].some(([key, kind]) => observedElements.get(key) !== kind)) {

@@ -21,5 +21,17 @@ export function reportSpecErrors(spec) {
   for (const page of spec.pages) {
     if (!page?.id || !spec.layout.includes(`id="${page.id}"`)) errors.push(`Report page missing from layout: ${page?.name || page?.id || '(missing id)'}`);
   }
+  // A data table elsewhere or a repeated text footer does not make a screenshot
+  // page editable. This catches image-only bodies, not all rasterized content;
+  // mixed image/text pages still require source-to-native inventory review.
+  for (const block of String(spec.layout || '').matchAll(/<Page\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/Page>/g)) {
+    const ids = new Set([...block[2].matchAll(/elementId="([^"]+)"/g)].map((match) => match[1]));
+    const body = spec.elements.filter((element) => ids.has(element.id));
+    if (body.some((element) => element.kind === 'image') &&
+        !body.some((element) => (element.kind === 'text' && String(element.body || '').trim()) ||
+          (element.kind !== 'image' && element.source?.kind))) {
+      errors.push(`image-only Report page is not editable source content: ${spec.pages.find((page) => page.id === block[1])?.name || block[1]}`);
+    }
+  }
   return errors;
 }

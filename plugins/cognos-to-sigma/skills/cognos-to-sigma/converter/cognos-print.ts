@@ -17,6 +17,7 @@ const findAll = (node: any, tag: string, out: any[] = []): any[] => {
   if (!node || typeof node !== 'object') return out;
   for (const [key, value] of Object.entries(node)) {
     if (key === tag) out.push(...arr(value));
+    if (key === 'promptPages') continue;
     for (const item of arr(value)) findAll(item, tag, out);
   }
   return out;
@@ -60,6 +61,15 @@ export function convertCognosPrintToSigma(xml: string, options: CognosPrintOptio
   const panels: Array<Record<string, any>> = [];
   const pageLines: string[] = [], panelLines: string[] = [];
   const notPrintable = new Set(['navigation', 'page-break', 'drill', 'progress', 'repeated-container', 'container', 'tabbed-container', 'divider']);
+  if (original.some((warning) => /query dependency/.test(warning))) {
+    throw new Error('Cognos report has an unresolved query dependency; author and verify its joins, filters and grain before printing.');
+  }
+  if (original.some((warning) => /nested data container|master-detail links/.test(warning))) {
+    throw new Error('Cognos report uses a nested data container or master-detail layout; unrelated flat tables cannot preserve its record correlation and pagination.');
+  }
+  if (original.some((warning) => /visible column combines/.test(warning))) {
+    throw new Error('Cognos report has a compound list cell; retaining only its first value would omit printable content. Re-author the complete cell before printing.');
+  }
   // CodeRep.wrap strips visibleAsSource from workbook code, so use the
   // pre-wrap lineage marker. Printing a hidden scatter/progress helper as a
   // table changes the PDF; removing it also breaks its dependent visual.
@@ -88,6 +98,24 @@ export function convertCognosPrintToSigma(xml: string, options: CognosPrintOptio
   if (doc.elements.some((element: any) => element.kind === 'control')) {
     throw new Error('Cognos report uses parameter or drill controls; render and author a control-specific Sigma Report before printing. Omitting controls could change the reported values.');
   }
+  if (findAll(report.layouts || report, 'pageSet').length ||
+      ['@_resetPageNumber', '@_resetPageCount'].some((tag) => findAll(report.layouts || report, tag)
+        .some((value) => !['false', '0', ''].includes(String(value).toLowerCase())))) {
+    throw new Error('Cognos page-set or page-reset pagination is not converted; verify document boundaries and per-document numbering before printing.');
+  }
+  if (findAll(report.layouts || report, 'conditionalRender').length) {
+    throw new Error('Cognos conditional rendering is not converted; resolve which pages and records should render before printing.');
+  }
+  // Prompt metadata may not have produced a workbook control (search/text/multi-
+  // select widgets and render-only parameters). Absence of a control is no proof.
+  const promptRoots = [report, ...findAll(report, 'promptPages')];
+  if (promptRoots.some((root) => ['selectValue', 'selectWithSearch', 'textBox', 'selectDate', 'selectTime', 'selectDateTime', 'selectInterval', 'selectTree']
+    .some((tag) => findAll(root, tag).some((widget) => widget?.['@_parameter'])))) {
+    throw new Error('Cognos runtime prompt widgets require verified parameter selections and behavior before printing; defaults are not a source snapshot.');
+  }
+  if (findAll(report.layouts || report, 'reportExpression').length) {
+    throw new Error('Cognos runtime report expression is not converted; preserve parameter display text and page-number expressions before printing.');
+  }
   if (original.some((warning) => /no grounded Sigma mapping|preserved its data as a table|emitted its data as a table/i.test(warning))) {
     throw new Error('Cognos visual was degraded to a table by the workbook converter; cannot claim print fidelity until it is explicitly re-authored.');
   }
@@ -106,8 +134,8 @@ export function convertCognosPrintToSigma(xml: string, options: CognosPrintOptio
   // Filter XML can be structured (e.g. filterDefinition/filterInValues) and
   // have no filterExpression. The workbook translator cannot see these in
   // q.filters, so warn/refuse rather than exporting unfiltered extra rows.
-  if (findAll(report, 'detailFilter').some((filter) => !text(filter?.filterExpression || filter?.expression)) ||
-      findAll(report, 'summaryFilter').some((filter) => !text(filter?.filterExpression || filter?.expression))) {
+  if (['detailFilter', 'summaryFilter'].some((tag) => findAll(report, tag).some((filter) =>
+    filter?.['@_use'] !== 'prohibited' && !text(filter?.filterExpression || filter?.expression)))) {
     throw new Error('a Cognos report uses a structured or empty filter without a translated expression; refusing an unfiltered print report');
   }
   const add = (element: any, x: number, y: number, w: number, h: number, flow = false) => {

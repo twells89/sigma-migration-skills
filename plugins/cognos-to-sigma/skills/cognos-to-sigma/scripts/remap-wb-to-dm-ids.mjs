@@ -23,18 +23,21 @@ const doc = assertWorkbookContract(wb);
 
 const els = elementsOf((await api('GET', `/v2/dataModels/${dmId}/elements`)).json);
 if (!els.length) { console.error(`No elements found on data model ${dmId} (token? wrong id?)`); process.exit(1); }
-const byName = new Map(els.map((e) => [e.name.toLowerCase(), e.id]));
 
 let remapped = 0; const unresolved = [];
 for (const e of CodeRep.workbookElements(doc)) {
-  const s = e.source; if (!s || !('elementId' in s)) continue;
+  const s = e.source; if (!s || s.kind !== 'data-model') continue;
   s.dataModelId = dmId;
   const want = String(s.elementId || '').toLowerCase();
-  const real = byName.get(want) || (els.length === 1 ? els[0].id : undefined);
+  const matches = els.filter((element) => element.name.toLowerCase() === want);
+  const real = els.find((element) => element.id === s.elementId)?.id || (matches.length === 1 ? matches[0].id : undefined);
   if (real) { s.elementId = real; remapped++; } else unresolved.push(s.elementId);
 }
 
+if (unresolved.length) {
+  console.error(`ERROR: ${unresolved.length} elementId(s) unresolved - no verified DM subject binding for: ${unresolved.join(', ')}`);
+  process.exit(1);
+}
 const out = a.out || a.wb.replace(/\.json$/, '.remapped.json');
 writeFileSync(out, JSON.stringify(CodeRep.wrap(doc, CodeRep.metadata(wb)), null, 2));
 console.log(JSON.stringify({ dataModelId: dmId, dmElements: els.length, remapped, unresolved, out }, null, 2));
-if (unresolved.length) { console.error(`WARN: ${unresolved.length} elementId(s) unresolved — DM has no element named: ${unresolved.join(', ')}`); process.exit(1); }

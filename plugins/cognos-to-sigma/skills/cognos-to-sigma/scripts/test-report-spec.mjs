@@ -15,4 +15,16 @@ assert.match(reportSpecErrors({ ...base, elements: [] }).join(' '), /data-bearin
 assert.match(reportSpecErrors({ ...base, elements: [{ id: 'table', kind: 'image', source: { kind: 'url', url: 'https://example.org/image.svg' } }] }).join(' '), /data-bearing/);
 assert.match(reportSpecErrors({ ...base, elements: [{ ...base.elements[0], source: { kind: 'data-model', elementId: 'el' } }] }).join(' '), /unbound/);
 assert.match(reportSpecErrors({ ...base, pages: [{ id: 'missing', name: 'Missing' }] }).join(' '), /page missing/);
+const imagePage = { ...base,
+  pages: [...base.pages, { id: 'scan', name: 'Scanned output' }],
+  elements: [...base.elements, { id: 'scan-image', kind: 'image', source: { kind: 'url', url: 'https://example.org/page.png' } },
+    { id: 'footer', kind: 'text', body: 'Page 2' }],
+  panels: [{ id: 'foot', type: 'footer', pages: ['scan'] }],
+  layout: `${base.layout}<Page id="scan"><Element elementId="scan-image"/></Page><Panel id="foot"><Element elementId="footer"/></Panel>`,
+};
+assert.match(reportSpecErrors(imagePage).join(' '), /image-only.*editable/i, 'a table elsewhere and a native footer must not disguise a screenshot page');
+assert.deepEqual(reportSpecErrors({ ...base,
+  elements: [...base.elements, { id: 'logo', kind: 'image', source: { kind: 'url', url: 'https://example.org/logo.svg' } }],
+  layout: base.layout.replace('</Page>', '<Element elementId="logo"/></Page>'),
+}), [], 'decorative artwork alongside native data is allowed');
 console.log('test-report-spec: PASS');

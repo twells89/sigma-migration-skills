@@ -62,7 +62,7 @@ import sys
 report = json.load(open(sys.argv[1]))
 assert [p['name'] for p in report['pages']] == ['Cover', 'Letter', 'Summary'] + [f'Terms {i}' for i in range(1, 7)]
 assert sum(e['kind'] == 'table' for e in report['elements']) == 1
-assert sum(e['kind'] == 'image' for e in report['elements']) == 11
+assert sum(e['kind'] == 'image' for e in report['elements']) == 5  # decorative artwork only
 assert next(e for e in report['elements'] if e['kind'] == 'table')['name'] == 'Product revenue by line'
 assert sum(p['type'] == 'footer' for p in report['panels']) == 1
 assert not any(p['type'] == 'header' for p in report['panels'])
@@ -73,9 +73,14 @@ layout = report['layout']
 assert re.findall(r'<Page id="([^"]+)"', layout) == [p['id'] for p in report['pages']]
 assert layout.count('flow="paginated"') == 1
 assert 'x="48" y="265" width="670" height="455" flow="paginated"' in layout
-assert layout.count('x="48" y="48" width="670" height="830"') == 5
+elements = {e['id']: e for e in report['elements']}
+for page in report['pages'][3:]:
+    body = re.search(r'<Page id="' + re.escape(page['id']) + r'">(.*?)</Page>', layout, re.S)[1]
+    ids = re.findall(r'elementId="([^"]+)"', body)
+    assert len(ids) > 1 and all(elements[i]['kind'] == 'text' for i in ids), 'terms must stay editable'
+assert any('SCOPE OF EXAMPLE' in e.get('body', '') for e in report['elements'] if e['kind'] == 'text')
 assert all(layout.count(f'elementId="{e["id"]}"') == 1 for e in report['elements'])
-print('  ok   bundled print report composes neutral nine-page cover, letter, summary, terms, watermark and numbered footer')
+print('  ok   bundled print report composes native editable terms, table and text with decorative artwork')
 PY
 
 if node "$skill/converter/cli.mjs" "$skill/fixtures/banking-risk-crosstab.report.xml" \
@@ -117,7 +122,7 @@ assert source.count('</selection></query>') == 1
 source = source.replace('</selection></query>',
     '</selection><detailFilters><detailFilter><filterDefinition><filterInValues refDataItem="Region">'
     '<filterValues><filterValue>West</filterValue></filterValues></filterInValues>'
-    '</filterDefinition></detailFilter></detailFilters></selection></query>')
+    '</filterDefinition></detailFilter></detailFilters></query>')
 Path(sys.argv[2]).write_text(source)
 PY
 if node "$skill/converter/cli.mjs" "$tmp/structured-filter.xml" --print --dm example-model \

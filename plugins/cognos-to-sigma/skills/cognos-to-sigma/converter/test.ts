@@ -264,6 +264,68 @@ for (const [input, expected] of NAME_CASES) {
   else { fail++; console.log('✗ lists: measure-only visible table lost grouping'); }
 }
 
+// Nested records keep their own query scope, even with same-named fields.
+{
+  const child = `<list name="Details" refQuery="detail"><listGroups><listGroup refDataItem="Category"/></listGroups>
+    <listColumns><listColumn><listColumnBody><dataItemValue refDataItem="Label"/>
+      <conditionalStyleRef refConditionalStyle="Detail style"/>
+    </listColumnBody></listColumn></listColumns></list>`;
+  const xml = `<report><queries>
+    <query name="header"><source><model/></source><selection>
+      <dataItem name="Label"><expression>[C].[M].[Headers].[Label]</expression></dataItem>
+      <dataItem name="Amount" aggregate="total"><expression>[C].[M].[Headers].[Amount]</expression></dataItem>
+      <dataItem name="Internal"><expression>[C].[M].[Headers].[Internal]</expression></dataItem>
+    </selection></query>
+    <query name="detail"><source><model/></source><selection>
+      <dataItem name="Label"><expression>[C].[M].[Details].[Label]</expression></dataItem>
+      <dataItem name="Category"><expression>[C].[M].[Details].[Category]</expression></dataItem>
+    </selection></query>
+  </queries><layouts><layout><reportPages><page name="Records"><pageBody><contents>
+    <list name="Headers" refQuery="header"><listColumns>
+      <listColumn><listColumnBody><block><contents>${child}<textItem><dataSource><dataItemValue refDataItem="Amount"/></dataSource></textItem></contents></block></listColumnBody></listColumn>
+    </listColumns></list>
+  </contents></pageBody></page></reportPages></layout></layouts></report>`;
+  const r = convertCognosReportToSigma(xml, { captureLineage: true });
+  const header = r.lineage?.find((s) => s.source['@_name'] === 'Headers');
+  const detail = r.lineage?.find((s) => s.source['@_name'] === 'Details');
+  const elements = CodeRep.workbookElements(r.workbook) as any[];
+  const parentTable = elements.find((e) => e.id === header?.elementId);
+  const childTable = elements.find((e) => e.id === detail?.elementId);
+  const checks: Array<[string, boolean]> = [
+    ['parent cell excludes child fields even when the names exist in both queries',
+      parentTable?.columns?.length === 1 && parentTable.columns[0].name === 'Amount'],
+    ['child list binds its own query and preserves its hidden grouping key',
+      childTable?.source?.elementId === 'Details' && childTable.columns?.some((c: any) => c.name === 'Label' && /Details\//.test(c.formula)) &&
+      childTable.columns?.some((c: any) => c.name === 'Category' && c.hidden)],
+    ['child grouping and conditional styles are not attributed to parent',
+      !parentTable?.groupings && !r.warnings.some((w) => /list "header" uses conditional|list "Headers": group key/.test(w))],
+    ['nested record layout is explicitly flagged, not represented as faithful flat tables',
+      r.warnings.some((w) => /nested data container/.test(w))],
+  ];
+  for (const [label, ok] of checks) {
+    if (ok) console.log(`✓ nested lists: ${label}`);
+    else { fail++; console.log(`✗ nested lists: ${label}`); }
+  }
+  const onlyChild = xml.replace('<textItem><dataSource><dataItemValue refDataItem="Amount"/></dataSource></textItem>', '');
+  const onlyChildResult = convertCognosReportToSigma(onlyChild);
+  const onlyChildTables = (CodeRep.workbookElements(onlyChildResult.workbook) as any[]).filter((e) => e.kind === 'table');
+  if (onlyChildTables.length === 1 && onlyChildTables[0].source.elementId === 'Details' &&
+      onlyChildResult.warnings.some((w) => /no visible dataItemValue/.test(w))) {
+    console.log('✓ nested lists: a container-only parent does not invent columns or duplicate the child');
+  } else { fail++; console.log('✗ nested lists: container-only parent was mistaken for a data table'); }
+  const sameQuery = convertCognosReportToSigma(xml.replace('refQuery="detail"', 'refQuery="header"'), { captureLineage: true });
+  const sameParentId = sameQuery.lineage?.find((s) => s.source['@_name'] === 'Headers')?.elementId;
+  const sameParent = (CodeRep.workbookElements(sameQuery.workbook) as any[]).find((e) => e.id === sameParentId);
+  if (sameParent?.columns?.length === 1 && sameParent.columns[0].name === 'Amount') {
+    console.log('✓ nested lists: same-query child still owns its fields');
+  } else { fail++; console.log('✗ nested lists: same-query child fields leaked into parent'); }
+  try { convertCognosPrintToSigma(xml); fail++; console.log('✗ print: nested record was flattened'); }
+  catch (err: any) {
+    if (/nested data container|master-detail/.test(err.message)) console.log('✓ print: nested record cannot pass as unrelated flat tables');
+    else { fail++; console.log('✗ print: unexpected nested-record error: ' + err.message); }
+  }
+}
+
 // ── Sigma Report/PDF path — same query translations, pixel layout ───────────
 {
   const xml = `<report><reportName>Quarterly statement</reportName><layouts><layout><reportPages>
@@ -297,6 +359,44 @@ for (const [input, expected] of NAME_CASES) {
     if (ok) console.log(`✓ print: ${label}`);
     else { fail++; console.log(`✗ print: ${label}`); }
   }
+  const compound = xml.replace('<dataItemValue refDataItem="Region"/>', '<dataItemValue refDataItem="Region"/><dataItemValue refDataItem="Segment"/>');
+  const masterDetail = xml.replace('<list name="Revenue" refQuery="q">', `<list name="Revenue" refQuery="q"><masterDetailLinks><masterDetailLink>
+    <masterContext><dataItemContext refDataItem="Region"/></masterContext><detailContext><dataItemContext refDataItem="Region"/></detailContext>
+  </masterDetailLink></masterDetailLinks>`);
+  for (const [label, input, expected] of [
+    ['compound cell', compound, /compound|visible column combines/],
+    ['master-detail correlation', masterDetail, /master-detail/],
+  ] as const) {
+    try { convertCognosPrintToSigma(input); fail++; console.log(`✗ print: accepted unconverted ${label}`); }
+    catch (err: any) {
+      if (expected.test(err.message)) console.log(`✓ print: refuses unconverted ${label}`);
+      else { fail++; console.log(`✗ print: unexpected ${label} error: ${err.message}`); }
+    }
+  }
+  for (const source of [
+    '<joinOperation><joinOperands><joinOperand><queryRef refQuery="left"/></joinOperand><joinOperand><queryRef refQuery="missing"/></joinOperand></joinOperands></joinOperation>',
+    '<queryOperation name="union"><queryRefs><queryRef refQuery="left"/><queryRef refQuery="right"/></queryRefs></queryOperation>',
+    '<queryRef refQuery="left"/>',
+  ]) {
+    const dependent = xml.replace('<queries>', `<queries>
+      <query name="left"><source><model/></source><selection><dataItem name="Region"><expression>[C].[M].[Orders].[Region]</expression></dataItem></selection>
+        <detailFilters><detailFilter><filterExpression>[Region] = 'East'</filterExpression></detailFilter></detailFilters></query>
+      <query name="right"><source><model/></source><selection><dataItem name="Region"><expression>[C].[M].[Other].[Region]</expression></dataItem></selection></query>`)
+      .replace('<query name="q">', `<query name="q"><source>${source}</source>`);
+    const result = convertCognosReportToSigma(dependent);
+    const tables = (CodeRep.workbookElements(result.workbook) as any[]).filter((e) => e.kind === 'table');
+    if (result.warnings.some((w) => /query dependency.*left/.test(w)) && tables.every((e) => e.source.elementId === '<element>')) {
+      console.log('✓ queries: dependent source is flagged instead of guessed from a projected model column');
+    } else { fail++; console.log('✗ queries: query dependency silently mapped to a model subject'); }
+    try { convertCognosPrintToSigma(dependent); fail++; console.log('✗ print: accepted unresolved query source'); }
+    catch (err: any) {
+      if (/query dependency/.test(err.message)) console.log('✓ print: refuses unresolved query dependency');
+      else { fail++; console.log('✗ print: unexpected query dependency error: ' + err.message); }
+    }
+  }
+  const unused = xml.replace('<queries>', '<queries><query name="unused"><source><queryRef refQuery="absent"/></source></query>');
+  try { convertCognosPrintToSigma(unused); console.log('✓ print: unused query operation does not block unrelated printable data'); }
+  catch (err: any) { fail++; console.log('✗ print: unused query operation blocked print: ' + err.message); }
   try { convertCognosPrintToSigma('<report><reportName>Empty</reportName></report>'); fail++; console.log('✗ print: refuses an empty report'); }
   catch { console.log('✓ print: refuses an empty report'); }
   try { convertCognosPrintToSigma(readFileSync(join(FIX, 'banking-risk-crosstab.report.xml'), 'utf8')); fail++; console.log('✗ print: rejects unsupported pivot Report code'); }
@@ -339,6 +439,50 @@ for (const [input, expected] of NAME_CASES) {
   catch (err: any) {
     if (/filter was not converted|structured or empty filter/.test(err.message)) console.log('✓ print: refuses structured summary filters');
     else { fail++; console.log('✗ print: unexpected structured-summary-filter error: ' + err.message); }
+  }
+  // Disabled predicates must not restrict rows, register controls, or block print.
+  const prohibited = xml.replace('</selection></query>', `</selection>
+    <detailFilters>
+      <detailFilter><filterExpression>[Region] = 'East'</filterExpression></detailFilter>
+      <detailFilter use="prohibited"><filterExpression>[Region] = 'West'</filterExpression></detailFilter>
+      <detailFilter use="prohibited"><filterExpression>[Region] = ?disabledRegion?</filterExpression></detailFilter>
+      <detailFilter use="prohibited"><filterDefinition><filterInValues refDataItem="Region"/></filterDefinition></detailFilter>
+      <detailFilter use="prohibited"/>
+    </detailFilters>
+    <summaryFilters>
+      <summaryFilter use="prohibited"><filterExpression>[Revenue] &gt; 100</filterExpression></summaryFilter>
+      <summaryFilter use="prohibited"><filterDefinition><filterInValues refDataItem="Region"/></filterDefinition></summaryFilter>
+      <summaryFilter use="prohibited"/>
+    </summaryFilters></query>`);
+  const disabledResult = convertCognosReportToSigma(prohibited);
+  const disabledElements = CodeRep.workbookElements(disabledResult.workbook) as any[];
+  const disabledTables = disabledElements.filter((e) => e.kind === 'table');
+  const disabledChecks: Array<[string, boolean]> = [
+    ['prohibited detail filters leave only the active predicate on every table',
+      disabledTables.length === 2 && disabledTables.every((e) => e.filters?.length === 1 &&
+        JSON.stringify(e.filters[0].values) === '["East"]')],
+    ['prohibited prompt filters do not create controls', !disabledElements.some((e) => e.kind === 'control')],
+    ['prohibited structured and summary filters produce no repair warning',
+      !disabledResult.warnings.some((w) => /filter/i.test(w))],
+  ];
+  for (const [label, ok] of disabledChecks) {
+    if (ok) console.log(`✓ filters: ${label}`);
+    else { fail++; console.log(`✗ filters: ${label}`); }
+  }
+  try {
+    const printed = convertCognosPrintToSigma(prohibited);
+    if (printed.contents.elements.filter((e: any) => e.kind === 'table').every((e: any) =>
+      e.filters?.length === 1 && JSON.stringify(e.filters[0].values) === '["East"]')) {
+      console.log('✓ print: prohibited filters neither block print nor become predicates');
+    } else { fail++; console.log('✗ print: prohibited filter changed printed predicates'); }
+  } catch (err: any) { fail++; console.log('✗ print: prohibited filter incorrectly blocks print: ' + err.message); }
+  for (const use of ['', ' use="required"', ' use="optional"']) {
+    const active = structured.replace('<detailFilter>', `<detailFilter${use}>`);
+    try { convertCognosPrintToSigma(active); fail++; console.log(`✗ print: active structured filter was allowed (${use})`); }
+    catch (err: any) {
+      if (/filter was not converted|structured or empty filter/.test(err.message)) console.log(`✓ print: active structured filter still blocks (${use || 'default'})`);
+      else { fail++; console.log('✗ print: unexpected active-filter error: ' + err.message); }
+    }
   }
   const scatter = `<report><queries><query name="scatter"><selection>
       <dataItem name="Group"><expression>[C].[M].[Sales].[Group]</expression></dataItem>
