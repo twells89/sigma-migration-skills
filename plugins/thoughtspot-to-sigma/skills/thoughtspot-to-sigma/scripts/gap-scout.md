@@ -48,7 +48,8 @@ INPUTS
 
 DO
 1. Propose a Sigma formula (see the candidate table in gap-scout.md).
-2. Validate (eval get-token.sh first):
+2. Validate (set `SIGMA_BASE_URL`; the script reuses caller/browser/client auth
+   through `lib/sigma_rest.py`):
    python3 scripts/scout-validate.py --formula '<sigma>' \
      --data-model-id <dm> --element-id <denorm> --folder-id <folder> \
      --feature '<fn>' --pattern '<regex>' --template '<sigma template>' \

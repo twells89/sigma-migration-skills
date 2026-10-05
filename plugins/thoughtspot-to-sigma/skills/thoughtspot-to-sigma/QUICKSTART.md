@@ -5,7 +5,7 @@ parity-verified against the warehouse.
 
 ## 0. ONE COMMAND (preferred)
 ```bash
-export TS_HOST TS_TOKEN SIGMA_CONNECTION_ID TS_DB TS_SCHEMA   # Sigma token auto-minted from ~/.sigma-migration/env
+export TS_HOST TS_TOKEN SIGMA_BASE_URL SIGMA_CONNECTION_ID TS_DB TS_SCHEMA
 python3 scripts/migrate-thoughtspot.py --model <TS_MODEL_ID> [--liveboard <ID> ...] \
     [--name PREFIX] [--workdir /tmp/ts-run]
 # offline: --model-tml fixtures/retail-analytics-model.tml --liveboard-tml fixtures/retail-analytics-liveboard.tml
@@ -33,9 +33,20 @@ Security Settings) and POST `username`+`secret_key` to `auth/token/full`.
 ```bash
 export TS_HOST="https://<your>.thoughtspot.cloud"  TS_TOKEN="<bearer>"
 ```
-**Sigma**: `export SIGMA_BASE_URL=... SIGMA_API_TOKEN=$(scripts/get-token.sh ...)`
-plus `SIGMA_CONNECTION_ID` (the warehouse connection) and `SIGMA_FOLDER_ID`.
-Also set `TS_DB` / `TS_SCHEMA` (the warehouse db/schema the model's tables live in).
+**Sigma**: set `SIGMA_BASE_URL`, then run the preferred one-time browser login.
+The migration scripts subsequently refresh from the OS keychain without
+reopening the browser. For unattended runs, configure `SIGMA_CLIENT_ID` /
+`SIGMA_CLIENT_SECRET` instead.
+```bash
+export SIGMA_BASE_URL=https://<your-published-sigma-api-host>
+eval "$(scripts/browser-login.sh)"          # one time, interactive
+export SIGMA_CONNECTION_ID=<full-connection-uuid>
+export SIGMA_FOLDER_ID=<destination-folder-id>
+```
+The Python migration, parity, scout, visual-compare, layout, and RLS paths reuse
+a valid caller token, proactively refresh known-age tokens through the
+browser-first provider, and refresh/retry exactly once on HTTP 401. Also set
+`TS_DB` / `TS_SCHEMA` (the warehouse db/schema the model's tables live in).
 
 ## 2. Discover
 ```bash

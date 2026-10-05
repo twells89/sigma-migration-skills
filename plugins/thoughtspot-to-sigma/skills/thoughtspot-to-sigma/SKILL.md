@@ -40,9 +40,16 @@ password, open `${TS_HOST}/api/rest/2.0/auth/session/token` in the logged-in
 browser tab (or Develop → REST Playground) and copy the `token`. For a service
 identity, enable Trusted Auth (Develop → Customizations → Security Settings) and
 POST `username`+`secret_key` to `auth/token/full`. Sigma side uses
-`SIGMA_BASE_URL` + `SIGMA_API_TOKEN` (vendored `scripts/get-token.sh`).
-Trials often sit behind corp TLS — the Python helpers use an unverified SSL
-context (curl uses the system store and works).
+`SIGMA_BASE_URL` plus a valid caller bearer, a browser refresh session stored
+by one-time `eval "$(scripts/browser-login.sh)"` (preferred), or
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` as the unattended fallback. The
+Python migration, parity, scout, visual-compare, layout, and RLS paths use the
+co-located `scripts/lib/sigma_rest.py`: known-age tokens refresh proactively,
+the browser keychain is tried before client credentials, and one HTTP 401 is
+refreshed and retried. No manual token mint is required for those scripts.
+Trials often sit behind corp TLS — the Python helpers prefer the OS trust store,
+then certifi, and disable verification only when the user explicitly sets the
+corresponding insecure-TLS override.
 
 ## Source dashboard PNG + value anchors (Phase 1d — MANDATORY for the measured gates)
 
@@ -91,7 +98,7 @@ single command (mirrors qlik-to-sigma's `migrate-qlik.rb`). Gates are never
 bypassed: the command exits non-zero if parity or `assert-phase6-ran.rb` fails.
 
 ```bash
-export TS_HOST TS_TOKEN SIGMA_CONNECTION_ID TS_DB TS_SCHEMA   # + Sigma creds (token auto-minted from ~/.sigma-migration/env)
+export TS_HOST TS_TOKEN SIGMA_BASE_URL SIGMA_CONNECTION_ID TS_DB TS_SCHEMA
 python3 scripts/migrate-thoughtspot.py --model <TS_MODEL_ID> [--liveboard <ID> ...] \
        [--name PREFIX] [--workdir DIR]
 # offline (fixtures, no TS instance):
@@ -125,7 +132,7 @@ python3 scripts/migrate-thoughtspot.py --model-tml fixtures/retail-analytics-mod
 
 ## Manual phases: migrate.py (the per-phase pipeline the one-command wraps)
 ```
-export TS_HOST TS_TOKEN SIGMA_BASE_URL SIGMA_API_TOKEN \
+export TS_HOST TS_TOKEN SIGMA_BASE_URL \
        SIGMA_CONNECTION_ID SIGMA_FOLDER_ID TS_DB TS_SCHEMA
 python3 scripts/migrate.py --model <TS_MODEL_ID> [--liveboard <ID> ...] \
        [--name PREFIX] [--workdir DIR] [--reuse-dm <dataModelId>]
@@ -375,7 +382,11 @@ driving the picker by hand:
 - `visual-similarity.py` — gate 14: scores `dashboards/source.png` vs the Sigma render →
   `visual-similarity.json` (invoked by `assert-phase6-ran.rb`)
 - `gap-scout.md` + `scout-validate.py` + `learned-rules.py` — formula gap-scout (validate + persist unhandled-TML translations)
-- `get-token.sh` — Sigma token; `get-ts-token.sh` — ThoughtSpot Trusted-Auth service token
+- `browser-login.sh` — preferred one-time interactive Sigma login; stores the
+  refresh session in the OS keychain
+- `get-token.sh` — browser-first Sigma token helper for raw shell/curl use;
+  Python migration scripts call the same provider through `lib/sigma_rest.py`
+- `get-ts-token.sh` — ThoughtSpot Trusted-Auth service token
 
 ## Worked example
 The DEMO_DB.DEMO retail star (ORDER_FACT + 5 dims) → ThoughtSpot model "Retail Analytics"
@@ -420,10 +431,11 @@ Row/column security is **never silently dropped and never silently ported** — 
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + username-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   eval "$(scripts/get-token.sh)"
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
    ```
+   This Python path uses the browser-first provider and one-401 retry contract
+   described above.
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 

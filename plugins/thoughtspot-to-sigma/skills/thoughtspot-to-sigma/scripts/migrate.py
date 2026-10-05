@@ -28,19 +28,20 @@ exported pair. No TS_HOST/TS_TOKEN needed.
 
 Env:
   TS_HOST, TS_TOKEN                         ThoughtSpot (live mode only)
-  SIGMA_BASE_URL, SIGMA_API_TOKEN           Sigma
+  SIGMA_BASE_URL                            Sigma API host (auth is browser-first)
   SIGMA_CONNECTION_ID                       warehouse connection in Sigma
   SIGMA_FOLDER_ID                           destination folder
   TS_DB, TS_SCHEMA                          warehouse db/schema for the model's tables
   TS_WORKDIR                                default for --workdir (else ./ts-migration)
 """
-import argparse, json, os, re, ssl, subprocess, sys, time, urllib.request, urllib.error
+import argparse, json, os, re, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import yaml, ts_common, ts_lib, apply_layouts, scout_gate
 from warehouse_column_refs import apply as ground_warehouse_refs
 import metric_binding as _mb    # shared DM-metric binder ([Metrics/<name>] over inline re-derive)
 import code_rep  # workbook code-rep document-wrapper adapter (nested POST shape)
+import sigma_rest
 yaml.SafeLoader.add_constructor("tag:yaml.org,2002:value", lambda l, n: l.construct_scalar(n))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +51,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _VENDORED_CONV = os.path.join(HERE, "..", "converter", "thoughtspot.mjs")
 if not os.environ.get("CONVERTER_PATH") and os.path.exists(_VENDORED_CONV):
     os.environ["CONVERTER_PATH"] = _VENDORED_CONV
-_SSL = ts_lib.ssl_context()
 MCP_TOOL = "mcp__sigma-data-model__convert_thoughtspot_to_sigma"
 
 # Unattended mode (set from --yes in main). Regression fix (gap-scout PR #153):
@@ -64,15 +64,52 @@ def need_env(*names):
         sys.exit("missing env: " + ", ".join(missing))
     return [os.environ[n] for n in names]
 
-def sigma(method, path, body=None):
-    base, tok = need_env("SIGMA_BASE_URL", "SIGMA_API_TOKEN")
-    r = urllib.request.Request(base + path, data=(json.dumps(body).encode() if body else None),
-        method=method, headers={"Authorization": "Bearer " + tok, "Accept": "application/json",
-        **({"Content-Type": "application/json"} if body else {})})
+class SigmaApiError(RuntimeError):
+    """Compatibility wrapper that retains the old transport's HTTP status."""
+
+    def __init__(self, status, detail):
+        self.status = status
+        self.code = status
+        super().__init__(detail)
+
+
+def ensure_sigma_env(workdir=None):
+    """Load neutral credentials and any shell-neutral auth.json handoff.
+
+    Token selection stays lazy so offline conversion and dry runs remain
+    credentials-free; the first live request invokes the browser-first provider.
+    """
+    if workdir:
+        os.environ.setdefault("SIGMA_WORKDIR", workdir)
+    sigma_rest.bootstrap_credentials(cwd=workdir)
+
+
+def sigma(method, path, body=None, binary=False):
+    """Sigma transport with the historical raw-response contract.
+
+    Call sites continue to parse JSON/YAML/CSV themselves. The co-located
+    shared client owns valid-token reuse, browser/client refresh, proactive
+    token aging, URL validation, and one refresh/retry on HTTP 401.
+    """
     try:
-        return urllib.request.urlopen(r, context=_SSL).read().decode()
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Sigma {method} {path} -> {e.code}: {e.read().decode()[:300]}")
+        raw = sigma_rest.request(
+            method.lower(),
+            path,
+            body=json.dumps(body) if body else None,
+            accept="application/json",
+            binary=True,
+        )
+        return raw if binary else raw.decode()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        detail = str(exc)
+        match = re.search(r" -> (\d+)[^\n]*\n?(.*)", detail, re.DOTALL)
+        status = int(match.group(1)) if match else None
+        message = (
+            f"Sigma {method} {path} -> {status}: {match.group(2)[:300]}"
+            if match
+            else f"Sigma {method} {path}: {detail}"
+        )
+        raise SigmaApiError(status, message) from exc
 
 def resolve_workdir(arg):
     wd = arg or os.environ.get("TS_WORKDIR") or os.path.join(os.getcwd(), "ts-migration")
@@ -274,31 +311,28 @@ def error_column_gate(wb, wd, display):
     print("   gap-scout: all %d error column(s) accounted for (validated or escalated)" % len(gap_ids))
 
 def render_page_png(wb, page_id, out, w=1800, h=1000):
-    """Render one workbook PAGE to a PNG via the REST export API (token explicit
-    via the same SIGMA_API_TOKEN the rest of the run uses). Returns True on a
-    real PNG, False otherwise — NON-FATAL (a transient export must not sink a
-    green migration). Promotes compare.py's element render to a full-page one."""
-    base, tok = need_env("SIGMA_BASE_URL", "SIGMA_API_TOKEN")
-    body = json.dumps({"pageId": page_id,
-                       "format": {"type": "png", "pixelWidth": w, "pixelHeight": h}}).encode()
+    """Render one workbook page through the shared, refreshable transport.
+
+    Returns True on a real PNG and False otherwise. A transient export remains
+    non-fatal so visual QA does not sink an otherwise green migration.
+    """
+    body = {"pageId": page_id,
+            "format": {"type": "png", "pixelWidth": w, "pixelHeight": h}}
     try:
-        r = urllib.request.Request(base + f"/v2/workbooks/{wb}/export", data=body, method="POST",
-            headers={"Authorization": "Bearer " + tok, "Content-Type": "application/json"})
-        qid = json.loads(urllib.request.urlopen(r, context=_SSL).read().decode()).get("queryId")
+        qid = json.loads(sigma("POST", f"/v2/workbooks/{wb}/export", body)).get("queryId")
     except Exception as ex:
         print(f"     [warn] visual-QA export POST failed for page {page_id}: {ex}")
         return False
     for _ in range(40):
         try:
-            g = urllib.request.Request(base + f"/v2/query/{qid}/download",
-                                       headers={"Authorization": "Bearer " + tok})
-            data = urllib.request.urlopen(g, context=_SSL).read()
+            data = sigma("GET", f"/v2/query/{qid}/download", binary=True)
             if data[:4] == b"\x89PNG":
                 open(out, "wb").write(data)
                 return True
-        except urllib.error.HTTPError as e:
-            if e.code not in (202, 204, 404):
-                print(f"     [warn] visual-QA download {e.code} for page {page_id}"); return False
+        except SigmaApiError as exc:
+            if exc.status not in (202, 204, 404):
+                print(f"     [warn] visual-QA download {exc.status} for page {page_id}")
+                return False
         time.sleep(2)
     return False
 
@@ -557,6 +591,7 @@ def main():
     global UNATTENDED
     UNATTENDED = a.yes
     wd = resolve_workdir(a.workdir)
+    ensure_sigma_env(wd)
     offline = bool(a.model_tml)
     if not a.model and not a.model_tml:
         ap.error("--model or --model-tml required")
