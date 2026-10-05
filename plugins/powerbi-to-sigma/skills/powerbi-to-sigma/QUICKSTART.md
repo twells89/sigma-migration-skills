@@ -85,7 +85,13 @@ Duration: 5
      cortex skill add sigma-migration-skills/plugins/powerbi-to-sigma/skills/powerbi-to-sigma
      ```
    The two skills live at `plugins/powerbi-to-sigma/skills/{powerbi-to-sigma,powerbi-assessment}/`. Run each skill's scripts **from its own skill directory** — script paths are relative (e.g. `scripts/fabric-auth-check.py`).
-2. **Sigma credentials** — run `ruby scripts/setup.rb` (in the tableau-to-sigma skill) once. It writes both `~/.claude/settings.json` and a neutral, sourceable `~/.sigma-migration/env` (mode 0600), which every script auto-loads under any agent. (Or just `export SIGMA_BASE_URL` / `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` yourself.) `scripts/get-token.sh` exchanges them for a ~1h `SIGMA_API_TOKEN`.
+2. **Sigma authentication** — set `SIGMA_BASE_URL`, then run the preferred
+   one-time browser login from an interactive terminal:
+   `eval "$(bash scripts/browser-login.sh)"`. Live migration helpers reuse the
+   stored keychain session, refresh known-age tokens proactively, and retry one
+   HTTP 401. For unattended hosts, configure `SIGMA_CLIENT_ID` /
+   `SIGMA_CLIENT_SECRET` with `ruby scripts/setup.rb --from-env`; setup writes
+   the agent-neutral `~/.sigma-migration/env`.
 3. **Power BI auth** — from the `powerbi-to-sigma` skill dir, run the device-code flow
    (use the venv interpreter from the Prerequisites step — it has `msal`/`truststore`):
    ```bash
@@ -117,7 +123,7 @@ points (e.g. a DAX measure the converter can't translate) surface as a structure
 Each phase is checkpointed, so you can answer the questions and resume.
 
 ```bash
-eval "$(scripts/get-token.sh)"   # Sigma token in env first (or rely on ~/.sigma-migration/env)
+# After the one-time browser login (or unattended client setup):
 ruby scripts/migrate-powerbi.rb \
   --tmsl   /path/to/Model.tmsl \
   --pbir   /path/to/Report.json \

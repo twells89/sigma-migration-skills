@@ -32,6 +32,14 @@ raw = {
   }]
 }
 
+source = File.read(File.expand_path('convert-model.rb', __dir__))
+check.call(source.include?("require_relative 'lib/sigma_rest'") &&
+           source.include?('Sigma.request(:get, "/v2/dataModels/#{opts[:ref_dm]}/spec")'),
+           'reference-DM harvest delegates browser/client auth and one-401 retry to sigma_rest')
+check.call(!source.include?("ENV.fetch('SIGMA_API_TOKEN')") &&
+           !source.include?("req['Authorization']"),
+           'reference-DM harvest does not read or attach a static bearer')
+
 Dir.mktmpdir('reprefix-test') do |dir|
   input = File.join(dir, 'raw.json')
   output = File.join(dir, 'spec.json')

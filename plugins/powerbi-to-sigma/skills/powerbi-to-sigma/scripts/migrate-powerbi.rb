@@ -30,7 +30,8 @@
 # QUESTIONS, not silent Null columns.
 #
 # Usage:
-#   eval "$(scripts/get-token.sh)"   # Sigma token in env first (or rely on ~/.sigma-migration/env)
+#   # Sigma auth resolves through a valid caller token, stored browser session,
+#   # or client credentials in ~/.sigma-migration/env.
 #   ruby scripts/migrate-powerbi.rb \
 #     --tmsl /tmp/assessment-pbi-live/raw-tmsl/Test__Superstore_Overview.tmsl \
 #     --pbir /tmp/assessment-pbi-live/raw-pbir/Test__Superstore_Overview.json \
@@ -2090,7 +2091,11 @@ else
 
   probe_out = File.join(WORK, 'probe-controls')
   probe     = File.join(HERE, 'probe-controls.rb')
-  has_creds = !ENV['SIGMA_BASE_URL'].to_s.empty? && !ENV['SIGMA_API_TOKEN'].to_s.empty?
+  has_creds = begin
+    !ENV['SIGMA_BASE_URL'].to_s.empty? && !Sigma.auth_token.to_s.empty?
+  rescue Sigma::Error
+    false
+  end
 
   decision, info =
     if n_controls == 0

@@ -14,14 +14,13 @@
 #   ruby put-layout.rb --workbook <wbId> --layout <layout.xml> \
 #     [--elements <elements.json>]
 
-require 'net/http'
-require 'uri'
 require 'json'
 require 'yaml'
 require 'date'
 require 'optparse'
 $LOAD_PATH.unshift File.expand_path('lib', __dir__)
 require 'code_rep'
+require 'sigma_rest'
 # Ruby 2.6 floor (macOS system ruby): this file uses a 2.7+ Enumerable
 # method. Polyfilled rather than rewritten — see shared/lib/ruby_compat.rb.
 require_relative 'lib/ruby_compat'
@@ -34,18 +33,11 @@ OptionParser.new do |p|
 end.parse!
 %i[wb layout].each { |k| abort("missing --#{k}") unless opts[k] }
 
-BASE = ENV.fetch('SIGMA_BASE_URL')
-TOK  = ENV.fetch('SIGMA_API_TOKEN')
+HttpResponse = Struct.new(:body)
 
 def http(method, path, body = nil)
-  uri = URI("#{BASE}#{path}")
-  req = case method
-        when :get then Net::HTTP::Get.new(uri)
-        when :put then r = Net::HTTP::Put.new(uri); r.body = body; r['Content-Type'] = 'application/json'; r
-        end
-  req['Authorization'] = "Bearer #{TOK}"
-  req['Accept']        = 'application/json'
-  Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
+  raw = Sigma.request(method, path, body: body, accept: '*/*')
+  HttpResponse.new(raw.is_a?(String) ? raw : JSON.generate(raw))
 end
 
 # encoding: 'UTF-8' is NOT optional — this layout XML is regexp-matched below and
