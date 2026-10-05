@@ -13,10 +13,11 @@
 #     2026-06-02, so a bare first-page GET silently truncates at the server
 #     default (50) — the field case is a 599-column workbook.
 #   - list_entries: query-string composition + defensive termination.
-#   - migrate-tableau.rb wiring pins: sigma_token! reuses a fresh-stamped
-#     token instead of minting per child; both Sigma spawn wrappers forward
-#     the mint stamp; tableau_env reuses its signin within a TTL; all five
-#     orchestrator list reads paginate via Sigma.list_entries.
+#   - migrate-tableau.rb wiring/runtime: sigma_token! delegates to the shared
+#     browser-first policy, preserving unknown-age caller tokens and refreshing
+#     known-stale tokens; both Sigma spawn wrappers forward the mint stamp;
+#     tableau_env reuses its signin within a TTL; all five orchestrator list
+#     reads paginate via Sigma.list_entries.
 #
 # Usage: ruby scripts/test-sigma-rest-pagination.rb
 
@@ -141,14 +142,36 @@ out = Sigma.list_entries('/v2/teams', http: http)
 check(out.length == 1 && http.reqs.length == 1,
       'an empty nextPage ends the loop (single page)', fails)
 
-# --- orchestrator wiring pins (migrate-tableau.rb): mint-once-per-TTL +
-#     paginated list reads through the shared lib ----------------------------
+# --- orchestrator auth/runtime + wiring pins -------------------------------
 src = File.read(File.expand_path('migrate-tableau.rb', __dir__), encoding: 'UTF-8')
 destination_src = File.read(
   File.expand_path('lib/destination_resolver.rb', __dir__), encoding: 'UTF-8'
 )
-check(src =~ /def sigma_token!.*?Sigma\.token_minted_at\.nil\? \|\| Sigma\.token_stale\?.*?Sigma\.refresh_token!/m,
-      'sigma_token! reuses a fresh-stamped token and mints only when stale/unknown (once per TTL, not per child)', fails)
+sigma_token_source = src[/^def sigma_token!.*?^end$/m]
+check(!sigma_token_source.nil? && sigma_token_source.match?(/^\s+Sigma\.auth_token$/) &&
+        !sigma_token_source.include?('Sigma.refresh_token!'),
+      'sigma_token! delegates token freshness and browser/client refresh to Sigma.auth_token', fails)
+check(sigma_token_source.to_s.include?('browser login or client credentials') &&
+        sigma_token_source.to_s.include?('browser-login.sh') &&
+        sigma_token_source.to_s.include?('SIGMA_CLIENT_ID'),
+      'sigma_token! failure names both browser login and unattended client remediation', fails)
+
+eval(sigma_token_source, binding, 'migrate-tableau.rb:sigma_token!') if sigma_token_source
+
+reset_state!
+ENV['SIGMA_API_TOKEN'] = 'caller-or-browser-token'
+before = $mints
+check(sigma_token! == 'caller-or-browser-token' && $mints == before,
+      'orchestrator preserves a valid unknown-age caller/browser token', fails)
+
+reset_state!
+ENV['SIGMA_API_TOKEN'] = 'known-stale'
+ENV['SIGMA_TOKEN_MINTED_AT'] =
+  (Time.now - (Sigma::TOKEN_TTL_SECONDS + 60)).utc.iso8601
+before = $mints
+check(sigma_token! == "minted-#{before + 1}" && $mints == before + 1,
+      'orchestrator refreshes a known-stale token through the shared provider policy', fails)
+
 check(src.scan("'SIGMA_TOKEN_MINTED_AT' => ENV['SIGMA_TOKEN_MINTED_AT']").size == 2,
       'both Sigma child-spawn wrappers pass the mint stamp so children age the token correctly', fails)
 check(src.include?('TABLEAU_ENV_TTL_SECONDS') && src.include?('$tableau_env_cache'),

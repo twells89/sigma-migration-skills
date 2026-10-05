@@ -18,6 +18,28 @@ prompts (no-TTY-safe), and never echoes credential values. Node is pinned to
 `migrate-tableau.rb` and `migrate-tableau.py` refuse to start until the
 bootstrap sentinel + a passing `doctor.json` exist.
 
+## Sigma authentication at preflight
+
+Bootstrap is deliberately noninteractive and never opens a browser. It accepts
+an already-current `SIGMA_API_TOKEN`, a browser refresh session already stored
+in the OS keychain, or complete client credentials. Each route also needs
+`SIGMA_BASE_URL`. The doctor verifies the route with `GET /v2/whoami` through
+the shared `sigma_rest` client: it tries the caller token first, then retries
+one 401 through the browser-first/client-fallback provider.
+
+For the preferred one-time human login, run this explicitly from an interactive
+terminal (Git Bash on Windows):
+
+```bash
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
+```
+
+Later bootstrap/doctor and Tableau migration runs reuse the keychain session
+without opening the browser. For unattended hosts, configure
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` with `setup.rb --from-env` or
+`setup.py --from-env`.
+
 To require the supported no-Ruby path, add `--runtime-profile python` on
 macOS/Linux or `-RuntimeProfile python` in PowerShell. `auto` prefers Ruby when
 available and falls back to Python when Ruby cannot be installed. The Python
@@ -217,20 +239,19 @@ anyway — see the SKILL.md prerequisites rule).
 
 ### Sigma credentials
 
-`ruby scripts/setup.rb` once (bootstrap runs it `--from-env` when the vars are
-exported). Writes `~/.claude/settings.json` (Claude Code auto-loads) and
-`~/.sigma-migration/env` (neutral, auto-sourced by the scripts under any
-agent). Required: `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, `SIGMA_CLIENT_SECRET`.
-Tokens live ~1h — scripts auto-refresh; for hand-driven calls,
-`python scripts/get_token.py --workdir <WORK>` (any shell). Shell footguns
-(subshell `eval`, inline-python quoting): `refs/troubleshooting.md` §Shell.
+Prefer the one-time browser login above. Its refresh token remains in the OS
+keychain; scripts preserve a valid caller/browser access token and refresh it
+through the shared provider when its age is known stale or a request receives
+one 401. For unattended service hosts, run `ruby scripts/setup.rb` (or
+`python3 scripts/setup.py`) once with client credentials; bootstrap runs
+`--from-env` when those variables are exported. Setup writes
+`~/.claude/settings.json` and `~/.sigma-migration/env`.
 
 > **Credentials are shell-neutral.** The Ruby/Python scripts mint Sigma tokens
-> themselves from `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` (env or
-> `~/.sigma-migration/env`) and auto-refresh — no `eval` step, any shell. For a
-> hand-driven `curl`, mint explicitly: `python scripts/get_token.py --workdir
-> <WORK>` writes `<WORK>/auth.json` (0600), read automatically by the scripts.
-> (`eval "$(scripts/get-token.sh)"` still works in bash.)
+> through the browser-first provider with client-credential fallback and
+> auto-refresh — no token step is required for orchestrated calls. For a
+> hand-driven call, `python scripts/get_token.py --workdir <WORK>` writes
+> `<WORK>/auth.json` (0600), read automatically by the scripts.
 
 ### Tableau access — two modes
 

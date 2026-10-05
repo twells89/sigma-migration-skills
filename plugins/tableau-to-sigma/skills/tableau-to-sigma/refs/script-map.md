@@ -20,7 +20,7 @@ you to.
 | `lib/offramp.rb` + `offramps.jsonl` | Observability trail of every golden-path exit |
 | `setup.rb` / `setup-tableau.rb` | One-time Sigma / Tableau credential setup (`--from-env` = non-interactive; bootstrap runs them) |
 | `setup.py` / `setup-tableau.py` | No-Ruby Sigma / Tableau credential setup with the same neutral environment contract |
-| `get-token.sh` / `get_token.py` | Sigma token mint (bash / shell-neutral twin → `<WORK>/auth.json`) |
+| `browser-login.sh` / `get-token.sh` / `get_token.py` | One-time Sigma browser login + browser-first token provider (client-credential fallback; Python can write `<WORK>/auth.json`) |
 | `get-tableau-token.sh` / `get-tableau-token.py` | Tableau PAT signin (bash / shell-neutral twin) |
 | `bootstrap.sh` / `bootstrap.ps1` | Step-0 environment bootstrap → doctor-green + sentinel (`--check` dry run) |
 | `doctor.sh` / `doctor.ps1` | Env check; writes the `doctor.json` fingerprint the orchestrator gates on |
@@ -80,8 +80,9 @@ you to.
 | `scripts/verify-complete.rb` | **The single offline "are we done?" check** — exit 0 / ✅ DONE only when `phase6-success.json` is present (stamped by `assert-phase6-ran.rb` exit 0) and no `parity-pending.json` remains. A clean PASS 1 (exit 12) reports NOT DONE. PR-14: re-derives the degradation ledger, prints the verdict (GREEN/YELLOW/PARTIAL) with the ledger inline, and **exits 6 when the report's claims (verdict / waiver census) contradict the derivation** — the anti-"GREEN, 0 waivers" cross-check. Also prints the run's off-ramp trail. Run before claiming success. |
 | `scripts/lib/offramp.rb` + `offramps.jsonl` | **Observability trail** — every point a run leaves the golden path (cred/doctor waiver, PASS-1 stop, converter-stop, workbook-handoff, degraded fast path, manual-spec) appends a structured record to `<WORK>/offramps.jsonl`. Read it (or `verify-complete.rb`) to pinpoint *where* a run defected. |
 | `scripts/setup.rb` | One-time Sigma credential setup |
-| `scripts/get-token.sh` | Exchange `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` for `SIGMA_API_TOKEN` (~1h TTL) — **bash only** |
-| `scripts/get_token.py` | Shell-neutral twin of `get-token.sh` (bash/PowerShell/cmd): writes `<WORK>/auth.json` (0600), read automatically by the scripts |
+| `scripts/browser-login.sh` | Preferred one-time interactive Sigma OAuth login; stores refresh state in the OS keychain |
+| `scripts/get-token.sh` | Browser-first token provider with client-credential fallback — **bash only** |
+| `scripts/get_token.py` | Canonical shell-neutral provider (browser keychain first, client fallback): writes `<WORK>/auth.json` (0600), read automatically by the scripts |
 | `scripts/doctor.sh` / `scripts/doctor.ps1` | Step-0 env check; writes `doctor.json` fingerprint the orchestrator gates on |
 | `scripts/assert-doctor-ran.rb` | 🚧 GATE — refuse to run without a passing `doctor.json` |
 | `scripts/assert-wb-refs-resolve.rb` | 🚧 GATE — every workbook `[Element/Column]` ref must exist in the live DM before POST (catches multi-datasource collapse → "Dependency not found"; waive `--skip-ref-check "<reason>"`) |

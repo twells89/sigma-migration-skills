@@ -102,6 +102,11 @@ apply_src = File.read(File.join(DIR, 'apply_sigma_rls.py'))
 check(apply_src.include?('rule.get("kind") == "rls-entitlement-table"') &&
       apply_src.match?(/NOT auto-applied \(by design\)/),
       'apply_from_security has an explicit never-auto-apply branch for entitlement rules', fails)
+check(apply_src.include?('import sigma_rest') &&
+      apply_src.include?('sigma_rest.request(') &&
+      !apply_src.include?('TOK = os.environ.get("SIGMA_API_TOKEN")') &&
+      !apply_src.include?('"Authorization": "Bearer " + TOK'),
+      'live RLS path delegates browser/client auth + one-401 retry to sigma_rest (no static bearer)', fails)
 mig_src = File.read(File.join(DIR, 'migrate-tableau.rb'))
 check(mig_src.match?(/rls-entitlement-table/) && mig_src.match?(/UNCONSTRAINED live join/),
       'migrate-tableau RLS gate surfaces entitlement rules with the unconstrained-join risk', fails)

@@ -80,8 +80,9 @@ run. Do not "clean up" `'None'` strings in landed tables downstream.
 `{"path": ["DB", "SCHEMA", "TABLE"]}` makes a newly landed table visible to
 Sigma **immediately** — no UI "refresh schema" needed. Verified 48/48 in the
 live-migration run. `--sigma-connection-id` does this per landed table and reports
-ok/fail counts. (This supersedes any older "no API can refresh the catalog"
-claims.)
+ok/fail counts. Catalog sync authenticates through `scripts/lib/sigma_rest.py`
+(browser keychain first, client-credential fallback) and refreshes/retries once
+on a 401. (This supersedes any older "no API can refresh the catalog" claims.)
 
 If you re-sync **manually** (e.g. after renaming a landed table) via
 `Sigma.request` / `sigma_rest.request`, the `body:` must be a **JSON string**,
