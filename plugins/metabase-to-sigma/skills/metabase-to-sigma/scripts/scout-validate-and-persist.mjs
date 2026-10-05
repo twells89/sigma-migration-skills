@@ -7,7 +7,7 @@
 // candidate); this script does the deterministic POST/validate/write.
 //
 // Usage:
-//   eval "$(scripts/get-token.sh)"
+//   # Set SIGMA_BASE_URL; auth is browser-first and automatic.
 //   node scripts/scout-validate-and-persist.mjs \
 //     --feature 'running-total' \
 //     --pattern '\brunning-total\s*\(\s*\[([^\]]+)\]\s*\)' \

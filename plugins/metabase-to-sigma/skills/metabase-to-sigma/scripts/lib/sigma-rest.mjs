@@ -1,26 +1,75 @@
-// Minimal Sigma REST helper for the metabase-to-sigma verify scripts.
-// Reads SIGMA_BASE_URL + SIGMA_API_TOKEN from env — run `eval "$(scripts/get-token.sh)"` first.
+// Fetch-based Sigma REST helper for the metabase-to-sigma live scripts.
+// Preserves valid caller tokens, refreshes known-stale tokens through the
+// browser-first provider, and refreshes/retries exactly once after any 401.
 // Tolerates YAML responses (Sigma's /spec POST returns YAML) when pulling an id.
+import {
+  loadSigmaAuth,
+  refreshSigmaAuth,
+  sigmaWorkdir,
+} from './auth.mjs';
 
-export function sigmaEnv() {
-  const base = process.env.SIGMA_BASE_URL, token = process.env.SIGMA_API_TOKEN;
-  if (!base || !token) {
-    console.error('Missing SIGMA_BASE_URL / SIGMA_API_TOKEN. Run: eval "$(scripts/get-token.sh)"');
-    process.exit(2);
+function validateBase(base) {
+  const url = new URL(base);
+  const host = url.hostname.toLowerCase();
+  const insecure = process.env.SIGMA_ALLOW_INSECURE_BASE_URL === '1';
+  if (!insecure && (url.protocol !== 'https:' ||
+      !(host === 'sigmacomputing.com' || host.endsWith('.sigmacomputing.com')))) {
+    throw new Error(`refusing to send a Sigma bearer token to untrusted base URL: ${base}`);
   }
-  return { base: base.replace(/\/$/, ''), token };
+  if (insecure && !['https:', 'http:'].includes(url.protocol)) {
+    throw new Error(`refusing non-HTTP Sigma base URL: ${base}`);
+  }
 }
 
+export function sigmaEnv(workdir = sigmaWorkdir()) {
+  try {
+    const { base, token } = loadSigmaAuth(workdir);
+    return { base, token };
+  } catch (error) {
+    console.error(`Sigma authentication unavailable: ${error.message}`);
+    process.exit(2);
+  }
+}
+
+export function makeClient(workdir = sigmaWorkdir(), options = {}) {
+  const loadAuth = options.loadAuth || loadSigmaAuth;
+  const refreshAuth = options.refreshAuth || refreshSigmaAuth;
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  let auth = loadAuth(workdir);
+  validateBase(auth.base);
+
+  async function request(method, path, body) {
+    let res;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      res = await fetchImpl(auth.base + path, {
+        method,
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
+      });
+      if (res.status !== 401 || attempt === 1) break;
+      auth = refreshAuth(workdir);
+      validateBase(auth.base);
+    }
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* Sigma /spec POST can return YAML or empty */ }
+    return { status: res.status, ok: res.ok, text, json };
+  }
+
+  return { base: auth.base, api: request };
+}
+
+let defaultClient;
 export async function api(method, path, body) {
-  const { base, token } = sigmaEnv();
-  const res = await fetch(base + path, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
-  });
-  const text = await res.text();
-  let json = null; try { json = JSON.parse(text); } catch { /* YAML or empty */ }
-  return { status: res.status, ok: res.ok, text, json };
+  if (!defaultClient) {
+    const workdir = sigmaWorkdir();
+    defaultClient = makeClient(workdir, { loadAuth: () => sigmaEnv(workdir) });
+  }
+  return defaultClient.api(method, path, body);
 }
 
 // Sigma POST /spec returns JSON ({"workbookId":...}) OR YAML (workbookId: ...). Pull either.

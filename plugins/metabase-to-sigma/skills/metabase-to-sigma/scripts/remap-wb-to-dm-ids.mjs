@@ -8,7 +8,7 @@
 // element NAME from the DM readback. (This was a manual step in every live test.)
 //
 // Usage:
-//   eval "$(scripts/get-token.sh)"
+//   # Set SIGMA_BASE_URL; auth is browser-first and automatic.
 //   node scripts/remap-wb-to-dm-ids.mjs --wb wb-spec.json --dm-id <dataModelId> [--out wb.remapped.json]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { api, parseArgs, elementsOf } from './lib/sigma-rest.mjs';

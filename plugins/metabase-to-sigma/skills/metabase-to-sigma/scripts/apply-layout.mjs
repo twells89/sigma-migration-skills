@@ -9,7 +9,7 @@
 // layout-safe full-document write after any post-create repair.
 //
 // Usage:
-//   eval "$(scripts/get-token.sh)"
+//   # Set SIGMA_BASE_URL; auth is browser-first and automatic.
 //   node scripts/apply-layout.mjs --workbook <workbookId> [--hints layout-hints.json]
 //
 // --hints (from `cli.ts … --layout-out hints.json`) reproduces the ORIGINAL
