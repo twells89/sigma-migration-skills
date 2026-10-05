@@ -97,14 +97,14 @@ logic.
   (+ optional `MSTR_PROJECT_ID`), exported or in `~/.sigma-migration/env`.
   Auth is session-based (`POST /api/auth/login`, loginMode 1) — there is no
   API-key concept; `scripts/mstr.py` handles it.
-- **Sigma API token** — `eval "$(scripts/get-token.sh)"` (uses
-  `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`, same neutral-cred pattern as the
-  sibling skills). If those Sigma creds aren't set yet (fresh machine, no prior
-  migration), run `ruby scripts/setup.rb` once — it prompts for the Sigma
-  base URL / client id / secret (+ optional connection id) and writes them to
-  both `~/.claude/settings.json` and `~/.sigma-migration/env`, so `get-token.sh`
-  and every sibling skill pick them up. (Source-side MSTR creds are separate —
-  see the MicroStrategy bullet above.)
+- **Sigma authentication** — set `SIGMA_BASE_URL`, then preferably run
+  `eval "$(bash scripts/browser-login.sh)"` once from an interactive terminal.
+  The co-located `scripts/lib/sigma_rest.py` reuses a current bearer or the
+  keychain refresh session; `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` remain the
+  unattended fallback. Known-old tokens refresh proactively, and live requests
+  retry once after HTTP 401. `ruby scripts/setup.rb` can persist unattended
+  credentials and the optional connection id. (Source-side MSTR creds are
+  separate — see the MicroStrategy bullet above.)
 - **The same warehouse on both sides.** Sigma reads the warehouse live; parity
   only means something when the Sigma connection reaches the database
   MicroStrategy queries.
@@ -300,7 +300,6 @@ detects it itself), MicroStrategy's Analytical Engine collapses non-unique key
 groups to one representative row that **cannot be derived from the model**:
 
 ```bash
-eval "$(scripts/get-token.sh)"
 python3 scripts/resolve_ae_winners.py --connection-id <id> --database <DB> \
   --folder-id <folderId> --out ae_winners.json
 python3 scripts/convert.py ... --ae-winners ae_winners.json
@@ -322,7 +321,6 @@ near-identical model:
 
 ```bash
 python3 scripts/mstr-dm-signature.py --dm-spec sigma_dm_spec.json --out dm-signature.json
-eval "$(scripts/get-token.sh)"
 ruby scripts/find-or-pick-dm.rb --workbook-signature dm-signature.json \
   --out dm-match.json [--auto-pick]
 ```
@@ -341,12 +339,10 @@ DM (0.7·column + 0.2·table + 0.1·metric overlap):
 ## Phase 3 — POST the data model + read back ids (hard gate)
 
 ```bash
-eval "$(scripts/get-token.sh)"
-curl -s -X POST "$SIGMA_BASE_URL/v2/dataModels/spec" \
-  -H "Authorization: Bearer $SIGMA_API_TOKEN" -H "Content-Type: application/json" \
-  -d @sigma_dm_spec.json            # -> dataModelId
-curl -s "$SIGMA_BASE_URL/v2/dataModels/<dataModelId>/spec" \
-  -H "Authorization: Bearer $SIGMA_API_TOKEN" > dm_readback.yaml
+python3 scripts/sigma-request.py POST /v2/dataModels/spec \
+  --body sigma_dm_spec.json         # -> dataModelId
+python3 scripts/sigma-request.py GET /v2/dataModels/<dataModelId>/spec \
+  > dm_readback.yaml
 ```
 
 The readback is **YAML**, with **reassigned element ids** — capture them as
@@ -367,9 +363,8 @@ formulas that don't resolve at query time). Do not proceed on errors —
 ```bash
 python3 scripts/convert.py ... --data-model-id <dataModelId> \
   --dm-element-ids dm_element_ids.json [--ae-winners ae_winners.json]
-curl -s -X POST "$SIGMA_BASE_URL/v2/workbooks/spec" \
-  -H "Authorization: Bearer $SIGMA_API_TOKEN" -H "Content-Type: application/json" \
-  -d @sigma_workbook_spec.json      # -> workbookId
+python3 scripts/sigma-request.py POST /v2/workbooks/spec \
+  --body sigma_workbook_spec.json   # -> workbookId
 # MANDATORY run-each-time gap-scout gate (bead beads-sigma-5l5e): the converter
 # passes metric function names through, so a function with no Sigma equivalent
 # surfaces HERE as a type=error column. This script STOPS (exit 11) on any
@@ -377,8 +372,8 @@ curl -s -X POST "$SIGMA_BASE_URL/v2/workbooks/spec" \
 # scripts/gap-scout.md), re-run the gate, and only proceed when it exits 0.
 python3 scripts/scout-gate-readback.py --workbook-id <workbookId> --workdir <out-dir>
 # Read back, validate, and confirm document.layout + flat document.elements survived.
-curl -s "$SIGMA_BASE_URL/v2/workbooks/<workbookId>/spec" \
-  -H "Authorization: Bearer $SIGMA_API_TOKEN" > <out-dir>/workbook-readback.yaml
+python3 scripts/sigma-request.py GET /v2/workbooks/<workbookId>/spec \
+  > <out-dir>/workbook-readback.yaml
 # Run from the companion sigma-workbooks skill directory:
 ./scripts/validate-spec.sh <absolute-out-dir>/workbook-readback.yaml
 # put-layout.rb is now a repair/reapply tool, not the normal create path:
@@ -427,7 +422,7 @@ layout lib de-overlaps bands, but this gate is the safety net (without a
 layout — `document.layout` in the current wrapped spec shape, see Phase 4 —
 the workbook renders as a single-column stack).
 
-1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
+1. Render every page to PNG (the script self-authenticates):
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
 2. **Source-fidelity check — put the Sigma PNG side-by-side with the Phase 1.1
    `source_dossier.pdf`** and compare page-for-page against the
@@ -507,7 +502,9 @@ MANUAL); panel selectors (navigation — flagged MANUAL); the newer
 REST-authorable "Data Model" object incl. `securityFilters` (the future RLS
 port surface — until then, **ask the customer about security filters
 explicitly**; never assume an estate has none just because the classic extract
-doesn't carry them).
+doesn't carry them). Browser OAuth does not change this limitation: there is no
+automated MicroStrategy RLS port path yet, so a security-filter finding is a
+hard stop for an explicit port/skip decision, never a silent omission.
 
 ## Gotchas baked into the scripts (don't re-learn these)
 

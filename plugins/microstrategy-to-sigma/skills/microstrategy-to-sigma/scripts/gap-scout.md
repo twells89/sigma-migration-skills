@@ -52,7 +52,8 @@ INPUTS
 
 DO
 1. Propose a Sigma formula (see the candidate table above).
-2. Validate (eval get-token.sh first):
+2. Validate (`scout-validate.py` self-authenticates through the browser-first
+   shared Sigma client):
    python3 scripts/scout-validate.py --formula '<sigma>' \
      --data-model-id <dm> --element-id <denorm> --folder-id <folder> \
      --feature '<fn>' --pattern '<regex>' --template '<sigma template>' \
