@@ -13,20 +13,27 @@ Includes `auto_layout()` — the reusable layout heuristic (header band + KPI ba
 rows, each a canonical <Container> band per layout-playbook.md) returning (24-col grid
 XML, container/header spec elements). The spec elements MUST be in the POSTed spec or
 the containers are silently dropped.
+
+Sigma auth is resolved by the co-located browser-first sigma_rest.py client; a
+manual SIGMA_API_TOKEN mint is not required.
 """
-import json, os, sys, urllib.request, subprocess, re, argparse
+import json, os, sys, subprocess, re, argparse
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import code_rep  # workbook code-rep document-wrapper adapter (nested POST shape)
+import sigma_rest
 
-BASE=os.environ["SIGMA_BASE_URL"]; TOK=os.environ["SIGMA_API_TOKEN"]
 # Reuse an existing Sigma data model: set these to YOUR ids (from the data-model build
 # step or the Sigma UI), or pass --data-model / --denorm-element / --folder. No real ids baked in.
 DM=os.environ.get("SIGMA_DM_ID",""); DENORM=os.environ.get("SIGMA_DENORM_ELEMENT_ID",""); FOLDER=os.environ.get("SIGMA_FOLDER_ID","")
 PUTLAYOUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),"put_layout.py")
 def post(p,b):
-    r=urllib.request.Request(BASE+p,data=json.dumps(b).encode(),method="POST",headers={"Authorization":"Bearer "+TOK,"Content-Type":"application/json"})
-    try: return urllib.request.urlopen(r).read().decode()
-    except urllib.error.HTTPError as e: print("HTTP",e.code,e.read().decode()[:400],file=sys.stderr); return None
+    try:
+        return sigma_rest.request(
+            "post", p, body=json.dumps(b), accept="application/json", binary=True
+        ).decode()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        print(f"Sigma POST {p} failed: {str(exc)[:400]}", file=sys.stderr)
+        return None
 N=lambda f:{"kind":"number","formatString":f}
 
 def auto_layout(page_id, elems, title="Overview"):
