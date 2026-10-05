@@ -111,7 +111,10 @@ non-equi/OR conditions remain blocked.
 
 The emitted source follows the current compiled Sigma join schema and is tested
 offline for duplicate-key fanout, null keys, composite keys and outer-join filter
-placement. This is not live compiler or warehouse parity evidence. The Report
+placement. A synthetic sample-model join was also created/read back with clean
+columns and exported in Sigma: input predicates remained inside each subquery,
+and an unmatched left row retained a null right value. This validates that
+restricted path, not arbitrary source joins or customer warehouse parity. The Report
 path refuses these hidden source dependencies until non-printing placement is
 verified, rather than printing extra source tables.
 
@@ -186,6 +189,9 @@ node scripts/compose-print-layout.mjs --spec /tmp/cognos-report.json \
 into separately positioned native text paragraphs, preserving editability.
 Its conservative line-count estimate can reject overflow; split/reflow the
 approved text and inspect the actual export, never fall back to an image.
+Live rendering uses a minimum line box even at small inline font sizes; the
+composer budgets at least 24px per line and emits Markdown hard breaks for
+explicit source newlines. Reducing the font alone does not safely reduce height.
 The neutral fixture alone sets `sampleFill: true` to generate clearly labeled nonbinding filler;
 ordinary blueprints never invent text, and an oversized supplied block fails
 instead of silently truncating. `emblem` creates an
@@ -212,10 +218,13 @@ page can cause unexpected extra PDF pages even if Sigma's dry run passes.
 Review every exported sheet for layering, text wrapping, and repeated panels.
 With a posted data model, remap IDs and validate the **composed** spec through
 the REST dry run, create/readback, and PDF export steps below. The neutral
-example previously exported nine nonblank letter pages using image-based dense
-copy. That historical render does **not** validate the current editable-text
-version. Re-export and check pagination after the change; neither offline
-geometry checks nor the old PDF establish current pixel parity.
+example was subsequently updated in place with native dense text, read back,
+and exported as nine nonblank letter pages. All supplied terms paragraphs were
+extractable on the expected pages, the table binding survived, and a further
+edit to an existing text element appeared in the next export. The initial native
+text export clipped lines; the minimum line-box correction above fixed the
+observed issue. This is sample render/editability evidence, not a claim of
+pixel-identical customer reproduction. Re-export after any content or font change.
 
 ## Bind and validate (Sigma REST)
 

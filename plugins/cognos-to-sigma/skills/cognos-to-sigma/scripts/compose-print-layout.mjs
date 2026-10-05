@@ -39,7 +39,9 @@ const denseTextBlocks = (body, width, height, fontSize, sampleFill = false) => {
     'Review the actual exported page for legibility, line wrapping and footer clearance. All content in this section is neutral placeholder copy for print-layout inspection.',
     'A page can be structurally valid yet look incomplete when a paragraph overflows or a font renders differently. Recheck the output after every intentional edit.',
   ];
-  const lineHeight = Math.ceil(fontSize * 1.5), gap = Math.ceil(fontSize * 0.8);
+  // Live Report rich text keeps a minimum line box even with a smaller inline
+  // font; using fontSize alone clipped second lines at 9px.
+  const lineHeight = Math.max(24, Math.ceil(fontSize * 1.5)), gap = Math.ceil(fontSize * 0.8);
   const maxChars = Math.max(1, Math.floor(width / (fontSize * 0.6)));
   const blocks = [];
   let used = 0;
@@ -123,7 +125,7 @@ export function composePrintLayout(input, manifest) {
     }
     const font = block.fontSize;
     if (font != null && (!Number.isFinite(font) || font < 6 || font > 48)) throw new Error('fontSize must be between 6 and 48');
-    const body = font == null ? block.body : block.body.split('\n').map((line) => line ? `<span style="font-size: ${font}px">${esc(line)}</span>` : '').join('\n');
+    const body = font == null ? block.body : block.body.split('\n').map((line) => line ? `<span style="font-size: ${font}px">${esc(line)}</span>` : '').join('  \n');
     const element = { id: id(), kind: 'text', body };
     spec.elements.push(element);
     const node = `<Element elementId="${element.id}" x="${x}" y="${y}" width="${w}" height="${h}"/>`;

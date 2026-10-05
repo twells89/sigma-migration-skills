@@ -63,6 +63,16 @@ const special = composePrintLayout(base, { pages: [{ name: 'Exact copy', blocks:
 assert.equal(special.elements.filter((e) => e.kind === 'text').length, 2);
 assert(special.elements.some((e) => e.body?.includes('Clause A &amp; B &lt; 5.')));
 assert(special.elements.some((e) => e.body?.includes('Final clause.')));
+assert(special.elements.some((e) => e.body?.includes('</span>  \n<span')), 'explicit source newlines need Markdown hard breaks');
+const smallFont = composePrintLayout(base, { pages: [{ name: 'Small multiline', blocks: [
+  { x: 48, y: 48, width: 500, height: 100, body: 'First line.\nSecond line.', dense: true, fontSize: 9 },
+] }] }).contents;
+const smallText = smallFont.elements.find((e) => e.kind === 'text');
+const smallBox = smallFont.layout.match(new RegExp(`<Element[^>]+elementId="${smallText.id}"[^>]+height="([^"]+)"`));
+assert(Number(smallBox[1]) >= 56, '9px text still needs two minimum 24px line boxes plus padding');
+assert.throws(() => composePrintLayout(base, { pages: [{ name: 'Clipped multiline', blocks: [
+  { x: 48, y: 48, width: 500, height: 40, body: 'First line.\nSecond line.', dense: true, fontSize: 9 },
+] }] }), /exceeds the allotted page/);
 assert.throws(() => composePrintLayout(base, { pages: [{ name: 'Too much', blocks: [{ x: 48, y: 48, width: 220, height: 60, body: 'A long paragraph that should not be silently truncated. '.repeat(30), dense: true }] }] }), /exceeds the allotted page/);
 assert.throws(() => composePrintLayout(base, { pages: [{ name: 'After', position: 'after', afterPage: 'Missing' }] }), /afterPage/);
 assert.throws(() => composePrintLayout(base, { pages: [{ sourcePage: 'Regional orders' }, { sourcePage: 'Regional orders' }] }), /more than once/);
