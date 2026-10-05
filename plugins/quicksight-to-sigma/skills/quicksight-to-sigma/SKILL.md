@@ -35,7 +35,7 @@ If a destination is already supplied, honor it silently — don't ask.
 
 ## What's proven (the happy path)
 ```
-1. AUTH      AWS CLI → QuickSight (Enterprise edition REQUIRED); Sigma creds via get-token.sh
+1. AUTH      AWS CLI → QuickSight (unchanged); Sigma via browser-first shared provider
 2. DISCOVER  describe-analysis-definition + describe-data-set(s) + describe-data-source(s)  → quicksight-discover.py → signals.json
 3. CONVERT   local vendored converter (converter/quicksight.mjs via node) — analysis.json + dataset jsons + connectionId → Sigma DM JSON   [MCP only as manual fallback]
 4. POST DM   fixup (name elements + passthrough cols, rewrite sql refs, schemaVersion=1) → validate → POST /v2/dataModels/spec
@@ -97,7 +97,18 @@ Exit 0 = parity + hard gate green; exit 10 = a gate (converter MCP / parity coll
 - Auth is whatever the AWS CLI / boto3 is already configured with: a named `--profile`, SSO (`aws sso login`), or — for Okta-fronted orgs — `gimme-aws-creds` writing a profile. The discovery script uses an **in-process boto3 client when boto3 is importable** (one session for the whole run) and only **falls back to shelling out to `aws quicksight ...`** when it isn't — boto3 is NOT a hard dependency, and `QS_FORCE_CLI=1` forces the CLI path.
 - You need the account id (`aws sts get-caller-identity`) and the analysis (or dashboard) id.
 
-**Sigma.** Same as the other migration skills: `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` → `scripts/get-token.sh` exchanges them for a `SIGMA_API_TOKEN`. You also need a **Sigma connection** that reaches the same warehouse the QuickSight datasets query (its `connection_id` feeds the converter), and a target **folder id**.
+**Sigma.** Set `SIGMA_BASE_URL`, then run
+`eval "$(bash scripts/browser-login.sh)"` once from an interactive terminal
+(preferred). The orchestrator and plugin-local RLS, scout, post, layout, reuse,
+cleanup, parity, and render paths use the co-located `lib/sigma_rest.rb` /
+`lib/sigma_rest.py`: they reuse a current bearer, proactively refresh known-age
+tokens, use the browser keychain without reopening the browser, fall back to
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` for unattended runs, and refresh/retry
+exactly once on HTTP 401. Manual `eval "$(scripts/get-token.sh)"` is only needed
+to expose a short-lived bearer for raw curl. You also need a **Sigma connection**
+that reaches the same warehouse the QuickSight datasets query (its
+`connection_id` feeds the converter), and a target **folder id**. This does not
+change AWS / QuickSight authentication.
 
 ## Phase 2 — Discover
 
@@ -257,7 +268,7 @@ Maps each QuickSight visual's grid cell → a 24-col Sigma layout. **QuickSight 
 ## Visual QA (mandatory gate — never skip)
 A workbook that POSTs 200 and passes parity can still be visually broken — **overlapping tiles, clipped KPI titles, dead zones, filters over charts.** QuickSight FreeForm pixel coords can overlap and Sigma's grid has no z-order; the build collapses collisions, but this visual gate is the safety net.
 
-1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
+1. Render every page to PNG (the helper resolves browser/client auth itself):
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
 2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in their own band, no clipped titles, even heights, right chart kind/format).
 3. Fix any failure in the spec — for multi-page workbooks use the companion **sigma-workbooks** skill's `scripts/wb-rep.rb` (full-clone: `plugins/sigma-authoring/skills/sigma-workbooks/scripts/wb-rep.rb`; pull → edit → push) — then **re-render and re-read**.
@@ -314,7 +325,7 @@ ruby scripts/assert-phase6-ran.rb --workdir /tmp/<name> --workbook-id <WORKBOOK_
 - **Verify without MCP via the Export API**: when the customer org isn't wired to `sigma-mcp-v2`, query an element with `POST /v2/workbooks/{wb}/export {elementId, format:{type:csv}}` → poll `GET /v2/query/{queryId}/download`. This is how you confirm real values (and filtered parity) on any org.
 
 ## Reuse, don't reinvent
-These vendor-agnostic Sigma-side scripts are reused across the migration skills: `get-token.sh`, `lib/sigma_rest.rb`, `post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `validate-spec.rb`, `verify-parity.rb`, `cleanup-orphan-workbooks.rb`. Only the QuickSight-specific stages (`quicksight-discover.py`, `quicksight-render-source.py`, `convert-model.rb`, `build-workbook-from-quicksight.rb`, `build-quicksight-layout.rb`, `phase6-parity-quicksight.rb`, `qs-dm-signature.py`) are new. `scripts/sigma-export-png.py` renders a workbook page to PNG for the mandatory **Visual QA** gate (read each image against `refs/layout-visual-qa.md`); `scripts/quicksight-render-source.py` renders the SOURCE dashboard to `<WORK>/dashboards/source.png` (Snapshot Export PDF→PNG) so the measured Phase-6 gates 13/14 (`verify-anchors.rb` + `visual-similarity.py`) can run.
+These vendor-agnostic Sigma-side scripts are reused across the migration skills: `browser-login.sh`, `get-token.sh`, `lib/sigma_rest.rb`, `lib/sigma_rest.py`, `post-and-readback.rb`, `put-layout.rb`, `find-or-pick-dm.rb`, `validate-spec.rb`, `verify-parity.rb`, `cleanup-orphan-workbooks.rb`. The live helpers delegate authentication and one-401 retry to the co-located Sigma clients; `get-token.sh` remains the raw-shell/curl bridge. Only the QuickSight-specific stages (`quicksight-discover.py`, `quicksight-render-source.py`, `convert-model.rb`, `build-workbook-from-quicksight.rb`, `build-quicksight-layout.rb`, `phase6-parity-quicksight.rb`, `qs-dm-signature.py`) are new. `scripts/sigma-export-png.py` renders a workbook page to PNG for the mandatory **Visual QA** gate (read each image against `refs/layout-visual-qa.md`); `scripts/quicksight-render-source.py` renders the SOURCE dashboard to `<WORK>/dashboards/source.png` (Snapshot Export PDF→PNG) so the measured Phase-6 gates 13/14 (`verify-anchors.rb` + `visual-similarity.py`) can run.
 
 
 ## Security: Row- & Column-Level Security (RLS/CLS)
@@ -328,10 +339,12 @@ Row/column security is **never silently dropped and never silently ported** — 
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + username-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   eval "$(scripts/get-token.sh)"
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
    ```
+   The helper resolves the same valid-bearer → browser-keychain → unattended
+   client fallback automatically and retries one HTTP 401; no manual token
+   export is required.
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 

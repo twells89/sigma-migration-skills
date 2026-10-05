@@ -45,7 +45,8 @@ Duration: 2
 - **Python 3** and **Ruby** (the discovery script is Python; the build pipeline is Ruby).
 - **AWS CLI v2**, configured for the QuickSight account (see auth below).
 - **An Enterprise-edition QuickSight account** + the analysis (or dashboard) id you want to migrate.
-- **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
+- **Sigma API access** via a stored browser login (preferred), an existing
+  bearer, or unattended `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`.
 - A **Sigma connection to the same warehouse** the datasets use (its `connection_id` feeds the converter), and a target **folder id**.
 - The **QuickSight → Sigma converter** — ships **inside the skill** as a prebuilt local bundle (`converter/quicksight.mjs`) and runs **in-process via `node`** (no clone, no `npm install`, no network, **no data egress** — your analysis/dataset JSON never leaves your machine). This is the default and works out of the box; it requires only `node` on PATH. A dev's own converter build wins via `--mcp-dir` / `$QS_MCP_DIR`. The hosted `sigma-data-model` MCP's `convert_quicksight_to_sigma` tool is **only** a manual fallback: if the bundle *and* `node` are both unavailable the orchestrator stops (exit 10) and prints the exact MCP call for you to run, then resume with `--converted`.
 
@@ -78,9 +79,13 @@ Duration: 5
    ```
    Note the **identity region is usually `us-east-1`** — the analysis/dataset/data-source
    resources are read from the identity region, not necessarily the data region.
-3. **Sigma credentials** — export `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` (or
-   write the neutral `~/.sigma-migration/env` the scripts auto-source under any
-   agent). `scripts/get-token.sh` exchanges them for a `SIGMA_API_TOKEN`.
+3. **Sigma authentication** — set `SIGMA_BASE_URL`, then run the preferred
+   one-time interactive login: `eval "$(bash scripts/browser-login.sh)"`.
+   Migration helpers reuse the OS-keychain session without reopening the
+   browser, proactively refresh known-age tokens, and retry one HTTP 401.
+   Unattended runs can instead configure `SIGMA_CLIENT_ID` /
+   `SIGMA_CLIENT_SECRET` in the neutral `~/.sigma-migration/env`. AWS /
+   QuickSight source authentication is unchanged.
 4. **Verify discovery** runs:
    ```bash
    python3 scripts/quicksight-discover.py \
