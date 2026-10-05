@@ -75,31 +75,50 @@ end.parse!
 %i[sig out].each { |k| abort "missing --#{k}" unless opts[k] }
 
 BASE = ENV.fetch('SIGMA_BASE_URL')
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__) # canonical shared/ layout
 $LOAD_PATH.unshift File.expand_path('lib', __dir__)
 require 'sigma_rest'
 
-# DM-shortlisting scans many candidates and is called per-follower in cluster
-# orchestration — auto-refresh on 401 to survive long batch runs.
-def http_get(path)
-  attempts = 0
-  loop do
-    attempts += 1
-    uri = URI("#{BASE}#{path}")
-    req = Net::HTTP::Get.new(uri)
-    req['Authorization'] = "Bearer #{Sigma.auth_token}"
-    req['Accept'] = 'application/json'
-    # Derive TLS from the URI scheme (same as put-layout.rb) instead of hardcoding
-    # use_ssl: true. Production SIGMA_BASE_URL is https so behaviour is unchanged;
-    # this is what lets the candidate-ranking tests drive the picker against a
-    # loopback WEBrick stub offline (hardcoded TLS made the scan untestable, which
-    # is how the recency-window bug shipped with a green suite).
-    res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https', read_timeout: 30) { |h| h.request(req) }
-    if res.code.to_i == 401 && attempts == 1 && ENV['SIGMA_CLIENT_ID']
-      Sigma.refresh_token!
-      next
-    end
-    return res
+# Preserve the response-object contract used by the ranking/retry code while
+# delegating request construction, bearer auth, and the single 401 refresh to
+# Sigma.request. Sigma.request normally returns parsed JSON and raises for
+# non-2xx responses; this transport records the underlying response so callers
+# still receive its exact code/body (including 429/5xx responses).
+class SigmaResponseHTTP
+  attr_reader :response
+
+  def initialize(uri, http = nil)
+    @uri = uri
+    @http = http
   end
+
+  def request(request)
+    @response =
+      if @http
+        @http.request(request)
+      else
+        # Derive TLS from the URI scheme instead of hardcoding use_ssl: true.
+        # Production is https; loopback HTTP keeps the ranking tests offline.
+        Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https',
+                                                read_timeout: 30) do |client|
+          client.request(request)
+        end
+      end
+  end
+end
+
+# DM-shortlisting scans many candidates and is called per-follower in cluster
+# orchestration. The optional HTTP transport retains the offline test seam.
+def http_get(path, http = nil)
+  transport = SigmaResponseHTTP.new(URI("#{BASE}#{path}"), http)
+  begin
+    Sigma.request(:get, path, http: transport)
+  rescue Sigma::Error, JSON::ParserError
+    # Sigma.request deliberately raises on a final non-2xx or malformed JSON.
+    # The picker has its own status/body handling, so return that exact response.
+    raise unless transport.response
+  end
+  transport.response
 end
 
 sig = JSON.parse(File.read(opts[:sig]))
