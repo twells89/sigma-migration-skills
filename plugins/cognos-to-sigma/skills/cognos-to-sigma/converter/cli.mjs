@@ -4986,7 +4986,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
   for (const q of queries.values()) {
     if (!q.sourceGap || duplicateQueries.has(q.name)) continue;
     const node = queryNodes.get(q.name), op = node.source?.joinOperation;
-    if (!op || Object.keys(node.source).length !== 1 || Object.keys(node).some((key) => !["@_name", "source", "selection", "detailFilters", "summaryFilters"].includes(key)) || Object.keys(op).some((key) => !["@_joinType", "joinOperands", "joinFilter"].includes(key))) continue;
+    if (!op || Object.keys(node.source).length !== 1 || Object.keys(node).some((key) => !["@_name", "@_autoGroupAndSummarize", "@_distinct", "source", "selection", "detailFilters", "summaryFilters"].includes(key)) || ["@_distinct", "@_autoGroupAndSummarize"].some((key) => node[key] != null && !["false", "0"].includes(String(node[key]))) || Object.keys(op).some((key) => !["@_joinType", "joinOperands", "joinFilter"].includes(key))) continue;
     const joinType = { inner: "inner", leftOuter: "left-outer" }[op["@_joinType"] || "inner"];
     const operands = arr2(op.joinOperands?.joinOperand);
     if (!joinType || operands.length !== 2 || Object.keys(op.joinOperands).some((key) => key !== "joinOperand") || operands.some((o) => Object.keys(o).some((key) => !["@_cardinality", "queryRef"].includes(key)) || o["@_cardinality"] != null && !["1:1", "1:N", "1:n"].includes(o["@_cardinality"]) || Object.keys(o.queryRef || {}).length !== 1 || !o.queryRef?.["@_refQuery"])) continue;

@@ -359,7 +359,8 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     if (!q.sourceGap || duplicateQueries.has(q.name)) continue;
     const node = queryNodes.get(q.name), op = node.source?.joinOperation;
     if (!op || Object.keys(node.source).length !== 1 ||
-        Object.keys(node).some((key) => !['@_name', 'source', 'selection', 'detailFilters', 'summaryFilters'].includes(key)) ||
+        Object.keys(node).some((key) => !['@_name', '@_autoGroupAndSummarize', '@_distinct', 'source', 'selection', 'detailFilters', 'summaryFilters'].includes(key)) ||
+        ['@_distinct', '@_autoGroupAndSummarize'].some((key) => node[key] != null && !['false', '0'].includes(String(node[key]))) ||
         Object.keys(op).some((key) => !['@_joinType', 'joinOperands', 'joinFilter'].includes(key))) continue;
     const joinType = ({ inner: 'inner', leftOuter: 'left-outer' } as Record<string, string>)[op['@_joinType'] || 'inner'];
     const operands = arr(op.joinOperands?.joinOperand);

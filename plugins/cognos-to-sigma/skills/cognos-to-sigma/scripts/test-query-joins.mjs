@@ -17,7 +17,7 @@ const source = (name, subject, predicate) => `<query name="${name}"><source><mod
 const left = source('left', 'Orders', '[Enabled] = 1');
 const right = source('right', 'Lines', '[Enabled] = 1');
 const condition = '[left].[Key] = [right].[Key] and [right].[Site] = [left].[Site]';
-const joined = (type) => `<query name="joined"><source><joinOperation ${type ? `joinType="${type}"` : ''}>
+const joined = (type) => `<query name="joined" autoGroupAndSummarize="false" distinct="0"><source><joinOperation ${type ? `joinType="${type}"` : ''}>
   <joinOperands><joinOperand cardinality="1:N"><queryRef refQuery="left"/></joinOperand><joinOperand cardinality="1:N"><queryRef refQuery="right"/></joinOperand></joinOperands>
   <joinFilter><filterExpression>${condition}</filterExpression></joinFilter></joinOperation></source><selection>
   ${item('Left Value', '[left].[Value]')}${item('Right Value', '[right].[Value]')}
@@ -106,6 +106,7 @@ try {
     ['optional operand filter', report().replace('<detailFilter>', '<detailFilter use="optional">')],
     ['optional cardinality', report().replace('cardinality="1:N"', 'cardinality="0:N"')],
     ['computed output', report().replace('[left].[Value]', '[left].[Value] + 1')],
+    ['distinct join result', report().replace('distinct="0"', 'distinct="true"')],
   ]) {
     check(`unsafe join stays unbound: ${label}`, () => {
       const result = run(xml); assert.equal(result.status, 0, result.stderr);
