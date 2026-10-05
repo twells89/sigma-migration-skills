@@ -9,32 +9,49 @@
 - The spec endpoints return YAML, not JSON — don't json.load the response.
 
 Usage:
-  eval "$(scripts/get-token.sh)"
   SIGMA_CONNECTION_ID=<full-uuid> python3 post_dm.py <spec.json> [--folder-id <id>]
+
+Sigma auth is resolved by scripts/lib/sigma_rest.py: a valid bearer is reused,
+then the browser keychain is refreshed, with client credentials as fallback.
 """
-import argparse, json, os, re, sys, urllib.request, urllib.error
+import argparse, json, os, re, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import sigma_rest
 from warehouse_column_refs import apply as ground_warehouse_refs
 
-BASE = os.environ["SIGMA_BASE_URL"]
-TOK = os.environ["SIGMA_API_TOKEN"]
 FULL_CONN = os.environ.get("SIGMA_CONNECTION_ID")
 
 
+class SigmaApiError(RuntimeError):
+    def __init__(self, status, body, detail):
+        self.status = status
+        self.code = status  # compatibility with the old urllib HTTPError shape
+        self.body = body
+        super().__init__(detail)
+
+
 def api(method, path, body=None):
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE + path, data=data, method=method,
-        headers={"Authorization": "Bearer " + TOK, "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req) as r:
-            raw = r.read().decode()
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode()
-        print("HTTP", e.code, method, path, "->", err_body[:1000], file=sys.stderr)
-        e.body = err_body  # stash so callers can inspect without re-reading the stream
-        raise
+        # Accept text so YAML spec responses retain the existing return shape.
+        # sigma_rest owns proactive refresh and a single refresh/retry on 401.
+        raw = sigma_rest.request(
+            method.lower(),
+            path,
+            body=json.dumps(body) if body is not None else None,
+            accept="*/*",
+        )
+    except sigma_rest.SigmaError as exc:
+        detail = str(exc)
+        match = re.search(r" -> (\d+)[^\n]*\n?(.*)", detail, re.DOTALL)
+        status = int(match.group(1)) if match else None
+        err_body = match.group(2) if match else detail
+        print("HTTP", status or "AUTH", method, path, "->", err_body[:1000], file=sys.stderr)
+        raise SigmaApiError(status, err_body, detail) from exc
+    except SystemExit as exc:
+        raise SigmaApiError(None, str(exc), str(exc)) from exc
     try:
         return json.loads(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return raw  # YAML/text
 
 
@@ -59,7 +76,7 @@ def sync_missing_schemas(err_body):
               f"path=[{db}, {schema}] (catalog not yet indexed)", file=sys.stderr)
         try:
             api("POST", f"/v2/connections/{FULL_CONN}/sync", {"path": [db, schema]})
-        except urllib.error.HTTPError as e:
+        except SigmaApiError as e:
             print(f"   WARN: sync of {db}.{schema} returned {e.code} — "
                   "continuing (schema may already be syncing)", file=sys.stderr)
     return pairs
@@ -71,7 +88,7 @@ def post_dm_with_sync(spec):
     table-discovery case the postmortem hit)."""
     try:
         return api("POST", "/v2/dataModels/spec", spec)
-    except urllib.error.HTTPError as e:
+    except SigmaApiError as e:
         body = getattr(e, "body", "")
         if e.code == 400 and "Source not found" in body:
             synced = sync_missing_schemas(body)

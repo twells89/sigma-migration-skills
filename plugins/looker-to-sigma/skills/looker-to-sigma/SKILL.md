@@ -240,7 +240,8 @@ python3 scripts/migrate-looker.py --lookml-dir /path/to/lookml \
 | `scripts/verify-parity.rb` | **Phase 4:** the comparator (strict set-compare with date-bucket canonicalization; `--extract-mode` tolerance variant). Vendored from the shared converter copy. |
 | `scripts/assert-phase6-ran.rb` | **HARD GATE** (vendored **byte-identical** across the 5 plugins — keep the md5 in lockstep): parity ran + PASS, no orphan workbooks, no `type=error` columns, layout applied, layout lint (gate 6), **control lint (gate 7** — dead controls / ghost targets / partial same-page reach / `control-scope.json` coverage; `--skip-control-lint` escape, exit 9; see `refs/control-parity.md`**)**. `ruby scripts/assert-phase6-ran.rb --workdir <dir> --workbook-id <wb>` must **exit 0** before declaring GREEN. |
 | `scripts/probe-controls.rb` | **Optional Phase-4 flip test** — runtime proof that controls actually filter: per control, exports one in-closure element CSV with and without `parameters:{controlId: <non-default value>}` (must differ) and, with `--check-out-of-closure`, an out-of-closure element (must NOT differ). Not the mandatory inner loop. Shared, vendored byte-identical. `refs/control-parity.md` has the design + the MCP-vs-export answer. |
-| `scripts/get-token.sh` | Exchange `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` → `SIGMA_API_TOKEN` (~1h TTL). `eval "$(scripts/get-token.sh)"` |
+| `scripts/browser-login.sh` | Preferred one-time interactive Sigma login. Stores only the refresh session in the OS keychain; later migration runs refresh without reopening the browser. |
+| `scripts/get-token.sh` | Browser-first token provider for raw shell/curl use: reuse/refresh the keychain session, then fall back to `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET`. Migration Python scripts call the same provider through `scripts/lib/sigma_rest.py` and do not require a manual `eval`. |
 | `scripts/looker_api.py` | Minimal Looker REST API 4.0 client (no SDK). Reads `~/.looker/looker.ini`, logs in via `client_credentials`, exposes `L.call(method, path, body)`. **Caches the bearer per process** (thread-safe; one login instead of one per call — ~150ms/call saved, measured 2.4x on a 10-call run) and retries once with a fresh login on 401. CLI: `python3 looker_api.py whoami` / `get <path>` / `raw GET /lookml_models`. |
 | `scripts/fetch_looker_dashboard.py` | **Phase 1 (live):** `GET /dashboards/{id}` → the normalized contract (`refs/dashboard-contract.md`). Works for UDD AND LookML dashboards. Self-contained (reads `~/.looker/looker.ini`). `tileType` is read from `query.vis_config.type` (NOT `element.type`, which is always `"vis"`); `listen` from `result_maker.filterables`; layout from the **active** layout's components. Exposes the shared `normalize_element()` (one tile → one contract element) and `build_field_meta()` (authoritative dim/measure category from the explore metadata + `dynamic_fields`). |
 | `scripts/fetch_looker_look.py` | **Phase 1 (live — Looks):** `GET /looks/{id}` → the **same contract** as the dashboard fetch but with ONE tile, `filters:[]`, a full-width layout, and a `fieldMeta` map. Imports+reuses `fetch_looker_dashboard`'s helpers (single source of truth), so a Look tile normalizes identically to a dashboard tile. `python3 fetch_looker_look.py <look_id> [out.json]`. |
@@ -248,22 +249,22 @@ python3 scripts/migrate-looker.py --lookml-dir /path/to/lookml \
 | `scripts/detect_rls.py` | **Phase 1 (RLS scan):** dependency-free regex scan of a LookML dir/file (and/or model JSON) for row-level-security constructs (`access_filter`, `sql_always_where`, `access_grant`, `user_attribute`). Prints a structured summary + recommended Sigma mapping per finding (or `--json`). **Prints nothing / exits 0 when there's no RLS** (zero-overhead). `python3 detect_rls.py <lookml_dir> [--json]` |
 | `scripts/detect_derived_perf.py` | **Phase 2b (performance scan):** dependency-free regex scan for EXPENSIVE `derived_table`s (nested-on-derived, un-persisted, persisted/incremental PDTs, NDTs, SQL complexity, warehouse hints). Scores each and recommends `materialize` / `rebuild-as-element` / `leave-inline` — the handoff for `--materialize-derived` and, post-migration, `sigma-materialization-advisor`. **Informational (never blocks); silent when there are no derived tables.** `python3 detect_derived_perf.py <lookml_dir> [--scope-explores e1,e2] [--json]` |
 | `scripts/detect_modeling_hazards.py` | **Phase 3/4 correctness gate:** scans the normalized contract + DM/workbook specs for grouped-element relationships/joins, broadcast additive formulas, and unsafe windows. Writes `modeling-hazards.json` + gate-19 `agg-semantics.json`; unresolved entries exit 2. Supports `--resolve N --how reaggregated\|n/a\|faithful-to-source --reason "…"`. |
-| `scripts/apply_sigma_rls.py` | **Phase 1.5 (apply RLS):** scripted, API-driven RLS port. Reuse-first `GET /v2/user-attributes` (prints a match before creating); `--create` → `POST /v2/user-attributes`; `--assign` (+`--member-id`,`--value`) → `POST /v2/user-attributes/{id}/users`; `--field`/`--element-id` → print the verified RLS calc-col + element-filter snippet, `--apply --dm-id` → PATCH it into the DM element spec. **Read-only / plan-only by default — mutates only on an explicit `--create`/`--assign`/`--apply` flag.** Reads `$SIGMA_BASE_URL`/`$SIGMA_API_TOKEN` like `post_dm.py`. |
+| `scripts/apply_sigma_rls.py` | **Phase 1.5 (apply RLS):** scripted, API-driven RLS port. Reuse-first `GET /v2/user-attributes` (prints a match before creating); `--create` → `POST /v2/user-attributes`; `--assign` (+`--member-id`,`--value`) → `POST /v2/user-attributes/{id}/users`; `--field`/`--element-id` → print the verified RLS calc-col + element-filter snippet, `--apply --dm-id` → PATCH it into the DM element spec. **Read-only / plan-only by default — mutates only on an explicit `--create`/`--assign`/`--apply` flag.** Uses the browser-first shared Sigma client. |
 | `scripts/convert_dm.mjs` | **Phase 2:** run `convertLookMLToSigma` against a directory of `.lkml` files for one explore → a Sigma DM spec JSON + `…-warnings.json` sidecar. A `.model.lkml` is optional — with none it converts **view-only** (each view → standalone element; pass the WHOLE directory so cross-view `${view.SQL_TABLE_NAME}` refs resolve — see `refs/layered-lookml.md`). Bypasses the deployed MCP build (see the converter-build gotcha below). Env: `LOOKML_DIR`, `CONVERTER_SRC`; args `<exploreName> <out.json>`. |
 | `scripts/lookml-dm-signature.py` | **Phase 2.5:** LookML view files → DM-reuse signature (`{warehouse_tables, referenced_columns, measures}`) for `find-or-pick-dm.rb`. Pure, no network. |
 | `scripts/find-or-pick-dm.rb` | **Phase 2.5:** scan existing Sigma DMs and recommend reuse (score = 0.7·column + 0.2·table + 0.1·metric overlap; `--auto-pick` with tie-window safety). Shared vendor-neutral copy (canonical: tableau-to-sigma; needs `scripts/lib/sigma_rest.rb`). Non-destructive. |
 | `scripts/shape-preflight.rb` | **Phase 2.5 (reuse gate):** before wiring a workbook to a REUSED DM element, mechanically check the three things a spec POST won't: (1) the element is not `visibleAsSource:false` (hidden → unusable as a source), (2) needed columns resolve on it, (3) every relationship it reaches columns through is 1:1 (non-unique target key → silent fan-out). Visibility/coverage hard-fail (exit 2); fan-out is surfaced with the exact Sigma-MCP uniqueness query per relationship — run it and feed back via `--fanout-results` (or `--ack-fanout`). Non-destructive; needs `scripts/lib/sigma_rest.rb`. `migrate-looker.py` auto-runs it on `--reuse-dm`. |
-| `scripts/post_dm.py` | **Phase 2:** POST a DM spec to `/v2/dataModels/spec` (auto-finds a writable folder, swaps in the full connection UUID). Env: `SIGMA_API_TOKEN`, `SIGMA_BASE_URL`, `SIGMA_CONNECTION_ID`; args `<spec.json>`. |
+| `scripts/post_dm.py` | **Phase 2:** POST a DM spec to `/v2/dataModels/spec` (auto-finds a writable folder, swaps in the full connection UUID). Auth: valid bearer → browser keychain → client fallback through `scripts/lib/sigma_rest.py`; env also needs `SIGMA_BASE_URL` and `SIGMA_CONNECTION_ID`. Args: `<spec.json>`. |
 | `scripts/build_workbook.py` | **Phase 3:** dashboard contract + the explore's view `.lkml` files → a Sigma `/v2/workbooks/spec` body (hidden Data page + master table, one element per tile, controls from filters, newspaper→24-col layout XML). Generates locally; does **not** POST. Handles ratio measures, joined-col `Field (alias)` naming, table calcs, pivot-flatten + warn. Layout: a top control bar (row 0), a full-width strip of **tall** KPI tiles (height ≥ 6 so titles render), then the remaining tiles shifted down. |
 | `scripts/looker-render-dashboard.py` | **Phase 4 (visual QA — SOURCE side):** render a LIVE Looker dashboard to PNG via the Looker render API (`POST /render_tasks/dashboards/{id}/png` → poll `GET /render_tasks/{task_id}` until `success` → `GET .../results`). Pairs with `sigma-export-png.py` for source-vs-migrated side-by-side. Reuses `looker_api.py` `~/.looker/looker.ini` auth. `python3 looker-render-dashboard.py <dashboard_id> [out.png] [--w 1200 --h 1600]`. |
 | `scripts/looker-render-look.py` | **Phase 4 (visual QA — SOURCE side, Looks):** render a LIVE Look to PNG via `GET /looks/{id}/run/png` (SYNCHRONOUS — no render-task poll). The Look analog of `looker-render-dashboard.py`; pairs with `sigma-export-png.py`. `python3 looker-render-look.py <look_id> [out.png] [--w 1200 --h 900]`. |
-| `scripts/sigma-export-png.py` | **Phase 4 (visual QA — MIGRATED side):** render a posted workbook page or element to PNG via `POST /v2/workbooks/{id}/export` → poll `GET /v2/query/{queryId}/download`. For side-by-side layout/render checks against the source Looker dashboard render (catches hidden KPI titles, orphaned filters, overlaps, bare-number vs `$`/`%` formats that a numeric parity check can't). **Read each migrated PNG and check it against `refs/layout-visual-qa.md` (mandatory gate — see Phase 4a).** Reads `$SIGMA_BASE_URL`/`$SIGMA_API_TOKEN`. `python3 sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/x.png` (or `--element <id>`). |
+| `scripts/sigma-export-png.py` | **Phase 4 (visual QA — MIGRATED side):** render a posted workbook page or element to PNG via `POST /v2/workbooks/{id}/export` → poll `GET /v2/query/{queryId}/download`. For side-by-side layout/render checks against the source Looker dashboard render (catches hidden KPI titles, orphaned filters, overlaps, bare-number vs `$`/`%` formats that a numeric parity check can't). **Read each migrated PNG and check it against `refs/layout-visual-qa.md` (mandatory gate — see Phase 4a).** Uses the browser-first shared Sigma client. `python3 sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/x.png` (or `--element <id>`). |
 | `scripts/build_looker_dashboard.py` | **TEST-FIXTURE BUILDER (not a migration step).** Builds the "Orders Overview" UDD on `demo_thelook` via the Looker API (4 KPIs + line/column/bar/pie + grid, 3 filters wired via `result_maker.filterables.listen`). |
 | `scripts/build_looker_dashboard2.py` | **TEST-FIXTURE BUILDER (not a migration step).** Builds the "Orders Deep Dive" UDD — area, pivot, table-calcs, scatter, donut, text tile — the harder dashboard surface for the converter. |
 | `scripts/build_looker_look.py` | **TEST-FIXTURE BUILDER (not a migration step).** Creates a matrix of test Looks on `demo_thelook`/`order_fact` (grouped table, measure-only, dims-only, bar, pivot, and a `dynamic_fields` custom measure) to exercise the Look → grouped-table / pivot / KPI / chart converter. `POST /queries` then `POST /looks`. `python3 build_looker_look.py [looker_folder_id]`. |
 | `scripts/record-visual-check.rb` | **Phase 4a (visual gate):** record the agent's source-vs-target visual verdict into `parity-final.json` so `assert-phase6-ran.rb` gate 8b can confirm the comparison happened (not a prose "I looked"). Shared/vendored byte-identical with the other migration plugins. `ruby record-visual-check.rb --workdir <dir> --agent-vision true --verdict pass --screenshot <png> --checklist "…" --notes "…"`. |
 | `scripts/gap-scout.md` | **Gap scout (converter gaps):** runbook for the main agent — when/how to spawn a scout subagent for a LookML construct the converter can't translate, the LookML→Sigma candidate table, and the opt-in issue-filing flow. Read before spawning. |
-| `scripts/scout-validate.py` | **Gap scout:** validate a candidate Sigma formula against a real DM element (throwaway test workbook → check column type ≠ `error` → delete), persist a win to `~/.looker-to-sigma/learned-rules.yaml`, or return an opt-in `escalation` block on failure. Also a quick "does this formula resolve?" check for Phase-4 validation. Reads `$SIGMA_BASE_URL`/`$SIGMA_API_TOKEN`. |
+| `scripts/scout-validate.py` | **Gap scout:** validate a candidate Sigma formula against a real DM element (throwaway test workbook → check column type ≠ `error` → delete), persist a win to `~/.looker-to-sigma/learned-rules.yaml`, or return an opt-in `escalation` block on failure. Also a quick "does this formula resolve?" check for Phase-4 validation. Uses the browser-first shared Sigma client. |
 | `scripts/learned-rules.py` | **Gap scout:** loader for the customer-local `learned-rules.yaml` (`load()`/`apply()`); applied to LookML measure expressions before the converter/WARN fallback. Home = `~/.looker-to-sigma` (override `LOOKER_TO_SIGMA_HOME`). |
 | `scripts/escalate-gap.py` | **Gap scout (shared, identical across all migration skills):** opt-in GitHub-issue filer — category→repo routing, dedupe (open issues + beads), converter-repo mirroring, bead cross-link. **Dry-run by default; files only with `--yes`.** Requires `gh`. |
 
@@ -303,13 +304,18 @@ verify_ssl=True
 
 ### Sigma credentials
 
-`eval "$(scripts/get-token.sh)"` exchanges `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` (from
-`~/.sigma-migration/env`, written by the `sigma-api` skill's `setup.rb`) for a `SIGMA_API_TOKEN`.
-Also note your **full connection UUID** (`SIGMA_CONNECTION_ID`) and a writable **folderId**.
+Set `SIGMA_BASE_URL`, then run `eval "$(scripts/browser-login.sh)"` once from an
+interactive terminal (preferred). It stores the refresh session in the OS
+keychain. The migration, scout, RLS, parity, and validation paths call the
+co-located shared client: they reuse a current bearer, refresh known-age tokens
+after 50 minutes, use the browser keychain without reopening the browser, fall
+back to `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` for unattended runs, and
+refresh/retry exactly once on HTTP 401. No manual token export is required.
 
-> Tokens live ~1 hour. Re-fetch when a curl returns 401. Never use
-> `TOKEN=$(eval "$(scripts/get-token.sh)")` — `$()` is a subshell where the exported var dies.
-> Keep `eval` + `curl` in the same `bash -c '...'` invocation.
+For raw curl only, `eval "$(scripts/get-token.sh)"` exposes the provider's
+short-lived bearer in the current shell. Never wrap that eval in `TOKEN=$(...)`;
+the subshell loses the export. Also note your **full connection UUID**
+(`SIGMA_CONNECTION_ID`) and a writable **folderId**.
 
 > **Inline Python/Node inside bash — DON'T.** Triple-nested escapes silently break. Always
 > write a `.py`/`.mjs` file with `Write` and call it via `python3 file.py` / `node file.mjs`.
@@ -483,7 +489,7 @@ mechanics are now concrete.
      Reuse a matching attribute rather than creating a new one.
 
      ```bash
-     bash -c 'eval "$(scripts/get-token.sh)" && python3 scripts/apply_sigma_rls.py --attr region'
+     python3 scripts/apply_sigma_rls.py --attr region
      ```
    - **Existing data models with similar RLS logic** — if a Sigma DM already filters the same
      field by the same attribute (e.g. a previously-migrated explore on the same source), reuse it
@@ -507,23 +513,23 @@ Then proceed to Phase 2 and apply the confirmed plan as part of the DM build, vi
 
 - **Provision the user attribute** (only if nothing reusable was found in step 1):
   ```bash
-  bash -c 'eval "$(scripts/get-token.sh)" && python3 scripts/apply_sigma_rls.py \
-    --attr region --value West --create'                       # POST /v2/user-attributes
+  python3 scripts/apply_sigma_rls.py \
+    --attr region --value West --create                         # POST /v2/user-attributes
   ```
 - **Assign a value to the member(s)** who should be restricted (the value the user attribute
   resolves to per person — assign to the member that the parity query runs AS, or RLS returns 0
   rows):
   ```bash
-  bash -c 'eval "$(scripts/get-token.sh)" && python3 scripts/apply_sigma_rls.py \
-    --attr region --value West --member-id <memberId> --assign'  # POST /v2/user-attributes/{id}/users
+  python3 scripts/apply_sigma_rls.py \
+    --attr region --value West --member-id <memberId> --assign   # POST /v2/user-attributes/{id}/users
   ```
 - **Apply the row filter** to the DM element — the verified spec shape (a boolean calc column
   `CurrentUserAttributeText("<attr>") = [<Field>]` + an element `filters` entry
   `{kind:list, mode:include, values:[true]}`):
   ```bash
-  bash -c 'eval "$(scripts/get-token.sh)" && python3 scripts/apply_sigma_rls.py \
+  python3 scripts/apply_sigma_rls.py \
     --attr region --field Region --element-id <denorm-element-id> \
-    --dm-id <dataModelId> --apply'                              # GET → inject → PUT /v2/dataModels/{id}/spec
+    --dm-id <dataModelId> --apply                               # GET → inject → PUT /v2/dataModels/{id}/spec
   ```
 
 Mapping recap: `access_filter` and user-attribute `sql_always_where` → the
@@ -666,9 +672,8 @@ same warehouse tables (don't add a 4th near-identical "Orders" DM):
 ```bash
 python3 scripts/lookml-dm-signature.py --lookml-dir /path/to/lookml \
   --label "<explore label>" --out /tmp/<name>/dm-signature.json
-bash -c 'eval "$(scripts/get-token.sh)" && \
-  ruby scripts/find-or-pick-dm.rb --workbook-signature /tmp/<name>/dm-signature.json \
-    --out /tmp/<name>/dm-match.json --auto-pick'     # exit 0 = candidate ≥ min-score
+ruby scripts/find-or-pick-dm.rb --workbook-signature /tmp/<name>/dm-signature.json \
+  --out /tmp/<name>/dm-match.json --auto-pick        # exit 0 = candidate ≥ min-score
 ```
 
 `lookml-dm-signature.py` derives `{warehouse_tables (sql_table_name FQNs),
@@ -701,9 +706,8 @@ files — the same files you fed `convert_dm.mjs`. Decision:
 ### 2c. POST the data model
 
 ```bash
-bash -c 'eval "$(scripts/get-token.sh)" && \
-  SIGMA_CONNECTION_ID=<full-connection-uuid> \
-  python3 scripts/post_dm.py /tmp/<name>/dm-spec.json'
+SIGMA_CONNECTION_ID=<full-connection-uuid> \
+  python3 scripts/post_dm.py /tmp/<name>/dm-spec.json
 ```
 
 - Endpoint is `POST /v2/dataModels/spec` (NOT `/v2/workbooks/spec`).
@@ -992,8 +996,8 @@ python3 scripts/looker-render-dashboard.py <dashboardId> /tmp/<name>/dashboards/
 #     per chart; schema: refs/source-anchors.md). Verified in 4-pre (gate 13) + fed to gate 14.
 
 # (2) MIGRATED — render the Sigma workbook page
-bash -c 'eval "$(scripts/get-token.sh)" && python3 scripts/sigma-export-png.py \
-  --workbook <workbookId> --page page-dash --out /tmp/<name>/sigma-<dash>.png'
+python3 scripts/sigma-export-png.py \
+  --workbook <workbookId> --page page-dash --out /tmp/<name>/sigma-<dash>.png
 ```
 
 Read both PNGs and compare tile-for-tile. Confirm: **KPI tile titles show** (the builder lays KPIs
