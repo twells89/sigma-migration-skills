@@ -5,13 +5,12 @@
 MSTR's converter (convert.py metric_formula) passes metric function names through
 optimistically — a function with no Sigma equivalent does NOT surface as a
 convert-time warning; it surfaces as a type=error column when the freshly-POSTed
-workbook is read back. There is no Python orchestrator that POSTs (Phase 4 of
-SKILL.md POSTs the workbook via curl), so this standalone script IS the mechanical
+workbook is read back. There is no Python orchestrator that POSTs, so this
+standalone script IS the mechanical
 gate: SKILL.md mandates running it immediately after the workbook POST, replacing
 the prose "check for type:error columns" instruction with a hard, scripted STOP.
 
 Run it after the workbook POST (Phase 4):
-    eval "$(scripts/get-token.sh)"
     python3 scripts/scout-gate-readback.py --workbook-id <id> --workdir <dir>
 
 Behavior (mirrors the looker / thoughtspot readback gate):
@@ -27,31 +26,33 @@ evidence (ScoutGate integrity, issue #458): a hand-written or forged 'validated'
 line is treated as unvalidated (falls to the escalated bucket) by
 scout_gate.classify, so this gate still blocks / requires genuine scouting.
 
-Env: SIGMA_BASE_URL, SIGMA_API_TOKEN (eval get-token.sh first).
+Env: SIGMA_BASE_URL plus a valid bearer, browser-login keychain session, or
+SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 """
 import argparse
 import json
 import os
 import sys
-import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import scout_gate
-
-BASE = os.environ.get("SIGMA_BASE_URL", "https://aws-api.sigmacomputing.com")
-TOKEN = os.environ.get("SIGMA_API_TOKEN") or sys.exit(
-    'SIGMA_API_TOKEN not set — run: eval "$(scripts/get-token.sh)"')
+import sigma_rest
 
 
 def api(method, path):
-    req = urllib.request.Request(BASE + path, method=method)
-    req.add_header("Authorization", "Bearer " + TOKEN)
-    req.add_header("Accept", "application/json")
-    try:
-        with urllib.request.urlopen(req) as r:
-            return r.status, r.read().decode()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()
+    """Keep the historical status/text contract on the shared auth transport."""
+    base = sigma_rest.base_url()
+    sigma_rest._validate_once(base)
+    headers = {"Accept": "application/json"}
+    for attempt in range(2):
+        headers["Authorization"] = f"Bearer {sigma_rest.auth_token()}"
+        response = sigma_rest._send(
+            method, f"{base}{path}", headers, None, 120
+        )
+        if response.status == 401 and attempt == 0:
+            sigma_rest.refresh_token()
+            continue
+        return response.status, response.body.decode(errors="replace")
 
 
 def main():
