@@ -71,8 +71,10 @@ never run them against a customer's Looker.
   Admin enables tools (off by default). Preferred for live discovery when wired in.
 - **Sigma data-model converter** — `convert_lookml_to_sigma` (MCP): LookML views+model → Sigma DM
   spec, resolving measure `${dim}`/`${measure}` refs and wiring snowflake (multi-hop) joins.
-- **Sigma REST API** (`get-token.sh` → `SIGMA_API_TOKEN`, ~1h TTL) — `/v2/dataModels/spec`,
-  `/v2/workbooks/spec`, `/v2/files`.
+- **Sigma REST API** (valid bearer → browser-keychain refresh → client fallback,
+  with proactive aging and one 401 retry) — `/v2/dataModels/spec`,
+  `/v2/workbooks/spec`, `/v2/files`. Run `scripts/browser-login.sh` once for the
+  preferred interactive setup; migration scripts self-authenticate afterward.
 - **Sigma MCP** (`sigma-mcp-v2`) — live parity queries in Phase 4.
 - **Warehouse** — reached through the Sigma connection (warehouse-agnostic). Looker needs its
   **own** direct warehouse auth (a Looker connection), separate from Sigma's connection.

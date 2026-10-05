@@ -50,8 +50,8 @@ PROCEDURE
    date-grouped element; CountOver/SumOver fail in DM/master calc cols — see memory).
 2. Propose ONE candidate Sigma formula referencing columns as [Master/<Display Name>]
    (joined-view cols carry the alias suffix, e.g. [Master/Region (customer_dim)]).
-3. Validate + persist:
-     eval "$(scripts/get-token.sh)"   # SIGMA_API_TOKEN
+3. Validate + persist (`scout-validate.py` self-authenticates through the
+   browser-first shared Sigma client):
      python3 scripts/scout-validate.py \
        --formula '<candidate with REAL [Master/Col] names>' \
        --feature '<construct>' --pattern '<LookML regex; capture field refs>' \
