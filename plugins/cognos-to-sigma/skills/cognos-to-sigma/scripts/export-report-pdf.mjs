@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Export a created Sigma Report to PDF; publish edits before first export.
 import { writeFileSync } from 'node:fs';
-import { api, parseArgs, sigmaEnv } from './lib/sigma-rest.mjs';
+import { api, parseArgs, sigmaFetch } from './lib/sigma-rest.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.report || !args.out) {
@@ -13,10 +13,9 @@ if (!['portrait', 'landscape'].includes(layout)) throw new Error('layout must be
 const post = await api('POST', `/v2/reports/${args.report}/export`, { format: { type: 'pdf', layout } });
 if (post.status === 204) throw new Error('PDF export returned HTTP 204 (no job). Confirm the report is published and contains renderable data.');
 if (!post.ok || !post.json?.queryId) throw new Error(`PDF export failed (HTTP ${post.status}): ${post.text.slice(0, 500)}`);
-const { base, token } = sigmaEnv();
 const timeout = Date.now() + 240_000;
 while (Date.now() < timeout) {
-  const res = await fetch(`${base}/v2/query/${post.json.queryId}/download`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await sigmaFetch(`/v2/query/${post.json.queryId}/download`);
   const file = Buffer.from(await res.arrayBuffer());
   if (res.ok && file.subarray(0, 5).toString() === '%PDF-') {
     writeFileSync(args.out, file);

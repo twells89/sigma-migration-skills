@@ -85,6 +85,15 @@ node scripts/migrate-cognos.mjs \
   [--reuse-dm [ID]] [--expected expected.json] [--yes]
 ```
 
+Sigma auth is automatic and shell-neutral on this Node path. Set
+`SIGMA_BASE_URL`, then either run `eval "$(scripts/browser-login.sh)"` once in
+an interactive shell to store a refresh session in the OS keychain (preferred)
+or configure
+`SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` as fallback. A valid caller
+`SIGMA_API_TOKEN` is reused; known-age tokens refresh after 50 minutes, and an
+HTTP 401 triggers exactly one provider refresh and retry. The provider checks
+the browser session first, then client credentials in the default `auto` mode.
+
 `--folder` is optional: when omitted, the DM + workbook land in **your My
 Documents** (resolved automatically via `GET /v2/whoami`). To target a shared
 folder, look its id up first — `GET /v2/files?typeFilters=folder&limit=500`
@@ -149,7 +158,10 @@ checkpoint, never silently ported or dropped).
 
   Probe `/api/v1` with the API key first; fall back to `/bi/v1` only if content calls 441/403.
   (Note the paths differ — see `refs/design-notes.md → API access`.)
-- **Sigma** API token (via the `sigma-api` skill) to POST the data model + workbook.
+- **Sigma** API access: set `SIGMA_BASE_URL`; use one-time
+  `eval "$(scripts/browser-login.sh)"` (preferred) or configure client
+  credentials as the unattended fallback. The Node migration stack invokes the browser-first
+  provider itself; pre-minting a token is optional.
 - **Node** for the converter (`converter/`: `npm install` once).
 
 ---
@@ -250,10 +262,12 @@ covers the same warehouse tables (don't add a 4th near-identical DM for the same
 
 ```bash
 python3 scripts/cognos-dm-signature.py --dm-spec dm.json --out dm-signature.json
-eval "$(scripts/get-token.sh)"
 ruby scripts/find-or-pick-dm.rb --workbook-signature dm-signature.json \
   --out dm-match.json --auto-pick           # exit 0 = candidate ≥ min-score
 ```
+
+`find-or-pick-dm.rb` and the surrounding Node orchestrator share the same
+browser-first provider state; no shell `eval` is required.
 
 `cognos-dm-signature.py` derives `{warehouse_tables, referenced_columns, measures}` from
 the Phase-1 converter output (`dm.json` — the Sigma DM JSON, BEFORE it is POSTed). Decision:
@@ -270,10 +284,11 @@ the Phase-1 converter output (`dm.json` — the Sigma DM JSON, BEFORE it is POST
 ## Phase 2 — POST the data model + read back ids (hard gate)
 
 ```bash
-eval "$(scripts/get-token.sh)"                 # Sigma SIGMA_BASE_URL + SIGMA_API_TOKEN
 node scripts/post-and-readback.mjs --type datamodel --spec dm.json \
   --folder <folderId> --out dm-map.json
 ```
+The Node helper reuses caller auth or obtains it from the co-located provider,
+including proactive age refresh and one 401 refresh/retry.
 POSTs to `/v2/dataModels/spec`, reads the spec back, and **fails on any `type=error`
 column** (a spec can POST 200 yet have formulas that don't resolve at query time — the
 readback scan is what catches it; it checks every element incl. the derived view).
@@ -339,7 +354,7 @@ report's numbers match the migrated Sigma workbook to the cent.
 ## Visual QA (mandatory gate — never skip)
 A workbook that POSTs 200 and passes parity ($-total / row-count) can still be visually broken — **overlapping tiles, clipped titles, dead zones, filters over charts.** Sigma's grid has no z-order; the shared layout lib de-overlaps bands, but this visual gate is the safety net (especially for crosstab→pivot sizing and map title/legend overlap).
 
-1. Render every page to PNG (token first: `eval "$(scripts/get-token.sh)"`):
+1. Render every page to PNG (the exporter uses the same browser-first provider):
    `python3 scripts/sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/<page>.png --w 1600`
 2. **Read each PNG** and check it against `refs/layout-visual-qa.md` (no overlaps/stacking, no dead zones, controls in-band, no clipped titles, even heights, right chart kind/format; short map titles).
 3. Fix any failure in the spec — for multi-page workbooks use the companion **sigma-workbooks** skill's `scripts/wb-rep.rb` (full-clone: `plugins/sigma-authoring/skills/sigma-workbooks/scripts/wb-rep.rb`; pull → edit → push) — then **re-render and re-read**.
@@ -418,10 +433,10 @@ Row/column security is **never silently dropped and never silently ported** — 
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + CAM-group-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   eval "$(scripts/get-token.sh)"
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId>            # plan only (default)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --provision --apply
    ```
+   These Python paths use the same browser-first provider and 401 retry contract.
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element.
 4. **Assign membership.** Assign per-user attribute values / team membership from the Cognos CAM group/role membership (the rule's `groups` name them; the values come from the customer's user mapping — CAM ids are usually not emails, reconcile them).
 
