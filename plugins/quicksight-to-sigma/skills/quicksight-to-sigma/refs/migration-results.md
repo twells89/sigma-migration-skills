@@ -92,7 +92,7 @@ Confirmed against the public Sigma OpenAPI element union (no matching Sigma elem
 ## How to reproduce
 
 See `SKILL.md` — the proven 7-phase happy path:
-1. **AUTH** AWS CLI → QuickSight (Enterprise required); Sigma creds via `scripts/get-token.sh`.
+1. **AUTH** AWS CLI → QuickSight (Enterprise required, unchanged); Sigma via the browser-first shared provider (`scripts/browser-login.sh` once, client credentials as the unattended fallback).
 2. **DISCOVER** `describe-analysis-definition` + `describe-data-set(s)` + `describe-data-source(s)` → `quicksight-discover.py`.
 3. **CONVERT** `convert_quicksight_to_sigma` MCP (MCP gate) → Sigma DM JSON.
 4. **POST DM** `convert-model.rb --fixup` → validate → `POST /v2/dataModels/spec`.

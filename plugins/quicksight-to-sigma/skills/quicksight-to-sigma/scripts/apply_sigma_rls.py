@@ -20,15 +20,15 @@ This script does the whole flow, REUSE-FIRST and SAFE-BY-DEFAULT:
                  into the DM element's spec (GET/PUT /v2/dataModels/{id}/spec).
 
 By default this only READS and PRINTS a plan — it mutates ONLY when you pass an
-explicit --create / --assign / --apply flag. Mirrors post_dm.py: reads
-$SIGMA_BASE_URL / $SIGMA_API_TOKEN from env (eval "$(scripts/get-token.sh)").
+explicit --create / --assign / --apply flag. Live calls use the co-located
+lib/sigma_rest.py, including valid-bearer reuse, browser-first provider refresh,
+client fallback, proactive token aging, and one retry on HTTP 401.
 Dependency-free (stdlib only).
 
 Live-validated: this exact flow produced exact 3-way parity (Looker-restricted ==
 Sigma-restricted == warehouse: $38,906.82 / 220 rows, region=West).
 
 Usage:
-  eval "$(scripts/get-token.sh)"
   # reuse-first lookup only (default, read-only):
   python3 apply_sigma_rls.py --attr region
   # create the attribute if missing:
@@ -57,29 +57,33 @@ import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 
-BASE = os.environ.get("SIGMA_BASE_URL")
-TOK = os.environ.get("SIGMA_API_TOKEN")
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+import sigma_rest
 
 
 def api(method, path, body=None):
-    if not BASE or not TOK:
-        sys.exit("SIGMA_BASE_URL / SIGMA_API_TOKEN unset — run: eval \"$(scripts/get-token.sh)\"")
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        BASE + path, data=data, method=method,
-        headers={"Authorization": "Bearer " + TOK, "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req) as r:
-            raw = r.read().decode()
-    except urllib.error.HTTPError as e:
-        print("HTTP", e.code, method, path, "->", e.read().decode()[:1000], file=sys.stderr)
-        raise
+        # Accept text so YAML spec responses retain their historical shape;
+        # ordinary JSON responses are parsed immediately below.
+        raw = sigma_rest.request(
+            method.lower(),
+            path,
+            body=json.dumps(body) if body is not None else None,
+            accept="*/*",
+        )
+    except sigma_rest.SigmaAuthError as exc:
+        sys.exit(
+            f"FATAL: Sigma API authentication failed: {exc}\n"
+            "  Run scripts/browser-login.sh once, or configure SIGMA_BASE_URL / "
+            "SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET for unattended auth."
+        )
+    except sigma_rest.SigmaError as exc:
+        sys.exit(f"FATAL: Sigma API request failed: {exc}")
     try:
         return json.loads(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return raw  # spec endpoints return YAML
 
 
