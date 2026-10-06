@@ -293,7 +293,11 @@ def ensure_sigma_env(workdir=None):
     """
     if workdir:
         os.environ.setdefault("SIGMA_WORKDIR", workdir)
-    sigma_rest.bootstrap_credentials(cwd=workdir)
+    credentials = dict(os.environ)
+    credentials.pop("SIGMA_CLIENT_ID", None)
+    sigma_rest.bootstrap_credentials(env=credentials, cwd=workdir)
+    for key, value in credentials.items():
+        os.environ.setdefault(key, value)
 
 
 def sigma(method, path, body=None):

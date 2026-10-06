@@ -73,12 +73,14 @@ def api(method, path, body=None):
             body=json.dumps(body) if body is not None else None,
             accept="*/*",
         )
-    except (sigma_rest.SigmaError, SystemExit) as exc:
+    except sigma_rest.SigmaAuthError as exc:
         sys.exit(
-            f"FATAL: Sigma API authentication/request failed: {exc}\n"
+            f"FATAL: Sigma API authentication failed: {exc}\n"
             "  Run scripts/browser-login.sh once, or configure SIGMA_BASE_URL / "
             "SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET for unattended auth."
         )
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        sys.exit(f"FATAL: Sigma API request failed: {exc}")
     try:
         return json.loads(raw)
     except (TypeError, ValueError):
