@@ -407,6 +407,10 @@ def sigma_sync_tables(connection_id, tables, db, schema):
     immediately, no UI 'refresh schema'). Authentication and the single 401
     refresh/retry are owned by scripts/lib/sigma_rest.py. Returns (ok, fail)
     counts."""
+    neutral = load_neutral_env()
+    for key in ("SIGMA_BASE_URL", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET"):
+        if not os.environ.get(key) and neutral.get(key):
+            os.environ[key] = neutral[key]
     try:
         sigma_rest.base_url()
         # Fail before reporting every table as an independent sync failure when
