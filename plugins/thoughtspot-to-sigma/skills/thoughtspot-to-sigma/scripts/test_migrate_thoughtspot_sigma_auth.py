@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Creds-free tests for ThoughtSpot's real Sigma transport path."""
+"""Creds-free caller-token, browser-refresh, and client-fallback transport tests."""
 
 import importlib.util
 import json
