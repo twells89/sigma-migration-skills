@@ -15,6 +15,20 @@ class TtyInput < StringIO
   end
 end
 
+class SequenceHTTP
+  attr_reader :authorization
+
+  def initialize(*responses)
+    @responses = responses
+    @authorization = []
+  end
+
+  def request(request)
+    @authorization << request['Authorization']
+    @responses.shift
+  end
+end
+
 failures = []
 
 def check(condition, message, failures)
@@ -28,6 +42,13 @@ end
 
 def response(body, code = 200)
   Response.new(code.to_s, JSON.generate(body))
+end
+
+def net_response(klass, code, message, body)
+  value = klass.new('1.1', code, message)
+  value.instance_variable_set(:@read, true)
+  value.instance_variable_set(:@body, body)
+  value
 end
 
 def workbook(id, name: "Migration #{id}", owner: 'member-1', creator: 'member-1')
@@ -216,6 +237,63 @@ Dir.mktmpdir do |dir|
   marker = JSON.parse(File.read(File.join(dir, 'cleanup-marker.json')))
   check(marker['dry_run'] == true && marker['would_delete'].first['id'] == 'wb-old',
         'dry-run marker records proposed candidate', failures)
+end
+
+puts '== real requester delegates browser-only 401 refresh to Sigma.request =='
+saved_env = ENV.to_h
+original_provider = nil
+begin
+  ENV['SIGMA_BASE_URL'] = 'https://api.sigmacomputing.com'
+  ENV['SIGMA_API_TOKEN'] = 'expired-browser-token'
+  ENV['SIGMA_CLIENT_ID'] = '' # prevent neutral-env bootstrap while requiring sigma_rest
+  %w[SIGMA_CLIENT_SECRET SIGMA_TOKEN_MINTED_AT SIGMA_AUTH_METHOD].each { |key| ENV.delete(key) }
+
+  http = SequenceHTTP.new(
+    net_response(Net::HTTPUnauthorized, '401', 'Unauthorized', '{"code":"unauthorized"}'),
+    net_response(Net::HTTPOK, '200', 'OK', '{"workbookId":"wb-live"}')
+  )
+  requester = OrphanWorkbookCleanup.real_requester(ENV['SIGMA_BASE_URL'], ENV, http: http)
+  ENV.delete('SIGMA_CLIENT_ID')
+
+  Sigma.instance_variable_set(:@token_override, nil)
+  Sigma.instance_variable_set(:@minted_at, nil)
+  Sigma.instance_variable_set(:@refresh_inflight, false)
+  Sigma.instance_variable_set(:@validated_bases, nil)
+  provider_calls = 0
+  provider = {
+    'SIGMA_API_TOKEN' => 'browser-refreshed-token',
+    'SIGMA_TOKEN_MINTED_AT' => Time.now.utc.iso8601,
+    'SIGMA_AUTH_METHOD' => 'browser'
+  }
+  original_provider = Sigma.method(:token_provider_result)
+  Sigma.define_singleton_method(:token_provider_result) do
+    provider_calls += 1
+    provider
+  end
+
+  raw = requester.call(:get, '/v2/workbooks/wb-live')
+  check(raw.code == '200' && raw.body == '{"workbookId":"wb-live"}',
+        'requester preserves the final response code/body object', failures)
+  check(provider_calls == 1, 'a 401 invokes the browser token provider exactly once', failures)
+  check(http.authorization == ['Bearer expired-browser-token', 'Bearer browser-refreshed-token'],
+        'the retry uses the browser-refreshed bearer token', failures)
+  check(!ENV.key?('SIGMA_CLIENT_ID'),
+        'browser refresh and retry do not require SIGMA_CLIENT_ID', failures)
+
+  unavailable_http = SequenceHTTP.new(
+    net_response(Net::HTTPServiceUnavailable, '503', 'Unavailable', 'retry later')
+  )
+  unavailable_requester = OrphanWorkbookCleanup.real_requester(
+    ENV['SIGMA_BASE_URL'], ENV, http: unavailable_http
+  )
+  unavailable = unavailable_requester.call(:delete, '/v2/files/wb-old')
+  check(unavailable.code == '503' && unavailable.body == 'retry later',
+        'final non-2xx status and body remain available to cleanup safety logic', failures)
+ensure
+  if original_provider
+    Sigma.singleton_class.send(:define_method, :token_provider_result, original_provider)
+  end
+  ENV.replace(saved_env)
 end
 
 abort "#{failures.length} cleanup safety test(s) failed" unless failures.empty?

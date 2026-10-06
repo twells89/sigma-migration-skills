@@ -76,7 +76,12 @@ end
 Thread.new { server.start }
 sleep 0.2
 base = "http://127.0.0.1:#{server.config[:Port]}"
-env = { 'SIGMA_BASE_URL' => base, 'SIGMA_CLIENT_ID' => nil, 'SIGMA_API_TOKEN' => 'offline-test' }
+env = {
+  'SIGMA_BASE_URL' => base,
+  'SIGMA_ALLOW_INSECURE_BASE_URL' => '1',
+  'SIGMA_CLIENT_ID' => nil,
+  'SIGMA_API_TOKEN' => 'offline-test'
+}
 
 begin
   Dir.mktmpdir do |work|

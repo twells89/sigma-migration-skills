@@ -1,6 +1,6 @@
 # Migration Runtime Contract
 
-**Status:** proposed (rollout tracked in [`structure-roadmap.md`](structure-roadmap.md) §R1) · **Date:** 2026-06-26
+**Status:** proposed (rollout tracked in [`structure-roadmap.md`](structure-roadmap.md) §R1) · **Last updated:** 2026-10-05
 
 ## Problem
 
@@ -13,6 +13,9 @@ customer's agent improvises differently. Observed failures:
   live source API. The cold-discovery path assumes live source access and degrades badly.
 - **Token waste on connection resolution.** The agent free-searches Sigma for the
   connection that should back the data model, burning tokens on every run.
+- **Authentication drift.** Interactive agents are told to provision a client
+  secret, bootstrap is mistaken for an interactive login, or a raw access token
+  expires during a long phase without a consistent refresh/retry policy.
 - **Silent completion.** Telemetry (`sigma_telemetry.py` → Render) is documented as an
   optional manual step, not wired into the orchestrators. PowerBI never fires it; a run can
   "finish" without the agent prompting to send the signal.
@@ -36,11 +39,50 @@ coverage (PR #177) gates.
   (CoverageGate), or per-plugin native-language variants (ScoutGate). Telemetry & the gate
   use the byte-identical pattern.
 - **Fanout mismatch:** telemetry → 9 plugins; hard-gate → 6 (missing **qlik, cognos, gooddata**).
+- **Dual-mode Sigma auth exists in shared runtime.** The token provider defaults
+  to browser-keychain auth with OAuth client credentials as fallback;
+  `sigma_rest.rb` / `sigma_rest.py` preserve mint metadata, refresh proactively
+  at 50 minutes, and retry one 401. The remaining contract work is consistent
+  entry-point behavior and documentation, not a new authentication protocol.
 
 ## The contract
 
 ### ① Intake front-door (shared)
 Runs first in every migration skill.
+- **Resolve Sigma authentication once.** All commands are invoked from the
+  selected skill directory. For an interactive human, recommend the explicit
+  OAuth 2.1 authorization-code/PKCE flow:
+
+  ```bash
+  export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+  eval "$(bash scripts/browser-login.sh)"
+  ```
+
+  When persisted, the browser refresh session lives only in the native OS
+  keychain (macOS `security` or Linux `secret-tool`); without one, only the
+  current access token is returned. Bootstrap and doctor may reuse a stored
+  session but are noninteractive and never open a browser.
+- **Use one deterministic auth resolution order.** Existing
+  `SIGMA_API_TOKEN` → `<SIGMA_WORKDIR>/auth.json` → `./auth.json` → shared token
+  provider. In default `SIGMA_AUTH_MODE=auto`, the provider tries browser
+  keychain/cache first, then `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`.
+  `browser` requires the first route; `client-credentials` skips keychain
+  lookup. An existing access token still has precedence.
+- **Make automation explicit.** OAuth client credentials are the unattended/CI
+  fallback. Cloud, container, headless, locked-keychain, and unsupported
+  keychain environments must fall back to client credentials in `auto` mode or
+  select `SIGMA_AUTH_MODE=client-credentials`; they must not copy a browser
+  refresh token into a file.
+- **Preserve refresh metadata.** A shell-neutral
+  `python3 scripts/get_token.py --workdir <workdir>` writes mode-0600
+  `auth.json` with only `SIGMA_API_TOKEN`, `SIGMA_BASE_URL`,
+  `SIGMA_TOKEN_MINTED_AT`, and `SIGMA_AUTH_METHOD`. Refresh tokens remain in
+  the keychain. Access tokens last about one hour; known-age tokens refresh at
+  50 minutes. A REST request may refresh and retry once on a 401; a second 401
+  fails loudly.
+- **Keep auth domains separate.** This contract governs Sigma API auth only.
+  Tableau, Power BI, Qlik, and other source-tool credentials follow their
+  skill-specific flows and never enter the Sigma auth resolution chain.
 - **Detect input mode:** `live` (source API + creds) · `file` (raw export only) · `both`.
 - **Resolve the Sigma connection ONCE.** Prompt the user or read config; list connections a
   single time; cache to `run-dir/connection.json`. All downstream steps read that file —

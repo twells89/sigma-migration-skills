@@ -164,11 +164,23 @@ end
 def automated_actions_effects(document)
   aa = property(document, 'automatedActions')
   return nil unless aa.is_a?(Hash) && aa['items']
-  Array(aa['items']['allOf']).each do |part|
-    effects = property(part, 'effects')
-    return effects['items'] if effects.is_a?(Hash) && effects['items']
+
+  # The public schema originally put the action object directly under
+  # items.allOf. It now wraps that same object in items.oneOf[].allOf. Walk the
+  # combinators so another harmless union wrapper cannot silently erase the
+  # automated-action contract.
+  found = nil
+  walk = lambda do |node|
+    next unless node.is_a?(Hash) && found.nil?
+
+    effects = property(node, 'effects')
+    found = effects['items'] if effects.is_a?(Hash) && effects['items']
+    %w[oneOf anyOf allOf].each do |comb|
+      Array(node[comb]).each { |part| walk.call(part) }
+    end
   end
-  nil
+  walk.call(aa['items'])
+  found
 end
 
 # Trigger string enums hang off Actions.items (sibling of effects), including
@@ -358,7 +370,23 @@ def column_properties(kind_schema)
   columns = property(kind_schema, 'columns')
   return [] unless columns.is_a?(Hash) && columns['items']
 
-  merged_properties(columns['items'])
+  # Table columns are a union of authored and readback variants. The union
+  # gained another oneOf wrapper, so a direct merged_properties(items) sees no
+  # fields even though every member still exposes `hidden`.
+  out = []
+  seen = {}
+  walk = lambda do |node|
+    next unless node.is_a?(Hash)
+    next if seen[node.object_id]
+
+    seen[node.object_id] = true
+    out.concat(merged_properties(node))
+    %w[oneOf anyOf allOf].each do |comb|
+      Array(node[comb]).each { |part| walk.call(part) }
+    end
+  end
+  walk.call(columns['items'])
+  out.uniq.sort
 end
 
 # Focused capability pin for the strengthen-workbook-authoring plan: chart/map

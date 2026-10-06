@@ -284,25 +284,35 @@ module OrphanWorkbookCleanup
     2
   end
 
-  def real_requester(base, env)
+  def real_requester(base, env, http: nil)
+    $LOAD_PATH.unshift File.expand_path('../lib', __dir__) # canonical shared/ layout
     $LOAD_PATH.unshift File.expand_path('lib', __dir__)
     require 'sigma_rest'
     lambda do |method, path|
-      attempts = 0
-      loop do
-        attempts += 1
-        uri = URI("#{base}#{path}")
-        request = method == :delete ? Net::HTTP::Delete.new(uri) : Net::HTTP::Get.new(uri)
-        request['Authorization'] = "Bearer #{Sigma.auth_token}"
-        request['Accept'] = 'application/json'
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
-                                  read_timeout: 30) { |http| http.request(request) }
-        if response.code.to_i == 401 && attempts == 1 && env['SIGMA_CLIENT_ID']
-          Sigma.refresh_token!
-          next
-        end
-        break response
+      uri = URI("#{base}#{path}")
+      response = nil
+      transport = Object.new
+      transport.define_singleton_method(:request) do |request|
+        response =
+          if http
+            http.request(request)
+          else
+            Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
+                                                read_timeout: 30) do |client|
+              client.request(request)
+            end
+          end
       end
+
+      begin
+        Sigma.request(method, path, http: transport)
+      rescue Sigma::Error, JSON::ParserError
+        # Sigma.request raises for final non-2xx and malformed JSON responses.
+        # Cleanup owns those status/body decisions, so retain its response-object
+        # interface while still using Sigma's browser/client 401 refresh path.
+        raise unless response
+      end
+      response
     end
   end
 end
