@@ -12,6 +12,7 @@
 # ~/.sigma-migration/env cannot resolve) and the cred env vars cleared, and
 # asserts it aborts AT the gate (before any network) with the actionable message.
 # The doctor gate is waived so the run reaches the cred gate deterministically.
+# The matrix covers caller-token, browser-keychain, and client fallback routes.
 #
 # Usage: ruby scripts/test-cred-gate.rb
 
