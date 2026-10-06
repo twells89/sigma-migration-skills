@@ -35,4 +35,9 @@ restricted parity on both text and numeric columns. **Don't claim parity until
 
 Sisense creds in `~/.sigma-migration/sisense.env`
 (`SISENSE_BASE_URL` + a bearer `SISENSE_API_TOKEN`); Sigma side reuses the shared
-`~/.sigma-migration/env` via `scripts/get-token.sh`, like the sibling converters.
+browser-first auth provider. Set `SIGMA_BASE_URL`, then run
+`eval "$(bash scripts/browser-login.sh)"` once from an interactive terminal.
+Later runs reuse the keychain refresh session without reopening the browser;
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` remain the unattended fallback. A
+current `SIGMA_API_TOKEN` is reused as-is, and long runs refresh known-old
+tokens proactively or refresh and retry once after HTTP 401.

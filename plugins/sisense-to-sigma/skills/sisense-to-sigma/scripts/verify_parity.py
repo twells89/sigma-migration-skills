@@ -16,10 +16,35 @@ Scope: this gate checks DATA only. Layout fidelity (did the dashboard's
 arrangement come over?) is a separate gate — see `verify_layout.py`. Run both.
 
 Env: SISENSE_BASE_URL/SISENSE_API_TOKEN; `snow` CLI connection (default "tj").
+Sigma workbook spot-check callers should use `SigmaParityTransport` below; it
+delegates auth to the co-located browser-first shared client instead of reading
+a static bearer.
 Usage: python3 verify_parity.py <checks.json> [--snow-conn tj]
 checks.json: [{"label","datasource","jaql":[...],"snowflake_sql","tol":0.01}]
 """
 import json, os, ssl, subprocess, sys, urllib.error, urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import sigma_rest
+
+
+class SigmaParityTransport:
+    """Authenticated Sigma transport for parity workbook spot-checks.
+
+    The current mandatory gate remains Sisense JAQL versus warehouse SQL. This
+    adapter preserves that behavior while ensuring any Sigma-side spot-check
+    uses valid-token reuse, proactive age refresh, browser refresh with client
+    fallback, and exactly one retry on HTTP 401.
+    """
+
+    def request(self, method, path, body=None, *, binary=False):
+        return sigma_rest.request(
+            method.lower(),
+            path,
+            body=json.dumps(body) if body is not None else None,
+            binary=binary,
+        )
+
 
 def _ssl_context():
     """TLS trust resolution. On-prem Sisense deployments commonly sit on

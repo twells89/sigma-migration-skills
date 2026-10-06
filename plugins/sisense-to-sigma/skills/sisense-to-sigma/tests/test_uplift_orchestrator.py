@@ -217,6 +217,7 @@ class UpliftContracts(unittest.TestCase):
                 env = {
                     "SIGMA_BASE_URL": "http://127.0.0.1:%d" % server.server_port,
                     "SIGMA_API_TOKEN": "test",
+                    "SIGMA_ALLOW_INSECURE_BASE_URL": "1",
                 }
                 first = command(SCRIPTS / "post-sisense-spec.py", "dm",
                                 "--spec", dm_spec, "--workdir", td, env=env)
@@ -255,6 +256,7 @@ class UpliftContracts(unittest.TestCase):
                     env={
                         "SIGMA_BASE_URL": "http://127.0.0.1:%d" % server.server_port,
                         "SIGMA_API_TOKEN": "test",
+                        "SIGMA_ALLOW_INSECURE_BASE_URL": "1",
                     },
                 )
                 self.assertEqual(result.returncode, 2)
