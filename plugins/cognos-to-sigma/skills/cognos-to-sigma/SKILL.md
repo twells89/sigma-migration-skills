@@ -55,8 +55,12 @@ of emitting wrong logic.
 
 **Print-critical reports:** read `refs/print-reports.md` for the separate
 report-spec XML → Sigma Report → paginated PDF workflow. Its code supports
-lists/tables; Sigma Report code currently rejects `pivot-table`, so Cognos
-crosstabs require a manual print path. Source PDF comparison is the parity gate.
+lists/tables; the converter keeps crosstabs blocked pending verified Report code
+support (see the reference's validation date). Source PDF comparison is the parity gate.
+**Editable output is required:** use the XML for native elements/data bindings
+and the PDF only as a visual reference. Never place rendered report pages or
+rasterized business text into image elements as a substitute for migration.
+Logos/artwork may remain images; unsupported editable content is a blocker.
 
 ---
 

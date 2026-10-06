@@ -28,42 +28,49 @@ const footerMark = ({ label, accent = '#c93024' }, width, height) => {
   if (!/^[A-Za-z ]{1,25}$/.test(label)) throw new Error('footer brand needs a short alphabetic label');
   return svgData(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><line x1="0" y1="1" x2="${width}" y2="1" stroke="#5b6069" stroke-width="1"/><circle cx="17" cy="${height / 2 + 3}" r="12" fill="${accentColor(accent)}"/><text x="43" y="${height / 2 + 9}" font-family="Arial" font-size="18" font-weight="bold" fill="#575c64">${label}</text></svg>`);
 };
-// Dense copy is an SVG text layer: Report rich text adds paragraph gaps.
-// Only the explicit neutral fixture opts into synthetic fill; ordinary
-// blueprints never generate text beyond the supplied body.
-const denseTextImage = (body, width, height, sampleFill = false) => {
-  const clauses = body.split(/\n\s*\n/).map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+// Separate native paragraph elements avoid one large rich-text box's paragraph
+// spacing without turning editable business copy into artwork. Estimated fit
+// is conservative, not a substitute for inspecting Sigma's exported pages.
+const denseTextBlocks = (body, width, height, fontSize, sampleFill = false) => {
+  const clauses = body.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
   if (!clauses.length) throw new Error('dense text needs at least one paragraph');
   const samples = [
     'This paragraph is illustrative typesetting text. It repeats the page rhythm, line length and leading of a printed reference section without representing an approved policy or business term.',
     'Review the actual exported page for legibility, line wrapping and footer clearance. All content in this section is neutral placeholder copy for print-layout inspection.',
     'A page can be structurally valid yet look incomplete when a paragraph overflows or a font renders differently. Recheck the output after every intentional edit.',
   ];
-  const lineHeight = 10;
-  const maxLines = Math.floor((height - 10) / lineHeight);
-  const maxChars = Math.max(20, Math.floor(width / 5.2));
-  const lines = [];
-  const wrap = (paragraph) => {
-    let line = '';
-    for (const word of paragraph.split(/\s+/)) {
-      if (word.length > maxChars) throw new Error('dense text has a word too wide for its page');
-      if (line && `${line} ${word}`.length > maxChars) { lines.push(line); line = word; }
-      else line = line ? `${line} ${word}` : word;
+  // Live Report rich text keeps a minimum line box even with a smaller inline
+  // font; using fontSize alone clipped second lines at 9px.
+  const lineHeight = Math.max(24, Math.ceil(fontSize * 1.5)), gap = Math.ceil(fontSize * 0.8);
+  const maxChars = Math.max(1, Math.floor(width / (fontSize * 0.6)));
+  const blocks = [];
+  let used = 0;
+  const append = (paragraph) => {
+    let count = 0;
+    for (const sourceLine of paragraph.split('\n')) {
+      let length = 0;
+      count++;
+      for (const word of sourceLine.split(/\s+/).filter(Boolean)) {
+        if (word.length > maxChars) throw new Error('dense text has a word too wide for its page');
+        if (length && length + 1 + word.length > maxChars) { count++; length = word.length; }
+        else length += (length ? 1 : 0) + word.length;
+      }
     }
-    if (line) lines.push(line);
+    const blockHeight = count * lineHeight + 8;
+    if (used + blockHeight > height) return false;
+    blocks.push({ body: paragraph, y: used, height: blockHeight });
+    used += blockHeight + gap;
+    return true;
   };
-  for (const clause of clauses) { wrap(clause); lines.push(''); }
-  if (lines.length > maxLines) throw new Error('dense text exceeds the allotted page; split the approved text across pages');
-  if (sampleFill) {
-    for (let index = 0; lines.length < maxLines - 2; index++) {
-      wrap(`Example note ${index + 1}. ${samples[index % samples.length]}`);
-      lines.push('');
-    }
-    if (lines.length > maxLines) lines.length = maxLines;
+  for (const clause of clauses) {
+    if (!append(clause)) throw new Error('dense text exceeds the allotted page; split the approved text across pages');
   }
-  const content = lines.map((line, index) => line
-    ? `<text x="0" y="${10 + index * lineHeight}" font-family="Arial" font-size="9" fill="#222222">${esc(line)}</text>` : '').join('');
-  return svgData(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">${content}</svg>`);
+  if (sampleFill) {
+    for (let index = 0; ; index++) {
+      if (!append(`Example note ${index + 1}. ${samples[index % samples.length]}`)) break;
+    }
+  }
+  return blocks;
 };
 const watermarkImage = ({ text, color = '#e7e9f0', opacity = 0.22, angle = -35 }, width, height) => {
   if (!/^[A-Za-z ]{1,40}$/.test(text)) throw new Error('watermark text must contain 1–40 letters/spaces');
@@ -109,18 +116,16 @@ export function composePrintLayout(input, manifest) {
       throw new Error(`text block on ${pageId} exceeds the page canvas`);
     }
     if (block.dense) {
-      if (block.fontSize != null && block.fontSize !== 9) throw new Error('dense text uses a fixed 9px SVG font');
+      const font = block.fontSize ?? 9;
+      if (!Number.isFinite(font) || font < 6 || font > 48) throw new Error('fontSize must be between 6 and 48');
       if (block.body.length > 10000) throw new Error('dense text is too long for one page');
       if (block.sampleFill != null && typeof block.sampleFill !== 'boolean') throw new Error('sampleFill must be boolean');
-      const image = { id: id(), kind: 'image', source: { kind: 'url', url: denseTextImage(block.body, w, h, block.sampleFill) } };
-      spec.elements.push(image);
-      layout = layout.replace(new RegExp(`(<Page\\b[^>]*\\bid="${esc(pageId)}"[^>]*>)([\\s\\S]*?)(<\/Page>)`),
-        (_m, open, inner, close) => `${open}${inner}\n  <Element elementId="${image.id}" x="${x}" y="${y}" width="${w}" height="${h}"/>\n${close}`);
-      return image;
+      return denseTextBlocks(block.body, w, h, font, block.sampleFill).map((paragraph) =>
+        add({ x, y: y + paragraph.y, width: w, height: paragraph.height, body: paragraph.body, fontSize: font }, pageId));
     }
     const font = block.fontSize;
     if (font != null && (!Number.isFinite(font) || font < 6 || font > 48)) throw new Error('fontSize must be between 6 and 48');
-    const body = font == null ? block.body : block.body.split('\n').map((line) => line ? `<span style="font-size: ${font}px">${esc(line)}</span>` : '').join('\n');
+    const body = font == null ? block.body : block.body.split('\n').map((line) => line ? `<span style="font-size: ${font}px">${esc(line)}</span>` : '').join('  \n');
     const element = { id: id(), kind: 'text', body };
     spec.elements.push(element);
     const node = `<Element elementId="${element.id}" x="${x}" y="${y}" width="${w}" height="${h}"/>`;

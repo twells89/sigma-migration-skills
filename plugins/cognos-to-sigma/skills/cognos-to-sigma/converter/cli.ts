@@ -56,7 +56,19 @@ function loadMetrics() {
   catch (e) { console.error(`[metrics] could not read ${p} (${(e as Error).message}); measures stay inline`); return undefined; }
 }
 
-const xml = readFileSync(file, 'utf8');
+let xml: string;
+try {
+  xml = new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(file));
+} catch (error) {
+  if (!(error instanceof TypeError)) throw error;
+  console.error('Input is not valid UTF-8. Re-export or explicitly transcode using its confirmed encoding; no replacement-decoded conversion was produced.');
+  process.exit(2);
+}
+const declaredEncoding = xml.match(/^\s*<\?xml\b[^?]*\bencoding\s*=\s*['"]([^'"]+)['"]/i)?.[1];
+if (declaredEncoding && !/^utf-8$/i.test(declaredEncoding)) {
+  console.error('Unsupported XML encoding declaration. Provide a confirmed UTF-8 export rather than guessing its encoding.');
+  process.exit(2);
+}
 
 // Dispatch on the ROOT ELEMENT, not the extension: a Framework Manager model is also a
 // `.xml` starting with `<`, so an extension check silently routes it into the report

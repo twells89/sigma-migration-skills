@@ -5,6 +5,7 @@ Uses Poppler (pdfinfo, pdftotext, pdftoppm) plus Pillow. A green result still
 requires a human check of fonts and pagination against a genuine source PDF.
 """
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -30,6 +31,22 @@ def info(path):
     if not pages or not size:
         raise ValueError(f'{path}: could not read page count or page size')
     return int(pages[1]), (float(size[1]), float(size[2]))
+
+
+def page_size(path, number):
+    raw = command('pdfinfo', '-f', str(number), '-l', str(number), path).decode(errors='replace')
+    match = re.search(r'^Page\s+\d+\s+size:\s*([\d.]+) x ([\d.]+) pts', raw, re.M)
+    if not match:
+        raise ValueError(f'{path}: could not read geometry for page {number}')
+    return float(match[1]), float(match[2])
+
+
+def digest(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            h.update(block)
+    return h.hexdigest()
 
 
 def page(path, number):
@@ -69,10 +86,13 @@ def main():
     a = ap.parse_args()
     if not 0 <= a.max_mean_diff <= 1 or not 0 <= a.min_text_ratio <= 1:
         raise ValueError('comparison thresholds must be in [0, 1]')
+    identical_input = digest(a.cognos) == digest(a.sigma)
     n_source, size_source = info(a.cognos)
     n_target, size_target = info(a.sigma)
     pages = []
     for number in range(1, min(n_source, n_target) + 1):
+        source_size, target_size = page_size(a.cognos, number), page_size(a.sigma, number)
+        size_matches = all(x > 0 and abs(x - y) / x <= 0.02 for x, y in zip(source_size, target_size))
         raw_source_text = text(a.cognos, number)
         raw_target_text = text(a.sigma, number)
         source_text = normal(raw_source_text)
@@ -87,16 +107,19 @@ def main():
         text_ratio = SequenceMatcher(None, source_text, target_text, autojunk=False).ratio() if source_text else None
         numbers_match = numeric_tokens(raw_source_text) == numeric_tokens(raw_target_text) if source_text else True
         pages.append({'page': number, 'mean_pixel_diff': round(mean, 4),
+                      'source_size_pts': source_size, 'sigma_size_pts': target_size,
+                      'size_matches': size_matches,
                       'source_text_chars': len(source_text), 'sigma_text_chars': len(target_text),
                       'source_ink_fraction': round(source_ink, 4), 'sigma_ink_fraction': round(target_ink, 4),
                       'text_similarity': round(text_ratio, 4) if text_ratio is not None else None,
                       'numbers_match': numbers_match,
-                      'passed': not blank and mean <= a.max_mean_diff and numbers_match
+                      'passed': size_matches and not blank and mean <= a.max_mean_diff and numbers_match
                       and (text_ratio is None or text_ratio >= a.min_text_ratio)})
-    verdict = {'passed': bool(pages) and n_source == n_target
+    verdict = {'passed': not identical_input and bool(pages) and n_source == n_target
                and all(abs(x - y) / x <= 0.02 for x, y in zip(size_source, size_target))
                and all(p['passed'] for p in pages),
                'cognos_pages': n_source, 'sigma_pages': n_target,
+               'identical_input': identical_input,
                'cognos_size_pts': size_source, 'sigma_size_pts': size_target,
                'pages': pages}
     if a.out:
