@@ -47,7 +47,7 @@ calls = {"post_body": None}
 def fake_post(path, body):
     assert path == "/v2/workbooks/spec", path
     calls["post_body"] = body
-    return "workbookId: 11111111-1111-4111-8111-111111111111"
+    return '{"workbookId":"11111111-1111-4111-8111-111111111111"}'
 
 
 BM.post = fake_post

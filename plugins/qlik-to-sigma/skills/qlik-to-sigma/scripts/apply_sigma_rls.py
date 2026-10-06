@@ -62,18 +62,23 @@ from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
-import sigma_rest
+sigma_rest = None
 
 
 def configure_auth(workdir=None):
     """Load neutral credentials and a workdir auth.json without minting yet."""
+    global sigma_rest
     if workdir:
         resolved = Path(workdir).expanduser().resolve()
-        os.environ.setdefault("SIGMA_WORKDIR", str(resolved))
-        sigma_rest.bootstrap_credentials(cwd=resolved)
+        os.environ["SIGMA_WORKDIR"] = str(resolved)
+    import sigma_rest as client
+    sigma_rest = client
+    sigma_rest.bootstrap_credentials(cwd=resolved if workdir else None)
 
 
 def api(method, path, body=None):
+    if sigma_rest is None:
+        configure_auth()
     try:
         # Accept text so spec endpoints that return YAML retain their historical
         # shape; ordinary JSON responses are parsed immediately below.

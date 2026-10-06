@@ -96,8 +96,14 @@ def build(app_name):
     post_body=code_rep.wrap(doc,{"name":f"{app_name} → Sigma","folderId":FOLDER})
     res=post("/v2/workbooks/spec",post_body)
     if not res: return None
-    wb=re.search(r'workbookId:\s*(\S+)',res)
-    wb=wb.group(1) if wb else None
+    try:
+        parsed=json.loads(res)
+        wb=parsed.get("workbookId") if isinstance(parsed,dict) else None
+    except (TypeError,ValueError):
+        wb=None
+    if not wb:
+        match=re.search(r'workbookId:\s*(\S+)',res)
+        wb=match.group(1) if match else None
     if wb:
         lf="/tmp/_lay_%s.xml"%wb; open(lf,"w").write(full_xml)
         subprocess.run([sys.executable,PUTLAYOUT,"--workbook",wb,"--layout",lf],capture_output=True)

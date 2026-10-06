@@ -4,7 +4,9 @@
 import importlib.util
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -228,6 +230,53 @@ class BuilderSigmaAuthTest(unittest.TestCase):
             load_script("build-sigma-workbook.py", "qlik_builder_auth_workbook_lazy")
 
         provider.assert_not_called()
+
+    def test_rls_workdir_auth_precedes_cwd_auth_json(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            cwd = root / "cwd"
+            workdir = root / "work"
+            home = root / "home"
+            for directory in (cwd, workdir, home):
+                directory.mkdir()
+            (cwd / "auth.json").write_text(
+                json.dumps({"SIGMA_API_TOKEN": "cwd-token"}),
+                encoding="utf-8",
+            )
+            (workdir / "auth.json").write_text(
+                json.dumps({"SIGMA_API_TOKEN": "workdir-token"}),
+                encoding="utf-8",
+            )
+            code = (
+                "import importlib.util, os, sys;"
+                "spec=importlib.util.spec_from_file_location('rls_auth_test',sys.argv[1]);"
+                "mod=importlib.util.module_from_spec(spec);"
+                "spec.loader.exec_module(mod);"
+                "mod.configure_auth(sys.argv[2]);"
+                "print(os.environ['SIGMA_API_TOKEN'])"
+            )
+            env = {
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("SIGMA_")
+            }
+            env["HOME"] = str(home)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    code,
+                    str(SCRIPTS / "apply_sigma_rls.py"),
+                    str(workdir),
+                ],
+                cwd=cwd,
+                env=env,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual("workdir-token", result.stdout.strip())
 
     def test_python_live_paths_do_not_read_a_static_bearer(self):
         for filename in (
