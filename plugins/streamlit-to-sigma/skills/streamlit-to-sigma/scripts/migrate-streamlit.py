@@ -4,21 +4,20 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 SKILL = Path(__file__).resolve().parents[1]
+SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SKILL))
+sys.path.insert(0, str(SCRIPTS / "lib"))
 
 from converter import analyze_project, build_data_model, build_workbook  # noqa: E402
+import sigma_rest  # noqa: E402
 
 
 def write_json(path: Path, value: object) -> None:
@@ -27,102 +26,74 @@ def write_json(path: Path, value: object) -> None:
 
 
 def source_neutral_env() -> None:
-    path = Path.home() / ".sigma-migration" / "env"
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        match = re.match(r"\s*export\s+([A-Z0-9_]+)=(.*)\s*$", line)
-        if not match or match.group(1) in os.environ:
-            continue
-        value = match.group(2).strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        os.environ[match.group(1)] = value
+    """Retain the public bootstrap hook while delegating to the shared client."""
+    sigma_rest.bootstrap_credentials()
 
 
 class SigmaAPI:
     def __init__(self) -> None:
         source_neutral_env()
-        self.base_url = os.environ.get("SIGMA_BASE_URL", "").rstrip("/")
-        client_id = os.environ.get("SIGMA_CLIENT_ID")
-        client_secret = os.environ.get("SIGMA_CLIENT_SECRET")
-        if not self.base_url or not client_id or not client_secret:
+        try:
+            self.base_url = sigma_rest.base_url().rstrip("/")
+            # Keep the constructor's fail-fast URL check and trailing-slash
+            # normalization while the shared client owns all auth decisions.
+            sigma_rest.validate_base_url(self.base_url)
+            os.environ["SIGMA_BASE_URL"] = self.base_url
+            self.token = sigma_rest.auth_token()
+        except (sigma_rest.SigmaError, SystemExit) as error:
             raise RuntimeError(
-                "SIGMA_BASE_URL, SIGMA_CLIENT_ID, and SIGMA_CLIENT_SECRET are required"
-            )
-        parsed = urllib.parse.urlparse(self.base_url)
-        host = (parsed.hostname or "").lower()
-        trusted_domain = "sigma" + "computing.com"
-        if os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") != "1":
-            if parsed.scheme != "https" or not (
-                host == trusted_domain
-                or host.endswith(f".{trusted_domain}")
-            ):
-                raise RuntimeError(
-                    "Refusing to transmit Sigma credentials: SIGMA_BASE_URL "
-                    "must be an HTTPS Sigma-managed host. Set "
-                    "SIGMA_ALLOW_INSECURE_BASE_URL=1 only for explicit dev use."
-                )
-        basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-        request = urllib.request.Request(
-            f"{self.base_url}/v2/auth/token",
-            data=urllib.parse.urlencode({"grant_type": "client_credentials"}).encode(),
-            headers={
-                "Authorization": f"Basic {basic}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request) as response:
-            self.token = json.load(response)["access_token"]
+                "Sigma authentication unavailable via a pre-minted token, "
+                f"browser login, or client credentials: {error}"
+            ) from error
 
     def request(
         self, method: str, path: str, body: dict[str, Any] | None = None
     ) -> Any:
-        payload = json.dumps(body).encode() if body is not None else None
-        headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json",
-        }
-        if payload is not None:
-            headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(
-            f"{self.base_url}{path}",
-            data=payload,
-            headers=headers,
-            method=method,
-        )
+        payload = json.dumps(body) if body is not None else None
         try:
-            with urllib.request.urlopen(request) as response:
-                content = response.read()
-                if not content:
-                    return {}
-                try:
-                    return json.loads(content)
-                except json.JSONDecodeError:
-                    try:
-                        import yaml  # type: ignore
+            # binary=True keeps response parsing here byte-for-byte compatible
+            # (including Sigma's occasional YAML create response) while the
+            # shared transport owns token reuse, proactive refresh, and one
+            # refresh/retry after a 401.
+            content = sigma_rest.request(
+                method,
+                path,
+                body=payload,
+                accept="application/json",
+                binary=True,
+            )
+        except sigma_rest.SigmaError as error:
+            detail = str(error)
+            match = re.search(r" -> (\d+)[^\n]*\n?(.*)", detail, re.DOTALL)
+            if match:
+                raise RuntimeError(
+                    f"{method} {path} failed ({match.group(1)}): {match.group(2)}"
+                ) from error
+            raise RuntimeError(f"{method} {path} failed: {detail}") from error
 
-                        return yaml.safe_load(content.decode("utf-8"))
-                    except (ImportError, ValueError):
-                        # Create responses are shallow YAML maps; preserve ids
-                        # even when PyYAML is unavailable.
-                        result = {}
-                        for line in content.decode(
-                            "utf-8", errors="replace"
-                        ).splitlines():
-                            if ":" not in line or line.startswith((" ", "-")):
-                                continue
-                            key, value = line.split(":", 1)
-                            result[key.strip()] = value.strip().strip("\"'")
-                        if result:
-                            return result
-                        raise RuntimeError(
-                            f"Unable to parse Sigma response from {path}"
-                        )
-        except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"{method} {path} failed ({error.code}): {detail}") from error
+        # Preserve the public token attribute for callers that inspect it.
+        self.token = os.environ.get("SIGMA_API_TOKEN", self.token)
+        if not content:
+            return {}
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            try:
+                import yaml  # type: ignore
+
+                return yaml.safe_load(content.decode("utf-8"))
+            except (ImportError, ValueError):
+                # Create responses are shallow YAML maps; preserve ids even
+                # when PyYAML is unavailable.
+                result = {}
+                for line in content.decode("utf-8", errors="replace").splitlines():
+                    if ":" not in line or line.startswith((" ", "-")):
+                        continue
+                    key, value = line.split(":", 1)
+                    result[key.strip()] = value.strip().strip("\"'")
+                if result:
+                    return result
+                raise RuntimeError(f"Unable to parse Sigma response from {path}")
 
 
 def resolve_folder(api: SigmaAPI, requested: str | None) -> str:

@@ -22,8 +22,19 @@ python3 -m json.tool /tmp/streamlit-retail/wb-spec.json
 
 ## Live
 
-Set `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, and `SIGMA_CLIENT_SECRET` or store them
-in `~/.sigma-migration/env`.
+Prefer a one-time browser login:
+
+```bash
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
+```
+
+The refresh session stays in the OS keychain; later runs reuse it without
+opening a browser. For unattended hosts, set `SIGMA_BASE_URL`,
+`SIGMA_CLIENT_ID`, and `SIGMA_CLIENT_SECRET` (directly or in
+`~/.sigma-migration/env`). A valid pre-minted `SIGMA_API_TOKEN` is also reused.
+The live orchestrator proactively refreshes known-stale tokens and refreshes
+once on a 401 before retrying the request.
 
 Run the reuse check:
 
