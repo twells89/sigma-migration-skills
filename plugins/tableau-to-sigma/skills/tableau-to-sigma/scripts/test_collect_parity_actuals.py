@@ -160,10 +160,10 @@ class CollectParityActualsTest(unittest.TestCase):
                 poll_interval=0.002,
             )
 
-    def test_authenticated_transport_refreshes_once_on_401(self):
+    def test_browser_only_transport_refreshes_once_on_401(self):
         os.environ["SIGMA_BASE_URL"] = "https://stub.invalid"
-        os.environ["SIGMA_CLIENT_ID"] = "id"
-        os.environ["SIGMA_CLIENT_SECRET"] = "secret"
+        os.environ.pop("SIGMA_CLIENT_ID", None)
+        os.environ.pop("SIGMA_CLIENT_SECRET", None)
         state = {"token": "stale", "refreshes": 0, "calls": []}
 
         collector.sigma_rest.auth_token = lambda: state["token"]

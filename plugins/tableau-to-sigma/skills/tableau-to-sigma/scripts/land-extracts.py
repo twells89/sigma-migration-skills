@@ -56,13 +56,14 @@ import os
 import re
 import sys
 import tempfile
-import urllib.error
-import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import OrderedDict
 from datetime import datetime, timezone
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+import sigma_rest  # noqa: E402
 
 PIP_HINT = "pip install tableauhyperapi 'pandas>=2.0,<3' pyarrow snowflake-connector-python"
 
@@ -400,71 +401,42 @@ def connect_snowflake(args):
     return connector.connect(**kw)
 
 
-def _http_json(method, url, headers=None, json_body=None, form_body=None):
-    data = None
-    hdrs = dict(headers or {})
-    if json_body is not None:
-        data = json.dumps(json_body).encode()
-        hdrs["Content-Type"] = "application/json"
-    elif form_body is not None:
-        data = urllib.parse.urlencode(form_body).encode()
-        hdrs["Content-Type"] = "application/x-www-form-urlencoded"
-    req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        body = resp.read().decode("utf-8", "replace")
-        return resp.status, (json.loads(body) if body.strip() else {})
-
-
-def sigma_token(base):
-    """SIGMA_API_TOKEN directly, else client-credentials exchange with
-    SIGMA_CLIENT_ID/SECRET — same flow as scripts/get-token.sh."""
-    tok = env_or_neutral("SIGMA_API_TOKEN")
-    if tok:
-        return tok
-    cid, sec = env_or_neutral("SIGMA_CLIENT_ID"), env_or_neutral("SIGMA_CLIENT_SECRET")
-    if not (cid and sec):
-        sys.exit("FATAL: --sigma-connection-id needs SIGMA_API_TOKEN, or "
-                 "SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (env or ~/.sigma-migration/env).\n"
-                 "  Mint one:  eval \"$(scripts/get-token.sh)\"")
-    # Security (A2): only send Sigma client creds to an https:// sigmacomputing.com host.
-    if os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") != "1":
-        _p = urllib.parse.urlparse(base or ""); _h = (_p.hostname or "").lower()
-        if _p.scheme != "https" or not (_h == "sigmacomputing.com" or _h.endswith(".sigmacomputing.com")):
-            sys.exit(f"FATAL: refusing to send Sigma credentials to '{base}' — require https:// on a sigmacomputing.com host (set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override).")
-    try:
-        status, body = _http_json(
-            "POST", f"{base}/v2/auth/token",
-            form_body={"grant_type": "client_credentials",
-                       "client_id": cid, "client_secret": sec})
-    except (urllib.error.URLError, OSError) as e:
-        sys.exit(f"FATAL: Sigma token exchange failed ({e}) — check SIGMA_BASE_URL/credentials")
-    tok = body.get("access_token")
-    if not tok:
-        sys.exit(f"FATAL: Sigma token exchange returned no access_token (HTTP {status})")
-    return tok
-
-
 def sigma_sync_tables(connection_id, tables, db, schema):
     """POST /v2/connections/{id}/sync {"path":[DB,SCHEMA,TABLE]} per table —
     this endpoint WORKS (verified in a 10-workbook live migration: 48/48 tables visible
-    immediately, no UI 'refresh schema'). Returns (ok, fail) counts."""
-    base = env_or_neutral("SIGMA_BASE_URL")
-    if not base:
-        sys.exit("FATAL: --sigma-connection-id needs SIGMA_BASE_URL "
-                 "(env or ~/.sigma-migration/env — run scripts/setup.rb once)")
-    base = base.rstrip("/")
-    hdrs = {"Authorization": f"Bearer {sigma_token(base)}"}
+    immediately, no UI 'refresh schema'). Authentication and the single 401
+    refresh/retry are owned by scripts/lib/sigma_rest.py. Returns (ok, fail)
+    counts."""
+    neutral = load_neutral_env()
+    for key in ("SIGMA_BASE_URL", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET"):
+        if not os.environ.get(key) and neutral.get(key):
+            os.environ[key] = neutral[key]
+    try:
+        sigma_rest.base_url()
+        # Fail before reporting every table as an independent sync failure when
+        # no provider route is usable. Unknown-age caller/browser tokens remain
+        # untouched; known-stale tokens refresh through the provider.
+        sigma_rest.auth_token()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        sys.exit(
+            "FATAL: --sigma-connection-id needs usable Sigma authentication "
+            f"({exc}).\n"
+            "  Run scripts/browser-login.sh once, or configure SIGMA_BASE_URL / "
+            "SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET for unattended auth."
+        )
+
     ok = fail = 0
     for tbl in tables:
+        path = f"/v2/connections/{connection_id}/sync"
         try:
-            status, _ = _http_json(
-                "POST", f"{base}/v2/connections/{connection_id}/sync",
-                headers=hdrs, json_body={"path": [db, schema, tbl]})
-            good = 200 <= status < 300
-        except urllib.error.HTTPError as e:
-            good, status = False, e.code
-        except (urllib.error.URLError, OSError) as e:
-            good, status = False, str(e)
+            sigma_rest.request(
+                "post",
+                path,
+                body=json.dumps({"path": [db, schema, tbl]}),
+            )
+            good, status = True, "ok"
+        except sigma_rest.SigmaError as exc:
+            good, status = False, str(exc).splitlines()[0]
         ok, fail = ok + good, fail + (not good)
         print(f"SYNC {db}.{schema}.{tbl} -> {status}", flush=True)
     return ok, fail
@@ -618,8 +590,8 @@ def parse_args(argv=None):
     ap.add_argument("--warehouse", default=None, help="Snowflake warehouse")
     ap.add_argument("--sigma-connection-id", default=None,
                     help="Sigma connection UUID — sync each landed table into the "
-                         "catalog (needs SIGMA_BASE_URL + SIGMA_API_TOKEN or "
-                         "SIGMA_CLIENT_ID/SECRET, env or ~/.sigma-migration/env)")
+                         "catalog (uses browser-first Sigma auth with client-credential "
+                         "fallback through scripts/lib/sigma_rest.py)")
     ap.add_argument("--manifest-out", default=None,
                     help="landing-manifest.json path (default: ./landing-manifest.json)")
     ap.add_argument("--dry-run", action="store_true",

@@ -55,7 +55,7 @@ Sigma SEs, technical CSMs, and migration partners running 1:1 Tableau-to-Sigma c
 
 <ul>
   <li><strong>A coding agent that runs skills</strong> — Claude Code (CLI or desktop), Cursor, Cortex Code, etc. These skills are <strong>agent-neutral</strong>: each is a <code>SKILL.md</code> plus <code>scripts/</code>, indexed by <code>AGENTS.md</code> at the repo root. For Claude Code, the skill ships as a directory under <code>~/.claude/skills/tableau-to-sigma/</code>; other agents read the skill folder directly. Where this guide says "Claude," substitute your agent.</li>
-  <li><strong>Sigma API credentials</strong> — client ID + secret. Run <code>python3 scripts/setup.py</code> (Python profile) or <code>ruby scripts/setup.rb</code> once; both persist the same agent-neutral environment.</li>
+  <li><strong>Sigma authentication</strong> — preferably a one-time browser login stored in the OS keychain (<code>eval "$(bash scripts/browser-login.sh)"</code> after setting <code>SIGMA_BASE_URL</code>). Unattended hosts can instead use a client ID + secret via <code>python3 scripts/setup.py</code> or <code>ruby scripts/setup.rb</code>.</li>
   <li><strong>Tableau access</strong> — either the Tableau MCP tools loaded in your agent session or a Tableau Personal Access Token via <code>python3 scripts/setup-tableau.py</code> / <code>ruby scripts/setup-tableau.rb</code>. PAT mode is required when you need the workbook's <code>.twb</code> XML (most conversions).</li>
   <li><strong>The data-model converter backend</strong> — the Tableau→Sigma converter (<code>convert_tableau_to_sigma</code>). <strong>This works out of the box — no setup, no data egress.</strong> Note the local converter is <em>not</em> a server: it's a pure function (<code>.twb</code> XML → Sigma JSON) the orchestrator runs via <code>node</code>; no HTTP, no daemon, nothing leaves your machine. In precedence order:
     <ul>
@@ -152,14 +152,16 @@ git clone https://github.com/twells89/sigma-migration-skills
 ```
 
 First run the environment bootstrap (macOS/Linux — on Windows use
-`scripts\bootstrap.ps1`), then the two setup scripts. To require the supported
-no-Ruby lane, select the Python profile:
+`scripts\bootstrap.ps1`), then authenticate to Sigma and configure Tableau. To
+require the supported no-Ruby lane, select the Python profile:
 
 ```console
 bash scripts/bootstrap.sh --runtime-profile python
-python3 scripts/setup.py
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
 python3 scripts/setup-tableau.py
 # Windows: scripts\bootstrap.ps1 -RuntimeProfile python
+# Unattended Sigma fallback: python3 scripts/setup.py --from-env
 ```
 
 The Ruby profile's `setup.rb` / `setup-tableau.rb` remain supported. Both
@@ -167,7 +169,7 @@ profiles write the same Sigma and Tableau variables to
 **`~/.claude/settings.json`** and **`~/.sigma-migration/env`**.
 
 <aside class="negative">
-<strong>NOTE:</strong><br> Tokens are 1-hour bearer tokens fetched on demand via <code>scripts/get-token.sh</code>. Never hard-code tokens in scripts — every long-running script in the skill re-fetches on cold start.
+<strong>NOTE:</strong><br> Access tokens live about one hour. Never hard-code them: live scripts preserve valid caller/browser tokens and use the shared browser-first provider (with client-credential fallback) for stale-token refresh and one retry after a 401.
 </aside>
 
 ![Alt text](assets/horizonalline.png)
@@ -211,9 +213,9 @@ is detail on these steps):
 
 1. `bash scripts/bootstrap.sh` — environment bootstrap → doctor-green + sentinel
    (fail-closed; Windows PowerShell: `scripts\bootstrap.ps1`)
-2. `ruby scripts/setup.rb` + `ruby scripts/setup-tableau.rb` — the **user** runs
-   these **once** per machine (bootstrap runs them `--from-env` when the vars
-   are exported)
+2. `scripts/browser-login.sh` + `ruby scripts/setup-tableau.rb` — the **user**
+   runs these **once** per machine; unattended Sigma hosts use
+   `ruby scripts/setup.rb --from-env` with client credentials instead
 3. `ruby scripts/intake.rb …` — resolve the destination connection/folder into
    the workdir (the orchestrator honors `<WORK>/connection.json`)
 4. `ruby scripts/migrate-tableau.rb …` — **PASS 1** (discovery → gates → DM →

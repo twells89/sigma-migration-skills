@@ -166,6 +166,7 @@ begin; require_relative 'lib/modeling_advisory'; rescue LoadError; end # shared,
 require 'date'
 require 'time'
 require 'set'
+require 'etc'
 require_relative 'lib/scout_gate'
 require_relative 'lib/dashboard_read'
 require_relative 'lib/recipe_multimetric'
@@ -741,23 +742,58 @@ end
 # Cursor, plain shell) can sail past it and then die at the FIRST Sigma API call
 # with an opaque auth error — which a low-context agent misreads as a TASK
 # failure and improvises around (hand-rolled curl, self-writing creds, a
-# hallucinated token). Resolve creds HERE, before any Tableau/discovery work, and
-# stop with the exact remediation if they're absent. Waive only for genuinely
-# offline runs with SIGMA_SKIP_CRED_GATE="<reason>".
+# hallucinated token). Resolve auth HERE, before any Tableau/discovery work.
+# Browser login stores its refresh token in the OS keychain rather than the
+# neutral env file, so that session is a first-class route alongside a caller
+# token and unattended client credentials. Waive only for genuinely offline
+# runs with SIGMA_SKIP_CRED_GATE="<reason>".
 _cred_skip = ENV['SIGMA_SKIP_CRED_GATE']
 _neutral_env = File.expand_path('~/.sigma-migration/env')
-_creds_ok = !ENV['SIGMA_API_TOKEN'].to_s.empty? ||
-            (!ENV['SIGMA_CLIENT_ID'].to_s.empty? && !ENV['SIGMA_CLIENT_SECRET'].to_s.empty?) ||
-            File.exist?(_neutral_env)
+if File.exist?(_neutral_env)
+  File.foreach(_neutral_env, encoding: 'UTF-8') do |line|
+    next unless (m = line.chomp.match(/\A\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=(.*)\z/))
+    key, raw = m[1], m[2].strip
+    next unless %w[SIGMA_BASE_URL SIGMA_CLIENT_ID SIGMA_CLIENT_SECRET].include?(key) &&
+                ENV[key].to_s.empty?
+    raw = raw[1..-2] if raw.length >= 2 &&
+      ((raw.start_with?("'") && raw.end_with?("'")) || (raw.start_with?('"') && raw.end_with?('"')))
+    ENV[key] = raw
+  end
+end
+def sigma_browser_session_present?
+  return false if ENV['SIGMA_AUTH_MODE'] == 'client-credentials'
+  return false if ENV['SIGMA_BASE_URL'].to_s.empty?
+
+  user = ENV['USER'].to_s
+  user = (Etc.getlogin rescue nil).to_s if user.empty?
+  if !user.empty? &&
+     system('security', 'find-generic-password', '-a', user,
+            '-s', 'sigma-api:refresh-token', out: File::NULL, err: File::NULL)
+    return true
+  end
+  system('secret-tool', 'lookup', 'service', 'sigma-api', 'key', 'refresh-token',
+         out: File::NULL, err: File::NULL) == true
+rescue Errno::ENOENT, StandardError
+  false
+end
+
+_sigma_auth_mode = ENV.fetch('SIGMA_AUTH_MODE', 'auto')
+_client_auth = _sigma_auth_mode != 'browser' &&
+               !ENV['SIGMA_CLIENT_ID'].to_s.empty? &&
+               !ENV['SIGMA_CLIENT_SECRET'].to_s.empty?
+_browser_auth = _sigma_auth_mode != 'client-credentials' &&
+                sigma_browser_session_present?
+_creds_ok = !ENV['SIGMA_API_TOKEN'].to_s.empty? || _client_auth || _browser_auth
 if !_creds_ok && (_cred_skip.nil? || _cred_skip.to_s.empty?)
   abort <<~MSG
-    FATAL: no Sigma credentials resolvable — the run would fail at the first API call.
-    This almost always means you are NOT on Claude Code (which auto-loads
-    ~/.claude/settings.json). Other harnesses (Coco, Cursor, plain shell) do not,
-    so the neutral credential file is REQUIRED. Fix it ONCE, in a real terminal:
-        ruby scripts/setup.rb        # writes ~/.sigma-migration/env
-    …or export SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET (and SIGMA_BASE_URL) into the
-    environment this orchestrator runs in. Then re-run this exact command.
+    FATAL: no usable Sigma authentication is resolvable — the run would fail at the first API call.
+    Preferred interactive fix (one-time browser login; refresh stays in the OS keychain):
+        export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+        eval "$(bash scripts/browser-login.sh)"
+    Unattended fallback: export SIGMA_CLIENT_ID + SIGMA_CLIENT_SECRET +
+    SIGMA_BASE_URL, then run `ruby scripts/setup.rb --from-env`.
+    A valid caller-provided SIGMA_API_TOKEN is also accepted as-is. Then re-run
+    this exact command.
     (Genuinely offline/no-Sigma run? Re-run with SIGMA_SKIP_CRED_GATE="<reason>".)
   MSG
 end
@@ -1065,23 +1101,16 @@ def refresh_render_health(work)
   [status.success?, "png_health.py #{status.success? ? 'PASS' : "exit #{status.exitstatus}"}"]
 end
 
-# Return a Sigma bearer token that is live RIGHT NOW, minting IN-PROCESS (pure
-# Ruby net/http via the Sigma lib) — no bash, no `eval "$(get-token.sh)"`, so
-# this works identically under PowerShell / cmd / a Cowork sandbox.
-# Mint once per TTL, not per child: this used to refresh_token! on every call,
-# so each child spawn paid a fresh client_credentials exchange (~15-25 mints
-# per run against Sigma's 1 req/s auth rate limit). The Sigma lib already
-# tracks mint time (TOKEN_TTL_SECONDS = 50 min, lib/sigma_rest.rb), so reuse
-# the current token while its age is KNOWN and under TTL; re-mint otherwise —
-# including an unknown-age env token, which gets minted-over ONCE and stamped,
-# so a long run still never carries a stale token.
+# Resolve a Sigma bearer through the shared browser-first provider policy.
+# Sigma.auth_token preserves caller/browser tokens whose age is unknown, reuses
+# fresh stamped tokens, and refreshes known-stale tokens through the provider.
+# Keeping that policy in lib/sigma_rest also avoids a token mint per child.
 def sigma_token!
-  tok = ENV['SIGMA_API_TOKEN'].to_s
-  return tok unless tok.empty? || Sigma.token_minted_at.nil? || Sigma.token_stale?
-  Sigma.refresh_token!
+  Sigma.auth_token
 rescue StandardError => e
-  abort "FATAL: could not mint a Sigma token: #{e.message}\n" \
-        '  Check SIGMA_BASE_URL / SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (run: ruby scripts/setup.rb).'
+  abort "FATAL: could not resolve a Sigma token via browser login or client credentials: #{e.message}\n" \
+        '  Run scripts/browser-login.sh once, or configure SIGMA_BASE_URL / SIGMA_CLIENT_ID / ' \
+        'SIGMA_CLIENT_SECRET with `ruby scripts/setup.rb --from-env`.'
 end
 
 # Wrap a command so a Sigma token is live for it (injected via child env). The

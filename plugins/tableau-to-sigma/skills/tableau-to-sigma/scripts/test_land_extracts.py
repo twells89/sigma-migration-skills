@@ -12,6 +12,7 @@ Usage:  python3 scripts/test_land_extracts.py
 """
 import datetime
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -243,6 +244,82 @@ try:
           "match_ds alone falls back to the GUID (confirms the map is load-bearing)")
 finally:
     os.unlink(twb_path2)
+
+print("Part K — Sigma catalog sync delegates auth + one-401 retry to sigma_rest")
+calls = []
+original_base_url = le.sigma_rest.base_url
+original_auth_token = le.sigma_rest.auth_token
+original_request = le.sigma_rest.request
+try:
+    le.sigma_rest.base_url = lambda: "https://api.sigmacomputing.com"
+    le.sigma_rest.auth_token = lambda: "caller-or-browser-token"
+
+    def fake_sigma_request(method, path, body=None, **_kwargs):
+        payload = json.loads(body)
+        calls.append((method, path, payload))
+        if payload["path"][-1] == "BAD_TABLE":
+            raise le.sigma_rest.SigmaError("POST sync -> 500 fixture")
+        return {}
+
+    le.sigma_rest.request = fake_sigma_request
+    ok, failed = le.sigma_sync_tables(
+        "connection-1", ["GOOD_TABLE", "BAD_TABLE"], "DB", "LANDING"
+    )
+    check((ok, failed) == (1, 1),
+          "catalog sync preserves per-table success/failure accounting")
+    check(calls == [
+        ("post", "/v2/connections/connection-1/sync",
+         {"path": ["DB", "LANDING", "GOOD_TABLE"]}),
+        ("post", "/v2/connections/connection-1/sync",
+         {"path": ["DB", "LANDING", "BAD_TABLE"]}),
+    ], "catalog sync sends the existing endpoint/body through sigma_rest.request")
+finally:
+    le.sigma_rest.base_url = original_base_url
+    le.sigma_rest.auth_token = original_auth_token
+    le.sigma_rest.request = original_request
+
+print("Part L — Sigma catalog sync resolves neutral-file auth despite empty env")
+saved_env = {key: os.environ.get(key) for key in (
+    "HOME", "SIGMA_BASE_URL", "SIGMA_CLIENT_ID", "SIGMA_CLIENT_SECRET"
+)}
+with tempfile.TemporaryDirectory() as home:
+    neutral_dir = os.path.join(home, ".sigma-migration")
+    os.makedirs(neutral_dir)
+    with open(os.path.join(neutral_dir, "env"), "w", encoding="utf-8") as fh:
+        fh.write(
+            "SIGMA_BASE_URL='https://api.sigmacomputing.com'\n"
+            "SIGMA_CLIENT_ID='file-id'\n"
+            "SIGMA_CLIENT_SECRET='file-secret'\n"
+        )
+    os.environ["HOME"] = home
+    os.environ["SIGMA_CLIENT_ID"] = ""
+    os.environ.pop("SIGMA_BASE_URL", None)
+    os.environ.pop("SIGMA_CLIENT_SECRET", None)
+    le.sigma_rest.base_url = lambda: os.environ["SIGMA_BASE_URL"]
+    le.sigma_rest.auth_token = lambda: (
+        os.environ["SIGMA_CLIENT_ID"], os.environ["SIGMA_CLIENT_SECRET"]
+    )
+    le.sigma_rest.request = lambda *_args, **_kwargs: {}
+    try:
+        ok, failed = le.sigma_sync_tables(
+            "connection-1", ["GOOD_TABLE"], "DB", "LANDING"
+        )
+        check((ok, failed) == (1, 0), "neutral-file Sigma auth passes sync preflight")
+        check(os.environ["SIGMA_CLIENT_ID"] == "file-id",
+              "empty client id is filled from the neutral file")
+    finally:
+        le.sigma_rest.base_url = original_base_url
+        le.sigma_rest.auth_token = original_auth_token
+        le.sigma_rest.request = original_request
+for key, value in saved_env.items():
+    if value is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = value
+
+source = open(os.path.join(HERE, "land-extracts.py"), encoding="utf-8").read()
+check("client_credentials" not in source and "def sigma_token(" not in source,
+      "landing path no longer mints client credentials or owns a static token")
 
 print()
 if fails:
