@@ -48,7 +48,6 @@ PROCEDURE
    date-grouped element; etc.).
 2. Propose ONE candidate Sigma formula referencing columns as [Master/<Display Name>].
 3. Validate + persist:
-     eval "$(scripts/get-token.sh)"   # SIGMA_API_TOKEN
      python3 scripts/scout-validate.py \
        --formula '<candidate with REAL [Master/Col] names>' \
        --feature '<feature>' --pattern '<DAX regex; capture column refs>' \
@@ -58,6 +57,8 @@ PROCEDURE
        --data-model-id <dm-id> --element-id <element-id> --folder-id <folder-id> \
        --home ~/.powerbi-to-sigma   [--kind table] \
        --gap-id '<dax:... from the GAP-SCOUT REQUIRED list>' --workdir <migration workdir>
+   Sigma auth is browser-first through `lib/sigma_rest.py`: it reuses a valid
+   caller token or stored browser session, with client credentials as fallback.
 4. Parse JSON: status=validated → done; status=error → retry (≤3). After the last
    failed attempt the result carries an `escalation.dry_run_cmd` / `escalation.file_cmd`
    and the gap is left as a WARN. Do NOT file anything yourself — see "Opt-in issue

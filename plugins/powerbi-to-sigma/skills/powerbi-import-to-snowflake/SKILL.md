@@ -51,6 +51,9 @@ names **byte-match** what `powerbi-to-sigma`'s converter emits (see
 5. **Load** — typed DDL + `PUT`/`COPY` via `snow sql`, with `GRANT`s.
 6. **Sync** — `--sigma-connection <id>` registers the new tables with Sigma
    (`POST /v2/connections/<id>/sync`) so the DM POST resolves them immediately.
+   The co-located `scripts/lib/sigma_rest.py` reuses a valid token, refreshes a
+   stored browser session before client-credential fallback, honors token age,
+   and retries one HTTP 401.
 7. **Manifest** — `out/<dataset>/manifest.json`: `pbi_table.col → sf_table.COLUMN`.
 
 ## Run
@@ -74,9 +77,21 @@ Useful flags: `--pbix <file>` (upload first), `--only "A,B"` (subset),
 `PBI_BAND_MAX=<n>` (force/soften pagination — testing).
 
 Requires: `msal`, `requests`, `truststore` (corp TLS); the Snowflake CLI
-(`snow`) configured; and `SIGMA_CLIENT_ID`/`SIGMA_CLIENT_SECRET` in the
-environment for `--sigma-connection` sync. See `../powerbi-to-sigma/SKILL.md`
-for the connect/auth details (same device-code path, no Entra app).
+(`snow`) configured. Sigma sync is optional. When `--sigma-connection` is set,
+configure `SIGMA_BASE_URL` plus either a valid `SIGMA_API_TOKEN`, a browser
+session saved by `scripts/browser-login.sh`, or `SIGMA_CLIENT_ID` /
+`SIGMA_CLIENT_SECRET` for unattended fallback. Missing Sigma auth skips sync
+without undoing the completed Snowflake landing; per-table sync errors are
+reported and the remaining tables continue. Power BI/Fabric auth remains the
+separate device-code path described in `../powerbi-to-sigma/SKILL.md`.
+
+## Verifying a change locally
+
+The Sigma sync transport tests are credentials-free and make no network calls:
+
+```bash
+python3 scripts/test_pbi_import_sigma_auth.py
+```
 
 ## Then hand off
 
