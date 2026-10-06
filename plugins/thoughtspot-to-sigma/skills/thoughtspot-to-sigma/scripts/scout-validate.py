@@ -20,31 +20,38 @@ as scouted (validated → ok; error → escalated):
 
       --gap-id 'errcol:<elementId>/<label>' --workdir <wd>
 
-Env: SIGMA_BASE_URL, SIGMA_API_TOKEN (eval get-token.sh first).
+Env: SIGMA_BASE_URL plus a valid bearer, browser-login keychain session, or
+SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 Prints JSON: {status: validated|error, workbook_id, error, ...}. Cleans up the test workbook.
 """
-import json, os, sys, ssl, urllib.request, argparse, datetime, re, hashlib
+import json, os, sys, argparse, datetime, re, hashlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import scout_gate
 import code_rep
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import ts_lib
-_SSL = ts_lib.ssl_context()
+import sigma_rest
 
-BASE = os.environ["SIGMA_BASE_URL"]; TOK = os.environ["SIGMA_API_TOKEN"]
 def api(method, path, body=None, accept_json=True):
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE+path, data=data, method=method,
-        headers={"Authorization":"Bearer "+TOK, "Content-Type":"application/json",
-                 **({"Accept":"application/json"} if accept_json else {})})
     try:
-        r = urllib.request.urlopen(req, context=_SSL); return r.status, r.read().decode()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()
+        raw = sigma_rest.request(
+            method.lower(),
+            path,
+            body=json.dumps(body) if body is not None else None,
+            accept="application/json" if accept_json else "*/*",
+            binary=True,
+        )
+        return 200, raw.decode()
+    except sigma_rest.SigmaError as exc:
+        detail = str(exc)
+        match = re.search(r" -> (\d+)[^\n]*\n?(.*)", detail, re.DOTALL)
+        if not match:
+            raise
+        return int(match.group(1)), match.group(2)
 
 def dm_element_master_columns(dm_id, el_id):
     """Read the DM spec, find the element, return (elementName, [displayName,...])."""
     st, body = api("GET", f"/v2/dataModels/{dm_id}/spec")
+    if st != 200:
+        raise sigma_rest.SigmaError(f"GET data model spec failed ({st}): {body}")
     spec = json.loads(body)
     for pg in spec.get("pages", []):
         for el in pg.get("elements", []):

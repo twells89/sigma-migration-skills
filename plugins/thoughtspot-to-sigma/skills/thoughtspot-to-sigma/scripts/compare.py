@@ -6,15 +6,17 @@ diff: chart kind, and whether the element resolved). Dependency-free (base64 img
 
   python3 compare.py --liveboard <TS_LB_ID> --workbook <SIGMA_WB_ID> [--out compare.html]
 
-Env: TS_HOST, TS_TOKEN, SIGMA_BASE_URL, SIGMA_API_TOKEN.
+Env: TS_HOST, TS_TOKEN, SIGMA_BASE_URL plus a valid Sigma bearer,
+browser-login keychain session, or client-credentials fallback.
 """
-import argparse, base64, json, os, ssl, sys, time, urllib.request, urllib.error, html
+import argparse, base64, json, os, re, sys, time, urllib.request, html
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import yaml, ts_lib
 import code_rep  # workbook code-rep document-wrapper adapter (nested GET shape)
+import sigma_rest
 yaml.SafeLoader.add_constructor("tag:yaml.org,2002:value", lambda l, n: l.construct_scalar(n))
-SBASE = os.environ["SIGMA_BASE_URL"]; STOK = os.environ["SIGMA_API_TOKEN"]; _SSL = ts_lib.ssl_context()
+_SSL = ts_lib.ssl_context()
 
 # TS chart type -> the Sigma element kind the migration produces (for the structural check)
 EXPECTED = {"KPI": "kpi-chart", "COLUMN": "bar-chart", "BAR": "bar-chart", "LINE": "line-chart",
@@ -37,9 +39,14 @@ def ts_png(lb_id, viz_guid):
             time.sleep(2)
 
 def sigma(method, path, body=None, raw=False):
-    r = urllib.request.Request(SBASE + path, data=(json.dumps(body).encode() if body else None), method=method,
-        headers={"Authorization": "Bearer " + STOK, **({"Content-Type": "application/json"} if body else {})})
-    resp = urllib.request.urlopen(r, context=_SSL); return (resp.read() if raw else resp.read().decode()), resp.status
+    data = sigma_rest.request(
+        method.lower(),
+        path,
+        body=json.dumps(body) if body else None,
+        accept="application/json",
+        binary=True,
+    )
+    return (data if raw else data.decode()), 200
 
 def sigma_png(wb, el):
     txt, _ = sigma("POST", f"/v2/workbooks/{wb}/export", {"elementId": el, "format": {"type": "png", "pixelWidth": 900, "pixelHeight": 560}})
@@ -49,8 +56,11 @@ def sigma_png(wb, el):
             data, st = sigma("GET", f"/v2/query/{qid}/download", raw=True)
             if st == 200 and data[:4] == b"\x89PNG":
                 return data
-        except urllib.error.HTTPError as e:
-            if e.code not in (202, 204, 404): raise
+        except sigma_rest.SigmaError as exc:
+            match = re.search(r" -> (\d+)", str(exc))
+            status = int(match.group(1)) if match else None
+            if status not in (202, 204, 404):
+                raise
         time.sleep(2)
     return None
 
