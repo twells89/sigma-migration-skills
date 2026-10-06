@@ -11,7 +11,8 @@ Also writes the cross-plugin gate sentinels next to --report:
 so scripts/assert-phase6-ran.rb (gates 1-7, shared) can prove this phase ran.
 
 Usage: python3 verify_parity.py --workbook-id <id> [--report parity_report.md]
-Requires SIGMA_BASE_URL + SIGMA_API_TOKEN (eval "$(scripts/get-token.sh)").
+Requires SIGMA_BASE_URL plus a valid bearer, browser-login keychain session, or
+SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 """
 import argparse
 import csv
@@ -20,34 +21,43 @@ import json
 import os
 import sys
 import time
-import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import code_rep  # workbook code-rep document-wrapper adapter (nested GET/POST shape)
-
-BASE = os.environ.get("SIGMA_BASE_URL", "https://aws-api.sigmacomputing.com")
-TOKEN = os.environ.get("SIGMA_API_TOKEN") or sys.exit(
-    'SIGMA_API_TOKEN not set — run: eval "$(scripts/get-token.sh)"')
+import sigma_rest
 
 # report name -> (element name, key column names, tolerance map)
 TOLERANT = {"Profit Margin Pct": 1e-6}
 
 
 def api(method, path, body=None, raw=False):
-    req = urllib.request.Request(BASE + path, method=method)
-    req.add_header("Authorization", "Bearer " + TOKEN)
+    """Sigma request with the legacy ``(status, payload)`` return contract.
+
+    ``sigma_rest.request`` intentionally hides successful status codes, but the
+    export poll distinguishes 200 from other 2xx responses. Use its authenticated
+    transport seam so status codes and byte-for-byte raw downloads are preserved
+    while still getting proactive token aging and exactly one refresh on 401.
+    """
+    base = sigma_rest.base_url()
+    sigma_rest._validate_once(base)
+    headers = {}
     if not path.endswith("/spec") or body is not None:
-        req.add_header("Accept", "application/json")
-    data = None
+        headers["Accept"] = "application/json"
+    data = json.dumps(body) if body is not None else None
     if body is not None:
-        req.add_header("Content-Type", "application/json")
-        data = json.dumps(body).encode()
-    try:
-        with urllib.request.urlopen(req, data) as r:
-            payload = r.read()
-            return r.status, payload if raw else payload.decode()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()
+        headers["Content-Type"] = "application/json"
+
+    for attempt in range(2):
+        headers["Authorization"] = f"Bearer {sigma_rest.auth_token()}"
+        response = sigma_rest._send(
+            method, f"{base}{path}", headers, data, 120
+        )
+        if response.status == 401 and attempt == 0:
+            sigma_rest.refresh_token()
+            continue
+        if raw and 200 <= response.status < 300:
+            return response.status, response.body
+        return response.status, response.body.decode(errors="replace")
 
 
 def export_element(workbook_id, element_id):

@@ -28,24 +28,33 @@ error column's gate id and the conversion working dir — the result is appended
 
       --gap-id 'errcol:<elementId>/<label>' --workdir <wd>
 
-Env: SIGMA_BASE_URL, SIGMA_API_TOKEN (eval get-token.sh first).
+Env: SIGMA_BASE_URL plus a valid bearer, browser-login keychain session, or
+SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET fallback.
 Prints JSON: {status: validated|error, workbook_id, error, ...}. Cleans up the test workbook.
 """
-import json, os, sys, urllib.request, argparse, datetime, re, hashlib
+import json, os, sys, argparse, datetime, re, hashlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import scout_gate
 import code_rep
+import sigma_rest
 
-BASE = os.environ["SIGMA_BASE_URL"]; TOK = os.environ["SIGMA_API_TOKEN"]
 def api(method, path, body=None, accept_json=True):
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE+path, data=data, method=method,
-        headers={"Authorization":"Bearer "+TOK, "Content-Type":"application/json",
-                 **({"Accept":"application/json"} if accept_json else {})})
-    try:
-        r = urllib.request.urlopen(req); return r.status, r.read().decode()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()
+    """Keep the historical status/text contract on the shared auth transport."""
+    base = sigma_rest.base_url()
+    sigma_rest._validate_once(base)
+    data = json.dumps(body) if body is not None else None
+    headers = {"Content-Type": "application/json"}
+    if accept_json:
+        headers["Accept"] = "application/json"
+    for attempt in range(2):
+        headers["Authorization"] = f"Bearer {sigma_rest.auth_token()}"
+        response = sigma_rest._send(
+            method, f"{base}{path}", headers, data, 120
+        )
+        if response.status == 401 and attempt == 0:
+            sigma_rest.refresh_token()
+            continue
+        return response.status, response.body.decode(errors="replace")
 
 def dm_element_master_columns(dm_id, el_id):
     """Read the DM spec, find the element, return (elementName, [displayName,...])."""

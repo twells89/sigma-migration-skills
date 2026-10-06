@@ -28,7 +28,9 @@ IS covered: extraction + authoring + parity-validated live querying
 (`connect_live`, exact 19/19 vs the classic fixture) — see
 `skills/microstrategy-to-sigma/refs/datamodels.md` and
 `scripts/{build,extract}_datamodel.py`. Its `securityFilters` (RLS) remain
-the future RLS-port surface.
+the future RLS-port surface; browser OAuth does not make that unsupported
+translation automatic, so a security-filter finding still requires an explicit
+port/skip decision.
 
 ## What's in the box
 
@@ -49,6 +51,11 @@ response headers, session-bound dossier flows, the datasource trio),
 export MSTR_BASE_URL="https://<host>/MicroStrategyLibrary"
 export MSTR_USERNAME="..." MSTR_PASSWORD="..."   # or ~/.sigma-migration/env
 
+# Sigma (preferred one-time interactive setup; later runs reuse the keychain)
+export SIGMA_BASE_URL="https://<your-published-sigma-api-host>"
+eval "$(bash skills/microstrategy-to-sigma/scripts/browser-login.sh)"
+# SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET remain the unattended fallback.
+
 # Assess the estate (read-only)
 python3 skills/microstrategy-assessment/scripts/assess.py --out /tmp/mstr-assessment
 
@@ -58,6 +65,10 @@ python3 skills/microstrategy-to-sigma/scripts/convert.py --bundle bundle.json \
   --connection-id <SIGMA_CONN> --database <DB> --folder-id <FOLDER>
 # ... POST DM spec -> readback ids -> re-emit workbook -> POST -> verify_parity.py
 ```
+
+All Sigma-side Python live paths use the co-located shared client: they reuse a
+valid bearer, proactively refresh known-old tokens, prefer the browser keychain,
+fall back to client credentials, and retry once after HTTP 401.
 
 Or install as a Claude Code plugin and just ask: *"migrate my MicroStrategy
 dossier to Sigma"* / *"assess my MicroStrategy estate."*

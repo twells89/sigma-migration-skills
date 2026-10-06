@@ -47,8 +47,12 @@ Duration: 2
 - **MicroStrategy REST access** — any Library deployment exposes it at
   `…/MicroStrategyLibrary/api` (cloud trials included; no API key concept —
   standard login works): `MSTR_BASE_URL`, `MSTR_USERNAME`, `MSTR_PASSWORD`.
-- **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`,
-  or `~/.sigma-migration/env`).
+- **Sigma authentication** — set `SIGMA_BASE_URL` and preferably run
+  `eval "$(bash scripts/browser-login.sh)"` once interactively. Later live
+  scripts reuse the keychain session; `SIGMA_CLIENT_ID` /
+  `SIGMA_CLIENT_SECRET` remain the unattended fallback. The shared client also
+  reuses current bearers, refreshes known-old tokens proactively, and retries
+  once after HTTP 401.
 - **The same warehouse on both sides** — Sigma's connection must reach the
   database MicroStrategy queries. In-memory cubes migrate as their
   *underlying* warehouse tables.
@@ -103,6 +107,10 @@ classic schema, the same flow applies: `extract_datamodel.py` pulls tables,
 attributes, factMetrics, metrics, and relationships (`refs/datamodels.md`
 documents the dataServer-pipeline binding and the
 `POST /v2/cubes/{id}/instances` parity-query path).
+
+`securityFilters` remain a roadmap RLS port surface. Browser OAuth only changes
+Sigma authentication; it does not make that translation safe. Treat any source
+security-filter finding as a hard stop for an explicit port/skip decision.
 
 ## Verify & wrap up
 Duration: 3
