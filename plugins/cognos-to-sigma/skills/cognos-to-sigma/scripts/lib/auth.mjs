@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { pythonArgv } from './py_resolve.mjs';
 
 export const TOKEN_REFRESH_AGE_MS = 50 * 60 * 1000;
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -53,28 +54,19 @@ function providerPath() {
   return candidates.find((path) => existsSync(path));
 }
 
-function pythonCommands() {
-  const commands = [];
-  if (process.env.SIGMA_PYTHON) commands.push([process.env.SIGMA_PYTHON]);
-  commands.push(['python3'], ['python'], ['py', '-3']);
-  return commands;
-}
-
 export function refreshSigmaAuth(workdir) {
   const resolvedWorkdir = resolveAuthWorkdir(workdir);
   const provider = providerPath();
   if (!provider) throw new Error('Sigma get_token.py provider not found');
 
-  let result;
-  for (const [command, ...prefix] of pythonCommands()) {
-    result = spawnSync(command, [...prefix, provider, '--workdir', resolvedWorkdir], {
-      encoding: 'utf8',
-      env: process.env,
-    });
-    if (!result.error || result.error.code !== 'ENOENT') break;
-    result = null;
+  const [command, ...prefix] = pythonArgv();
+  const result = spawnSync(command, [...prefix, provider, '--workdir', resolvedWorkdir], {
+    encoding: 'utf8',
+    env: process.env,
+  });
+  if (result.error?.code === 'ENOENT') {
+    throw new Error('Python is unavailable; cannot refresh the Sigma token');
   }
-  if (!result) throw new Error('Python is unavailable; cannot refresh the Sigma token');
   if (result.status !== 0) {
     const detail = (result.stderr || result.stdout || '').trim();
     throw new Error(`Sigma token provider failed${detail ? `: ${detail}` : ''}`);
