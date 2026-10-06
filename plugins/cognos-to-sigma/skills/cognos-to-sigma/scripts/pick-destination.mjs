@@ -8,54 +8,15 @@
 //   node pick-destination.mjs create --name "<NAME>" [--parent "<workspace-or-folder-id>"]
 //       -> { id, name, parentId }
 //
-// Auth: SIGMA_API_TOKEN + SIGMA_BASE_URL if set; else minted from
-// SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (sourced from ~/.sigma-migration/env).
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+// Auth is browser-first via the co-located provider. A valid caller token is
+// preserved, client credentials remain the provider's fallback, and a 401 is
+// refreshed/retried once.
+import { api } from './lib/sigma-rest.mjs';
 
-function loadNeutralEnv() {
-  if (process.env.SIGMA_CLIENT_ID || process.env.SIGMA_API_TOKEN) return;
-  const p = path.join(os.homedir(), '.sigma-migration', 'env');
-  if (!fs.existsSync(p)) return;
-  for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
-    const t = line.trim();
-    if (!t || t.startsWith('#') || !t.includes('=')) continue;
-    const idx = t.indexOf('=');
-    const k = t.slice(0, idx).trim();
-    const v = t.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
-    if (process.env[k] === undefined) process.env[k] = v;
-  }
-}
-
-const BASE = () => (process.env.SIGMA_BASE_URL || 'https://aws-api.sigmacomputing.com').replace(/\/$/, '');
-let TOK = null;
-function validateBaseUrl(base) {
-  // Security (A2): only send Sigma client creds to an https:// sigmacomputing.com host.
-  if (process.env.SIGMA_ALLOW_INSECURE_BASE_URL === '1') { console.error(`WARNING: SIGMA_ALLOW_INSECURE_BASE_URL=1 — skipping SIGMA_BASE_URL validation (${base})`); return; }
-  let u; try { u = new URL(base); } catch { console.error(`FATAL: invalid SIGMA_BASE_URL: ${base}`); process.exit(1); }
-  const host = u.hostname.toLowerCase();
-  if (u.protocol !== 'https:' || !(host === 'sigmacomputing.com' || host.endsWith('.sigmacomputing.com'))) {
-    console.error(`FATAL: refusing to send Sigma credentials to ${base} — require https:// on a sigmacomputing.com host (set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override).`); process.exit(1);
-  }
-}
-async function token() {
-  if (process.env.SIGMA_API_TOKEN) return process.env.SIGMA_API_TOKEN;
-  loadNeutralEnv();
-  validateBaseUrl(BASE());
-  const body = new URLSearchParams({ grant_type: 'client_credentials',
-    client_id: process.env.SIGMA_CLIENT_ID, client_secret: process.env.SIGMA_CLIENT_SECRET });
-  const r = await fetch(BASE() + '/v2/auth/token', { method: 'POST', body });
-  return (await r.json()).access_token;
-}
 async function call(method, p, body) {
-  if (!TOK) TOK = await token();
-  const r = await fetch(BASE() + p, { method,
-    headers: { Authorization: 'Bearer ' + TOK, 'Content-Type': 'application/json' },
-    body: body !== undefined ? JSON.stringify(body) : undefined });
-  const raw = await r.text();
-  if (!r.ok) { console.error(`${method} ${p} -> ${r.status} ${raw.slice(0, 300)}`); process.exit(1); }
-  return raw ? JSON.parse(raw) : {};
+  const r = await api(method, p, body);
+  if (!r.ok) { console.error(`${method} ${p} -> ${r.status} ${r.text.slice(0, 300)}`); process.exit(1); }
+  return r.json || {};
 }
 async function myDocumentsId() {
   try {

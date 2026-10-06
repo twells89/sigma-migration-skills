@@ -63,8 +63,8 @@ console.error(`authoritative layout verified (${pageBlocks.length} page block(s)
 // be reviewed against refs/layout-visual-qa.md (matching qlik/tableau Phase 5b).
 // NON-FATAL: a transient export failure must not sink a green migration — the
 // REVIEW is the gate. Page ids come from the authoritative GET readback we
-// already hold. The Sigma token is passed explicitly to the python
-// child via env (inherited SIGMA_API_TOKEN; same one the api() helper uses).
+// already hold. The Python exporter inherits the browser-first provider state
+// and independently handles token age plus one 401 refresh/retry.
 // --skip-visual-qa bypasses.
 if (!a['skip-visual-qa'] && rb.json) {
   const contentPages = (rbSpec.pages || []).filter((p) => {
@@ -73,7 +73,6 @@ if (!a['skip-visual-qa'] && rb.json) {
   });
   const vqaDir = join(tmpdir(), `cognos-visual-qa-${a.workbook}`);
   mkdirSync(vqaDir, { recursive: true });
-  const tok = process.env.SIGMA_API_TOKEN || '';
   const PY = pythonArgv();
   let rendered = 0;
   for (const p of contentPages) {
@@ -81,7 +80,7 @@ if (!a['skip-visual-qa'] && rb.json) {
     const png = spawnSync(PY[0],
       [...PY.slice(1), join(HERE, 'sigma-export-png.py'), '--workbook', a.workbook, '--page', p.id,
         '--out', out, '--w', '1800', '--h', '1000'],
-      { encoding: 'utf8', env: { ...process.env, SIGMA_API_TOKEN: tok } });
+      { encoding: 'utf8' });
     if (png.status === 0) { rendered++; }
     else { console.error(`   [warn] visual-QA render failed for page ${p.id} (exit ${png.status})${png.stderr ? `: ${png.stderr.trim().slice(0, 200)}` : ''}`); }
   }

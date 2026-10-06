@@ -84,7 +84,8 @@ try {
       const stub = `globalThis.fetch = async () => new Response(JSON.stringify({entries:[{elementId:'orders-id',name:'Orders'},{elementId:'lines-id',name:'Lines'}]}));`;
       const mapped = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(stub)}`,
         fileURLToPath(new URL('./remap-wb-to-dm-ids.mjs', import.meta.url)), '--wb', wb, '--dm-id', 'model', '--out', remapped], {
-        encoding: 'utf8', env: { ...process.env, SIGMA_BASE_URL: 'https://stub.invalid', SIGMA_API_TOKEN: 'test-token' },
+        encoding: 'utf8', env: { ...process.env, SIGMA_BASE_URL: 'https://stub.invalid',
+          SIGMA_ALLOW_INSECURE_BASE_URL: '1', SIGMA_API_TOKEN: 'test-token' },
       });
       assert.equal(mapped.status, 0, mapped.stderr);
       const remappedDoc = JSON.parse(readFileSync(remapped, 'utf8')).document;

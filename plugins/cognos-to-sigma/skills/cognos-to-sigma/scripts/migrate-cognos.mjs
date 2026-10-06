@@ -60,6 +60,7 @@ import { fileURLToPath } from 'node:url';
 import * as scoutGate from './lib/scout_gate.mjs';
 import { pythonArgv } from './lib/py_resolve.mjs';
 import { parityActuals } from './lib/parity-export.mjs';
+import { makeClient } from './lib/sigma-rest.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONV = join(HERE, '..', 'converter');
@@ -95,24 +96,22 @@ const hdr = (n, t) => console.log(`\n── Phase ${n}/${TOTAL} · ${t} ──`)
 const line = (m) => console.log(`   ${m}`);
 
 // ---------------------------------------------------------------------------
-// Sigma env bootstrap — shell-neutral (no bash, no `eval`): shells out to the
-// co-located get_token.py via a real Python interpreter (pythonArgv() — robust
-// to the Windows Store "App Execution Alias" python stub), which mints a
-// bearer (falling back to ~/.sigma-migration/env for creds) and writes
-// WORK/auth.json; read the token back from there. All children inherit via
-// process.env. Works identically on macOS/Linux/Windows.
+// Sigma auth bootstrap — shell-neutral (no bash, no `eval`). The Cognos REST
+// client preserves a valid caller token and otherwise delegates to the
+// co-located browser-first provider (client credentials are its fallback).
+// Known-stale tokens refresh before use and a rejected token refreshes/retries
+// once. All child phases inherit the resulting token + mint metadata.
 // ---------------------------------------------------------------------------
+let sigmaClient;
 function sigmaLogin() {
-  if (process.env.SIGMA_API_TOKEN && process.env.SIGMA_BASE_URL) return;
-  const py = pythonArgv();
-  const r = spawnSync(py[0], [...py.slice(1), join(HERE, 'get_token.py'), '--workdir', WORK], { encoding: 'utf8' });
-  if (r.status !== 0) die(`Sigma token bootstrap failed:\n${r.stderr || r.stdout}`);
-  const authPath = join(WORK, 'auth.json');
-  if (!existsSync(authPath)) die('get_token.py did not write auth.json');
-  const auth = JSON.parse(readFileSync(authPath, 'utf8'));
-  if (auth.SIGMA_API_TOKEN) process.env.SIGMA_API_TOKEN = auth.SIGMA_API_TOKEN;
-  if (auth.SIGMA_BASE_URL && !process.env.SIGMA_BASE_URL) process.env.SIGMA_BASE_URL = auth.SIGMA_BASE_URL;
-  if (!process.env.SIGMA_API_TOKEN) die('get_token.py did not yield SIGMA_API_TOKEN');
+  if (sigmaClient) return sigmaClient;
+  process.env.SIGMA_WORKDIR = WORK;
+  try {
+    sigmaClient = makeClient(WORK);
+  } catch (error) {
+    die(`Sigma token bootstrap failed:\n${error.message}`);
+  }
+  return sigmaClient;
 }
 
 // Run a child, stream output indented; hard-fail unless allowFail.
@@ -124,18 +123,10 @@ function run(cmd, args, { allowFail = false, capture = false, cwd = undefined } 
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 
-// Minimal Sigma REST (for the parity auto-export only — builders go through the
-// per-phase scripts).
+// Sigma REST for destination resolution + parity auto-export. Builders use the
+// same helper in their per-phase processes.
 async function api(method, path, body) {
-  const base = process.env.SIGMA_BASE_URL.replace(/\/$/, '');
-  const res = await fetch(base + path, {
-    method,
-    headers: { Authorization: `Bearer ${process.env.SIGMA_API_TOKEN}`, 'Content-Type': 'application/json' },
-    body: body == null ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
-  let json = null; try { json = JSON.parse(text); } catch { /* csv/yaml */ }
-  return { status: res.status, ok: res.ok, text, json };
+  return sigmaLogin().api(method, path, body);
 }
 
 // --folder default (bead eqom; prior art: migrate-tableau.rb's folderId
