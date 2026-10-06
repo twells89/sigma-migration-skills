@@ -36,7 +36,7 @@ end.parse!
 HttpResponse = Struct.new(:body)
 
 def http(method, path, body = nil)
-  raw = Sigma.request(method, path, body: body, accept: '*/*')
+  raw = Sigma.request(method, path, body: body, binary: true)
   HttpResponse.new(raw.is_a?(String) ? raw : JSON.generate(raw))
 end
 
