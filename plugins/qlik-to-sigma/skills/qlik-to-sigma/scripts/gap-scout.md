@@ -52,7 +52,6 @@ PROCEDURE
 2. Propose ONE candidate Sigma formula. Reference columns as [Master/<Display Name>].
    Prefer Sigma whitelist functions (SumIf/CountIf, Avg, WindowSum/WindowAvg, If, etc.).
 3. Validate + persist in one call:
-     eval "$(scripts/vendor/get-token.sh)"   # sets SIGMA_API_TOKEN
      python3 scripts/scout-validate.py \
        --formula '<candidate with REAL [Master/Col] names>' \
        --feature '<feature>' \
@@ -64,6 +63,8 @@ PROCEDURE
        --home ~/.qlik-to-sigma   [--kind table] \
        --gap-id '<measure:... from the GAP-SCOUT REQUIRED list>' --workdir <migration workdir>
    # --kind: default kpi-chart; use table for row-level/dimension formulas.
+   # Sigma auth is browser-first through lib/sigma_rest.py; a valid caller token
+   # or stored browser session is reused, with client credentials as fallback.
    # --gap-id + --workdir feed the run-each-time gate (bead beads-sigma-5l5e): the
    # result is recorded to <workdir>/scout-ledger.jsonl keyed by --gap-id, so
    # the Python or Ruby migration gate sees the measure as scouted and stops blocking it on

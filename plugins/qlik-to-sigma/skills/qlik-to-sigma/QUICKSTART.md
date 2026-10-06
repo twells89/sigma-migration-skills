@@ -70,7 +70,9 @@ Duration: 2
     pass independently queried values through `--warehouse-expected` for strict
     completion — see the QlikView note in SKILL.md.
 - **Qlik Cloud access for live discovery** — an API key *or* an OAuth client (Admin → OAuth). For creating/round-tripping content, an **M2M impersonation** client is ideal (acts as a real user so content is visible). Not required for `--unbuild`.
-- **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
+- **Sigma API access** — set `SIGMA_BASE_URL`; use the preferred one-time
+  browser login or `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` for unattended
+  fallback.
 - A **Sigma connection to the same warehouse** the Qlik app loads from (for true parity). The skill discovers its tables and columns through Sigma REST, so no Snowflake credentials, SQL CLI, or MCP are required.
 - The **`convert_qlik_to_sigma`** converter — ships inside the skill as a local vendored bundle (`converter/qlik.mjs`, run in-process via `node`, no clone/npm/network); the sigma-data-model MCP tool of the same name is only a manual fallback if the bundle is somehow missing.
 
@@ -113,15 +115,19 @@ Duration: 5
    <WORK>` and `scripts\doctor.ps1 -RuntimeProfile python -WorkDir <WORK>`.
    `--runtime-profile auto` uses Ruby when healthy and otherwise falls back to
    Python.
-4. **Sigma credentials** — export `SIGMA_CLIENT_ID` /
-   `SIGMA_CLIENT_SECRET`, then persist them with the selected profile:
+4. **Sigma authentication** — set the API host, then run the preferred
+   one-time browser login. The builders and orchestrators subsequently refresh
+   from the OS keychain without reopening the browser:
    ```bash
-   python3 scripts/setup.py --from-env
-   python3 scripts/vendor/get_token.py --workdir <WORK>  # optional token file
+   export SIGMA_BASE_URL=https://<your-published-sigma-api-host>
+   eval "$(scripts/vendor/browser-login.sh)"
    ```
-   Interactive setup is `python3 scripts/setup.py`; the Ruby profile's
-   `setup.rb` and `vendor/get-token.sh` remain supported. Both profiles write
-   the same neutral `~/.sigma-migration/env`.
+   For unattended runs, export `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` and
+   persist them with `python3 scripts/setup.py --from-env` (interactive:
+   `setup.py`; Ruby: `setup.rb`). A valid caller token is reused; known-age
+   tokens refresh proactively, and one HTTP 401 is refreshed/retried. The
+   `vendor/get-token.sh` and `vendor/get_token.py` helpers remain available for
+   raw shell/curl calls, but migration scripts do not require a manual mint.
 5. **Sigma connection** — resolve it once and cache it in the workdir:
    ```bash
    python3 scripts/intake.py --workdir <WORK> --tool qlik-to-sigma \

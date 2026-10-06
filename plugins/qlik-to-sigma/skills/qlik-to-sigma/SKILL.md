@@ -119,7 +119,6 @@ was not supplied.
 
 ```bash
 # Ruby profile:
-eval "$(scripts/vendor/get-token.sh)"
 ruby scripts/migrate-qlik.rb \
   --app <qlikAppId> --connection <SIGMA_CONNECTION_ID> \
   --database <DB> --schema <SCHEMA> --context <qlik-cli ctx> \
@@ -208,11 +207,15 @@ For live access: `qlik context use <ctx>`.
 
 ### Sigma access
 ```bash
-# Ruby/bash profile:
-bash -c 'eval "$(scripts/vendor/get-token.sh)"; <cmd>'
-# Python profile (shell-neutral token file; the orchestrator can also self-mint):
-python3 scripts/vendor/get_token.py --workdir <WORK>
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(scripts/vendor/browser-login.sh)"  # preferred one-time interactive login
 ```
+Both supported orchestrators and their Python builders use the co-located
+`sigma_rest` client: a valid caller token is reused, a stored browser session is
+refreshed before client credentials are tried, known-age tokens refresh
+proactively, and HTTP 401 is refreshed/retried exactly once. For unattended
+hosts, configure `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` instead. Manual
+`get-token.sh` / `get_token.py` output is only needed for raw shell/curl calls.
 Need a Sigma connection pointing at the same warehouse as the Qlik app (for parity).
 The scripts discover tables and columns through that connection's Sigma REST
 catalog; a Snowflake login/CLI/MCP is not a prerequisite.
@@ -373,7 +376,6 @@ covers the same warehouse tables (don't add a 4th near-identical "Orders" DM):
 ```bash
 python3 scripts/qlik-dm-signature.py --model converter-input.json \
   --database <DB> --schema <SCHEMA> --out $WORK/dm-signature.json
-eval "$(scripts/vendor/get-token.sh)"       # SIGMA_BASE_URL + SIGMA_API_TOKEN
 ruby scripts/vendor/find-or-pick-dm.rb --workbook-signature $WORK/dm-signature.json \
   --out $WORK/dm-match.json --auto-pick     # exit 0 = candidate ≥ min-score
 ```
@@ -694,12 +696,12 @@ it never treats missing rules as an unsecured success.
 2. **Gate (opt-in/out, default _Port_).** Show a plain-English summary of each detected rule + recommended Sigma mapping, then ask: **Port** (recommended) / **Customize** (review per-rule attribute/team mapping + username-to-email reconciliation) / **Skip** (migrated model shows ALL rows to everyone). Reuse-first: existing Sigma user attributes/teams are matched before creating new ones.
 3. **Provision + apply** with the shared engine:
    ```bash
-   # Python profile self-mints; optional shell-neutral token handoff:
-   python3 scripts/vendor/get_token.py --workdir <WORK>
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK>            # plan only (default)
    python3 scripts/apply_sigma_rls.py --from-security security.json --dm-id <dataModelId> --workdir <WORK> --provision --apply \
      [--membership-evidence <assignment-readback.json>]
    ```
+   The RLS helper uses the same browser-first provider and one-401 retry
+   contract; no manual token mint is required.
    `--provision` creates missing user attributes / teams; `--apply` PATCHes the boolean RLS calc column + fail-closed `filters` entry and the `columnSecurities` (CLS) onto the matching element, reads every requested rule back, and writes run/model/hash-bound `security-decision.json`. When rules name teams or user attributes, completion also requires hash-bound `--membership-evidence` from the assignment/readback step.
 4. **Assign membership.** Assign per-user attribute values / team membership from the source tool's group/role membership (the converter reports the attribute/team names; the values come from the source's user mapping).
 5. **Effective-user proof.** Write `security-effective-user-verdict.json`

@@ -49,14 +49,21 @@ python3 scripts/setup.py --from-env
 On Windows, replace `python3` with `py -3`. Both setup profiles write the same
 `~/.sigma-migration/env` and `~/.claude/settings.json`.
 
-The Python orchestrator mints and refreshes its token in process. To create a
-shell-neutral token file for a manual REST helper:
+Set `SIGMA_BASE_URL`, then run the preferred one-time browser login:
 
 ```bash
-python3 scripts/vendor/get_token.py --workdir <WORK>
-# Bash-only export form, when needed:
-eval "$(python3 scripts/vendor/get_token.py --print-export)"
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(scripts/vendor/browser-login.sh)"
 ```
+
+The Python orchestrator, builders, scout, and RLS helper use the co-located
+browser-first `sigma_rest.py`: they reuse a valid caller token, refresh a stored
+browser session before falling back to client credentials, proactively refresh
+known-age tokens, and retry one HTTP 401. For unattended runs, persist
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` with `setup.py --from-env`. To create
+a shell-neutral token file for a raw manual REST helper only, run
+`python3 scripts/vendor/get_token.py --workdir <WORK>` (or use
+`--print-export` from Bash).
 
 Choose a destination before building when the user did not supply one:
 
