@@ -62,10 +62,11 @@ Other flags:
   --dry-run                  no Sigma POSTs: contract + RLS scan + DM spec (or
                              MCP request) + workbook spec with placeholder ids
 
-Env: SIGMA_BASE_URL + SIGMA_API_TOKEN (or SIGMA_CLIENT_ID/SECRET via
-~/.sigma-migration/env — the script mints a token), SIGMA_CONNECTION_ID,
+Env: SIGMA_BASE_URL plus one of a valid SIGMA_API_TOKEN, a browser-login
+keychain session, or SIGMA_CLIENT_ID/SECRET fallback; SIGMA_CONNECTION_ID;
 optional CONVERTER_SRC (src/lookml.ts, run via tsx) or CONVERTER_PATH
-(build/lookml.js) — both auto-located.
+(build/lookml.js) — both auto-located. The co-located sigma_rest client reuses
+valid bearers, refreshes known-age tokens proactively, and retries one 401.
 
 Exit codes: 0 = done, all gates GREEN; 3 = MCP convert request emitted (resume
 with --converted); 10 = RLS found, decision needed (nothing posted);
@@ -73,12 +74,12 @@ with --converted); 10 = RLS found, decision needed (nothing posted);
 accounting, report, or hard gate FAILED; other = error.
 """
 import argparse, csv, glob, io, json, os, re, statistics, subprocess, sys, time
-import urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import scout_gate
 import code_rep  # workbook code-rep document-wrapper adapter (nested POST shape)
+import sigma_rest
 from build_workbook import build_field_index, parse_join_aliases, disp, leaf
 from looker_filter_expr import matches_filter_expr
 from safe_workbook_io import (
@@ -285,34 +286,18 @@ def refresh_degradation_ledger(workdir):
 
 
 def ensure_sigma_env(workdir=None):
-    """Load ~/.sigma-migration/env and mint a bearer when SIGMA_API_TOKEN isn't
-    already exported.
+    """Load neutral credentials and any shell-neutral auth.json handoff.
 
-    Shell-neutral (no bash, no `eval`): shells out to the co-located
-    get_token.py with the SAME interpreter already running this script
-    (sys.executable — no PATH/py-launcher guessing needed), which writes
-    <workdir>/auth.json; read the token back from there. Works identically on
-    macOS/Linux/Windows."""
-    env_file = os.path.expanduser("~/.sigma-migration/env")
-    if os.path.exists(env_file):
-        for line in open(env_file):
-            m = re.match(r"\s*export\s+(\w+)=['\"]?([^'\"\n]+)", line)
-            if m and not os.environ.get(m.group(1)):
-                os.environ[m.group(1)] = m.group(2)
-    if not os.environ.get("SIGMA_API_TOKEN") and os.environ.get("SIGMA_CLIENT_ID"):
-        wd = workdir or os.getcwd()
-        os.makedirs(wd, exist_ok=True)
-        p = subprocess.run([sys.executable, os.path.join(HERE, "get_token.py"),
-                            "--workdir", wd], capture_output=True, text=True)
-        if p.returncode != 0:
-            print(p.stderr or p.stdout, file=sys.stderr)
-        auth_path = os.path.join(wd, "auth.json")
-        if os.path.exists(auth_path):
-            auth = json.load(open(auth_path))
-            if auth.get("SIGMA_API_TOKEN"):
-                os.environ["SIGMA_API_TOKEN"] = auth["SIGMA_API_TOKEN"]
-            if auth.get("SIGMA_BASE_URL") and not os.environ.get("SIGMA_BASE_URL"):
-                os.environ["SIGMA_BASE_URL"] = auth["SIGMA_BASE_URL"]
+    Token selection and refresh stay lazy so --dry-run remains credentials-free;
+    the first live sigma() call uses the browser-first shared provider.
+    """
+    if workdir:
+        os.environ.setdefault("SIGMA_WORKDIR", workdir)
+    credentials = dict(os.environ)
+    credentials.pop("SIGMA_CLIENT_ID", None)
+    sigma_rest.bootstrap_credentials(env=credentials, cwd=workdir)
+    for key, value in credentials.items():
+        os.environ.setdefault(key, value)
 
 
 def sigma(method, path, body=None):
@@ -320,15 +305,26 @@ def sigma(method, path, body=None):
         raise RuntimeError(
             f"Sigma POST {path} refused before the LookML readiness gate passed"
         )
-    base = os.environ["SIGMA_BASE_URL"]; tok = os.environ["SIGMA_API_TOKEN"]
-    req = urllib.request.Request(base + path,
-        data=(json.dumps(body).encode() if body is not None else None), method=method,
-        headers={"Authorization": "Bearer " + tok, "Accept": "application/json",
-                 **({"Content-Type": "application/json"} if body is not None else {})})
     try:
-        return urllib.request.urlopen(req).read().decode()
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Sigma {method} {path} -> {e.code}: {e.read().decode()[:300]}")
+        # Keep the historical raw-text contract: call sites parse JSON/YAML/CSV
+        # themselves. The shared client owns bearer reuse, browser/client
+        # refresh, proactive token aging, URL validation, and one 401 retry.
+        raw = sigma_rest.request(
+            method.lower(),
+            path,
+            body=json.dumps(body) if body is not None else None,
+            accept="application/json",
+            binary=True,
+        )
+        return raw.decode()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        detail = str(exc)
+        match = re.search(r" -> (\d+)[^\n]*\n?(.*)", detail, re.DOTALL)
+        if match:
+            raise RuntimeError(
+                f"Sigma {method} {path} -> {match.group(1)}: {match.group(2)[:300]}"
+            ) from exc
+        raise RuntimeError(f"Sigma {method} {path}: {detail}") from exc
 
 
 def my_documents_id():
@@ -744,7 +740,7 @@ def main():
 
     ensure_sigma_env(wd)
     if not a.dry_run:
-        missing = [v for v in ("SIGMA_BASE_URL", "SIGMA_API_TOKEN") if not os.environ.get(v)]
+        missing = [v for v in ("SIGMA_BASE_URL",) if not os.environ.get(v)]
         if not a.reuse_dm and not os.environ.get("SIGMA_CONNECTION_ID"):
             missing.append("SIGMA_CONNECTION_ID (full warehouse-connection UUID — NOT a short prefix)")
         if missing:

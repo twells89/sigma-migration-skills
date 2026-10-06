@@ -29,8 +29,9 @@ convert (exit 3 + `--converted` resume when no local converter) → DM-reuse che
 `post_dm.py` + readback → `build_workbook.py` + POST (layout inline) → freshness
 preflight → **scripted parity (`phase6-parity-looker.rb`) +
 `assert-phase6-ran.rb` hard gate**. Exit 0 = GREEN; a failed gate fails the
-command. Sigma token auto-minted from `~/.sigma-migration/env`. Steps 1–5 below
-are the manual, per-phase path.
+command. Sigma auth is automatic through the shared client (current bearer →
+browser keychain → client fallback, with proactive refresh and one 401 retry).
+Steps 1–5 below are the manual, per-phase path.
 
 ## 1. Authenticate
 
@@ -47,9 +48,13 @@ Generate the key in Looker: **Admin → Users → (you) → Edit Keys → New AP
 python3 scripts/looker_api.py whoami        # HTTP 200 + your name/roles
 ```
 
-**Sigma**: credentials via the `sigma-api` skill (`ruby scripts/setup.rb` once → `~/.sigma-migration/env`).
+**Sigma**: set the API host, then do the preferred one-time browser login. The
+migration scripts reuse the keychain session without reopening the browser.
+For unattended runs, configure `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`
+instead.
 ```bash
-eval "$(scripts/get-token.sh)"              # sets SIGMA_API_TOKEN (~1h TTL)
+export SIGMA_BASE_URL=https://<your-published-sigma-api-host>
+eval "$(scripts/browser-login.sh)"          # one time, interactive
 export SIGMA_CONNECTION_ID=<full-connection-uuid>   # NOT a short prefix
 ```
 
@@ -111,8 +116,8 @@ Read the printed warnings. Before POSTing, run the **DM-reuse check** (SKILL.md 
 models against the explore's tables/columns — on a strong match the skill asks reuse-vs-new
 and the POST is skipped. Otherwise POST + register:
 ```bash
-bash -c 'eval "$(scripts/get-token.sh)" && \
-  SIGMA_CONNECTION_ID=$SIGMA_CONNECTION_ID python3 scripts/post_dm.py /tmp/look/dm-spec.json'
+SIGMA_CONNECTION_ID=$SIGMA_CONNECTION_ID \
+  python3 scripts/post_dm.py /tmp/look/dm-spec.json
 ```
 This POSTs to `/v2/dataModels/spec` (auto-finds a folder, swaps in the full connection UUID).
 Verify with `mcp__sigma-mcp-v2__describe` (no `type=error` columns) + a raw-aggregate `query`.
