@@ -43,16 +43,15 @@ def api(method, path, body=None, accept_json=True):
     except sigma_rest.SigmaError as exc:
         detail = str(exc)
         match = re.search(r" -> (\d+)[^\n]*\n?(.*)", detail, re.DOTALL)
-        return (
-            int(match.group(1)) if match else 0,
-            match.group(2) if match else detail,
-        )
-    except SystemExit as exc:
-        return 0, str(exc)
+        if not match:
+            raise
+        return int(match.group(1)), match.group(2)
 
 def dm_element_master_columns(dm_id, el_id):
     """Read the DM spec, find the element, return (elementName, [displayName,...])."""
     st, body = api("GET", f"/v2/dataModels/{dm_id}/spec")
+    if st != 200:
+        raise sigma_rest.SigmaError(f"GET data model spec failed ({st}): {body}")
     spec = json.loads(body)
     for pg in spec.get("pages", []):
         for el in pg.get("elements", []):
