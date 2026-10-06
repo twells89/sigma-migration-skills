@@ -1,0 +1,6 @@
+  <Element elementId="title" gridColumn="1 / 25" gridRow="1 / 4"/>
+  <Element elementId="actions" gridColumn="1 / 25" gridRow="4 / 7"/>
+  <Element elementId="builder" gridColumn="1 / 8" gridRow="7 / 31"/>
+  <Element elementId="preview" gridColumn="8 / 25" gridRow="7 / 31"/>
+  <Element elementId="impact" gridColumn="1 / 25" gridRow="31 / 39"/>
+  <Element elementId="save" gridColumn="1 / 25" gridRow="39 / 43"/>

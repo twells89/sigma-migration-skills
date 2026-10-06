@@ -91,7 +91,8 @@ check(http.reqs.size == 3 && http.reqs.all? { |r| r.path.include?('limit=1000') 
         "#{file} no longer reads columns via a single Sigma.request", fails)
 end
 
-# 3. WIRING — the final gate paginates with a LOCAL loop and stays dependency-free.
+# 3. WIRING — the final gate paginates with a LOCAL loop while resolving auth
+#    through the shared provider at startup.
 #    Not every converter ships this gate under this name (qlik-to-sigma's phase-6
 #    equivalent is verify-complete.rb) — skip rather than fail where the file is
 #    simply absent; presence is proven everywhere it IS deployed (canonical +
@@ -101,8 +102,8 @@ if File.exist?(phase6_path)
   src = File.read(phase6_path)
   check(src.include?('nextPage'), 'assert-phase6-ran.rb follows nextPage on its gate 3/7 audit', fails)
   check(src.include?('limit=1000'), 'assert-phase6-ran.rb requests limit=1000 on its gate 3/7 audit', fails)
-  check(!src.match?(/require 'sigma_rest'/),
-        'assert-phase6-ran.rb stays free of a sigma_rest dependency (it is the final gate)', fails)
+  check(src.include?('Sigma.auth_token'),
+        'assert-phase6-ran.rb resolves a fresh dual-mode token through sigma_rest at startup', fails)
 else
   puts '  SKIP  assert-phase6-ran.rb not present in this directory (converter uses a different phase-6 gate)'
 end

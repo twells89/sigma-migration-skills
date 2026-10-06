@@ -3,4 +3,4 @@
   <Element elementId="kpi3" gridColumn="13 / 19" gridRow="1 / 7"/>
   <Element elementId="kpi4" gridColumn="19 / 25" gridRow="1 / 7"/>
   <Element elementId="hero" gridColumn="1 / 25" gridRow="7 / 19"/>
-  <Element elementId="tbl" gridColumn="1 / 25" gridRow="19 / 28"/>
+  <Element elementId="tbl" gridColumn="1 / 25" gridRow="19 / 32"/>

@@ -74,28 +74,41 @@ module CompositionLint
   end
 
   # Core check shared by the page and every container: `members` (rects with
-  # id/c0/c1/r0/r1) must tile columns [1, ncols+1) per gridRow band, and bands
-  # must stack contiguously starting at row 1, with no gap/overlap.
+  # id/c0/c1/r0/r1) must tile every atomic row slice across
+  # [1, ncols+1), starting at row 1, with no gap/overlap. Slicing at every
+  # member boundary handles both ordinary horizontal bands and mosaics where
+  # one tall left rectangle spans two shorter right-side rectangles.
   def self.check_region(members, ncols, label)
     return [] if members.empty?
     errors = []
-    bands = members.group_by { |e| [e[:r0], e[:r1]] }
-    bands.each do |(r0, r1), band|
-      cols = band.sort_by { |e| e[:c0] }
-      if cols.first[:c0] != 1
-        errors << "#{label}: band rows #{r0}/#{r1}: does not start at column 1 (starts at #{cols.first[:c0]})"
-      end
-      if cols.last[:c1] != ncols + 1
-        errors << "#{label}: band rows #{r0}/#{r1}: does not fill to #{ncols + 1} (dead columns; ends at #{cols.last[:c1]})"
-      end
-      cols.each_cons(2) do |a, b|
-        errors << "#{label}: band rows #{r0}/#{r1}: column overlap/gap between #{a[:id]} and #{b[:id]} (#{a[:c1]} vs #{b[:c0]})" if a[:c1] != b[:c0]
+    members.each do |member|
+      if member[:c0] >= member[:c1] || member[:r0] >= member[:r1]
+        errors << "#{label}: #{member[:id]} has a non-positive layout rectangle"
       end
     end
-    band_rows = bands.keys.sort_by { |(r0, _)| r0 }
-    errors << "#{label}: top band does not start at row 1 (starts at #{band_rows.first[0]})" if band_rows.first[0] != 1
-    band_rows.each_cons(2) do |(_, ar1), (br0, _)|
-      errors << "#{label}: vertical gap/overlap between bands (row #{ar1} vs #{br0})" if ar1 != br0
+
+    row_bounds = members.flat_map { |e| [e[:r0], e[:r1]] }.uniq.sort
+    errors << "#{label}: top band does not start at row 1 (starts at #{row_bounds.first})" if row_bounds.first != 1
+
+    row_bounds.each_cons(2) do |r0, r1|
+      cols = members.select { |e| e[:r0] <= r0 && e[:r1] >= r1 }
+                    .sort_by { |e| [e[:c0], e[:c1]] }
+      if cols.empty?
+        errors << "#{label}: vertical gap across rows #{r0}/#{r1}"
+        next
+      end
+      if cols.first[:c0] != 1
+        errors << "#{label}: slice rows #{r0}/#{r1}: does not start at column 1 (starts at #{cols.first[:c0]})"
+      end
+      if cols.last[:c1] != ncols + 1
+        errors << "#{label}: slice rows #{r0}/#{r1}: does not fill to #{ncols + 1} (dead columns; ends at #{cols.last[:c1]})"
+      end
+      cols.each_cons(2) do |a, b|
+        next if a[:c1] == b[:c0]
+        defect = a[:c1] > b[:c0] ? 'overlap' : 'gap'
+        errors << "#{label}: slice rows #{r0}/#{r1}: column #{defect} between #{a[:id]} and #{b[:id]} " \
+                  "(#{a[:c1]} vs #{b[:c0]})"
+      end
     end
     errors
   end

@@ -81,6 +81,18 @@ class TestCodeRep < Minitest::Test
     assert_equal 'p', page['id']
   end
 
+  def test_panel_and_overlay_membership_comes_from_their_own_layout_regions
+    layout = '<Page id="p"><Element elementId="page"/></Page>' \
+             '<Panel id="sidebar"><Container elementId="panel"/></Panel>' \
+             '<Overlay id="modal"><TabbedContainer elementId="overlay"/></Overlay>'
+    assert_equal(
+      { 'p' => ['page'], 'sidebar' => ['panel'], 'modal' => ['overlay'] },
+      Sigma::CodeRep.workbook_page_element_ids(
+        Sigma::CodeRep.document(LIVE).merge('layout' => layout)
+      )
+    )
+  end
+
   def test_page_nested_elements_flatten_for_api
     assert_equal %w[chart source],
                  Sigma::CodeRep.workbook_elements(LEGACY_NESTED).map { |element| element['id'] }.sort

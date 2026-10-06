@@ -38,18 +38,14 @@ persistence.
 ```
 
 This checks the wrapper, required arrays, forbidden nested elements, formula
-qualification heuristics (including bare self-references), list/segmented
-value-list sources, and bidirectional layout coverage. Run it on the submitted
-spec and again on the GET readback so a control source absent from the live
-document cannot escape as an empty picker.
+qualification heuristics, bidirectional layout coverage, case-sensitive
+`columnId` pointers, pointer targets, and common grouped-table mistakes.
 
 ## 4. Manual formula pass
 
 For every formula:
 
-1. A bare `[Column]` must resolve to a different column declared on the same
-   element. A column cannot reference itself; source passthroughs need the
-   qualified `[Source/Column]` form.
+1. A bare `[Column]` must resolve to a column declared on the same element.
 2. A qualified reference uses the applicable prefix:
    - warehouse table: source table name;
    - workbook element: source element `name`;
@@ -67,9 +63,6 @@ For every formula:
 - `pages`, `overlays`, and `panels` contain metadata only.
 - Every literal element appears once in `document.elements`.
 - Every element is placed in `document.layout`.
-- Every `list` / `segmented` control has a value-list `source`; `filters` alone
-  can POST but leave the picker empty. Date/range controls legitimately derive
-  their column from `filters` without a separate `source`.
 - Layout references only declared elements and known page/overlay/panel IDs.
 - Container children use canonical `<Container>` / `<Element>` tags; tabbed
   containers use `<TabbedContainer>` / `<Tab>`.
@@ -78,6 +71,18 @@ For every formula:
 - Preserve `settings`, `agents`, `overlays`, and `panels on full-replacement PUT.
 - Box charts remain unsupported/pending: no box-chart element kind exists in
   the live OpenAPI.
+
+## 5b. Grouping pass
+
+- A `table` with aggregate columns needs `groupings`; otherwise it renders
+  detail rows even when its formulas look like a summary.
+- Every `groupBy`, `calculations`, and grouping sort reference names a column
+  declared on that table.
+- Every `calculations` column contains an aggregate expression.
+- Columns used only to support a grouped calculation should be hidden. A
+  visible column outside `groupBy` / `calculations` exposes detail rows in the
+  grouped table.
+- Multiple grouping objects are nested levels, not independent summaries.
 
 ## 6. Readback and compile verification
 
@@ -110,6 +115,21 @@ scale, or a layout is visually usable.
 | `Dependency not found` | A source, column, control, or dynamic reference did not resolve. |
 | `Column reference not found` on a join | The join key does not match the required exact source column form. |
 | field disappears on GET | The server ignored/stripped it; use the canonical readback or inspect the live schema. |
+
+## Retry budget
+
+Do not use the write endpoint as a syntax search loop. For each failed
+POST/PUT:
+
+1. classify it as authentication, entitlement, shape/schema, dependency, or
+   semantic/rendering;
+2. make one local correction backed by validator/OpenAPI/readback evidence;
+3. rerun offline validation and dry-run verification;
+4. submit one corrected write.
+
+If the same error class persists, stop and surface the unresolved contract or
+entitlement. Do not rotate through guessed field names such as `columnID`,
+`column`, `id`, and `columnId`.
 
 Do not convert a successful POST into a claim of parity. The readback,
 compiler query, and render are separate gates.

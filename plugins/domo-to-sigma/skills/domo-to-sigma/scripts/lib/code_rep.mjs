@@ -93,10 +93,10 @@ export function workbookElements(spec) {
 export function workbookPageElementIds(spec) {
   const result = {};
   const layout = String(document(spec).layout || '');
-  const pagePattern = /<Page\b[^>]*\bid="([^"]*)"[^>]*>(.*?)<\/Page>/gs;
-  for (const match of layout.matchAll(pagePattern)) {
-    result[match[1]] = [...new Set(
-      [...match[2].matchAll(
+  const regionPattern = /<(Page|Panel|Overlay)\b[^>]*\bid="([^"]*)"[^>]*>(.*?)<\/\1>/gs;
+  for (const match of layout.matchAll(regionPattern)) {
+    result[match[2]] = [...new Set(
+      [...match[3].matchAll(
         /<(?:Element|Container|TabbedContainer|LayoutElement|GridContainer)\b[^>]*\belementId="([^"]*)"/g,
       )].map((element) => element[1]),
     )];

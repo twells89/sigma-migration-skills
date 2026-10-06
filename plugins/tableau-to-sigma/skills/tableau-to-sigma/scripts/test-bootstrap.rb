@@ -10,7 +10,10 @@
 #      bootstrap sentinel (home + workdir) with doctor_pass:true; idempotent
 #      on a second run (no actions).
 #   4. the sentinel satisfies intake.rb's bootstrap gate.
-#   5. pip_user_install's TLS rung (the REAL bodies, driven via a pip shim):
+#   5. token-only and browser-keychain auth configurations are accepted without
+#      opening a browser; missing auth names browser login first and client flags
+#      as the unattended fallback.
+#   6. pip_user_install's TLS rung (the REAL bodies, driven via a pip shim):
 #      the truststore retry runs ONLY inside pip's [22.2, 24.2) window and
 #      never while installing truststore itself, and the retry can never
 #      overwrite the original CERTIFICATE_VERIFY_FAILED diagnostic.
@@ -82,7 +85,9 @@ Dir.mktmpdir do |t|
   home1 = File.join(t, 'home1')
   FileUtils.mkdir_p(File.join(home1, '.sigma-migration'))
   File.write(File.join(home1, '.sigma-migration', 'env'),
-             "export SIGMA_CLIENT_ID='x'\nexport SIGMA_CLIENT_SECRET='y'\nexport TABLEAU_PAT_SECRET='z'\n")
+             "export SIGMA_BASE_URL='https://api.sigmacomputing.com'\n" \
+             "export SIGMA_CLIENT_ID='x'\nexport SIGMA_CLIENT_SECRET='y'\n" \
+             "export TABLEAU_PAT_SECRET='z'\n")
   st, out = run_bootstrap(home1, [stub] + SYS, '--check')
   ok('--check complete env → exit 0', st == 0)
   ok('--check complete env says nothing to install', out.include?('nothing to install'))
@@ -99,7 +104,11 @@ Dir.mktmpdir do |t|
   # Creds MUST be reported missing on every host (HOME is empty).
   ok('--check scrubbed env reports node missing/inactive',
      out =~ /node not found/ || out =~ /node installed but not on PATH/)
-  ok('--check scrubbed env reports creds missing', out =~ /Sigma credentials MISSING/)
+  ok('--check scrubbed env reports auth missing', out =~ /Sigma authentication MISSING/)
+  ok('--check missing auth recommends one-time browser login first',
+     out.include?('browser-login.sh') && out.index('browser-login.sh') < out.index('--client-id'))
+  ok('--check missing auth retains unattended client-flag fallback',
+     out.include?('--client-id ID --client-secret SECRET'))
   ok('--check scrubbed env proposes, never installs (WOULD lines)', out.include?('WOULD:'))
   ok('--check scrubbed env wrote no bootstrap state to HOME',
      !File.exist?(File.join(home2, '.sigma-migration')))
@@ -117,6 +126,11 @@ Dir.mktmpdir do |t|
   ok('sentinel parses + doctor_pass:true', sj.is_a?(Hash) && sj['doctor_pass'] == true)
   ok('sentinel records mode + timestamp', sj && sj['mode'] == 'full' && !sj['completed_at'].to_s.empty?)
   ok('doctor.json written to workdir', File.exist?(File.join(work, 'doctor.json')))
+  dj = (JSON.parse(File.read(File.join(work, 'doctor.json'))) rescue nil)
+  ok('doctor.json records skipped status + non-secret auth method',
+     dj && dj.dig('cred_smoke', 'sigma') == 'skipped' &&
+       dj['sigma_auth_method'] == 'client-credentials' &&
+       !dj.key?('SIGMA_API_TOKEN') && !dj.key?('SIGMA_CLIENT_SECRET'))
 
   # idempotency: second run takes no actions and stays green
   st2, = run_bootstrap(home1, [stub] + SYS, '--workdir', work)
@@ -133,7 +147,37 @@ Dir.mktmpdir do |t|
     ok('intake gate opens on the real sentinel', $?.exitstatus == 0)
   end
 
-  # ── 5. pip_user_install TLS rung: gated retry, diagnostics never clobbered ─
+  # ── 5. token/browser auth are recognized without browser launch ──────────
+  token_home = File.join(t, 'token-home')
+  FileUtils.mkdir_p(File.join(token_home, '.sigma-migration'))
+  File.write(File.join(token_home, '.sigma-migration', 'env'),
+             "export SIGMA_BASE_URL='https://api.sigmacomputing.com'\n" \
+             "export SIGMA_API_TOKEN='current-token'\n")
+  keychain_probe = File.join(t, 'keychain-probe-bin')
+  keychain_mark = File.join(t, 'keychain-probed')
+  FileUtils.mkdir_p(keychain_probe)
+  write_stub(keychain_probe, 'secret-tool', "printf probed > #{keychain_mark.inspect}; exit 1")
+  st, out = run_bootstrap(token_home, [keychain_probe, stub] + SYS, '--check')
+  ok('--check accepts current token + base URL', st == 0 && out.include?('current API token'))
+  ok('--check does not touch the keychain when a current token is configured',
+     !File.exist?(keychain_mark))
+
+  browser_home = File.join(t, 'browser-home')
+  FileUtils.mkdir_p(File.join(browser_home, '.sigma-migration'))
+  File.write(File.join(browser_home, '.sigma-migration', 'env'),
+             "export SIGMA_BASE_URL='https://api.sigmacomputing.com'\n")
+  keychain_stub = File.join(t, 'keychain-bin')
+  FileUtils.mkdir_p(keychain_stub)
+  write_stub(keychain_stub, 'security',
+             '[ "$1" = find-generic-password ] && printf browser-refresh-token')
+  write_stub(keychain_stub, 'secret-tool',
+             '[ "$1" = lookup ] && [ "$2 $3 $4 $5" = "service sigma-api key refresh-token" ]')
+  st, out = run_bootstrap(browser_home, [keychain_stub, stub] + SYS, '--check')
+  ok('--check accepts keychain-only browser session + base URL',
+     st == 0 && out.include?('browser refresh session present'))
+  ok('bootstrap does not invoke browser-login', !out.include?('Opening your browser'))
+
+  # ── 6. pip_user_install TLS rung: gated retry, diagnostics never clobbered ─
   # Drives the REAL pip_user_install/pip_truststore_window bodies extracted
   # from bootstrap.sh (not a copy) against a pip shim. The shim fails every
   # install with a real CERTIFICATE_VERIFY_FAILED and, under PIPVER=21.2.4

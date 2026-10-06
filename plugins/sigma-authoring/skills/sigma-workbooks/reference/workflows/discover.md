@@ -27,6 +27,55 @@ saved spec: Sigma may canonicalize the reference to a friendly form such as
 `[F_SALES/Transaction Type]`, or may preserve the raw spelling. Either readback
 is valid; use the returned form for later edits and still compile-check it.
 
+## Verify the composed source grain before drafting
+
+Declare what one row is supposed to represent, and name the key that proves it.
+Run the check against the source **as the workbook will read it**—after any
+warehouse view, SQL, data-model relationship, join, union, or other composition
+that will feed the elements. A clean spec cannot detect a plausible-looking
+fanout.
+
+For a single-column grain:
+
+```sql
+SELECT
+  COUNT(*) AS row_count,
+  COUNT(DISTINCT <grain_key>) AS distinct_grain_count
+FROM <composed_source>;
+```
+
+Require equality only when the declared contract is one row per key. For a
+composite grain, avoid warehouse-specific tuple syntax and look for duplicate
+groups:
+
+```sql
+SELECT <key_a>, <key_b>, COUNT(*) AS rows_at_grain
+FROM <composed_source>
+GROUP BY <key_a>, <key_b>
+HAVING COUNT(*) > 1;
+```
+
+That query must return zero rows. Add every grain column to both clauses.
+
+For a 1:1 or many:1 join intended to preserve the left-side grain, capture both
+`COUNT(*)` and the distinct left-grain count before and after the join. Require
+both counts to remain unchanged. If rows increase, the right key is not unique
+at the join key or the predicate is incomplete.
+
+Do not apply “row count unchanged” mechanically:
+
+- an inner join may intentionally remove unmatched left rows—write the expected
+  shrinkage and account for every missing key;
+- an intentional 1:many join changes the grain—declare the new composite grain
+  and prove uniqueness there;
+- a union normally expects the sum of its input row counts, followed by a
+  uniqueness check at the union's declared grain.
+
+Use a warehouse-native query tool, the Sigma MCP query surface, or a SQL client.
+If none is available, ask for the counts instead of drafting from an unverified
+source. Record the expected counts for the post-build recheck in
+[`runtime-verification.md`](runtime-verification.md#4-cardinality-and-uniqueness).
+
 ### If you're using the Sigma MCP server
 
 The Sigma MCP server adds workspace-level discovery on top of plain value probing: `search` across workbooks / data models / tables by topic, `describe` of existing Sigma elements, awareness of pre-built metrics on data models. See [Use the Sigma MCP server](https://help.sigmacomputing.com/docs/use-sigma-mcp-server) for setup.
@@ -49,6 +98,21 @@ For elements with `source.kind: "warehouse-table"`, you need three things:
 3. **Column names** — exact names from the warehouse, used in formulas
 
 **Prefer a pre-existing MCP tool when you have one.** If an MCP is connected, discover through it: the **Sigma MCP** (`search` / `describe` across connections, tables, and data models) or a **warehouse-native MCP** (Snowflake, BigQuery, Databricks, …) querying `INFORMATION_SCHEMA`. The REST endpoints below are the universal fallback when no MCP is available — they cover all three and need no extra setup.
+
+Use this decision order for an open-ended business prompt:
+
+1. Search with an already-connected Sigma or warehouse MCP.
+2. Without MCP, list connections and browse every needed page from
+   `/v2/connections/paths`; rank candidate paths by the user's business terms.
+3. Resolve the best candidates and inspect their columns. Do not treat the
+   first name match as sufficient when many paths match.
+4. If several candidates remain semantically plausible—or browsing is blocked
+   by permissions—show a short candidate list and ask one focused source
+   question.
+
+REST path browsing is name matching, not semantic catalog search. A vague
+request such as “sales performance” can match dozens of tables. Stop after a
+bounded candidate pass instead of repeatedly opening tables or workbooks.
 
 ### Step 1: Find the Connection
 
@@ -80,7 +144,7 @@ curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
       '.entries[] | select(.connectionId == $c) | select(.path | length == 3) | .path | join(".")'
 ```
 
-(Adjust the `length` filter to your path depth — `3` for Snowflake/BigQuery/Databricks, `2` for Redshift/Postgres/MySQL. Paginate via `page`/`limit` on large connections. The response carries no `inodeId` — capture that from `lookup` next.)
+(Adjust the `length` filter to your path depth — `3` for Snowflake/BigQuery/Databricks, `2` for Redshift/Postgres/MySQL. The service may cap a requested `limit`; continue through `nextPage` while `hasMore` is true. A first page is not a complete search. The response carries no `inodeId` — capture that from `lookup` next.)
 
 Verify the path resolves and capture the `inodeId` — Step 3 needs it:
 
@@ -99,10 +163,14 @@ Use the verified path in the source definition.
 Use the `inodeId` from Step 2 to list the table's columns directly — no need to ask the user or have them query the warehouse:
 
 ```bash
-curl -sf -H "Authorization: Bearer $SIGMA_API_TOKEN" \
-  "$SIGMA_BASE_URL/v2/connections/tables/$INODE_ID/columns" \
+bash <sigma-api-skill-dir>/scripts/list-table-columns.sh "$INODE_ID" \
   | jq '.entries[] | {name, type}'
 ```
+
+The raw endpoint defaults to 50 columns. It returns an opaque
+`nextPageToken`, which must be sent as `pageToken` until absent. The helper
+requests `pageSize=1000`, follows every page, and returns combined entries.
+Never infer that a column is missing from the first response.
 
 Each entry has `name`, `type`, `description`, and `visibility`. Use the `name` value verbatim in formulas — do not invent or transform it.
 
@@ -118,7 +186,19 @@ For elements with `source.kind: "data-model"`, you need:
 - **dataModelId** — the UUID of the data model
 - **elementId** — the UUID of the specific element within the data model
 
-Ask the user to supply the `dataModelId` (visible in the Sigma UI URL when viewing a data model). To find elements within the data model, fetch the data model spec and examine the `pages[].elements[]` array.
+Ask the user to supply the `dataModelId` (visible in the Sigma UI URL when viewing a data model), then list the model's elements:
+
+```bash
+curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
+  "$SIGMA_BASE_URL/v2/dataModels/<dataModelId>/elements" \
+  | jq '.entries[] | {elementId, name, columns}'
+```
+
+Each entry carries the `elementId` you need plus a `columns` array of **exposed column-name strings** — the names a consuming workbook element must reference.
+
+> **Use the elements endpoint, not the model's spec, to resolve column names.** `GET /v2/dataModels/{id}/spec` reports each column's internal id and its source formula (e.g. `[Order Fact/CUSTOMER_DIM/Region]`) and leaves `name` unset for passthrough columns. Those internal formulas are not what a consuming element references, so authoring formulas from the spec fails with `Dependency not found` on the first attempt.
+
+**Relationship-derived columns carry a join-leg suffix.** Columns the model element pulls through a relationship are exposed as `Column Name (SOURCE)`; the base table's own columns stay bare. The suffix exists to disambiguate — on one 104-column element, `Region`, `City`, `State`, and `Is Active` each appeared twice, once under `(CUSTOMER_DIM)` and once under `(STORE_DIM)`. Reference the suffixed form verbatim, parentheses included: `[Order Fact View/Region (CUSTOMER_DIM)]`, not `[Order Fact View/Region]`.
 
 ## Cross-Element Sources
 

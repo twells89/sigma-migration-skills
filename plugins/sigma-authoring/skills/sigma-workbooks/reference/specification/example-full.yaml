@@ -177,12 +177,12 @@ document:
         kind: number
         formatString: "$,.0f"
     color:
-      id: oJ4m0bMl34
+      columnId: oJ4m0bMl34
       sort:
         by: rMc1XEsnWx
         direction: descending
     value:
-      id: rMc1XEsnWx
+      columnId: rMc1XEsnWx
     name: Sales by product family
   - id: XnyLSupesM
     kind: table

@@ -1,0 +1,5 @@
+  <Element elementId="title" gridColumn="1 / 25" gridRow="1 / 4"/>
+  <Element elementId="filters" gridColumn="1 / 25" gridRow="4 / 7"/>
+  <Element elementId="queue" gridColumn="1 / 18" gridRow="7 / 29"/>
+  <Element elementId="rail" gridColumn="18 / 25" gridRow="7 / 29"/>
+  <Element elementId="actions" gridColumn="1 / 25" gridRow="29 / 33"/>

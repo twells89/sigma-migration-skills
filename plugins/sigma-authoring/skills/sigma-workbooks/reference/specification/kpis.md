@@ -48,7 +48,7 @@ Run `./scripts/validate-spec.sh <spec.yaml>` before publishing to catch it.
 
 The OpenAPI exposes three more kpi-chart objects; their spec-authoring support differs:
 
-- `layout` — **round-trips.** `{ anchor: start|middle|end, titleOrient: top|bottom, ... }` positions the card contents. Default values are omitted on readback. (live-verified 2026-06-11, re-verified 2026-06-24)
+- `layout` — **round-trips.** `{ anchor: left|center|right, verticalAnchor: top|center|bottom, titleOrient: top|bottom, ... }` positions the card contents. Default values are omitted on readback. (live-verified 2026-06-11, re-verified 2026-06-24)
 - `value` styling — **round-trips.** `fontSize` (number or `"auto"`), `color`; `fontWeight: bold` reads back omitted (it appears to be the default). (live-verified 2026-06-11, re-verified 2026-06-24)
 - `comparison` (the Δ badge) via `comparisonColumn: {columnId}` + `comparison: {display: "delta", colorGood, colorBad}` — **spec-authorable and readback-stable.** Verified 2026-07-27 against live staging: POST → export the source table → GET readback, with `comparisonColumn.columnId` intact and correct and `comparison.display`/colors unmodified. **KPIs are comparative by default — this is the house pattern, not an edge case.** See `comparative-kpi-card.yaml` beside this file for a full worked example. This supersedes the "did not render from spec / UI-only / stripped on readback" claim this doc carried through 2026-06-24 — for *this exact shape only* (see below for what's still unproven).
 

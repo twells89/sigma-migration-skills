@@ -29,12 +29,12 @@ layout = <<~XML
       <Element elementId="title" gridColumn="1 / 25" gridRow="1 / 5"/>
     </Container>
   </Page>
-  <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overlay-detail">
+  <Overlay type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="overlay-detail">
     <Element elementId="detail" gridColumn="1 / 25" gridRow="1 / 8"/>
-  </Page>
-  <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="panel-filter">
-    <Element elementId="filter-copy" gridColumn="1 / 25" gridRow="1 / 4"/>
-  </Page>
+  </Overlay>
+  <Panel type="grid" gridTemplateColumns="repeat(6, 1fr)" gridTemplateRows="auto" id="panel-filter">
+    <Element elementId="filter-copy" gridColumn="1 / 6" gridRow="1 / 4"/>
+  </Panel>
 XML
 
 spec = {

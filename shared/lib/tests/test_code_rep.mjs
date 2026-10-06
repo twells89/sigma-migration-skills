@@ -54,6 +54,13 @@ assert.deepEqual(
   workbookPageElementIds({ ...live.document, layout: legacyLayout }),
   { p: ['c', 'e1'] },
 );
+const regionLayout = '<Page id="p"><Element elementId="page"/></Page>'
+  + '<Panel id="sidebar"><Container elementId="panel"/></Panel>'
+  + '<Overlay id="modal"><TabbedContainer elementId="overlay"/></Overlay>';
+assert.deepEqual(
+  workbookPageElementIds({ ...live.document, layout: regionLayout }),
+  { p: ['page'], sidebar: ['panel'], modal: ['overlay'] },
+);
 const canonicalLayout = wrap({ ...live.document, layout: legacyLayout }).document.layout;
 assert.equal(
   canonicalLayout,

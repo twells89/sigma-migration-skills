@@ -74,6 +74,19 @@ class TestCodeRep(unittest.TestCase):
         self.assertEqual(element['id'], 'e1')
         self.assertEqual(page['id'], 'p')
 
+    def test_panel_and_overlay_membership_comes_from_own_layout_regions(self):
+        layout = (
+            '<Page id="p"><Element elementId="page"/></Page>'
+            '<Panel id="sidebar"><Container elementId="panel"/></Panel>'
+            '<Overlay id="modal"><TabbedContainer elementId="overlay"/></Overlay>'
+        )
+        self.assertEqual(
+            code_rep.workbook_page_element_ids(
+                {**code_rep.document(LIVE), 'layout': layout}
+            ),
+            {'p': ['page'], 'sidebar': ['panel'], 'modal': ['overlay']},
+        )
+
     def test_wrap_flattens_legacy_page_elements(self):
         nested = {
             'schemaVersion': 1,

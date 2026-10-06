@@ -27,7 +27,7 @@ Requires Node >= 18 (for global `fetch`). The zip helper additionally needs a re
 
 | Concern | Do this | Instead of | Old hit |
 |---|---|---|---|
-| **Auth** | `lib/auth.mjs`: env → `<workdir>/auth.json` → helpful cross-shell error | `eval "$(get-token.sh)"`; `spawnSync('bash', ['-c', ...])` | `migrate-cognos.mjs:102` |
+| **Auth** | `lib/auth.mjs`: valid env/auth.json token → browser-first provider refresh at 50m or on 401 | direct client-credential exchange; refresh gated on `SIGMA_CLIENT_ID` | shared REST adapters before dual-mode auth |
 | **Temp/work dir** | `lib/paths.mjs`: `os.tmpdir()` + `--workdir` | hardcoded `"/tmp/..."` | `pbi_exec.py:3`, `probe-controls.rb:81` |
 | **HTTP** | global `fetch` (`lib/sigma-rest.mjs`) | `curl` | `wb-rep.rb:409`, `verify_parity.py:26` |
 | **JSON** | native `JSON.parse` | `jq` | `wb-rep.rb:413-417` |
@@ -44,8 +44,8 @@ you are building a Node-only skill and want to drop the Python dependency, swap 
 ## Files
 
 - `orchestrate.mjs` — the entry point; `--self-test` and a real `--workdir` run.
-- `lib/auth.mjs` — shell-neutral credential load.
-- `lib/sigma-rest.mjs` — `fetch`-based REST client + arg parser.
+- `lib/auth.mjs` — shell-neutral credential load + canonical provider refresh.
+- `lib/sigma-rest.mjs` — `fetch` REST client with one refresh/retry on 401 + arg parser.
 - `lib/paths.mjs` — cross-platform workdir/temp helpers.
 - `lib/py_resolve.mjs` — Store-stub-safe Python resolver (sibling of `shared/lib/py_resolve.rb`).
 - `lib/extract-zip.mjs` — cross-platform archive extraction.

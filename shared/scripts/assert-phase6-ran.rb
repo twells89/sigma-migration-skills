@@ -484,6 +484,25 @@ require 'rbconfig'
 require 'digest'
 require_relative 'lint-render-integrity'
 
+# Resolve Sigma auth once at startup through the shared browser-first provider.
+# A browser/keychain-only session therefore surfaces a bearer into ENV for the
+# existing live gates and their child processes. If resolution fails, leave the
+# token absent: gates 3/4 retain their existing fail-closed exits.
+_sigma_rest_path = [
+  File.join(__dir__, 'lib', 'sigma_rest.rb'),
+  File.join(__dir__, '..', 'lib', 'sigma_rest.rb')
+].find { |path| File.file?(path) }
+raise LoadError, 'lib/sigma_rest.rb is required by assert-phase6-ran.rb' unless _sigma_rest_path
+require _sigma_rest_path
+if !ENV['SIGMA_BASE_URL'].to_s.empty?
+  begin
+    _sigma_startup_token = Sigma.auth_token
+    ENV['SIGMA_API_TOKEN'] = _sigma_startup_token unless _sigma_startup_token.to_s.empty?
+  rescue Sigma::Error
+    # Deliberately defer to the existing gate-specific diagnostics and exits.
+  end
+end
+
 # Degradation ledger (PLAN-v3 PR-14) — vendored at scripts/lib/ in adopting
 # plugins; the canonical checkout resolves it from shared/lib. A checkout
 # without it keeps the legacy final line (stated below, never silent).
@@ -1527,8 +1546,9 @@ unless opts[:skip_column]
       # error-column audit. A bare first-page GET truncates at the server default of
       # 50, which would let THIS GATE pass a wide workbook whose type=="error"
       # columns sat past column 50 — the exact false GREEN the gate exists to
-      # prevent. Local loop rather than Sigma.list_entries: this gate deliberately
-      # carries no sigma_rest dependency.
+      # prevent. Keep the local loop so an incomplete scan remains recorded as a
+      # quality waiver rather than becoming an uncaught request exception. Its
+      # bearer was freshly resolved through Sigma.auth_token at startup.
       cols = []
       res  = nil
       page = nil

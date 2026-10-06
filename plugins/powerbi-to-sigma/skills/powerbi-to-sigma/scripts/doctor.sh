@@ -304,57 +304,123 @@ if [ -f "$GT" ] && grep -q $'\r' "$GT" 2>/dev/null; then
       "Fix: 'sed -i \$'s/\\r\$//' scripts/*.sh' (or set core.autocrlf=input and re-checkout)."
 fi
 
-# --- Sigma credentials (REQUIRED — fail-closed) + live token-mint smoke ----
-# Missing creds used to be a WARN, so a run could start doomed and die at its
-# first API call with an opaque auth error the agent improvises around. Now:
-# absent creds = ✗ REQUIRED failure. When creds ARE present and the sibling
-# Ruby lib exists (lib/sigma_rest.rb — the same in-process mint path the
-# orchestrators use), a live token mint (bounded ~20s) proves they WORK:
-# present-but-broken creds are ✗ too. SIGMA_SKIP_CRED_SMOKE=1 skips the live
-# probe (genuinely offline runs). Recorded in doctor.json
-# {cred_smoke:{sigma: pass|fail|skipped}}.
+# --- Sigma authentication (REQUIRED — fail-closed) + live /v2/whoami smoke --
+# A usable starting configuration is one of:
+#   1. SIGMA_API_TOKEN + SIGMA_BASE_URL (the current token is tried first);
+#   2. SIGMA_BASE_URL + a refresh session in the native OS keychain; or
+#   3. SIGMA_BASE_URL + both client-credential values.
+# Browser refresh and client fallback are owned by the shared sigma_rest dual
+# provider. The smoke deliberately calls Sigma.request(GET, /v2/whoami), so a
+# current token is verified without being replaced and a 401 refreshes once
+# through that provider. SIGMA_SKIP_CRED_SMOKE=1 skips only the network call.
+# doctor.json records the status plus the non-secret sigma_auth_method.
+sigma_env_file_has() {
+  local key="$1" file="${2:-$HOME/.sigma-migration/env}"
+  [ -f "$file" ] && grep -Eq "^[[:space:]]*(export[[:space:]]+)?${key}=.+" "$file" 2>/dev/null
+}
+sigma_base_configured() {
+  [ -n "${SIGMA_BASE_URL:-}" ] || sigma_env_file_has SIGMA_BASE_URL
+}
+sigma_browser_session_present() {
+  sigma_base_configured || return 1
+  if command -v security >/dev/null 2>&1; then
+    security find-generic-password -a "${USER:-$(id -un 2>/dev/null)}" \
+      -s "sigma-api:refresh-token" >/dev/null 2>&1
+  elif command -v secret-tool >/dev/null 2>&1; then
+    secret-tool lookup service sigma-api key refresh-token >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+sigma_auth_method() {
+  case "${1:-}" in
+    browser|client-credentials|api-token|none) printf '%s' "$1" ;;
+    *) printf '%s' "api-token" ;;
+  esac
+}
+
 SMOKE_SIGMA="skipped"
+SIGMA_AUTH_METHOD_REPORTED="none"
 _SIGMA_CREDS=false
-# Content-based presence (the Tableau twin's pattern below): bare
-# file-existence would misread an env file holding only non-credential lines
-# (anything a future writer persists there) as "credentials present".
-if grep -Eq 'SIGMA_(API_TOKEN|CLIENT_ID)' "$HOME/.sigma-migration/env" 2>/dev/null \
-   || [ -n "${SIGMA_API_TOKEN:-}" ] || [ -n "${SIGMA_CLIENT_ID:-}" ]; then
-  _SIGMA_CREDS=true
+_SIGMA_TOKEN=false
+_SIGMA_BROWSER=false
+_SIGMA_CLIENT=false
+if sigma_base_configured && { [ -n "${SIGMA_API_TOKEN:-}" ] || sigma_env_file_has SIGMA_API_TOKEN; }; then
+  _SIGMA_TOKEN=true
 fi
+if [ "$_SIGMA_TOKEN" != true ] \
+   && [ "${SIGMA_AUTH_MODE:-auto}" != "client-credentials" ] \
+   && sigma_browser_session_present; then
+  _SIGMA_BROWSER=true
+fi
+if sigma_base_configured \
+   && { { [ -n "${SIGMA_CLIENT_ID:-}" ] && [ -n "${SIGMA_CLIENT_SECRET:-}" ]; } \
+        || { sigma_env_file_has SIGMA_CLIENT_ID && sigma_env_file_has SIGMA_CLIENT_SECRET; }; }; then
+  _SIGMA_CLIENT=true
+fi
+
+if [ "$_SIGMA_TOKEN" = true ]; then
+  _SIGMA_CREDS=true
+  SIGMA_AUTH_METHOD_REPORTED="$(sigma_auth_method "${SIGMA_AUTH_METHOD:-api-token}")"
+elif [ "${SIGMA_AUTH_MODE:-auto}" != "client-credentials" ] && [ "$_SIGMA_BROWSER" = true ]; then
+  _SIGMA_CREDS=true
+  SIGMA_AUTH_METHOD_REPORTED="browser"
+elif [ "${SIGMA_AUTH_MODE:-auto}" != "browser" ] && [ "$_SIGMA_CLIENT" = true ]; then
+  _SIGMA_CREDS=true
+  SIGMA_AUTH_METHOD_REPORTED="client-credentials"
+fi
+
+_SIGMA_BROWSER_FIX="In an interactive terminal, set SIGMA_BASE_URL and run: eval \"\$(bash scripts/browser-login.sh)\" (one-time browser sign-in)."
+if [ "$RUBY_REQUIRED" = true ]; then
+  _SIGMA_CLIENT_FIX="Unattended fallback: export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL), then run 'ruby scripts/setup.rb --from-env'."
+else
+  _SIGMA_CLIENT_FIX="Unattended fallback: export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL, then use the certified profile's noninteractive setup."
+fi
+_SIGMA_SETUP_FIX="$_SIGMA_BROWSER_FIX $_SIGMA_CLIENT_FIX"
+
+_SIGMA_RUBY_LIB=""
+for _c in "$HERE/lib" "$HERE/../lib"; do
+  if [ -f "$_c/sigma_rest.rb" ]; then _SIGMA_RUBY_LIB="$_c"; break; fi
+done
+_SIGMA_PY_LIB=""
+for _c in "$HERE/lib" "$HERE/../lib"; do
+  if [ -f "$_c/sigma_rest.py" ]; then _SIGMA_PY_LIB="$_c"; break; fi
+done
+
 if [ "$_SIGMA_CREDS" != true ]; then
   if [ "${SIGMA_OFFLINE_DRY_RUN:-}" = "1" ]; then
     warn "Sigma credentials absent — accepted for SIGMA_OFFLINE_DRY_RUN=1" \
          "Only --dry-run/offline fixture conversion is allowed; unset this flag and configure credentials before any live build."
-  elif [ "$RUBY_REQUIRED" = true ]; then
-    _SIGMA_SETUP_FIX="Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
-    bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
   else
-    _SIGMA_SETUP_FIX="Export SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
-    bad "no Sigma credentials found (REQUIRED — the run would die at its first Sigma API call)" "$_SIGMA_SETUP_FIX"
+    bad "no usable Sigma authentication found (REQUIRED — need SIGMA_BASE_URL plus a current token, browser-keychain session, or client credentials)" "$_SIGMA_SETUP_FIX"
   fi
 elif [ -n "${SIGMA_SKIP_CRED_SMOKE:-}" ]; then
-  ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
-elif [ "$RUNTIME_PROFILE_SELECTED" = python ] && [ -f "$HERE/lib/sigma_rest.py" ] && [ -n "$PY_ARGV" ]; then
-  if $PY_ARGV -c 'import sys; sys.path.insert(0, sys.argv[1] + "/lib"); import sigma_rest; sigma_rest.refresh_token()' "$HERE" >/dev/null 2>&1; then
-    ok "Sigma credentials present + live token mint OK (Python)"
+  ok "Sigma authentication available via $SIGMA_AUTH_METHOD_REPORTED (live GET /v2/whoami smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
+elif [ "$RUNTIME_PROFILE_SELECTED" = python ] && [ -n "$_SIGMA_PY_LIB" ] && [ -n "$PY_ARGV" ]; then
+  _SIGMA_SMOKE_METHOD="$($PY_ARGV -c 'import os,sys; sys.path.insert(0, sys.argv[1]); import sigma_rest; sigma_rest.request("get", "/v2/whoami"); print(os.environ.get("SIGMA_AUTH_METHOD") or ("api-token" if os.environ.get("SIGMA_API_TOKEN") else "none"))' "$_SIGMA_PY_LIB" 2>/dev/null)"
+  if [ "$?" -eq 0 ]; then
+    SIGMA_AUTH_METHOD_REPORTED="$(sigma_auth_method "$_SIGMA_SMOKE_METHOD")"
+    ok "Sigma live GET /v2/whoami OK via $SIGMA_AUTH_METHOD_REPORTED (Python)"
     SMOKE_SIGMA="pass"
   else
-    bad "Sigma credentials present but the live Python token mint FAILED (bad/stale client id/secret, or wrong SIGMA_BASE_URL)" \
-        "Refresh the exported Sigma credentials. Genuinely offline? SIGMA_SKIP_CRED_SMOKE=1 skips this probe."
+    bad "Sigma authentication is configured but live GET /v2/whoami FAILED (current token and dual-provider refresh were rejected)" \
+        "$_SIGMA_SETUP_FIX Genuinely offline? SIGMA_SKIP_CRED_SMOKE=1 skips this probe."
     SMOKE_SIGMA="fail"
   fi
-elif [ -f "$HERE/lib/sigma_rest.rb" ] && command -v ruby >/dev/null 2>&1; then
-  if ruby -e '$LOAD_PATH.unshift File.join(ARGV[0], "lib"); require "timeout"; require "sigma_rest"; Timeout.timeout(20) { Sigma.refresh_token! }' "$HERE" >/dev/null 2>&1; then
-    ok "Sigma credentials present + live token mint OK"
+elif [ -n "$_SIGMA_RUBY_LIB" ] && command -v ruby >/dev/null 2>&1; then
+  _SIGMA_SMOKE_RB='require %q{timeout};require %q{sigma_rest};Timeout.timeout(30){Sigma.request(:get,%q{/v2/whoami})};m=ENV[%q{SIGMA_AUTH_METHOD}].to_s;puts(m.empty? ? %q{api-token} : m)'
+  _SIGMA_SMOKE_METHOD="$(ruby -I "$_SIGMA_RUBY_LIB" -e "$_SIGMA_SMOKE_RB" 2>/dev/null)"
+  if [ "$?" -eq 0 ]; then
+    SIGMA_AUTH_METHOD_REPORTED="$(sigma_auth_method "$_SIGMA_SMOKE_METHOD")"
+    ok "Sigma live GET /v2/whoami OK via $SIGMA_AUTH_METHOD_REPORTED"
     SMOKE_SIGMA="pass"
   else
-    bad "Sigma credentials present but the live token mint FAILED (bad/stale client id/secret, or wrong SIGMA_BASE_URL)" \
-        "Re-run 'ruby scripts/setup.rb' with fresh values (Sigma: Administration → APIs & Embed Secrets). Genuinely offline? SIGMA_SKIP_CRED_SMOKE=1 skips this probe."
+    bad "Sigma authentication is configured but live GET /v2/whoami FAILED (current token and dual-provider refresh were rejected)" \
+        "$_SIGMA_SETUP_FIX Genuinely offline? SIGMA_SKIP_CRED_SMOKE=1 skips this probe."
     SMOKE_SIGMA="fail"
   fi
 else
-  ok "Sigma credentials present (mint smoke skipped — no ruby lib next to this doctor)"
+  ok "Sigma authentication available via $SIGMA_AUTH_METHOD_REPORTED (GET /v2/whoami smoke skipped — no shared sigma_rest library next to this doctor)"
 fi
 
 # --- Tableau credentials (self-gated: tableau skill only) --------------------
@@ -598,6 +664,7 @@ write_doctor_json() {
       "$(json_csv "$RUNTIME_PROFILE_REQUIRED")" "$(jstr "$RUNTIME_PROFILE_FALLBACK_REASON")"
     printf '"sandbox_hint":"%s",' "$(jstr "$SANDBOX_HINT")"
     printf '"cred_smoke":{"sigma":"%s","tableau":"%s","looker":"%s"},' "$SMOKE_SIGMA" "$SMOKE_TABLEAU" "$LOOKER_PROBE"
+    printf '"sigma_auth_method":"%s",' "$(jstr "$SIGMA_AUTH_METHOD_REPORTED")"
     printf '"hyperapi_present":%s,' "$HYPERAPI"
     printf '"skill_sha":"%s",' "$(jstr "$SKILL_SHA")"
     printf '"behind_count":%s,' "$BEHIND_COUNT"

@@ -13,10 +13,11 @@
 # Live-verified shape facts (verified live against a real Sigma org, building
 # a multi-KPI command-center-style workbook with buttons + an append-only-log
 # input table):
-#   - `inputMode:"edit"` on an input-table element is MANDATORY. Omit it and
+#   - `inputMode` on an input-table element is MANDATORY. Omit it and
 #     the POST masked-fails as `Invalid kind:"input-table"` — a misleading
 #     message; the real cause is the missing inputMode. Both input_table_*
-#     builders below always emit it.
+#     builders below always emit it and default to `"view"`. No inputMode value
+#     enables published data entry; that is a UI-only element permission.
 #   - Empty input table: source:{kind:"empty",connectionId:<WRITE conn>}.
 #     Linked input table: source:{kind:"linked",from:<parent element id>,
 #     connectionId:<WRITE conn>} — the parent element (`from`) may live on a
@@ -33,9 +34,14 @@
 #   - Effects verified live: insert-rows (values is a pass-through Hash of
 #     colId => {type:"control",control:} | {type:"constant",value:{type:"text",value:}}
 #     entries — this module does not reshape `values`, callers build it),
-#     clear-control (an ELEMENT-scoped clear-control masked-failed the button
-#     live — only page scope is verified, so this builder only emits
+#     clear-control (this builder emits page scope only —
 #     scope:{type:"page",pageId:}), set-control-value (constant text value).
+#
+# NOT renamed in the 2026-08-26 action field rename — probe-confirmed that the
+# `*Id` form is REJECTED and the bare name is still required, so do not "fix"
+# these: `set-control-value.control`, `navigate` target.page,
+# `refresh-element` target.element, and the {type:"control",control:} value
+# source used inside `values`.
 #
 # All builders are gated through Actions::SURFACES (same discipline as
 # richness.rb/styling.rb): a NO-GO flip on `button`/`input_table_empty`/
@@ -49,7 +55,7 @@ require 'json'
 module Actions
   SURFACES = {
     button: true,             # {kind:"button"} + actions:[{trigger,effects}] — verified GO live
-    input_table_empty: true,  # input-table, source.kind:"empty" — verified GO live; inputMode:"edit" mandatory (masked-error fix)
+    input_table_empty: true,  # input-table, source.kind:"empty" — verified GO live; inputMode required
     input_table_linked: true, # input-table, source.kind:"linked" (cross-connection from a read-only parent) — verified GO live
     effects: true             # insert-rows / clear-control / set-control-value shape helpers — verified GO live, one gate for all 3
   }.freeze
@@ -78,24 +84,26 @@ module Actions
   end
 
   # Returns an `input-table` element sourced empty (a fresh write-back table,
-  # e.g. an append-only log): {id, kind:"input-table", inputMode:"edit",
-  # source:{kind:"empty",connectionId:}, columns:}. `inputMode:"edit"` is
-  # ALWAYS emitted — it is mandatory (see module docstring's masked-error
-  # note). `columns` is passed through verbatim (already-shaped column
+  # e.g. an append-only log): {id, kind:"input-table", inputMode:"view",
+  # source:{kind:"empty",connectionId:}, columns:}. `inputMode` is always
+  # emitted and defaults to `"view"`; pass `"edit"` or `"explore"` through
+  # `input_mode:` when needed. It does not grant published data entry.
+  # `columns` is passed through verbatim (already-shaped column
   # entries, including bare {'id'=>'CREATED_AT'} system-column entries with
   # no `type`). `name:` (optional; a text-style Hash or plain string, caller's
   # choice — passed through verbatim) is OMITTED entirely when not given, not
   # emitted as nil. NO-GO surface -> {'opt_in'=>true,'id'=>id}.
-  def self.input_table_empty(id:, connection_id:, columns:, name: nil, surfaces: SURFACES)
+  def self.input_table_empty(id:, connection_id:, columns:, name: nil, input_mode: 'view', surfaces: SURFACES)
     raise ArgumentError, 'id required' if id.to_s.empty?
     raise ArgumentError, 'connection_id required' if connection_id.to_s.empty?
     raise ArgumentError, 'columns required' if columns.nil? || columns.empty?
+    raise ArgumentError, 'input_mode must be edit, explore, or view' unless %w[edit explore view].include?(input_mode)
     return { 'opt_in' => true, 'id' => id } unless surfaces[:input_table_empty]
 
     out = {
       'id' => id,
       'kind' => 'input-table',
-      'inputMode' => 'edit',
+      'inputMode' => input_mode,
       'source' => { 'kind' => 'empty', 'connectionId' => connection_id },
       'columns' => columns
     }
@@ -105,23 +113,25 @@ module Actions
 
   # Returns an `input-table` element sourced linked from a parent element
   # (e.g. a write-back "targets" table keyed off a read-only pivot):
-  # {id, kind:"input-table", inputMode:"edit", source:{kind:"linked",from:,
+  # {id, kind:"input-table", inputMode:"view", source:{kind:"linked",from:,
   # connectionId:}, columns:}. `from` is the PARENT element's id — verified
   # live to work even when the parent sits on a different (read-only)
   # connection than `connection_id` (the write connection this table itself
   # lives on). Same `columns`/`name:` pass-through contract as
-  # input_table_empty. NO-GO surface -> {'opt_in'=>true,'id'=>id}.
-  def self.input_table_linked(id:, from:, connection_id:, columns:, name: nil, surfaces: SURFACES)
+  # input_table_empty. `input_mode:` defaults to `"view"` and accepts
+  # `"edit"` or `"explore"`. NO-GO surface -> {'opt_in'=>true,'id'=>id}.
+  def self.input_table_linked(id:, from:, connection_id:, columns:, name: nil, input_mode: 'view', surfaces: SURFACES)
     raise ArgumentError, 'id required' if id.to_s.empty?
     raise ArgumentError, 'from required' if from.to_s.empty?
     raise ArgumentError, 'connection_id required' if connection_id.to_s.empty?
     raise ArgumentError, 'columns required' if columns.nil? || columns.empty?
+    raise ArgumentError, 'input_mode must be edit, explore, or view' unless %w[edit explore view].include?(input_mode)
     return { 'opt_in' => true, 'id' => id } unless surfaces[:input_table_linked]
 
     out = {
       'id' => id,
       'kind' => 'input-table',
-      'inputMode' => 'edit',
+      'inputMode' => input_mode,
       'source' => { 'kind' => 'linked', 'from' => from, 'connectionId' => connection_id },
       'columns' => columns
     }
@@ -129,8 +139,11 @@ module Actions
     out
   end
 
-  # Returns an `insert-rows` effect Hash: {effect, tableElementId, values}. `values`
-  # is a pass-through Hash of colId => {type:"control",control:} |
+  # Returns an `insert-rows` effect Hash: {effect, tableElementId, values}.
+  # The OpenAPI field is `tableElementId` (the target input-table element's
+  # id). A stale `table:` key fails every WorkbookElement oneOf and Sigma
+  # reports the masked `Invalid kind: "button"`. `values` is a pass-through
+  # Hash of colId => {type:"control",control:} |
   # {type:"constant",value:{type:"text",value:}} entries (or any other
   # already-shaped value descriptor) — never reshaped here; system columns
   # (CREATED_AT/CREATED_BY) are never included, Sigma auto-fills them.
@@ -143,10 +156,18 @@ module Actions
     { 'effect' => 'insert-rows', 'tableElementId' => table_element_id, 'values' => values }
   end
 
-  # Returns a `clear-control` effect Hash: {effect, scope:{type:"page",pageId:},
-  # usePublishedValue:true}. Page scope ONLY — an element-scoped
-  # clear-control masked-failed the button live, so this builder never emits
-  # any other scope shape. NO-GO surface -> {}.
+  # Returns a `clear-control` effect Hash: {effect,
+  # scope:{type:"page",pageId:}, usePublishedValue:true}. The OpenAPI field
+  # is `pageId` (not `page`). A stale `page:` key is dropped on GET
+  # readback, and click then fails with "No target page is selected in the
+  # action." Page scope only — but note the reason has changed: the old
+  # "an element-scoped clear-control masked-failed the button live" finding
+  # was recorded while this builder still emitted the PRE-RENAME key names.
+  # Re-probed 2026-08-26, control scope ({type:"control",controlId:}) and
+  # container scope ({type:"container",containerElementId:}) BOTH create and
+  # read back cleanly, so what masked-failed was the rejected key, not the
+  # scope type. Widening this builder to those scopes is a safe follow-up.
+  # NO-GO surface -> {}.
   def self.clear_control_effect(page_id:, surfaces: SURFACES)
     raise ArgumentError, 'page_id required' if page_id.to_s.empty?
     return {} unless surfaces[:effects]
@@ -160,7 +181,7 @@ module Actions
   # NO-GO surface -> {}.
   def self.set_control_value_effect(control:, text:, surfaces: SURFACES)
     raise ArgumentError, 'control required' if control.to_s.empty?
-    raise ArgumentError, 'text required' if text.to_s.empty?
+    raise ArgumentError, 'text required' if text.nil?
     return {} unless surfaces[:effects]
 
     {

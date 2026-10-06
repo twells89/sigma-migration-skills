@@ -1,0 +1,219 @@
+# Best-practice fixture for an exception app.
+# Replace <FOLDER_ID>, <WRITE_CONNECTION_ID>, <SOURCE_CONNECTION_ID>, and
+# [Source/…] column names from live discovery before POST.
+# Published data entry is UI-only: element kebab → Set data entry permission
+# → Only in published version. That setting is absent from GET /spec.
+# Architecture: ../exception-apps.md. Intake: ../generate-apps.md.
+# The recommendation column is a policy formula, not an "AI" label.
+name: Exception app
+folderId: "<FOLDER_ID>"
+document:
+  schemaVersion: 1
+  kind: workbook
+  elements:
+  - id: source-exception
+    kind: table
+    name: Source
+    source:
+      kind: warehouse-table
+      connectionId: "<SOURCE_CONNECTION_ID>"
+      path:
+      - "<SOURCE_DATABASE>"
+      - "<SOURCE_SCHEMA>"
+      - Source
+    columns:
+    - id: src-sku
+      formula: "[Source/SKU]"
+      name: SKU
+    - id: src-on-hand
+      formula: "[Source/On Hand]"
+      name: On Hand
+    - id: src-on-order
+      formula: "[Source/On Order]"
+      name: On Order
+    - id: src-reorder
+      formula: "[Source/Reorder Point]"
+      name: Reorder Point
+    - id: src-cost
+      formula: "[Source/Unit Cost]"
+      name: Unit Cost
+    - id: src-flag
+      formula: "[Source/Exception Flag]"
+      name: Exception Flag
+  - id: exception-directory
+    kind: table
+    name: Exception Directory
+    source:
+      kind: table
+      elementId: source-exception
+    columns:
+    - id: ed-sku
+      formula: "[Source/SKU]"
+      name: SKU
+    - id: ed-on-hand
+      formula: "[Source/On Hand]"
+      name: On Hand
+    - id: ed-on-order
+      formula: "[Source/On Order]"
+      name: On Order
+    - id: ed-reorder
+      formula: "[Source/Reorder Point]"
+      name: Reorder Point
+    - id: ed-cost
+      formula: "[Source/Unit Cost]"
+      name: Unit Cost
+    - id: ed-flag
+      formula: "[Source/Exception Flag]"
+      name: Exception Flag
+  - id: action-queue
+    kind: input-table
+    inputMode: view
+    name: Action Queue
+    source:
+      kind: linked
+      from: exception-directory
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: aq-sku
+      key: ed-sku
+      name: SKU
+    - id: aq-on-hand
+      key: ed-on-hand
+      name: On Hand
+    - id: aq-on-order
+      key: ed-on-order
+      name: On Order
+    - id: aq-reorder
+      key: ed-reorder
+      name: Reorder Point
+    - id: aq-cost
+      key: ed-cost
+      name: Unit Cost
+    - id: aq-flag
+      key: ed-flag
+      name: Exception Flag
+    - id: aq-suggested
+      formula: If([Reorder Point] - [On Hand] - [On Order] > 0, [Reorder Point] - [On Hand] - [On Order], 0)
+      name: Suggested Order
+    - id: aq-override
+      type: number
+      name: Override Order Qty
+    - id: aq-decision
+      type: text
+      name: Decision
+      values: [Open, Accept suggestion, Override, Dismiss]
+      pills: color-by-option
+    - id: aq-owner
+      type: text
+      name: Owner
+    - id: aq-note
+      type: text
+      name: Resolution Note
+    - id: aq-final
+      formula: Coalesce([Override Order Qty], [Suggested Order])
+      name: Final Order
+    - id: aq-value
+      formula: "[Final Order] * [Unit Cost]"
+      name: Order Value
+  - id: resolution-log
+    kind: input-table
+    inputMode: view
+    name: Resolution log
+    source:
+      kind: empty
+      connectionId: "<WRITE_CONNECTION_ID>"
+    columns:
+    - id: ID
+    - id: rl-sku
+      type: text
+      name: SKU
+    - id: rl-decision
+      type: text
+      name: Decision
+    - id: rl-note
+      type: text
+      name: Comment
+    - id: CREATED_AT
+    - id: CREATED_BY
+  - id: btn-resolve
+    kind: button
+    text: Log resolution
+    appearance: filled
+    actions:
+    - id: a-exception-resolve
+      trigger: on-click
+      effects:
+      - effect: insert-rows
+        tableElementId: resolution-log
+        values:
+          rl-sku: { type: control, control: skuControl }
+          rl-decision: { type: control, control: decisionControl }
+          rl-note: { type: control, control: noteControl }
+      - effect: clear-control
+        scope: { type: page, pageId: page-app }
+        usePublishedValue: true
+  - id: kpi-order-value
+    kind: kpi-chart
+    name: Order Value
+    source:
+      kind: table
+      elementId: action-queue
+    columns:
+    - id: kpi-value-val
+      formula: Sum([Action Queue/Order Value])
+      name: Order Value
+    value:
+      columnId: kpi-value-val
+  - id: ctrl-sku
+    kind: control
+    controlId: skuControl
+    name: SKU
+    controlType: list
+    mode: include
+    selectionMode: single
+    values: []
+    source:
+      kind: source
+      source:
+        kind: table
+        elementId: exception-directory
+      columnId: ed-sku
+  - id: ctrl-decision
+    kind: control
+    controlId: decisionControl
+    name: Decision
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  - id: ctrl-note
+    kind: control
+    controlId: noteControl
+    name: Comment
+    controlType: text
+    mode: equals
+    case: insensitive
+    includeNulls: when-no-value-is-selected
+    showOperators: false
+  pages:
+  - id: page-source
+    name: Source
+    visibility: hidden
+  - id: page-app
+    name: Exceptions
+  layout: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-source">
+      <Element elementId="source-exception" gridColumn="1 / 25" gridRow="1 / 10"/>
+      <Element elementId="exception-directory" gridColumn="1 / 25" gridRow="10 / 19"/>
+    </Page>
+    <Page type="grid" gridTemplateColumns="repeat(24, 1fr)" gridTemplateRows="auto" id="page-app">
+      <Element elementId="ctrl-sku" gridColumn="1 / 9" gridRow="1 / 3"/>
+      <Element elementId="ctrl-decision" gridColumn="9 / 17" gridRow="1 / 3"/>
+      <Element elementId="ctrl-note" gridColumn="17 / 25" gridRow="1 / 3"/>
+      <Element elementId="kpi-order-value" gridColumn="1 / 9" gridRow="3 / 9"/>
+      <Element elementId="action-queue" gridColumn="9 / 25" gridRow="3 / 18"/>
+      <Element elementId="resolution-log" gridColumn="1 / 19" gridRow="18 / 27"/>
+      <Element elementId="btn-resolve" gridColumn="19 / 25" gridRow="18 / 21"/>
+    </Page>

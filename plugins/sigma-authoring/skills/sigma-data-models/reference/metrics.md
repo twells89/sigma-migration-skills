@@ -2,33 +2,6 @@
 
 Metrics are aggregate measures defined in the `metrics` array of a table element. They standardize common calculations so workbook authors don't need to rewrite them.
 
-## Referencing a data-model metric from a workbook
-
-Data-model metrics do flow into workbook elements that source the corresponding
-data-model element. The formula reference uses Sigma's reserved metric namespace:
-
-```yaml
-source:
-  kind: data-model
-  dataModelId: <data-model-id>
-  elementId: <element-id-that-exposes-the-metric>
-columns:
-  - id: total-revenue
-    name: Total Revenue
-    formula: "[Metrics/Total Revenue]"
-```
-
-Use the metric's **name**, not its ID. `[Base/Total Revenue]`,
-`[Base/metric-revenue]`, and `[<data-model-element-name>/Total Revenue]` are
-column references, not metric references, and fail with `Dependency not found`
-when no such column exists.
-
-After creating or updating the data model, GET the model spec and confirm the
-metric is still present before authoring workbook references. A table element
-that gives a metric the exact same name as one of its columns can be accepted
-on write but return without its metrics on readback; rename the metric (preferred)
-or keep the workbook aggregation inline until readback confirms it.
-
 ## Metric
 
 ```json

@@ -112,17 +112,18 @@ def workbook_elements(spec):
 
 
 def workbook_page_element_ids(spec):
-    """Return {page_id: [element_id, ...]} derived from layout order."""
+    """Return {region_id: [element_id, ...]} for page/panel/overlay layout blocks."""
     import re
 
     result = {}
     layout = str(document(spec).get("layout") or "")
-    for match in re.finditer(r'<Page\b[^>]*\bid="([^"]*)"[^>]*>(.*?)</Page>', layout, re.S):
-        result[match.group(1)] = list(dict.fromkeys(
+    pattern = r'<(Page|Panel|Overlay)\b[^>]*\bid="([^"]*)"[^>]*>(.*?)</\1>'
+    for match in re.finditer(pattern, layout, re.S):
+        result[match.group(2)] = list(dict.fromkeys(
             re.findall(
                 r'<(?:Element|Container|TabbedContainer|LayoutElement|GridContainer)\b'
                 r'[^>]*\belementId="([^"]*)"',
-                match.group(2),
+                match.group(3),
             )
         ))
     return result

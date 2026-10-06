@@ -34,7 +34,7 @@
   "input_table_empty": {
     "id": "annotations",
     "kind": "input-table",
-    "inputMode": "edit",
+    "inputMode": "view",
     "source": {
       "kind": "empty",
       "connectionId": "write-conn-1"
@@ -62,7 +62,7 @@
   "input_table_linked": {
     "id": "targets",
     "kind": "input-table",
-    "inputMode": "edit",
+    "inputMode": "view",
     "source": {
       "kind": "linked",
       "from": "fam-pivot",

@@ -27,7 +27,24 @@ catches.
 
 ## Prerequisites
 
-Required env vars: `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, `SIGMA_CLIENT_SECRET`
+Required env var: `SIGMA_BASE_URL`. For an interactive terminal, prefer a
+one-time browser login through the `sigma-api` skill:
+
+```bash
+eval "$(bash <repo-root>/sigma-api/scripts/browser-login.sh)"
+```
+
+It keeps the refresh token exclusively in the OS keychain. For unattended
+hosts, set `SIGMA_CLIENT_ID` and `SIGMA_CLIENT_SECRET` (Sigma Administration →
+Developer Access) as the fallback.
+
+The local `get_token.py` is a byte-identical synced copy of the canonical
+`sigma-api` provider. In default `auto` mode it uses a cached/refreshable
+browser session first, then client credentials. Override with
+`SIGMA_AUTH_MODE` / `--auth-mode` (`auto`, `browser`, or
+`client-credentials`). Before either auth mode succeeds, the provider requires
+a non-redirecting, valid-JSON `GET /v2/whoami`; 401, 403, non-JSON, and
+redirect responses fail without emitting or writing the token.
 
 **Default (shell-neutral, works in bash/zsh/PowerShell/cmd):** mint a token
 with the stdlib-only Python script and let `scripts/lib/sigma_rest.rb` pick
@@ -37,12 +54,12 @@ it up automatically from `auth.json` — no `eval`, no shell-specific syntax:
 python3 scripts/get_token.py --workdir /tmp/custom-sql-run
 ```
 
-This writes `/tmp/custom-sql-run/auth.json` (mode 0600). Every Ruby script in
-this skill checks `$SIGMA_WORKDIR/auth.json` (or `./auth.json`) before
-falling back to a fresh client-credentials exchange, so point `SIGMA_WORKDIR`
-at the same directory (or run from inside it) and every subsequent `ruby
-scripts/*.rb` invocation authenticates without any shell-specific token
-plumbing:
+After verification, this writes `/tmp/custom-sql-run/auth.json` (mode 0600)
+with the access token, base URL, mint timestamp, and auth method—never the
+refresh token. Every Ruby script in this skill checks
+`$SIGMA_WORKDIR/auth.json` (or `./auth.json`) before invoking the same dual
+provider, so point `SIGMA_WORKDIR` at the same directory (or run from inside
+it):
 
 ```bash
 export SIGMA_WORKDIR=/tmp/custom-sql-run
@@ -55,7 +72,13 @@ ruby scripts/scan-workbooks.rb
 eval "$(bash scripts/get-token.sh)"
 ```
 
-> Tokens expire after ~1 hour. **The Ruby scripts in this skill now auto-refresh on 401** via `scripts/lib/sigma_rest.rb` — full-site scans on large orgs (hundreds of workbooks, sometimes >1 hour total) no longer fail mid-run. If you still see `Token missing or malformed` after a refresh, re-run `python3 scripts/get_token.py --workdir "$SIGMA_WORKDIR"` (or `eval "$(bash scripts/get-token.sh)"` in bash) manually.
+> Tokens expire after ~1 hour. Using `SIGMA_TOKEN_MINTED_AT` from the
+> environment or `auth.json`, the Ruby wrapper proactively refreshes at 50
+> minutes through the dual provider and also refreshes/retries once on 401.
+> Caller tokens with missing or malformed mint-age metadata remain in use until
+> a 401. If authentication still fails, re-run `browser-login.sh` when a
+> browser refresh token was revoked, or verify the client credentials used as
+> fallback.
 
 ---
 

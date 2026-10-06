@@ -14,12 +14,19 @@ UUID blind. Also dumps GET /v2/plugins (the plugin registry) for free.
 Usage:
   python3 harvest-theme-registry.py --env ~/.sigma-migration/env [--workers 10] [--limit N]
 
-Env file must export SIGMA_BASE_URL / SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET.
+Env file must export SIGMA_BASE_URL and any settings needed by the shared
+browser-first Sigma token provider.
 """
-import argparse, json, os, re, sys, time, urllib.request, urllib.parse
+import argparse, json, os, re, sys, time, urllib.error, urllib.request, urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 REGISTRY = os.path.expanduser("~/.sigma-migration/theme-registry.yaml")
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _lib in (os.path.join(_HERE, "lib"), os.path.join(_HERE, "..", "lib")):
+    if os.path.isdir(_lib):
+        sys.path.insert(0, _lib)
+import sigma_rest
 
 
 def parse_env(path):
@@ -31,55 +38,44 @@ def parse_env(path):
     return env
 
 
-def api(base, tok, path, accept_json=True, retries=5):
+def api(base, path, accept_json=True, retries=5):
     # Sigma sits behind Cloudflare and returns 429 (CF error 1015) when spec GETs
     # are fired too fast — back off and retry so a full harvest doesn't silently
     # drop workbooks. Honors Retry-After when present.
     delay = 1.0
-    for attempt in range(retries + 1):
+    rate_retries = 0
+    auth_retried = False
+    while True:
         req = urllib.request.Request(base + path)
-        if tok:
-            req.add_header("Authorization", f"Bearer {tok}")
+        req.add_header("Authorization", f"Bearer {sigma_rest.auth_token()}")
         req.add_header("Accept", "application/json")  # spec GET returns YAML without this
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < retries:
+            if e.code == 401 and not auth_retried:
+                sigma_rest.refresh_token()
+                auth_retried = True
+                continue
+            if e.code == 429 and rate_retries < retries:
                 ra = e.headers.get("Retry-After")
                 time.sleep(float(ra) if ra and ra.isdigit() else delay)
                 delay = min(delay * 2, 16)
+                rate_retries += 1
                 continue
             raise
 
 
-def _validate_base_url(base):
-    # Security (A2): only send Sigma client creds to an https:// sigmacomputing.com host.
-    if os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") == "1":
-        print(f"WARNING: SIGMA_ALLOW_INSECURE_BASE_URL=1 — skipping SIGMA_BASE_URL validation ({base})", file=sys.stderr); return
-    p = urllib.parse.urlparse(base or ""); host = (p.hostname or "").lower()
-    if p.scheme != "https" or not (host == "sigmacomputing.com" or host.endswith(".sigmacomputing.com")):
-        sys.exit(f"FATAL: refusing to send Sigma credentials to '{base}' — require https:// on a sigmacomputing.com host (set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override).")
-
-
 def get_token(env):
-    _validate_base_url(env["SIGMA_BASE_URL"])
-    data = urllib.parse.urlencode({
-        "grant_type": "client_credentials",
-        "client_id": env["SIGMA_CLIENT_ID"],
-        "client_secret": env["SIGMA_CLIENT_SECRET"],
-    }).encode()
-    req = urllib.request.Request(env["SIGMA_BASE_URL"] + "/v2/auth/token", data=data)
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)["access_token"]
+    os.environ.update(env)
+    return sigma_rest.refresh_token()
 
 
-def list_workbooks(base, tok, cap=None):
+def list_workbooks(base, cap=None):
     ids, page = [], None
     while True:
         q = "limit=1000" + (f"&page={urllib.parse.quote(page)}" if page else "")
-        d = api(base, tok, f"/v2/workbooks?{q}")
+        d = api(base, f"/v2/workbooks?{q}")
         ids += [w["workbookId"] for w in d.get("entries", [])]
         if cap and len(ids) >= cap:
             return ids[:cap]
@@ -88,9 +84,9 @@ def list_workbooks(base, tok, cap=None):
         page = d["nextPage"]
 
 
-def theme_of(base, tok, wb):
+def theme_of(base, wb):
     try:
-        spec = api(base, tok, f"/v2/workbooks/{wb}/spec")
+        spec = api(base, f"/v2/workbooks/{wb}/spec")
         # Live GET nests under `document`; tolerate a legacy flat artifact too.
         doc = spec.get("document", spec) if isinstance(spec, dict) else {}
         return (doc.get("settings") or {}).get("theme", {}).get("name")  # None if no theme set
@@ -109,15 +105,15 @@ def main():
     base = env["SIGMA_BASE_URL"]
     host = urllib.parse.urlparse(base).netloc
     t0 = time.time()
-    tok = get_token(env)
-    plugins = api(base, tok, "/v2/plugins?pageSize=1000").get("entries", [])
-    wbs = list_workbooks(base, tok, a.limit)
+    get_token(env)
+    plugins = api(base, "/v2/plugins?pageSize=1000").get("entries", [])
+    wbs = list_workbooks(base, a.limit)
     t_list = time.time() - t0
 
     themes, errors = {}, 0
     t1 = time.time()
     with ThreadPoolExecutor(max_workers=a.workers) as ex:
-        futs = {ex.submit(theme_of, base, tok, wb): wb for wb in wbs}
+        futs = {ex.submit(theme_of, base, wb): wb for wb in wbs}
         for f in as_completed(futs):
             r = f.result()
             if isinstance(r, tuple):

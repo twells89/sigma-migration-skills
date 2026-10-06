@@ -5,6 +5,8 @@ Recipe book for the control element family and the patterns that wire them up. T
 Controls are flat `document.elements[]` entries alongside tables and charts.
 Layout assigns them to pages or containers.
 
+> **Two different `filters` arrays.** On a `kind: control`, `filters[]` is only **wiring**: `{ source: { kind: table, elementId }, columnId }` — which element+column this widget drives. On a data element (`table`, chart, …), `filters[]` is the **predicate catalog** (`kind: list | top-n | number-range | date-range | text-match | hierarchy`). Do not put control wiring objects on a table, or list/`top-n` objects on a control. Element-filter shapes: `tables.md` → `filters`.
+
 **Every `controlType` wires up the same way** (`controlId` + `filters`, below); they differ only in the widget and its (flat top-level) value fields. So treat the per-type sections below as illustrations of the *wiring*, **not a catalog of what's supported** — a `controlType` you don't see here works the same way. The set also grows over time, so get the current list from the spec rather than hardcoding it:
 
 ```bash
@@ -22,7 +24,7 @@ A `control` element has exactly these fields:
 | `controlId` | yes | Formula reference name (e.g., `RegionFilter`) — keep distinct from `id`. This is the human-meaningful handle used when referring to the control's value from formulas. |
 | `controlType` | yes | Any value the recipe above returns. Determines the widget and filter behavior. |
 | `filters` | — | Array of `{ source, columnId }` — connects the control to the column(s) it filters. `source` is `{ kind: table, elementId: ... }`. |
-| `source` | list/segmented | Where the widget's VALUE LIST comes from. Required by this skill for a usable picker. Double-nested column source: `{ kind: source, source: { kind: table, elementId: ... }, columnId: ... }`; a manual source is also valid. |
+| `source` | list/segmented | Where the widget's VALUE LIST comes from. Double-nested: `{ kind: source, source: { kind: table, elementId: ... }, columnId: ... }`. |
 | `mode` | list | `include` \| `exclude`. **Flat top-level field.** |
 | `selectionMode` | list | `single` \| `multiple`. **Flat top-level field.** |
 | `values` | list | Default selection (`[]` = all). **Flat top-level field.** |
@@ -49,6 +51,10 @@ controlType: list
 mode: include            # include | exclude   (TOP-LEVEL, not nested)
 selectionMode: multiple  # single | multiple   (TOP-LEVEL)
 values: []               # default selection, [] = all   (TOP-LEVEL)
+                         # authored defaults drop on GET when the bound
+                         # column has no matching members yet (empty
+                         # input table / unseeded directory). PNG then
+                         # shows "Select value"; create a row first.
 source:                  # where the control's VALUE LIST comes from (note the double nesting)
   kind: source
   source:
@@ -62,7 +68,7 @@ filters:                 # the TARGETS it filters — one entry per element+colu
     columnId: scoped-col-region
 ```
 
-> **Verified working shape** (pulled from a live, successfully-POSTed workbook 2026-06-15). A list control carries `source` / `mode` / `selectionMode` / `values` as **flat top-level siblings** — NOT inside a nested "value object." `source` and `filters` are independent: `source` populates the picker; `filters` names what a selection changes. The API accepts a filters-only list control, but its picker is empty, so this skill treats missing `source` as a validation failure rather than a shippable control. A malformed/nested source or value object can instead produce the opaque catch-all `Invalid kind: "control"`; that means **the inner fields are wrong, NOT that controls are unsupported** (see `reference/workflows/validate.md`). `segmented` is the other flat-scalar list-style widget — same wiring. `hierarchy` is a list-style widget too, but unlike `segmented` it doesn't support ordinary `source`-based wiring — see `## Hierarchy` below for its `filters`-only shape.
+> **Verified working shape** (pulled from a live, successfully-POSTed workbook 2026-06-15). A list control carries `source` / `mode` / `selectionMode` / `values` as **flat top-level siblings** — NOT inside a nested "value object." The single most common mistake is omitting `source`/`mode`/`selectionMode`/`values` (or nesting them); Sigma then rejects the element with the opaque catch-all `Invalid kind: "control"`, which means **the inner fields are wrong, NOT that controls are unsupported** (see `reference/workflows/validate.md`). `segmented` is the other flat-scalar list-style widget — same wiring. `hierarchy` is a list-style widget too, but unlike `segmented` it doesn't support `source`-based wiring — see `## Hierarchy` below for its `filters`-only shape.
 
 > **A control cannot bind to a map element** (`point-map` / `region-map` / `geography-map`). Pointing a list control's `source` (value list) or a `filters[]` target at a map element fails the POST with `Dependency not found: '<mapElementId>'` (live-verified 2026-06-26). Back the control with a real `table` element (e.g. a small dimension/directory table on the same column) for both the value list and the filter target. To also scope the map, filter it indirectly (e.g. drive the map's source element off the same filtered table, or apply the predicate in the data model) rather than targeting the map element directly.
 

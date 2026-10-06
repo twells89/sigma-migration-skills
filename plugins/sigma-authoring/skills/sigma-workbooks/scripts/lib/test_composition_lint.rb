@@ -11,6 +11,25 @@ check('composition emits canonical Element leaves, never legacy aliases') do
     !good.include?('<LayoutElement') &&
     !good.include?('<GridContainer')
 end
+operational = {
+  workbench: [
+    { id: 'context', role: :context },
+    { id: 'grid', role: :work_surface }
+  ],
+  queue_rail: [
+    { id: 'queue', role: :queue },
+    { id: 'rail', role: :rail }
+  ],
+  builder_preview: [
+    { id: 'builder', role: :builder },
+    { id: 'preview', role: :preview }
+  ]
+}
+check('all asymmetric operational app layouts lint clean') do
+  operational.all? do |pattern, elements|
+    CompositionLint.check(Composition.compose(elements, pattern: pattern)).empty?
+  end
+end
 overlap = %Q(  <Element elementId="x" gridColumn="1 / 13" gridRow="1 / 7"/>\n  <Element elementId="y" gridColumn="10 / 25" gridRow="1 / 7"/>)
 check('detects column overlap in a band') { CompositionLint.check(overlap).any? { |e| e =~ /overlap/i } }
 gap = %Q(  <Element elementId="x" gridColumn="1 / 7" gridRow="1 / 7"/>)
@@ -68,6 +87,40 @@ container_sibling_overlap = %Q(<Container elementId="c1" type="grid" gridColumn=
 <Element elementId="b" gridColumn="1 / 25" gridRow="4 / 10"/>)
 check('a top-level Container overlapping a sibling band flags') do
   CompositionLint.check(container_sibling_overlap).any? { |e| e =~ /overlap/i }
+end
+
+ledger_els = [
+  { id: 'title', role: :ledger_header },
+  { id: 'count', role: :ledger_count },
+  { id: 'search', role: :ledger_toolbar },
+  { id: 'results', role: :ledger_results },
+  { id: 'detail', role: :ledger_detail },
+  { id: 'k1', role: :ledger_kpi }, { id: 'k2', role: :ledger_kpi }
+]
+check('ledger layout lints clean') do
+  CompositionLint.check(Composition.compose(ledger_els, pattern: :ledger)).empty?
+end
+check('mosaic layout lints clean across staggered row boundaries') do
+  CompositionLint.check(
+    Composition.mosaic(primary: 'deep', top_right: 'a', bottom_right: 'b')
+  ).empty?
+end
+check('exec layout with height-13 supporting band still lints clean') do
+  CompositionLint.check(
+    Composition.compose(
+      [{ id: 'k1', role: :kpi }, { id: 'hero', role: :hero }, { id: 'tbl', role: :table }],
+      pattern: :exec
+    )
+  ).empty?
+end
+check('band_splits asymmetric exec kpi row lints clean') do
+  CompositionLint.check(
+    Composition.compose(
+      [{ id: 'k1', role: :kpi }, { id: 'k2', role: :kpi }, { id: 'hero', role: :hero }],
+      pattern: :exec,
+      band_splits: { kpi: :pair_16_8 }
+    )
+  ).empty?
 end
 
 exit($f.zero? ? 0 : 1)

@@ -1,0 +1,7 @@
+  <Element elementId="title" gridColumn="1 / 17" gridRow="1 / 4"/>
+  <Element elementId="count" gridColumn="17 / 25" gridRow="1 / 4"/>
+  <Element elementId="search" gridColumn="1 / 25" gridRow="4 / 7"/>
+  <Element elementId="results" gridColumn="1 / 15" gridRow="7 / 23"/>
+  <Element elementId="detail" gridColumn="15 / 25" gridRow="7 / 23"/>
+  <Element elementId="k1" gridColumn="1 / 13" gridRow="23 / 29"/>
+  <Element elementId="k2" gridColumn="13 / 25" gridRow="23 / 29"/>

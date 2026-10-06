@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# NOTE: requires SIGMA_API_TOKEN (+SIGMA_BASE_URL) in env. The orchestrator injects
-# them; for HAND-DRIVEN runs: set -a; source ~/.sigma-migration/env; set +a; then
-# mint via scripts/get_token.py (A/B-report field note).
+# NOTE: authentication is resolved by the shared browser-first Sigma provider.
 """sigma-export-png.py — render a Sigma workbook page or element to PNG via the
 REST export API, for VISUAL QA of a migrated workbook (Phase 4: side-by-side
 against the source Looker dashboard).
@@ -13,7 +11,7 @@ numeric parity check can't see.
 POST /v2/workbooks/{id}/export {pageId|elementId, format:{type:"png",pixelWidth,pixelHeight}}
   -> {queryId, jobComplete}; then GET /v2/query/{queryId}/download until the PNG is ready.
 
-Env: SIGMA_BASE_URL + SIGMA_API_TOKEN (eval "$(scripts/get-token.sh)").
+Env: SIGMA_BASE_URL plus browser-keychain state or client-credential fallback.
 Usage:
   python3 sigma-export-png.py --workbook <id> --page <pageId> --out /tmp/x.png
   python3 sigma-export-png.py --workbook <id> --element <elId> --out /tmp/x.png [--w 1600 --h 900]
@@ -28,22 +26,44 @@ interaction verdict never depends on it).
 """
 import argparse, os, sys, time, requests
 
-def credentials():
-    base = os.environ.get("SIGMA_BASE_URL")
-    token = os.environ.get("SIGMA_API_TOKEN")
-    if base and token:
-        return base, token
-    # Shell-neutral no-Ruby path: mint from client credentials or the neutral
-    # env file using the co-located stdlib helper. Never print the token.
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _lib in (os.path.join(_HERE, "lib"), os.path.join(_HERE, "..", "lib")):
+    if os.path.isdir(_lib):
+        sys.path.insert(0, _lib)
+import sigma_rest
+
+
+def current_token():
+    """Reuse a valid caller token; refresh only when missing or known-stale."""
     try:
-        from get_token import mint_token
-        return mint_token()
-    except (ImportError, SystemExit) as exc:
+        return sigma_rest.auth_token()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
         raise SystemExit(
-            "Sigma token unavailable: set SIGMA_API_TOKEN or provide "
-            "SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL"
+            "Sigma token unavailable: authenticate with the browser provider or "
+            "provide SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL"
         ) from exc
+
+
+def refreshed_token():
+    """Force the dual provider after a rejected bearer."""
+    try:
+        return sigma_rest.refresh_token()
+    except (sigma_rest.SigmaError, SystemExit) as exc:
+        raise SystemExit(
+            "Sigma token unavailable: authenticate with the browser provider or "
+            "provide SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL"
+        ) from exc
+
+
+def credentials():
+    try:
+        base = sigma_rest.base_url()
+    except sigma_rest.SigmaError as exc:
+        raise SystemExit(
+            "Sigma token unavailable: authenticate with the browser provider or "
+            "provide SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET/SIGMA_BASE_URL"
+        ) from exc
+    return base.rstrip("/"), current_token()
 
 def main():
     ap = argparse.ArgumentParser()
@@ -73,16 +93,29 @@ def main():
     # a diagnosable failure). Repeated 500s on the poll are surfaced loudly:
     # that pattern is usually the workbook's own content — run the bisect
     # playbook (refs/layout-visual-qa.md) before blaming the service.
-    r = requests.post(f"{base}/v2/workbooks/{a.workbook}/export", headers=h, json=body, timeout=60)
+    export_url = f"{base}/v2/workbooks/{a.workbook}/export"
+    r = requests.post(export_url, headers=h, json=body, timeout=60)
+    if r.status_code == 401:
+        tok = refreshed_token()
+        h["Authorization"] = f"Bearer {tok}"
+        r = requests.post(export_url, headers=h, json=body, timeout=60)
     if r.status_code != 200: sys.exit(f"export POST {r.status_code}: {r.text[:300]}")
     qid = r.json()["queryId"]
     dl = f"{base}/v2/query/{qid}/download"
     n500 = 0
+    poll_auth_retried = False
     for i in range(60):
         try:
             g = requests.get(dl, headers={"Authorization": f"Bearer {tok}"}, timeout=60)
         except requests.exceptions.Timeout:
             time.sleep(3); continue
+        if g.status_code == 401 and not poll_auth_retried:
+            tok = refreshed_token()
+            poll_auth_retried = True
+            try:
+                g = requests.get(dl, headers={"Authorization": f"Bearer {tok}"}, timeout=60)
+            except requests.exceptions.Timeout:
+                time.sleep(3); continue
         ct = g.headers.get("Content-Type", "")
         if g.status_code == 200 and ("image" in ct or g.content[:8] == b"\x89PNG\r\n\x1a\n"):
             open(a.out, "wb").write(g.content)

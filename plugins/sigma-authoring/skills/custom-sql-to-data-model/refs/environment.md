@@ -1,9 +1,10 @@
 # Environment & Windows setup
 
-**Run the bootstrap first — it is the ONLY sanctioned way to fix a missing
-runtime.** One idempotent, non-interactive command takes a fresh machine to
-doctor-green (verify/activate/install ruby + python3 + pip deps + node, persist
-creds from env vars, run the doctor, write the bootstrap sentinel):
+**From the selected skill directory, run the bootstrap first — it is the ONLY
+sanctioned way to fix a missing runtime.** One idempotent, non-interactive
+command takes a fresh machine to doctor-green (verify/activate/install ruby +
+python3 + pip deps + node, persist creds from env vars, run the doctor, write
+the bootstrap sentinel):
 
 - macOS / Linux / **Git Bash**: `bash scripts/bootstrap.sh`
 - **Windows PowerShell**: `powershell -ExecutionPolicy Bypass -File scripts\bootstrap.ps1`
@@ -20,6 +21,74 @@ version-manager activation elsewhere; `pip --user` for Python deps), never
 prompts (no-TTY-safe), and never echoes credential values. `intake.rb` and the
 orchestrators refuse to start until the bootstrap sentinel + a passing
 `doctor.json` exist — so run it once per machine, before anything else.
+
+## Sigma authentication at preflight
+
+The recommended human flow is a one-time terminal-initiated browser OAuth 2.1
+authorization-code/PKCE login. Run it explicitly from an interactive terminal
+in the skill directory (Git Bash on Windows):
+
+```bash
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
+```
+
+The helper returns a roughly one-hour access token to the current shell. When a
+supported native keychain is available, it stores the refresh token, public
+OAuth client registration, token URL, and access-token cache there: macOS
+Keychain through `security`, or Linux Secret Service through `secret-tool`.
+It never writes a refresh token to `auth.json`, the workspace, or
+`~/.sigma-migration/env`. If the keychain cannot be used, the current access
+token still works, but the user must sign in again after it expires.
+
+Bootstrap and doctor are deliberately noninteractive and **never open a
+browser**. They accept an already-current `SIGMA_API_TOKEN`, a browser refresh
+session already stored in the OS keychain, or complete client credentials.
+Each route also needs `SIGMA_BASE_URL`. Later bootstrap/doctor runs reuse a
+keychain session without a browser round-trip.
+
+For CI and unattended hosts, use OAuth client credentials: bootstrap's
+`--client-id`, `--client-secret`, and optional `--base-url` flags (PowerShell:
+`-ClientId`, `-ClientSecret`, `-BaseUrl`), or export `SIGMA_BASE_URL`,
+`SIGMA_CLIENT_ID`, and `SIGMA_CLIENT_SECRET` and use `--from-env` /
+`-FromEnv`. This is also the fallback for cloud agents, containers, Windows
+hosts without `secret-tool`, locked keychains, and other headless environments.
+
+The shared REST clients resolve Sigma authentication in this order:
+
+1. `SIGMA_API_TOKEN` already present in the process environment.
+2. `<SIGMA_WORKDIR>/auth.json`, then `./auth.json`, when no env token exists.
+3. The token provider. Its default `SIGMA_AUTH_MODE=auto` tries the browser
+   keychain/cache first and then client credentials.
+
+Set `SIGMA_AUTH_MODE=browser` to require keychain auth, or
+`SIGMA_AUTH_MODE=client-credentials` to bypass the keychain. This selects the
+route for minting a new token; an already-supplied access token still wins.
+Client fallback settings and the mode may live in
+`~/.sigma-migration/env` (mode 0600), with current environment values taking
+precedence.
+
+For shell-neutral token handoff, write a local file from the skill directory:
+
+```bash
+python3 scripts/get_token.py --workdir <workdir>
+export SIGMA_WORKDIR=<workdir>
+```
+
+`<workdir>/auth.json` is mode 0600 and contains only `SIGMA_API_TOKEN`,
+`SIGMA_BASE_URL`, `SIGMA_TOKEN_MINTED_AT`, and `SIGMA_AUTH_METHOD`. Never print
+or commit it. The refresh token remains in the keychain. Access tokens last
+about one hour; the shared Ruby/Python clients proactively refresh at 50
+minutes when mint time is known. On a 401 they refresh through the same
+provider and retry exactly once; a second 401 fails.
+
+Doctor verifies the selected route with `GET /v2/whoami` through that shared
+client. `doctor.json` records only the smoke status and auth method, never a
+token or refresh secret.
+
+This flow authenticates only to Sigma. Source systems (Tableau PAT, Power BI
+device login, and so on) keep their own skill-specific credentials and
+resolution rules.
 
 **Agents: NEVER hand-install a runtime.** Do not `brew install` / `apt-get` /
 `winget install` / download binaries or edit PATH yourself — run the bootstrap

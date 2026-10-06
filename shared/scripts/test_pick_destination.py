@@ -130,5 +130,40 @@ class DestinationPickerTest(unittest.TestCase):
         )
 
 
+class SigmaRestDelegationTest(unittest.TestCase):
+    def setUp(self):
+        self.original_request = picker.sigma_rest.request
+
+    def tearDown(self):
+        picker.sigma_rest.request = self.original_request
+
+    def test_call_uses_shared_sigma_rest_and_json_body(self):
+        calls = []
+
+        def fake_request(method, path, body=None):
+            calls.append((method, path, body))
+            return {"id": "folder-1"}
+
+        picker.sigma_rest.request = fake_request
+        result = picker.call("POST", "/v2/files", {"name": "Migrated"})
+
+        self.assertEqual({"id": "folder-1"}, result)
+        self.assertEqual(
+            [("post", "/v2/files", '{"name": "Migrated"}')],
+            calls,
+        )
+
+    def test_sigma_rest_errors_keep_cli_exit_shape(self):
+        def fail_request(method, path, body=None):
+            raise picker.sigma_rest.SigmaError("GET /v2/files -> 503 unavailable")
+
+        picker.sigma_rest.request = fail_request
+        with self.assertRaisesRegex(SystemExit, "GET /v2/files -> 503 unavailable"):
+            picker.call("GET", "/v2/files")
+
+    def test_inline_client_credentials_flow_is_absent(self):
+        self.assertNotIn("client_credentials", SCRIPT.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -66,11 +66,13 @@ The last segment of the `url` field (e.g., `.../t/5FCsrDpnzcdw5YYJRBbY6l`) becom
 **Connection table columns** (use to discover real column names + types before composing — never invent column names):
 
 ```sh
-curl -s -H "Authorization: Bearer $SIGMA_API_TOKEN" \
-  "$SIGMA_BASE_URL/v2/connections/tables/<inodeId>/columns"
+bash <sigma-api-skill-dir>/scripts/list-table-columns.sh "<inodeId>"
 ```
 
-Returns `name`, `type`, and `visibility`. Normalize special characters per the **Special characters** section in `reference/columns.md`.
+Returns all pages of `name`, `type`, and `visibility`. The raw endpoint
+defaults to 50 and uses `nextPageToken`/`pageToken`; do not declare a column
+missing until pagination is exhausted. Normalize special characters per the
+**Special characters** section in `reference/columns.md`.
 
 **Existing data-model elements / columns** (only when the user explicitly names an existing model as a relationship target or template):
 

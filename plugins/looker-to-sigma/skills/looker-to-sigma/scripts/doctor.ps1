@@ -183,66 +183,119 @@ if ($crlf -eq 'true') {
        "git config --global core.autocrlf input  (then re-clone / re-checkout)."
 } else { Ok "git core.autocrlf=$(if ($crlf) {$crlf} else {'unset'}) (won't CRLF-mangle scripts)" }
 
-# --- Sigma credentials (REQUIRED - fail-closed) + live token-mint smoke ----
-# Absent creds = [X] REQUIRED failure (a run would die at its first API call).
-# When creds ARE present and the sibling Ruby lib exists (lib\sigma_rest.rb -
-# the same in-process mint path the orchestrators use), a live token mint
-# (bounded ~20s) proves they WORK: present-but-broken creds are [X] too.
-# SIGMA_SKIP_CRED_SMOKE=1 skips the live probe. Recorded in doctor.json
-# {cred_smoke:{sigma: pass|fail|skipped}}.
-$script:SmokeSigma = "skipped"
-$envFile = Join-Path $env:USERPROFILE ".sigma-migration\env"
-# Content-based presence (the Tableau check's pattern below): bare
-# file-existence would misread an env file holding only non-credential lines
-# (anything a future writer persists there) as "credentials present".
-$sigmaCreds = ((Test-Path $envFile) -and ((Get-Content $envFile -Raw -ErrorAction SilentlyContinue) -match 'SIGMA_(API_TOKEN|CLIENT_ID)')) -or $env:SIGMA_API_TOKEN -or $env:SIGMA_CLIENT_ID
-$sigmaLib = Join-Path $PSScriptRoot "lib\sigma_rest.rb"
-$sigmaTokenPy = Join-Path $PSScriptRoot "get_token.py"
-if (-not (Test-Path $sigmaTokenPy)) {
-  $sigmaTokenPy = Join-Path $PSScriptRoot "vendor\get_token.py"
+# --- Sigma authentication (REQUIRED) + live GET /v2/whoami smoke -----------
+# Accept a current token, a native-keychain browser refresh session, or complete
+# client credentials (all require SIGMA_BASE_URL). The shared sigma_rest client
+# tries the current token first and, on 401, retries once through the browser-
+# first/client-fallback provider. Bootstrap and doctor never open a browser.
+function Test-SigmaEnvFileKey([string]$key, [string]$file) {
+  if (-not (Test-Path $file)) { return $false }
+  $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
+  return [bool]($content -match "(?m)^\s*(?:export\s+)?$([regex]::Escape($key))=.+$")
 }
+function Test-SigmaBaseConfigured([string]$file) {
+  return [bool]($env:SIGMA_BASE_URL -or (Test-SigmaEnvFileKey 'SIGMA_BASE_URL' $file))
+}
+function Test-SigmaBrowserSession([string]$file) {
+  if (-not (Test-SigmaBaseConfigured $file)) { return $false }
+  if (Get-Command security -ErrorAction SilentlyContinue) {
+    $account = if ($env:USER) { $env:USER } else { $env:USERNAME }
+    & security find-generic-password -a $account -s 'sigma-api:refresh-token' 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  }
+  if (Get-Command secret-tool -ErrorAction SilentlyContinue) {
+    & secret-tool lookup service sigma-api key refresh-token 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  }
+  return $false
+}
+function Normalize-SigmaAuthMethod([string]$method) {
+  if ($method -in @('browser', 'client-credentials', 'api-token', 'none')) { return $method }
+  return 'api-token'
+}
+
+$script:SmokeSigma = "skipped"
+$script:SigmaAuthMethod = "none"
+$envFile = Join-Path $env:USERPROFILE ".sigma-migration\env"
+$sigmaBase = Test-SigmaBaseConfigured $envFile
+$sigmaToken = $sigmaBase -and ($env:SIGMA_API_TOKEN -or (Test-SigmaEnvFileKey 'SIGMA_API_TOKEN' $envFile))
+$sigmaBrowser = $false
+if ((-not $sigmaToken) -and ($env:SIGMA_AUTH_MODE -ne 'client-credentials')) {
+  $sigmaBrowser = Test-SigmaBrowserSession $envFile
+}
+$sigmaClient = $sigmaBase -and (
+  ($env:SIGMA_CLIENT_ID -and $env:SIGMA_CLIENT_SECRET) -or
+  ((Test-SigmaEnvFileKey 'SIGMA_CLIENT_ID' $envFile) -and (Test-SigmaEnvFileKey 'SIGMA_CLIENT_SECRET' $envFile))
+)
+$sigmaCreds = $false
+if ($sigmaToken) {
+  $sigmaCreds = $true
+  $tokenAuthMethod = if ($env:SIGMA_AUTH_METHOD) { $env:SIGMA_AUTH_METHOD } else { 'api-token' }
+  $script:SigmaAuthMethod = Normalize-SigmaAuthMethod $tokenAuthMethod
+} elseif (($env:SIGMA_AUTH_MODE -ne 'client-credentials') -and $sigmaBrowser) {
+  $sigmaCreds = $true
+  $script:SigmaAuthMethod = 'browser'
+} elseif (($env:SIGMA_AUTH_MODE -ne 'browser') -and $sigmaClient) {
+  $sigmaCreds = $true
+  $script:SigmaAuthMethod = 'client-credentials'
+}
+
+$sigmaBrowserFix = 'From an interactive Git Bash terminal, set SIGMA_BASE_URL and run: eval "$(bash scripts/browser-login.sh)" (one-time browser sign-in).'
+$sigmaClientFix = if ($rubyRequired) {
+  "Unattended fallback: set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL), then run 'ruby scripts/setup.rb --from-env'."
+} else {
+  "Unattended fallback: set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, then use the certified profile's noninteractive setup."
+}
+$sigmaFix = "$sigmaBrowserFix $sigmaClientFix"
+
+$sigmaRubyLib = @(
+  (Join-Path $PSScriptRoot 'lib'),
+  (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib')
+) | Where-Object { Test-Path (Join-Path $_ 'sigma_rest.rb') } | Select-Object -First 1
+$sigmaPythonLib = @(
+  (Join-Path $PSScriptRoot 'lib'),
+  (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib')
+) | Where-Object { Test-Path (Join-Path $_ 'sigma_rest.py') } | Select-Object -First 1
+
 if (-not $sigmaCreds) {
   if ($env:SIGMA_OFFLINE_DRY_RUN -eq '1') {
     Warn "Sigma credentials absent - accepted for SIGMA_OFFLINE_DRY_RUN=1" `
          "Only --dry-run/offline fixture conversion is allowed; unset this flag and configure credentials before any live build."
   } else {
-    $sigmaFix = if ($rubyRequired) {
-      "Run 'ruby scripts/setup.rb' once (writes ~/.sigma-migration/env), or set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET (+ SIGMA_BASE_URL)."
-    } else {
-      "Set SIGMA_CLIENT_ID / SIGMA_CLIENT_SECRET / SIGMA_BASE_URL, or use the Python credential setup shipped with the certified profile."
-    }
-    Bad "no Sigma credentials found (REQUIRED - the run would die at its first Sigma API call)" `
+    Bad "no usable Sigma authentication found (REQUIRED - need SIGMA_BASE_URL plus a current token, browser-keychain session, or client credentials)" `
         $sigmaFix
   }
 } elseif ($env:SIGMA_SKIP_CRED_SMOKE) {
-  Ok "Sigma credentials present (live token-mint smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
-} elseif (($script:RuntimeProfileSelected -eq "python") -and (Test-Path $sigmaTokenPy) -and $script:PyExe) {
+  Ok "Sigma authentication available via $($script:SigmaAuthMethod) (live GET /v2/whoami smoke SKIPPED: SIGMA_SKIP_CRED_SMOKE)"
+} elseif (($script:RuntimeProfileSelected -eq "python") -and $sigmaPythonLib -and $script:PyExe) {
   $pyArgs = @(); if ($script:PyPre) { $pyArgs += $script:PyPre }
-  & $script:PyExe @pyArgs $sigmaTokenPy --print-token 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) {
-    Ok "Sigma credentials present + live token mint OK (Python)"
+  $sigmaSmokeMethod = (& $script:PyExe @pyArgs -c "import os,sys; sys.path.insert(0,sys.argv[1]); import sigma_rest; sigma_rest.request('get','/v2/whoami'); print(os.environ.get('SIGMA_AUTH_METHOD') or ('api-token' if os.environ.get('SIGMA_API_TOKEN') else 'none'))" $sigmaPythonLib 2>$null | Out-String).Trim()
+  $sigmaSmokeExit = $LASTEXITCODE
+  if ($sigmaSmokeExit -eq 0) {
+    $script:SigmaAuthMethod = Normalize-SigmaAuthMethod $sigmaSmokeMethod
+    Ok "Sigma live GET /v2/whoami OK via $($script:SigmaAuthMethod) (Python)"
     $script:SmokeSigma = "pass"
   } else {
-    Bad "Sigma credentials present but the live Python token mint FAILED (bad/stale client id/secret, or wrong SIGMA_BASE_URL)" `
-        "Refresh the exported Sigma credentials. Genuinely offline? Set SIGMA_SKIP_CRED_SMOKE=1 to skip this probe."
+    Bad "Sigma authentication is configured but live GET /v2/whoami FAILED (current token and dual-provider refresh were rejected)" `
+        "$sigmaFix Genuinely offline? Set SIGMA_SKIP_CRED_SMOKE=1 to skip this probe."
     $script:SmokeSigma = "fail"
   }
-} elseif ((Test-Path $sigmaLib) -and (Get-Command ruby -ErrorAction SilentlyContinue)) {
+} elseif ($sigmaRubyLib -and (Get-Command ruby -ErrorAction SilentlyContinue)) {
   # Quote-free -e payload (portability lint): Windows PowerShell 5.1 native-arg
-  # passing strips embedded double quotes, so the old inline requires reached
-  # Ruby unquoted and died at parse - a guaranteed false cred-probe negative.
-  # Load path and requires ride -I / -r flags instead.
-  & ruby -I (Join-Path $PSScriptRoot 'lib') -rtimeout -rsigma_rest -e 'Timeout.timeout(20) { Sigma.refresh_token! }' 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) {
-    Ok "Sigma credentials present + live token mint OK"
+  # passing strips embedded double quotes. %q{} keeps the payload quote-free.
+  $sigmaSmokeMethod = (& ruby -I $sigmaRubyLib -rtimeout -rsigma_rest -e 'Timeout.timeout(30){Sigma.request(:get,%q{/v2/whoami})};m=ENV[%q{SIGMA_AUTH_METHOD}].to_s;puts(m.empty? ? %q{api-token} : m)' 2>$null | Out-String).Trim()
+  $sigmaSmokeExit = $LASTEXITCODE
+  if ($sigmaSmokeExit -eq 0) {
+    $script:SigmaAuthMethod = Normalize-SigmaAuthMethod $sigmaSmokeMethod
+    Ok "Sigma live GET /v2/whoami OK via $($script:SigmaAuthMethod)"
     $script:SmokeSigma = "pass"
   } else {
-    Bad "Sigma credentials present but the live token mint FAILED (bad/stale client id/secret, or wrong SIGMA_BASE_URL)" `
-        "Re-run 'ruby scripts/setup.rb' with fresh values (Sigma: Administration > APIs & Embed Secrets). Genuinely offline? Set SIGMA_SKIP_CRED_SMOKE=1 to skip this probe."
+    Bad "Sigma authentication is configured but live GET /v2/whoami FAILED (current token and dual-provider refresh were rejected)" `
+        "$sigmaFix Genuinely offline? Set SIGMA_SKIP_CRED_SMOKE=1 to skip this probe."
     $script:SmokeSigma = "fail"
   }
 } else {
-  Ok "Sigma credentials present (mint smoke skipped - no ruby lib next to this doctor)"
+  Ok "Sigma authentication available via $($script:SigmaAuthMethod) (GET /v2/whoami smoke skipped - no shared sigma_rest library next to this doctor)"
 }
 
 # --- Tableau credentials (self-gated: tableau skill only) --------------------
@@ -401,6 +454,7 @@ $doctor = [ordered]@{
   }
   sandbox_hint = $sandbox
   cred_smoke   = [ordered]@{ sigma = $script:SmokeSigma; tableau = $script:SmokeTableau; looker = $script:LookerProbe }
+  sigma_auth_method = "$($script:SigmaAuthMethod)"
   hyperapi_present = $hyperapiPresent
   skill_sha    = "$skillSha"
   behind_count = $behindCount

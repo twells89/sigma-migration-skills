@@ -143,7 +143,7 @@ curl -s -o /tmp/current-spec.yaml -w "%{http_code}\n" \
 # Edit /tmp/current-spec.yaml on disk (edit inside .document), then extract
 # ONLY the document object for the PUT body — sending the outer name/folderId/
 # response-only fields alongside it risks an "unexpected property" 400:
-yq '{document: .document}' /tmp/current-spec.yaml > /tmp/current-spec-put.yaml
+yq '{"document": .document}' /tmp/current-spec.yaml > /tmp/current-spec-put.yaml
 curl -s -X PUT -H "Authorization: Bearer $SIGMA_API_TOKEN" \
   -H "Content-Type: application/yaml" \
   -H "Accept: application/yaml" \

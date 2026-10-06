@@ -147,6 +147,21 @@ check('ownership parser ignores unknown tags with elementId attributes') do
   Sigma::CodeRep.workbook_page_element_ids(spec) == { 'p1' => ['owned'] }
 end
 
+check('ownership parser attributes <Panel>/<Overlay> region blocks by their own id') do
+  # Live GET specs emit distinct <Panel> (header/sidebar) and <Overlay> tags,
+  # not <Page id="panel-id"> — a panel body must be owned by the panel, never
+  # folded into the preceding page (live-confirmed 2026-08-10).
+  spec = Marshal.load(Marshal.dump(NESTED_RESPONSE))
+  spec['document']['layout'] = <<~XML
+    <Page id="p1"><Element elementId="page-el"/></Page>
+    <Panel id="hdr"><Element elementId="header-el"/></Panel>
+    <Overlay id="ov"><Element elementId="overlay-el"/></Overlay>
+  XML
+  Sigma::CodeRep.workbook_page_element_ids(spec) == {
+    'p1' => ['page-el'], 'hdr' => ['header-el'], 'ov' => ['overlay-el']
+  }
+end
+
 check('wrap migrates legacy page-nested elements to the current API shape') do
   legacy = {
     'schemaVersion' => 1,

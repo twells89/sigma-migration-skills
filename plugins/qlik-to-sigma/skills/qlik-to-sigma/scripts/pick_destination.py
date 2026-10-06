@@ -12,65 +12,25 @@ The SKILL drives the *asking*; this script lists candidates and creates folders.
   python3 pick_destination.py create --name "<NAME>" [--parent "<workspace-or-folder-id>"]
       -> {"id","name","parentId"}
 
-Auth: SIGMA_API_TOKEN + SIGMA_BASE_URL if set (e.g. via get-token.sh); otherwise
-minted from SIGMA_CLIENT_ID/SIGMA_CLIENT_SECRET (sourced from ~/.sigma-migration/env).
+Auth: resolved by the co-located shared lib/sigma_rest.py browser-first provider.
 """
-import json, os, sys, urllib.request, urllib.parse, urllib.error
+import json
+import os
+import sys
 
-def _load_neutral_env():
-    if os.environ.get("SIGMA_CLIENT_ID") or os.environ.get("SIGMA_API_TOKEN"):
-        return
-    p = os.path.expanduser("~/.sigma-migration/env")
-    if os.path.exists(p):
-        for line in open(p):
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _lib in (os.path.join(_HERE, "lib"), os.path.join(_HERE, "..", "lib")):
+    if os.path.isdir(_lib):
+        sys.path.insert(0, _lib)
+import sigma_rest
 
-def _base():
-    default = "https://aws-api." + "sigma" + "computing.com"
-    return os.environ.get("SIGMA_BASE_URL", default).rstrip("/")
 
-def _validate_base_url(base):
-    # Security (A2): only send Sigma client creds to an official HTTPS API host.
-    if os.environ.get("SIGMA_ALLOW_INSECURE_BASE_URL") == "1":
-        print(f"WARNING: SIGMA_ALLOW_INSECURE_BASE_URL=1 — skipping SIGMA_BASE_URL validation ({base})", file=sys.stderr); return
-    p = urllib.parse.urlparse(base or ""); host = (p.hostname or "").lower()
-    trusted_domain = "sigma" + "computing.com"
-    if p.scheme != "https" or not (host == trusted_domain or host.endswith("." + trusted_domain)):
-        sys.exit(f"FATAL: refusing to send Sigma credentials to '{base}' — require an official Sigma HTTPS API host (set SIGMA_ALLOW_INSECURE_BASE_URL=1 to override).")
-
-def _token():
-    tok = os.environ.get("SIGMA_API_TOKEN")
-    if tok:
-        return tok
-    _load_neutral_env()
-    _validate_base_url(_base())
-    data = urllib.parse.urlencode({
-        "grant_type": "client_credentials",
-        "client_id": os.environ["SIGMA_CLIENT_ID"],
-        "client_secret": os.environ["SIGMA_CLIENT_SECRET"],
-    }).encode()
-    req = urllib.request.Request(_base() + "/v2/auth/token", data=data)
-    return json.load(urllib.request.urlopen(req))["access_token"]
-
-_TOK = None
 def call(method, path, body=None):
-    global _TOK
-    if _TOK is None:
-        _TOK = _token()
-    url = _base() + path
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method,
-        headers={"Authorization": "Bearer " + _TOK, "Content-Type": "application/json"})
+    data = json.dumps(body) if body is not None else None
     try:
-        with urllib.request.urlopen(req) as r:
-            raw = r.read().decode()
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        raise SystemExit(f"{method} {path} -> {e.code} {e.read().decode()[:300]}")
+        return sigma_rest.request(method.lower(), path, body=data)
+    except sigma_rest.SigmaError as exc:
+        raise SystemExit(str(exc))
 
 def my_documents_id():
     try:

@@ -50,6 +50,83 @@ check('header shape: backgroundColor + borderRadius only') do
   header = Styling::DEFAULT_THEME[:header]
   header == { 'backgroundColor' => '#0F172A', 'borderRadius' => 'round' }
 end
+check('app-shell shape is light utility chrome, not the dark rounded hero') do
+  shell = Styling::DEFAULT_THEME[:app_shell]
+  shell == {
+    'backgroundColor' => '#FFFFFF',
+    'borderColor' => '#E2E8F0',
+    'borderWidth' => 1
+  } && !shell.key?('borderRadius')
+end
+
+# --- Semantic authoring roles ---
+
+EXPECTED_ROLES = %i[
+  canvas ink body muted hairline fill
+  series series-mid series-grey primary tint edge
+].freeze
+
+check('ROLE_NAMES lists exactly the twelve authoring roles') do
+  Styling::ROLE_NAMES == EXPECTED_ROLES
+end
+check('DEFAULT_ROLES covers exactly those twelve roles (no extras)') do
+  Styling::DEFAULT_ROLES.keys.sort == EXPECTED_ROLES.sort
+end
+check('resolve maps every default role to its verified hex') do
+  expected = {
+    canvas: '#FFFFFF', ink: '#0F172A', body: '#1E293B', muted: '#64748B',
+    hairline: '#E2E8F0', fill: '#FFFFFF', series: '#2563EB',
+    :'series-mid' => '#0EA5E9', :'series-grey' => '#64748B',
+    primary: '#2563EB', tint: '#1E3A8A', edge: '#FFFFFF'
+  }
+  expected.all? { |role, hex| Styling.resolve(role) == hex && Styling.resolve(role.to_s) == hex }
+end
+check('resolve passes through hex and theme-ref payloads (never invents Sigma fields)') do
+  ref = { 'kind' => 'theme', 'ref' => 'colors-primary' }
+  Styling.resolve('#ABCDEF') == '#ABCDEF' &&
+    Styling.resolve(ref) == ref
+end
+check('resolve raises on unknown symbol/string roles') do
+  symbol_raises = begin; Styling.resolve(:not_a_role); false; rescue ArgumentError; true; end
+  string_raises = begin; Styling.resolve('not-a-role'); false; rescue ArgumentError; true; end
+  symbol_raises && string_raises
+end
+check('theme(roles:) applies caller overrides without mutating DEFAULT_ROLES or the caller map') do
+  overrides = { primary: '#FF6600', :'series-mid' => '#00AA00' }
+  snapshot_roles = Marshal.load(Marshal.dump(Styling::DEFAULT_ROLES))
+  snapshot_overrides = Marshal.load(Marshal.dump(overrides))
+  t = Styling.theme(roles: overrides)
+  t[:accent] == '#FF6600' && t[:categorical][0] == '#2563EB' &&
+    t[:categorical][1] == '#00AA00' &&
+    Styling::DEFAULT_ROLES == snapshot_roles && overrides == snapshot_overrides
+end
+check('theme(roles:) + accent: tints slot 0/accent; role map still not mutated') do
+  overrides = { primary: '#111111' }
+  snap = Marshal.load(Marshal.dump(overrides))
+  t = Styling.theme(accent: '#FF6600', roles: overrides)
+  t[:accent] == '#FF6600' && t[:categorical][0] == '#FF6600' && overrides == snap
+end
+check('role overrides do not mutate DEFAULT_THEME') do
+  before = Marshal.load(Marshal.dump(Styling::DEFAULT_THEME))
+  Styling.theme(roles: { canvas: '#000000', primary: '#FF0000' })
+  Styling::DEFAULT_THEME == before
+end
+check('theme rejects unknown roles and unresolved role values') do
+  unknown = begin; Styling.theme(roles: { bogus: '#FFFFFF' }); false; rescue ArgumentError; true; end
+  unresolved = begin; Styling.theme(roles: { primary: 'primary' }); false; rescue ArgumentError; true; end
+  unknown && unresolved
+end
+check('compatibility: no-arg theme, chart_color, kpi_accent match DEFAULT_THEME-derived output') do
+  theme = Styling.theme
+  theme == Styling::DEFAULT_THEME &&
+    Styling.chart_color(theme) == { 'color' => { 'by' => 'single', 'value' => '#2563EB' } } &&
+    Styling.kpi_accent(theme) == { 'color' => '#2563EB' } &&
+    theme[:header_gradient] == %w[#0F172A #1E3A8A #2563EB] &&
+    theme[:card_gradient] == %w[#1E293B #0F172A]
+end
+check('DEFAULT_THEME is derived from DEFAULT_ROLES (empty roles rebuilds default)') do
+  Styling.theme(roles: {}) == Styling::DEFAULT_THEME
+end
 
 # Composition.bands — role -> [r0, r1) band descriptors.
 check('Composition.bands: kpi + hero (exec) matches the brief example') do
@@ -144,6 +221,41 @@ check('header: NO-GO container_style emits a bare text element, no container') d
   h = Styling.header(id: 'hdr', title: 'Dashboard', theme: Styling::DEFAULT_THEME,
                       surfaces: Styling::SURFACES.merge(container_style: false))
   h[:element].length == 1 && h[:element][0]['kind'] == 'text' && !h[:layout].include?('Container')
+end
+
+check('app_shell: identity/nav/utility use 6/11/7 columns in a light container') do
+  shell = Styling.app_shell(
+    id: 'app-shell', identity_id: 'identity', navigation_id: 'nav', utility_id: 'utility'
+  )
+  shell[:element] == {
+    'id' => 'app-shell',
+    'kind' => 'container',
+    'style' => Styling::DEFAULT_THEME[:app_shell]
+  } &&
+    shell[:layout].include?('elementId="identity" gridColumn="1 / 7"') &&
+    shell[:layout].include?('elementId="nav" gridColumn="7 / 18"') &&
+    shell[:layout].include?('elementId="utility" gridColumn="18 / 25"')
+end
+check('app_shell: identity + utility redistribute to 12/12') do
+  shell = Styling.app_shell(id: 'app-shell', identity_id: 'identity', utility_id: 'utility')
+  shell[:layout].include?('elementId="identity" gridColumn="1 / 13"') &&
+    shell[:layout].include?('elementId="utility" gridColumn="13 / 25"')
+end
+check('app_shell: NO-GO container style emits positioned leaves and no wrapper') do
+  shell = Styling.app_shell(
+    id: 'app-shell', identity_id: 'identity', navigation_id: 'nav',
+    surfaces: Styling::SURFACES.merge(container_style: false)
+  )
+  shell[:element].nil? && !shell[:layout].include?('<Container') &&
+    shell[:layout].scan('<Element').size == 2
+end
+check('app_shell rejects duplicate child ids') do
+  begin
+    Styling.app_shell(id: 'app-shell', identity_id: 'same', navigation_id: 'same')
+    false
+  rescue ArgumentError
+    true
+  end
 end
 
 check('section_card: container-style GO wraps band ids in a themed card Container') do

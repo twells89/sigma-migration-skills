@@ -161,6 +161,12 @@ check('wide_pivot: pivot-table with columns, rowsBy, columnsBy:[], values (metri
     'values' => %w[piv-revenue piv-orders piv-margin]
   }
 end
+check('wide_pivot: columns is a non-empty array (Invalid-kind 400 fix)') do
+  piv = Richness.wide_pivot(id: 'piv-1', source_element_id: 'src', columns: PIVOT_COLUMNS,
+                             rows_by: [{ 'columnId' => 'piv-region' }, { 'columnId' => 'piv-category' }],
+                             values: %w[piv-revenue piv-orders piv-margin])
+  piv['columns'].is_a?(Array) && !piv['columns'].empty?
+end
 check('wide_pivot: rewrites legacy {id} shelf pointers to {columnId}') do
   piv = Richness.wide_pivot(id: 'piv-legacy', source_element_id: 'src',
                              columns: PIVOT_COLUMNS,
@@ -168,15 +174,9 @@ check('wide_pivot: rewrites legacy {id} shelf pointers to {columnId}') do
                              values: %w[piv-revenue])
   piv['rowsBy'] == [{ 'columnId' => 'piv-region' }]
 end
-check('wide_pivot: columns is a non-empty array (Invalid-kind 400 fix)') do
-  piv = Richness.wide_pivot(id: 'piv-1', source_element_id: 'src', columns: PIVOT_COLUMNS,
-                             rows_by: [{ 'id' => 'piv-region' }, { 'id' => 'piv-category' }],
-                             values: %w[piv-revenue piv-orders piv-margin])
-  piv['columns'].is_a?(Array) && !piv['columns'].empty?
-end
 check('wide_pivot: columnsBy is always [] (wide, not crosstab)') do
   Richness.wide_pivot(id: 'piv-2', source_element_id: 'src', columns: [{ 'id' => 'c1', 'formula' => '[Src/C1]' }],
-                       rows_by: [{ 'id' => 'c1' }], values: ['c2'])['columnsBy'] == []
+                       rows_by: [{ 'columnId' => 'c1' }], values: ['c2'])['columnsBy'] == []
 end
 check('wide_pivot: id required') do
   begin
@@ -211,6 +211,81 @@ AGENT_TOOLS = [
     'steps' => [{ 'kind' => 'effect', 'effect' => 'insert-rows', 'tableElementId' => 'annotations',
                   'values' => { 'an-note' => { 'type' => 'agent-input', 'inputName' => 'note' } } }] }
 ].freeze
+
+check('agent_action_tool: Configure tool inlines set-control-value without approval') do
+  tool = Richness.agent_action_tool(
+    tool_id: 'set-region',
+    name: 'Set region',
+    description: 'Add one requested region to the filter.',
+    effects: [{
+      'effect' => 'set-control-value',
+      'control' => 'region',
+      'selectionMode' => 'add',
+      'value' => { 'type' => 'agent-input', 'inputName' => 'region' }
+    }]
+  )
+  tool['kind'] == 'action' && !tool.key?('requiresApproval') &&
+    tool['steps'][0]['kind'] == 'effect' &&
+    tool['steps'][0]['effect'] == 'set-control-value'
+end
+check('agent_action_tool: Navigate tool accepts direct page target') do
+  tool = Richness.agent_action_tool(
+    tool_id: 'open-review',
+    name: 'Open review',
+    description: 'Open Review after configuring the plan.',
+    effects: [{ 'effect' => 'navigate', 'target' => { 'type' => 'page', 'page' => 'pg-review' } }]
+  )
+  tool['steps'][0]['target'] == { 'type' => 'page', 'page' => 'pg-review' }
+end
+check('agent_action_tool: row write defaults to requiresApproval true') do
+  tool = Richness.agent_action_tool(
+    tool_id: 'log-note',
+    name: 'Log note',
+    description: 'Append the confirmed review note.',
+    effects: [{
+      'effect' => 'insert-rows',
+      'tableElementId' => 'notes',
+      'values' => { 'note' => { 'type' => 'agent-input', 'inputName' => 'note' } }
+    }]
+  )
+  tool['requiresApproval'] == true && tool['steps'][0]['kind'] == 'effect'
+end
+check('agent_action_tool: write cannot explicitly opt out of approval') do
+  begin
+    Richness.agent_action_tool(
+      tool_id: 'unsafe',
+      name: 'Unsafe write',
+      description: 'Should be rejected.',
+      effects: [{ 'effect' => 'delete-rows', 'tableElementId' => 'rows' }],
+      requires_approval: false
+    )
+    false
+  rescue ArgumentError => e
+    e.message.include?('write effects require approval')
+  end
+end
+check('agent_action_tool: sequence references are rejected for spec-created agents') do
+  begin
+    Richness.agent_action_tool(
+      tool_id: 'saved-sequence',
+      name: 'Saved sequence',
+      description: 'Should be rejected.',
+      effects: [{ 'kind' => 'sequence', 'sequenceId' => 'missing' }]
+    )
+    false
+  rescue ArgumentError => e
+    e.message.include?('sequence steps are reference-only')
+  end
+end
+check('agent_action_tool: NO-GO agent surface returns opt-in marker') do
+  Richness.agent_action_tool(
+    tool_id: 'set-region',
+    name: 'Set region',
+    description: 'Set region.',
+    effects: [{ 'effect' => 'set-control-value', 'control' => 'region' }],
+    surfaces: Richness::SURFACES.merge(agent: false)
+  ) == { 'opt_in' => true, 'toolId' => 'set-region' }
+end
 
 check('agent: read-only analyst (tools: []) OMITS the tools key entirely') do
   el = Richness.agent(id: 'ag-1', name: 'Analyst', instructions: 'Be a helpful retail analyst.',
