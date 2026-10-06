@@ -47,7 +47,8 @@ try {
     writeFileSync(output, 'prior output');
     const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(stub)}`,
       script, '--wb', input, '--dm-id', 'model', '--out', output], {
-      encoding: 'utf8', env: { ...process.env, SIGMA_BASE_URL: 'https://stub.invalid', SIGMA_API_TOKEN: 'test-token',
+      encoding: 'utf8', env: { ...process.env, SIGMA_BASE_URL: 'https://stub.invalid',
+        SIGMA_ALLOW_INSECURE_BASE_URL: '1', SIGMA_API_TOKEN: 'test-token',
         TEST_ELEMENTS: JSON.stringify([{ elementId: 'real-sales', name: 'Sales' },
           ...(duplicate ? [{ elementId: 'other-sales', name: 'Sales' }] : [])]),
       },
