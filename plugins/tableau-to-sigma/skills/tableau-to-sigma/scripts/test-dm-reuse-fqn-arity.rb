@@ -71,6 +71,7 @@ end
 Thread.new { server.start }
 sleep 0.2
 ENVV = { 'SIGMA_BASE_URL' => "http://127.0.0.1:#{server.config[:Port]}",
+         'SIGMA_ALLOW_INSECURE_BASE_URL' => '1',
          'SIGMA_CLIENT_ID' => nil, 'SIGMA_API_TOKEN' => 'offline-test' }.freeze
 
 def run_picker(dir, sig, tag)

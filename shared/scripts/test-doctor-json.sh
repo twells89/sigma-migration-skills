@@ -110,20 +110,34 @@ check $? "keychain-only session + base URL records skipped/browser"
 echo "Part C — live smoke is GET /v2/whoami through sigma_rest"
 mkdir -p "$TMP/fixture/scripts/lib" "$TMP/home-live"
 cp "$HERE/doctor.sh" "$TMP/fixture/scripts/doctor.sh"
-cat > "$TMP/fixture/scripts/lib/sigma_rest.rb" <<'RUBY'
-module Sigma
-  def self.request(method, path)
-    File.write(ENV.fetch('SIGMA_DOCTOR_SMOKE_MARKER'), "#{method} #{path}")
-    ENV['SIGMA_AUTH_METHOD'] = 'browser'
-    {}
-  end
+cp "$HERE/runtime_profile.py" "$TMP/fixture/scripts/runtime_profile.py"
+cat > "$TMP/fixture/runtime-capabilities.json" <<'JSON'
+{
+  "schemaVersion": 1,
+  "skill": "doctor-auth-fixture",
+  "profiles": {
+    "python": {
+      "status": "supported",
+      "requiredRuntimes": ["python", "node"],
+      "entrypoint": ["python", "scripts/runtime_profile.py"]
+    }
+  }
+}
+JSON
+cat > "$TMP/fixture/scripts/lib/sigma_rest.py" <<'PY'
+import os
 
-  def self.refresh_token!
-    raise 'doctor must verify through request, not direct mint'
-  end
-end
-RUBY
+def request(method, path):
+    with open(os.environ["SIGMA_DOCTOR_SMOKE_MARKER"], "w", encoding="utf-8") as handle:
+        handle.write(f"{method} {path}")
+    os.environ["SIGMA_AUTH_METHOD"] = "browser"
+    return {}
+
+def refresh_token():
+    raise AssertionError("doctor must verify through request, not direct mint")
+PY
 env HOME="$TMP/home-live" SIGMA_SKIP_VERSION_CHECK=1 SIGMA_SKIP_CRED_SMOKE= \
+  SIGMA_RUNTIME_PROFILE=python \
   SIGMA_BASE_URL="$BASE" SIGMA_API_TOKEN=expired-secret-token \
   SIGMA_DOCTOR_SMOKE_MARKER="$TMP/smoke.marker" \
   bash "$TMP/fixture/scripts/doctor.sh" --workdir "$TMP/live" >"$TMP/live.out" 2>&1

@@ -45,7 +45,25 @@ cortex skill add sigma-migration-skills/plugins/tableau-to-sigma/skills/tableau-
 cortex skill add sigma-migration-skills/plugins/sigma-authoring/skills/sigma-workbooks
 ```
 
-**Sigma access:** converters drive your org through the **Sigma REST API** (client id/secret -> bearer token via `scripts/get-token.sh`). The optional Sigma MCP server is recommended for interactive query/parity checks when your agent supports MCP; it is **not required** for the core migrate -> POST -> parity scripts. Setup details: [`docs/agent-entry.md`](docs/agent-entry.md).
+**Sigma access:** converters drive your org through the **Sigma REST API**.
+For an interactive run, the recommended flow is a one-time OAuth 2.1
+authorization-code/PKCE login in a terminal; later runs reuse its refresh
+session from the OS keychain. Run commands from the selected skill directory:
+
+```bash
+cd plugins/tableau-to-sigma/skills/tableau-to-sigma   # example
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
+```
+
+OAuth client credentials are the unattended/CI fallback. On a cloud or
+headless host without a usable keychain, the default `auto` mode falls back to
+`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`; set
+`SIGMA_AUTH_MODE=client-credentials` to require that route. Bootstrap is
+noninteractive and never opens a browser. The optional Sigma MCP server is
+recommended for interactive query/parity checks when your agent supports MCP;
+it is **not required** for the core migrate → POST → parity scripts. Full auth
+and setup details: [`docs/agent-entry.md`](docs/agent-entry.md).
 
 
 Then just describe what you want migrated — e.g. *"migrate this Power BI report to Sigma"* —
@@ -126,7 +144,11 @@ corpus/run-corpus.sh --check      # no creds needed; CI-safe
 ## Requirements
 
 - **A coding agent that runs skills** (Claude Code, Cursor, Cortex Code, …).
-- **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` / `SIGMA_BASE_URL`) and a Sigma **connection** pointing at the same warehouse as the source content (needed for the parity gate). See [`AGENTS.md`](AGENTS.md) §Credentials.
+- **Sigma API access:** `SIGMA_BASE_URL` plus either the recommended
+  interactive browser OAuth session or, for unattended/CI use,
+  `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`; and a Sigma **connection** pointing
+  at the same warehouse as the source content (needed for the parity gate).
+  See [`AGENTS.md`](AGENTS.md) §Credentials.
 - **`sigma-authoring` installed alongside** any converter (canonical workbook/DM spec).
 - **No converter binary to install** — each skill bundles its data-model converter (`convert_*_to_sigma`) and runs it **locally by default** (no network, no data egress). A [hosted converter MCP](https://github.com/twells89/sigma-data-model-mcp) is available as an **optional, opt-in fallback** that sends the source spec off-machine.
 - **Optional:** Sigma MCP for interactive read/query during parity — not required for the REST pipeline ([`docs/agent-entry.md`](docs/agent-entry.md)).

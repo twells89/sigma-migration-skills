@@ -105,34 +105,68 @@ cases.
 
 ## Credentials (agent-neutral)
 
-All scripts read credentials from **environment variables**. Setup writes them to
-two places so they work under any agent:
+Run every command below **from the selected skill directory**; `scripts/` paths
+are skill-relative.
 
-- `~/.claude/settings.json` — Claude Code auto-loads this into the env.
-- `~/.sigma-migration/env` — a neutral, sourceable file (`export KEY='value'`,
-  mode 0600) for every other agent and plain shells.
-
-`get-token.sh`, `get-tableau-token.sh`, and the Ruby libs (`lib/sigma_rest.rb`,
-`lib/tableau_rest.rb`) **auto-source `~/.sigma-migration/env`** when the vars
-aren't already set — so non-Claude agents work with no manual sourcing. Existing
-env always wins.
-
-**Sigma** (all converters): `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`,
-`SIGMA_CLIENT_SECRET`. Configure once with `ruby scripts/setup.rb` (in the
-tableau-to-sigma skill), or `export` them yourself. Then mint a ~1h bearer token:
+**Sigma (all converters):** use interactive browser OAuth by default. It is an
+OAuth 2.1 authorization-code/PKCE flow and does not require a pre-provisioned
+client id or secret:
 
 ```bash
-bash -c 'eval "$(scripts/get-token.sh)"; <your curl using $SIGMA_API_TOKEN>'
+export SIGMA_BASE_URL='https://<your-published-sigma-api-host>'
+eval "$(bash scripts/browser-login.sh)"
 ```
 
-> Keep the `eval` and the command in the **same** `bash -c '...'` — `$()` creates
-> a subshell where the exported token dies immediately.
+On a supported host, the login stores its refresh session only in the native OS
+keychain (macOS Keychain through `security`, or Linux Secret Service through
+`secret-tool`); it never writes a refresh token to the workspace or
+`~/.sigma-migration/env`. Later calls refresh without reopening the browser.
+Without a usable keychain, only the current access token is returned. Access
+tokens last about one hour; shared REST clients proactively refresh tokens with
+known mint metadata after 50 minutes.
+
+Bootstrap and doctor are deliberately noninteractive and **never open a
+browser**. Run the login command explicitly in an interactive terminal. For CI,
+automation, cloud agents, Windows hosts without a supported keychain, or locked
+keychains, provide `SIGMA_BASE_URL`, `SIGMA_CLIENT_ID`, and
+`SIGMA_CLIENT_SECRET`. In the default `SIGMA_AUTH_MODE=auto`, token minting
+tries the browser keychain first and falls back to those client credentials.
+Set `SIGMA_AUTH_MODE=browser` to forbid fallback, or
+`SIGMA_AUTH_MODE=client-credentials` to skip the keychain.
+
+The shared REST clients resolve Sigma auth in this order:
+
+1. `SIGMA_API_TOKEN` already in the process environment (explicit env wins).
+2. `<SIGMA_WORKDIR>/auth.json`, then `./auth.json`, when no env token exists.
+3. The token provider: browser keychain/cache first, then client credentials in
+   `auto` mode.
+
+For a shell-neutral handoff, write `<workdir>/auth.json` (mode 0600):
+
+```bash
+python3 scripts/get_token.py --workdir <workdir>
+```
+
+It contains only `SIGMA_API_TOKEN`, `SIGMA_BASE_URL`,
+`SIGMA_TOKEN_MINTED_AT`, and `SIGMA_AUTH_METHOD`; the refresh token remains in
+the keychain. Set `SIGMA_WORKDIR=<workdir>` for downstream scripts not launched
+from that directory. Never print or commit `auth.json`. Shared REST requests
+retry exactly once on a 401 after refreshing through the same provider; a
+second 401 is returned as an error.
+
+Client settings may be persisted for any agent in
+`~/.sigma-migration/env` (mode 0600); Claude Code may also load
+`~/.claude/settings.json`. Existing environment values win. OAuth client
+credentials are the unattended fallback, not the recommended interactive
+login.
 
 **Tableau** (PAT mode, when the Tableau MCP isn't available): `TABLEAU_SERVER_URL`,
 `TABLEAU_SITE_CONTENT_URL`, `TABLEAU_PAT_NAME`, `TABLEAU_PAT_SECRET`. Configure
 with `ruby scripts/setup-tableau.rb`; sign in with
 `eval "$(scripts/get-tableau-token.sh)"`. Other source tools (Power BI, Qlik,
 ThoughtSpot) have their own auth — see each skill's `SKILL.md` / `QUICKSTART.md`.
+Sigma OAuth does not authenticate to a source tool, and source-tool credentials
+do not participate in the Sigma auth resolution order above.
 
 ## Optional MCP servers
 
@@ -154,8 +188,11 @@ they're absent.
 - **Don't inline Ruby/Python inside `bash -c`** for anything over ~5 lines —
   nested-quote escaping silently breaks. Write a `.py`/`.rb` file and exec it.
 - **Scripts are relative to the skill dir** — `cd` there first.
-- **Tokens expire (~1h)** — re-mint on a 401; never cache across long runs except
-  via the Ruby libs, which auto-refresh.
+- **Tokens expire (~1h)** — use the shared Ruby/Python REST clients, which
+  refresh at 50 minutes when token age is known and perform at most one refresh
+  + retry on a 401.
+- **Bootstrap never performs interactive auth** — run `browser-login.sh`
+  yourself in a terminal, or supply client credentials for unattended runs.
 - **No legacy `sigma-skills/` paths** — use the companion `sigma-authoring`
   skills in this repo (see [`docs/agent-entry.md`](docs/agent-entry.md)).
 
