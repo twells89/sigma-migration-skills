@@ -50,8 +50,14 @@ progress viz, click behaviors) instead of emitting wrong logic.
   API keys; preferred, durable) or a username/password session. Capture either with
   `scripts/get-metabase-session.sh`. Open-source Metabase is fully sufficient — no
   Pro/EE features required (serialization export is EE-only; this skill doesn't use it).
-- **Sigma** API credentials in `~/.sigma-migration/env` (or environment
-  variables), minted with `scripts/get-token.sh`.
+- **Sigma** API access: set `SIGMA_BASE_URL`, then run
+  `eval "$(scripts/browser-login.sh)"` once (preferred), or configure
+  `SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET` in `~/.sigma-migration/env` as a
+  headless fallback. The Node converter and live scripts reuse a caller token,
+  refresh a known token after 50 minutes through `scripts/get_token.py`
+  (browser keychain first), and refresh/retry once on a 401. Set
+  `SIGMA_WORKDIR` to the migration work directory when you want the
+  shell-neutral `auth.json` handoff there.
 - **The same warehouse on both sides.** Sigma reads the warehouse live; parity only
   means something when the Sigma connection reaches the database Metabase queries.
   (Metabase's bundled H2 Sample Database is NOT reachable from Sigma — pick content
@@ -108,7 +114,6 @@ covers the same warehouse tables (don't add a 4th near-identical DM for the same
 
 ```bash
 python3 scripts/metabase-dm-signature.py --dm-spec dm.json --out dm-signature.json
-eval "$(scripts/get-token.sh)"
 ruby scripts/find-or-pick-dm.rb --workbook-signature dm-signature.json \
   --out dm-match.json --auto-pick           # exit 0 = candidate ≥ min-score
 ```
@@ -133,7 +138,6 @@ If a destination is already supplied, honor it silently — don't ask.
 ## Phase 2 — POST the data model + read back ids (hard gate)
 
 ```bash
-eval "$(scripts/get-token.sh)"                 # SIGMA_BASE_URL + SIGMA_API_TOKEN
 node scripts/post-and-readback.mjs --type datamodel --spec dm.json \
   --folder <folderId> --out dm-map.json
 ```
@@ -142,7 +146,9 @@ POSTs to `/v2/dataModels/spec`, reads the spec back, and **fails on any `type=er
 column** (a spec can POST 200 yet have formulas that don't resolve at query time — the
 readback scan catches it, derived view included). `dm-map.json` carries the real
 `dataModelId` + element ids (Sigma reassigns them on POST). Do not proceed past a
-non-zero exit.
+non-zero exit. No manual token mint is required: the Node REST client uses the
+browser-first provider described in Prerequisites (with client credentials only
+as its fallback).
 
 ## Phase 3 — Convert the dashboard → Sigma workbook, wired to the DM
 

@@ -42,9 +42,17 @@ Duration: 2
 - **A coding agent that runs skills** — Claude Code (CLI or desktop), Cursor, etc.
 - **Metabase REST access** — an API key (v49+: Admin → Settings → Authentication →
   API keys) or username/password. Open-source Metabase is fully sufficient.
-- **Sigma API credentials** (`SIGMA_CLIENT_ID` / `SIGMA_CLIENT_SECRET`).
+- **Sigma API access** — set `SIGMA_BASE_URL` and use
+  `eval "$(skills/metabase-to-sigma/scripts/browser-login.sh)"` for a
+  browser/keychain sign-in (preferred), or provide `SIGMA_CLIENT_ID` /
+  `SIGMA_CLIENT_SECRET` for headless fallback.
 - **The same warehouse on both sides** — Sigma's connection must reach the database
   Metabase queries (the bundled H2 Sample Database is not reachable from Sigma).
+
+The converter's warehouse lookup and every Node POST/readback command use the
+co-located browser-first token provider automatically. They preserve a caller
+token of unknown age, refresh known tokens after 50 minutes, and refresh/retry
+once after a 401; you do not need to mint a static token before each command.
 
 ## Assess the estate (optional, ~minutes)
 Duration: 5

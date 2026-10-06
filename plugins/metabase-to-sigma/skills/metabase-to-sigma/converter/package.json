@@ -10,7 +10,8 @@
   "scripts": {
     "convert": "node --import tsx/esm cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node --import tsx/esm test.ts"
+    "test:auth": "node --test ../scripts/lib/test-auth.mjs",
+    "test": "npm run typecheck && node --import tsx/esm test.ts && npm run test:auth"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

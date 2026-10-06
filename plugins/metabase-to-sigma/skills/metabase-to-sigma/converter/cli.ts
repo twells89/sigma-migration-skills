@@ -18,6 +18,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { convertMetabaseToSigma, applyWarehouseTransforms, type WarehouseDialect } from './metabase.js';
 import { convertMetabaseDashboardToSigma } from './metabase-dashboard.js';
+import { makeClient } from '../scripts/lib/sigma-rest.mjs';
 
 // Map Sigma connection type strings → our WarehouseDialect enum.
 const SIGMA_TYPE_MAP: Record<string, WarehouseDialect> = {
@@ -27,14 +28,12 @@ const SIGMA_TYPE_MAP: Record<string, WarehouseDialect> = {
 };
 
 async function detectWarehouse(connectionId: string): Promise<WarehouseDialect> {
-  const base = process.env.SIGMA_BASE_URL?.replace(/\/$/, '');
-  const token = process.env.SIGMA_API_TOKEN;
-  if (!base || !token || !connectionId || connectionId === '<CONNECTION_ID>') return 'unknown';
+  if (!connectionId || connectionId === '<CONNECTION_ID>') return 'unknown';
   try {
-    const res = await fetch(`${base}/v2/connections/${connectionId}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    });
-    const json = await res.json() as any;
+    const client = makeClient(process.env.SIGMA_WORKDIR || process.cwd());
+    const res = await client.api('GET', `/v2/connections/${connectionId}`);
+    if (!res.ok) return 'unknown';
+    const json = res.json as any;
     const type = String(json?.type || json?.connectionType || '').toLowerCase();
     return SIGMA_TYPE_MAP[type] ?? 'unknown';
   } catch { return 'unknown'; }
