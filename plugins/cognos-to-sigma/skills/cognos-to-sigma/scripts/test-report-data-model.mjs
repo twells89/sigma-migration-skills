@@ -99,5 +99,15 @@ try {
   assert.equal(orchestrator.status, 0, orchestrator.stderr);
   assert.equal(JSON.parse(readFileSync(join(work, 'run', 'dm.json'))).pages[0].elements[0].name, 'Orders');
   assert(existsSync(join(work, 'run', 'wb.json')), 'report-only model must enter the normal report pipeline');
+  for (const name of ['model-one', 'model-two']) {
+    const modelFile = join(work, `${name}.json`);
+    writeFileSync(modelFile, JSON.stringify(model));
+    const isolated = spawnSync(process.execPath, [fileURLToPath(new URL('./migrate-cognos.mjs', import.meta.url)),
+      '--dm-spec', modelFile, '--report', report, '--connection', 'connection', '--dry-run'], {
+      encoding: 'utf8', env: { ...process.env, HOME: work, USERPROFILE: work },
+    });
+    assert.equal(isolated.status, 0, isolated.stderr);
+    assert(existsSync(join(work, 'cognos-migration', name, 'dm.json')), 'default run directory must derive from the DM spec');
+  }
   console.log('test-report-data-model: PASS (inventory, verified mapping, create and readback without an existing model)');
 } finally { rmSync(work, { recursive: true, force: true }); }
