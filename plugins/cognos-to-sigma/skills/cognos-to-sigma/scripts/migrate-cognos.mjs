@@ -88,7 +88,7 @@ if (!opt.resume) {
   // --folder is optional (bead eqom): when unset, the caller's My Documents is
   // resolved via whoami right before the first POST (see resolveFolder).
 }
-const slug = basename((opt.module || opt.out || 'cognos')).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '-');
+const slug = basename((opt.module || opt['dm-spec'] || opt.out || 'cognos')).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '-');
 const WORK = resolve(opt.out || join(homedir(), 'cognos-migration', slug));
 mkdirSync(WORK, { recursive: true });
 const statePath = join(WORK, 'migrate-state.json');
