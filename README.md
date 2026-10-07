@@ -32,6 +32,7 @@ shared `~/.sigma-migration/env` under any agent.
 /plugin install hex-to-sigma@sigma-migration-skills
 /plugin install mode-to-sigma@sigma-migration-skills
 /plugin install metabase-to-sigma@sigma-migration-skills
+/plugin install streamlit-to-sigma@sigma-migration-skills
 ```
 
 **Other agents (Cursor, Cortex Code, …)** — clone the repo and point your agent at the
@@ -87,6 +88,7 @@ and the skill drives discovery → translation → build → parity.
 | [`hex-to-sigma`](plugins/hex-to-sigma/) | Hex | `hex-to-sigma`, `hex-assessment` (scaffold) |
 | [`mode-to-sigma`](plugins/mode-to-sigma/) | Mode Analytics | `mode-to-sigma` |
 | [`metabase-to-sigma`](plugins/metabase-to-sigma/) | Metabase (OSS / Pro / Enterprise) | `metabase-to-sigma`, `metabase-assessment` |
+| [`streamlit-to-sigma`](plugins/streamlit-to-sigma/) | Streamlit (incl. Streamlit in Snowflake) | `streamlit-to-sigma`, `streamlit-assessment` (scaffold) |
 | [`sigma-authoring`](plugins/sigma-authoring/) | (companion) | `sigma-workbooks`, `sigma-data-models`, … — install alongside every converter |
 
 In Claude Code, installed skills are namespaced — e.g. `/powerbi-to-sigma:powerbi-assessment`.
@@ -95,6 +97,13 @@ The `metabase-to-sigma` plugin converts MBQL/pMBQL questions and models into a
 Sigma data model, then rebuilds dashboards as workbooks with controls and the
 original 24-column layout. Its read-only `metabase-assessment` skill inventories
 and scores an estate through the Metabase REST API before migration.
+
+The `streamlit-to-sigma` plugin converts a Streamlit project (single file or
+multipage, including Streamlit-in-Snowflake layouts) using safe static Python
+analysis — the app is never imported or executed. It traces SQL-backed
+dataframes and conservative Pandas lineage into a Sigma data model, rebuilds
+common controls, charts, and layout as a workbook, and records anything it
+cannot prove in `gaps.json`. `streamlit-assessment` is a read-only scaffold.
 
 The `tableau-to-sigma` plugin bundles a third skill, **`tableau-vds-to-cdw`** — a
 data-landing bridge for when a Tableau datasource's data lives only inside Tableau (a
@@ -154,7 +163,7 @@ corpus/run-corpus.sh --check      # no creds needed; CI-safe
 - **Optional:** Sigma MCP for interactive read/query during parity — not required for the REST pipeline ([`docs/agent-entry.md`](docs/agent-entry.md)).
 - Per-tool source access — see each plugin's docs (e.g. `qlik-cli` for Qlik;
   device-code / Fabric `getDefinition` for Power BI; an API key or session
-  token for Metabase).
+  token for Metabase; a local checkout of the project source for Streamlit).
 
 ## Provenance
 
