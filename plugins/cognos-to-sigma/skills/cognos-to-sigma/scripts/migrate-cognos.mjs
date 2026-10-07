@@ -48,6 +48,8 @@
 //     [--resume]                   # jump to parity against the posted ids in
 //                                  # <out>/migrate-state.json
 //     [--dry-run]                  # convert only; no Sigma POSTs
+//   Report-only inputs: replace --module with --dm-spec <model.json> produced
+//   by build-dm-from-report.mjs after explicit warehouse/source-model verification.
 //
 // Exit codes: 0 = PARITY GREEN; 10 = stopped for human input (open questions
 // or expected-values needed — state saved, resume supported); 3 = built but
@@ -79,13 +81,14 @@ for (let i = 0; i < argv.length; i++) {
 const die = (m, code = 1) => { console.error(`FATAL: ${m}`); process.exit(code); };
 
 if (!opt.resume) {
-  if (!opt.module) die('missing --module <module.json>');
+  if (!opt.module && !opt['dm-spec']) die('need --module <module.json> or --dm-spec <verified-report-model.json>; for report-only XML use scripts/build-dm-from-report.mjs first');
+  if (opt.module && opt['dm-spec']) die('choose --module or --dm-spec, not both');
   if (!opt.report) die('missing --report <report.xml>');
   if (!opt.connection) die('missing --connection');
   // --folder is optional (bead eqom): when unset, the caller's My Documents is
   // resolved via whoami right before the first POST (see resolveFolder).
 }
-const slug = basename((opt.module || opt.out || 'cognos')).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '-');
+const slug = basename((opt.module || opt['dm-spec'] || opt.out || 'cognos')).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '-');
 const WORK = resolve(opt.out || join(homedir(), 'cognos-migration', slug));
 mkdirSync(WORK, { recursive: true });
 const statePath = join(WORK, 'migrate-state.json');
@@ -289,17 +292,22 @@ if (existsSync(cliBundle)) {
   }
   cliCmd = join(CONV, 'cli.ts'); cliPre = ['--import', 'tsx/esm'];
 }
-const modulePath = resolve(opt.module);
+const modulePath = resolve(opt.module || opt['dm-spec']);
 const reportPath = resolve(opt.report);
 const db = opt.database || 'DEMO_DB';
 const schema = opt.schema || 'TJ';
 const securityPath = join(WORK, 'security.json');
-const conv = spawnSync('node', [...cliPre, cliCmd, modulePath,
+const conv = opt['dm-spec']
+  ? { status: 0, stdout: readFileSync(modulePath, 'utf8'), stderr: '' }
+  : spawnSync('node', [...cliPre, cliCmd, modulePath,
   '--connection', opt.connection, '--database', db, '--schema', schema,
   '--security-out', securityPath],
   { encoding: 'utf8', cwd: CONV, maxBuffer: 64 * 1024 * 1024 });
 if (conv.status !== 0) die(`module converter failed:\n${conv.stderr}`);
 const dmSpec = JSON.parse(conv.stdout);
+if (opt['dm-spec'] && (!Array.isArray(dmSpec.pages) || !dmSpec.pages.some((page) => page.elements?.length))) {
+  die('--dm-spec must contain a nonempty Sigma data model, not a source inventory or workbook');
+}
 const dmPath = join(WORK, 'dm.json');
 writeFileSync(dmPath, JSON.stringify(dmSpec, null, 2));
 // DM metrics keyed by element display name (= the report converter's [Subject/…]
@@ -315,7 +323,7 @@ const metricsPath = join(WORK, 'report-metrics.json');
 writeFileSync(metricsPath, JSON.stringify(metricsMap, null, 2));
 const convWarnings = conv.stderr.split('\n').filter((l) => l.trim().startsWith('!')).map((l) => l.replace(/^\s*!\s*/, ''));
 const statsLine = (conv.stderr.match(/stats: (\{.*\})/) || [])[1];
-const securityDetected = existsSync(securityPath) ? JSON.parse(readFileSync(securityPath, 'utf8')) : [];
+const securityDetected = !opt['dm-spec'] && existsSync(securityPath) ? JSON.parse(readFileSync(securityPath, 'utf8')) : [];
 line(`module '${dmSpec.name || basename(modulePath)}' → DM spec (${statsLine || 'no stats'}); ${convWarnings.length} warning(s)`);
 if (securityDetected.length) line(`SECURITY: ${securityDetected.length} rule(s) detected → ${securityPath} (ported AFTER post via apply_sigma_rls.py — never silently)`);
 
@@ -492,7 +500,8 @@ if (reuseDmId) {
   line(`reusing data model ${dmId} — no POST (remap matches the report to ITS elements by name)`);
 } else {
   run('node', [join(HERE, 'post-and-readback.mjs'), '--type', 'datamodel', '--spec', dmPath,
-    '--folder', opt.folder, '--name', dmName, '--out', dmMapPath]);
+    '--folder', opt.folder, '--name', dmName, '--out', dmMapPath,
+    ...(opt['dm-spec'] ? ['--preserve-subject-names'] : [])]);
   dmId = JSON.parse(readFileSync(dmMapPath, 'utf8')).dataModelId;
 }
 state.dataModelId = dmId;

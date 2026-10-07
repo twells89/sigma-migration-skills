@@ -76,6 +76,11 @@ same `migrate-first / easy-win / needs-review` tagging.
 ## Installation & setup
 Duration: 5
 
+Updating the separate `sigma-skills` authoring repository does not update the
+Cognos converter. Confirm this plugin is loaded from `sigma-migration-skills`.
+For XML/PDF-only inputs, use `refs/report-only-model.md` to build a new data model
+from verified warehouse mappings; an existing Sigma model is not required.
+
 1. **Add the marketplace and install the plugin** (Claude Code):
    ```text
    /plugin marketplace add twells89/sigma-migration-skills

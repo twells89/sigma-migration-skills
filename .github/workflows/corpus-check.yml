@@ -780,6 +780,7 @@ jobs:
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-filter-semantics.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-compose-print-layout.mjs
             plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-report-spec.mjs
+            plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/test-report-data-model.mjs
             shared/lib/tests/test_code_rep.mjs
             shared/examples/node-orchestration-template/lib/test-auth.mjs
           )

@@ -328,6 +328,19 @@ for (const [input, expected] of NAME_CASES) {
 
 // ── Sigma Report/PDF path — same query translations, pixel layout ───────────
 {
+  const xml = `<report><queries><query name="q"><selection>
+    <dataItem name="Region" aggregate="none"><expression>[Business].[Orders].[Region]</expression></dataItem>
+  </selection></query></queries><layouts><layout><reportPages><page name="Output"><pageBody><contents>
+    <list refQuery="q"><listColumns><listColumn><listColumnBody><dataItemValue refDataItem="Region"/></listColumnBody></listColumn></listColumns></list>
+  </contents></pageBody></page></reportPages></layout></layouts></report>`;
+  const result = convertCognosReportToSigma(xml);
+  const table = (CodeRep.workbookElements(result.workbook) as any[]).find((e) => e.kind === 'table');
+  if (table.source.elementId === 'Orders' && table.columns[0].formula.toLowerCase() === '[orders/region]') {
+    console.log('✓ model refs: three-part namespace/subject/column binds without residual dot refs');
+  } else { fail++; console.log('✗ model refs: three-part reference was misbound'); }
+}
+
+{
   const xml = `<report><reportName>Quarterly statement</reportName><layouts><layout><reportPages>
     <page name="Summary"><pageHeader><style><CSS value="background-color:#112233"/></style><contents><textItem><dataSource><staticValue>Quarterly statement</staticValue></dataSource></textItem></contents></pageHeader>
       <pageBody><contents><list name="Revenue" refQuery="q"><listColumns>

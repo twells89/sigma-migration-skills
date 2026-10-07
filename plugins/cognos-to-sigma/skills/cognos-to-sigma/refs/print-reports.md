@@ -34,6 +34,9 @@ manual inventory review; that structural check cannot identify every screenshot.
    to exercise pagination. XML alone cannot reveal actual font, wrap and page
    positions. Use the PDF to determine pixel page size and margins.
 3. Land required data in the warehouse and post/read back a Sigma data model.
+    **Reuse or create:** a matching existing model is not a prerequisite. Follow
+    `report-only-model.md` for report XML/PDF input without a semantic-model export.
+    Complete model construction before invoking the print converter.
    No placeholder `--dm` can be used for Sigma validation.
 4. Resolve conversion warnings, including compound cells, unsupported formulas,
     horizontal pagination, static HTML and missing data. Structured filters
@@ -82,7 +85,7 @@ A direct `<source><queryRef refQuery="upstream"/></source>` can resolve through
 one or more alias-only queries to a single detail-grain model subject. Each
 projected item must be an exact `[upstream].[Item]` reference with explicit
 `aggregate="none"` throughout the chain; the base items
-must be four-part model references to the same catalog/module/subject path.
+must be three- or four-part model references to the same namespace/subject path.
 Aliases and declared data types are retained. Required/default literal `=` and
 `in (...)` filters from every stage are applied on hidden columns bound to their
 original fields, even if those fields are omitted or their names are reused

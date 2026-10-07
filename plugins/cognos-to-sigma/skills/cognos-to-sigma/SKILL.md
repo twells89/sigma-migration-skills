@@ -62,6 +62,17 @@ and the PDF only as a visual reference. Never place rendered report pages or
 rasterized business text into image elements as a substitute for migration.
 Logos/artwork may remain images; unsupported editable content is a blocker.
 
+**Build the data model before attempting print conversion.** Reuse-check is a
+choice between reusing a verified model and creating a new one, not a requirement
+that a matching model already exist. After one bounded reuse check with no suitable
+match, proceed to model construction. Do not stop at "no matching Sigma model."
+With a Data Module or Framework Manager export, use Phase 1 below. With report
+XML/PDF only, follow `refs/report-only-model.md`: inventory logical fields,
+discover/verify their warehouse mapping, build and POST/read back a new Sigma
+model, then convert the report. If physical mappings or source-model policies
+cannot be determined, ask for those specific missing inputs, not an existing
+Sigma model. Report XML alone is not evidence of physical table names or RLS.
+
 ---
 
 ## One command (orchestrated path)
@@ -70,8 +81,9 @@ Logos/artwork may remain images; unsupported editable content is a blocker.
 > `migrate-cognos.mjs` is the entry point. Rules:
 > - **NEVER hand-author a DM/workbook JSON and `curl`-POST it, and never ship
 >   empty "placeholder" pages.** Post only what the converter produces. If Cognos
->   is unreachable (no CA session), **STOP and tell the user to authenticate** —
->   don't build a shell.
+>   is unreachable and the required source exports are unavailable, **STOP and
+>   tell the user which export or authentication is needed** — don't build a shell.
+>   Already exported report/model files can be processed offline.
 > - **Dashboards ARE hand-authored** (the converter doesn't do exploration JSON —
 >   see `refs/dashboard-migration.md`). That is the one sanctioned hand-authored
 >   path — but it is NOT exempt from verification: a hand-authored dashboard must
@@ -88,6 +100,11 @@ node scripts/migrate-cognos.mjs \
   [--database <DB> --schema <SCHEMA>] [--name '<prefix>'] \
   [--reuse-dm [ID]] [--expected expected.json] [--yes]
 ```
+
+For a warehouse-verified model built from report XML, replace `--module` with
+`--dm-spec <model.json>`; the orchestrator still runs reuse-or-create, POST and
+readback, report conversion, and parity. Print-specific model preparation and
+creation are documented in `refs/report-only-model.md`.
 
 Sigma auth is automatic and shell-neutral on this Node path. Set
 `SIGMA_BASE_URL`, then either run `eval "$(scripts/browser-login.sh)"` once in

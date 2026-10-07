@@ -61,8 +61,9 @@ export function convertCognosPrintToSigma(xml: string, options: CognosPrintOptio
   const panels: Array<Record<string, any>> = [];
   const pageLines: string[] = [], panelLines: string[] = [];
   const notPrintable = new Set(['navigation', 'page-break', 'drill', 'progress', 'repeated-container', 'container', 'tabbed-container', 'divider']);
-  if (original.some((warning) => /query dependency/.test(warning))) {
-    throw new Error('Cognos report has an unresolved query dependency; author and verify its joins, filters and grain before printing.');
+  const queryGaps = original.filter((warning) => /query dependency/.test(warning));
+  if (queryGaps.length) {
+    throw new Error(`Cognos report has an unresolved query dependency; build or repair the data model and preserve query joins, filters and grain before printing.\n${queryGaps.slice(0, 5).join('\n')}${queryGaps.length > 5 ? `\n${queryGaps.length - 5} further query gaps are listed by the workbook converter.` : ''}`);
   }
   if (original.some((warning) => /nested data container|master-detail links/.test(warning))) {
     throw new Error('Cognos report uses a nested data container or master-detail layout; unrelated flat tables cannot preserve its record correlation and pagination.');

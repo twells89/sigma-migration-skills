@@ -31,7 +31,7 @@ async function listColumns(api, tableId) {
   return entries;
 }
 
-export async function groundWarehouseRefs(spec, api) {
+export async function groundWarehouseRefs(spec, api, { preserveElementNames = false } = {}) {
   const modes = new Map(), cache = new Map(), aliases = new Map(), prefixes = new Set(), idMap = new Map();
   const unresolved = [];
   let rewritten = 0, rekeyed = 0, reprefixed = 0;
@@ -50,8 +50,10 @@ export async function groundWarehouseRefs(spec, api) {
     if (friendly) continue;
 
     const oldName = String(element.name || ''), physicalName = String(path.at(-1));
-    if (oldName && oldName !== physicalName) aliases.set(oldName, physicalName);
-    element.name = physicalName;
+    if (!preserveElementNames) {
+      if (oldName && oldName !== physicalName) aliases.set(oldName, physicalName);
+      element.name = physicalName;
+    }
     const cacheKey = `${connection}\0${JSON.stringify(path)}`;
     if (!cache.has(cacheKey)) {
       const table = await jsonApi(api, 'POST', `/v2/connection/${connection}/lookup`, { path });

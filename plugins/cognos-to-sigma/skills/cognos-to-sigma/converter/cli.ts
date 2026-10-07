@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { convertCognosToSigma, convertCognosIR } from './cognos.js';
 import { convertCognosReportToSigma } from './cognos-report.js';
 import { convertCognosPrintToSigma } from './cognos-print.js';
+import { inventoryCognosReportSources } from './cognos-report-sources.js';
 import {
   isFrameworkManagerXml, listFrameworkManagerSubjectAreas, normalizeCognosFrameworkManager,
 } from './cognos-fm.js';
@@ -84,6 +85,11 @@ if (isFm && args.includes('--list')) {
 }
 
 const isReport = !isFm && (file.endsWith('.xml') || xml.trimStart().startsWith('<'));
+if (args.includes('--source-inventory')) {
+  if (!isReport) throw new Error('--source-inventory requires Cognos report XML');
+  process.stdout.write(JSON.stringify(inventoryCognosReportSources(xml), null, 2) + '\n');
+  process.exit(0);
+}
 const print = args.includes('--print');
 if (print && ((args.includes('--out') && !opt('out')) || (args.includes('--warnings-out') && !opt('warnings-out')))) {
   console.error('--out and --warnings-out require a path');

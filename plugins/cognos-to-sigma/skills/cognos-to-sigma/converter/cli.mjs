@@ -4887,7 +4887,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
       const expr = txt(di.expression);
       const dataType = findAll(di, "XMLAttribute").find((x) => x["@_name"] === "RS_dataType")?.["@_value"];
       items.set(dn, { name: dn, expression: expr, aggregate: di["@_aggregate"], dataType, sort: di["@_sort"] });
-      const m = expr.match(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[[^\]]+\]/);
+      const m = expr.match(/(?:\[[^\]]+\]\.){1,2}\[([^\]]+)\]\.\[[^\]]+\]/);
       if (m && !subject) subject = m[1];
     }
     const activeFilters = findAll(q, "detailFilter").filter((f) => f["@_use"] !== "prohibited");
@@ -4937,12 +4937,13 @@ function convertCognosReportToSigma(xml2, options = {}) {
         if (names.has(display)) return null;
         names.add(display);
         if (base) {
-          const modelRef = item.expression.match(/^\s*\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s*$/);
+          const modelRef = item.expression.match(/^\s*((?:\[[^\]]+\]\.){2,3}\[[^\]]+\])\s*$/);
           if (!modelRef) return null;
-          const path = JSON.stringify(modelRef.slice(1, 4));
+          const parts = [...modelRef[1].matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+          const path = JSON.stringify(parts.slice(0, -1));
           if (modelPath && modelPath !== path) return null;
           modelPath = path;
-          subject = modelRef[3];
+          subject = parts[parts.length - 2];
           items.set(item.name, { ...item });
         } else {
           const alias = item.expression.match(/^\s*\[([^\]]+)\]\.\[([^\]]+)\]\s*$/);
@@ -5086,7 +5087,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
     }
     controls.set(p, ctrl);
   };
-  const translateModelRef = (ref) => ref.replace(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`).replace(/\[([^\]/]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`);
+  const translateModelRef = (ref) => ref.replace(/(?:\[[^\]]+\]\.){1,2}\[([^\]]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`).replace(/\[([^\]/]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`);
   const translate = (expr, q) => {
     const warns = [];
     let f = (expr || "").trim();
@@ -5138,7 +5139,7 @@ function convertCognosReportToSigma(xml2, options = {}) {
       return { formula: promptName ? `Switch([${promptName}] /* map prompt tokens to columns */)` : `/* MACRO \u2014 manual: ${f.slice(0, 60)} */`, warns };
     }
     f = f.replace(
-      /\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[([^\]]+)\]/g,
+      /(?:\[[^\]]+\]\.){1,2}\[([^\]]+)\]\.\[([^\]]+)\]/g,
       (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`
     );
     f = f.replace(/\[([^\]]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`);
@@ -6192,8 +6193,11 @@ function convertCognosPrintToSigma(xml2, options = {}) {
   const panels = [];
   const pageLines = [], panelLines = [];
   const notPrintable = /* @__PURE__ */ new Set(["navigation", "page-break", "drill", "progress", "repeated-container", "container", "tabbed-container", "divider"]);
-  if (original.some((warning) => /query dependency/.test(warning))) {
-    throw new Error("Cognos report has an unresolved query dependency; author and verify its joins, filters and grain before printing.");
+  const queryGaps = original.filter((warning) => /query dependency/.test(warning));
+  if (queryGaps.length) {
+    throw new Error(`Cognos report has an unresolved query dependency; build or repair the data model and preserve query joins, filters and grain before printing.
+${queryGaps.slice(0, 5).join("\n")}${queryGaps.length > 5 ? `
+${queryGaps.length - 5} further query gaps are listed by the workbook converter.` : ""}`);
   }
   if (original.some((warning) => /nested data container|master-detail links/.test(warning))) {
     throw new Error("Cognos report uses a nested data container or master-detail layout; unrelated flat tables cannot preserve its record correlation and pagination.");
@@ -6368,6 +6372,60 @@ ${[...pageLines, ...panelLines].join("\n")}`;
     },
     warnings,
     stats: { pages: doc.pages.length, elements: content.length, panels: panels.length }
+  };
+}
+
+// plugins/cognos-to-sigma/skills/cognos-to-sigma/converter/cognos-report-sources.ts
+function inventoryCognosReportSources(xml2) {
+  const validity = XMLValidator.validate(xml2);
+  if (validity !== true) throw new Error(`invalid Cognos report XML at line ${validity.err.line}, column ${validity.err.col}`);
+  const report = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" }).parse(xml2).report;
+  if (!report) throw new Error("source inventory requires a Cognos report XML");
+  const subjects = /* @__PURE__ */ new Map();
+  const queries = [];
+  const arr4 = (v) => v == null ? [] : Array.isArray(v) ? v : [v];
+  const queryNames = new Set(arr4(report.queries?.query).map((q) => q["@_name"]));
+  const visit = (node, query) => {
+    if (!node || typeof node !== "object" || node["@_use"] === "prohibited") return;
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "query") {
+        for (const q of arr4(value)) {
+          const entry = { name: String(q["@_name"] || "query"), dependencies: [] };
+          queries.push(entry);
+          visit(q, entry);
+        }
+        continue;
+      }
+      if (key === "queryRef" && query) {
+        for (const ref of arr4(value)) if (ref["@_refQuery"] && !query.dependencies.includes(ref["@_refQuery"])) query.dependencies.push(ref["@_refQuery"]);
+      }
+      if (["expression", "filterExpression", "reportExpression"].includes(key)) {
+        const expression = typeof value === "string" ? value : value?.["#text"] || "";
+        if (/#\s*(?:prompt|sq|sb|sql)\s*\(/i.test(expression)) throw new Error("runtime macro source references require a semantic-model export and resolved runtime parameters");
+        for (const token of expression.matchAll(/'(?:[^']|'')*'|"(?:[^"]|"")*"|\[[^\]]+\](?:\.\[[^\]]+\])+/g)) {
+          if (!token[0].startsWith("[")) continue;
+          const parts = [...token[0].matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+          if (parts.length === 2) {
+            if (!queryNames.has(parts[0])) throw new Error(`ambiguous two-part source reference ${token[0]}; obtain the semantic-model export`);
+            continue;
+          }
+          if (parts.length > 4) throw new Error("model reference with more than four parts requires a semantic-model export");
+          const ref = parts.slice(0, -1).map((p) => `[${p}]`).join(".");
+          const name = parts[parts.length - 1];
+          const subject = subjects.get(ref) || { ref, name: sigmaDisplayName(parts[parts.length - 2]), columns: [] };
+          if (!subject.columns.some((column) => column.name === name)) subject.columns.push({ name, sigmaName: sigmaDisplayName(name) });
+          subjects.set(ref, subject);
+        }
+      }
+      arr4(value).forEach((child) => visit(child, query));
+    }
+  };
+  visit(report);
+  return {
+    schemaVersion: 1,
+    subjects: [...subjects.values()],
+    queries,
+    limitations: ["Report XML does not establish physical table mappings, model-level joins, calculated model items, or security policies. Verify them against the source model/owner before creating a data model."]
   };
 }
 
@@ -6951,6 +7009,11 @@ if (isFm && args.includes("--list")) {
   process.exit(0);
 }
 var isReport = !isFm && (file.endsWith(".xml") || xml.trimStart().startsWith("<"));
+if (args.includes("--source-inventory")) {
+  if (!isReport) throw new Error("--source-inventory requires Cognos report XML");
+  process.stdout.write(JSON.stringify(inventoryCognosReportSources(xml), null, 2) + "\n");
+  process.exit(0);
+}
 var print = args.includes("--print");
 if (print && (args.includes("--out") && !opt("out") || args.includes("--warnings-out") && !opt("warnings-out"))) {
   console.error("--out and --warnings-out require a path");
