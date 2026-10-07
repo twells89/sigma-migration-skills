@@ -74,6 +74,13 @@ try {
     const t = data(run(report(leaf + middle + q))).elements.find(e => e.kind === 'table');
     assert.deepEqual(predicates(t)[0].values, ['001', 'A,B', "O'Brien"]);
   });
+  check('three-part model refs support safe aliases and inherited filters', () => {
+    const result = run(report(leaf + middle + base.replaceAll('[C].[M].', '[Business].')));
+    const table = data(result).elements.find(e => e.kind === 'table');
+    assert.equal(table.source.elementId, 'Sales');
+    assert.equal(table.filters.length, 3);
+    assert.equal(table.columns.find(c => c.name === 'Region').formula.toLowerCase(), '[sales/status]');
+  });
   check('numeric and empty-string literals retain their types', () => {
     const q = base.replace("[Region] = 'East'", "[Code] in (-2, 1.5, 1e2, '')");
     const t = data(run(report(leaf + middle + q))).elements.find(e => e.kind === 'table');

@@ -22,7 +22,7 @@ const colsPath = (id) => a.type === 'datamodel' ? `/v2/dataModels/${id}/columns`
 
 const spec = JSON.parse(readFileSync(a.spec, 'utf8'));
 if (a.type === 'datamodel') {
-  const grounding = await groundWarehouseRefs(spec, api);
+  const grounding = await groundWarehouseRefs(spec, api, { preserveElementNames: a['preserve-subject-names'] === true });
   const modes = Object.entries(grounding.connectionModes)
     .map(([id, friendly]) => `${id}=${friendly ? 'friendly' : 'physical'}`).join(', ');
   console.error(`connection naming: ${modes}; grounded ${grounding.rewritten} formula(s), ` +

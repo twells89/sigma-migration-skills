@@ -1,12 +1,13 @@
 {
-  "source": "in-skill converter/cli.ts (cli.ts + cognos-fm.ts + cognos-print.ts + cognos-report.ts + cognos.ts + metric-binding.ts + sigma-ids.ts + workbook-features.ts)",
+  "source": "in-skill converter/cli.ts (cli.ts + cognos-fm.ts + cognos-print.ts + cognos-report-sources.ts + cognos-report.ts + cognos.ts + metric-binding.ts + sigma-ids.ts + workbook-features.ts)",
   "bundler": "esbuild --bundle --format=esm --platform=node",
   "vendored_modules": "cli.mjs",
-  "source_sha256": "865661df2bb535539e1adf5c94d627a652a9d60cbed528032d3d7671156542f4",
+  "source_sha256": "051f935797afcff16dfa768ddd842dd752c0b7f3b5f7837fe4faa0a0f62f63cf",
   "sources": [
     "cli.ts",
     "cognos-fm.ts",
     "cognos-print.ts",
+    "cognos-report-sources.ts",
     "cognos-report.ts",
     "cognos.ts",
     "metric-binding.ts",

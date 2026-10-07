@@ -243,7 +243,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
       // numeric dimensions that need a categorical (Text) axis binding.
       const dataType = findAll(di, 'XMLAttribute').find((x: any) => x['@_name'] === 'RS_dataType')?.['@_value'];
       items.set(dn, { name: dn, expression: expr, aggregate: di['@_aggregate'], dataType, sort: di['@_sort'] });
-      const m = expr.match(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[[^\]]+\]/); // [C].[Module].[Subject].[Col]
+      const m = expr.match(/(?:\[[^\]]+\]\.){1,2}\[([^\]]+)\]\.\[[^\]]+\]/); // [namespace].[Subject].[Col], with optional container
       if (m && !subject) subject = m[1];
     }
     // Cognos keeps disabled predicates in the XML with use="prohibited".
@@ -304,12 +304,13 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
         if (names.has(display)) return null;
         names.add(display);
         if (base) {
-          const modelRef = item.expression.match(/^\s*\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s*$/);
+          const modelRef = item.expression.match(/^\s*((?:\[[^\]]+\]\.){2,3}\[[^\]]+\])\s*$/);
           if (!modelRef) return null;
-          const path = JSON.stringify(modelRef.slice(1, 4));
+          const parts = [...modelRef[1].matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+          const path = JSON.stringify(parts.slice(0, -1));
           if (modelPath && modelPath !== path) return null;
           modelPath = path;
-          subject = modelRef[3];
+          subject = parts[parts.length - 2];
           items.set(item.name, { ...item });
         } else {
           const alias = item.expression.match(/^\s*\[([^\]]+)\]\.\[([^\]]+)\]\s*$/);
@@ -468,7 +469,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
   // Translate a bare Cognos model ref string ([C].[Module].[Subject].[Col] or
   // [Subject].[Col]) to a Sigma [Subject/Col] ref — used by the macro expansion.
   const translateModelRef = (ref: string): string => ref
-    .replace(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`)
+    .replace(/(?:\[[^\]]+\]\.){1,2}\[([^\]]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`)
     .replace(/\[([^\]/]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`);
 
   // expression translation: model refs + dataItem cross-refs + prompts + macros, then the DSL.
@@ -536,7 +537,7 @@ export function convertCognosReportToSigma(xml: string, options: CognosReportOpt
     }
 
     // model column ref → [Subject/Col]   (resolves against the migrated DM element)
-    f = f.replace(/\[[^\]]+\]\.\[[^\]]+\]\.\[([^\]]+)\]\.\[([^\]]+)\]/g,
+    f = f.replace(/(?:\[[^\]]+\]\.){1,2}\[([^\]]+)\]\.\[([^\]]+)\]/g,
       (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`);
     // shorter model ref [Subject].[Col]
     f = f.replace(/\[([^\]]+)\]\.\[([^\]]+)\]/g, (_m, subj, col) => `[${sigmaDisplayName(subj)}/${sigmaDisplayName(col)}]`);

@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cognos-to-sigma",
   "displayName": "Cognos \u2192 Sigma",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "Migrate IBM Cognos Analytics to Sigma \u2014 Data Module JSON and Framework Manager project XML \u2192 Sigma data model, report-spec XML \u2192 Sigma workbook, and print-oriented list reports \u2192 paginated Sigma Reports/PDFs. Preserves business calculations and flags unsupported source features for review.",
   "author": {
     "name": "Thomas Wells"
