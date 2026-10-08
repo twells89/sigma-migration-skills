@@ -1,0 +1,30 @@
+schema: public
+table_name: orders
+
+dimensions:
+  id:
+    primary_key: true
+    sql: '"ID"'
+  user_id:
+    sql: '"USER_ID"'
+  status:
+    sql: '"STATUS"'
+  sale_price:
+    label: Sale Price
+    sql: '"SALE_PRICE"'
+  created_at:
+    label: Created At
+    sql: '"CREATED_AT"'
+
+measures:
+  count:
+    aggregate_type: count
+    label: Order Count
+  total_revenue:
+    label: Total Revenue
+    sql: ${orders.sale_price}
+    aggregate_type: sum
+    format: usdcurrency_2
+  revenue_per_order:
+    label: Revenue per Order
+    sql: ${orders.total_revenue} / nullif(${orders.count}, 0)
