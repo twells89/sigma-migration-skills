@@ -1,0 +1,1154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spotfire-manifest.schema.json",
+  "title": "Spotfire neutral migration manifest",
+  "description": "Version 1.0 contract for an authoritative, read-only export through the public Spotfire Application API. Raw DXP inspection does not satisfy this schema.",
+  "type": "object",
+  "required": [
+    "manifest_type",
+    "manifest_version",
+    "authority",
+    "export",
+    "source",
+    "model",
+    "presentation",
+    "document_properties",
+    "automation",
+    "bookmarks",
+    "security",
+    "unsupported",
+    "export_errors"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "manifest_type": {
+      "const": "spotfire_neutral_manifest"
+    },
+    "manifest_version": {
+      "const": "1.0"
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "authoritative",
+        "api_surface",
+        "dxp_raw_used"
+      ],
+      "properties": {
+        "authoritative": {
+          "const": true
+        },
+        "api_surface": {
+          "const": "Spotfire.Dxp.Application"
+        },
+        "dxp_raw_used": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "export": {
+      "type": "object",
+      "required": [
+        "exporter",
+        "generated_at_utc",
+        "spotfire_version",
+        "api_version",
+        "execution_context",
+        "redaction",
+        "warnings"
+      ],
+      "properties": {
+        "exporter": {
+          "type": "object",
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "name": {
+              "const": "sigma-spotfire-manifest-exporter"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "generated_at_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "spotfire_version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "api_version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "execution_context": {
+          "enum": [
+            "analyst",
+            "automation",
+            "unknown"
+          ]
+        },
+        "redaction": {
+          "type": "object",
+          "required": [
+            "policy",
+            "script_bodies_included",
+            "row_data_included"
+          ],
+          "properties": {
+            "policy": {
+              "const": "connection_secrets_and_sensitive_properties_removed"
+            },
+            "script_bodies_included": {
+              "const": false
+            },
+            "row_data_included": {
+              "const": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "document_id",
+            "artifact_hash"
+          ],
+          "properties": {
+            "document_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "artifact_hash": {
+              "$ref": "#/$defs/artifactHash"
+            }
+          }
+        }
+      ]
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "tables",
+        "relations"
+      ],
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/table"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relation"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "presentation": {
+      "type": "object",
+      "required": [
+        "pages",
+        "filtering_schemes"
+      ],
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/page"
+          }
+        },
+        "filtering_schemes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/filteringScheme"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "document_properties": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/documentProperty"
+      }
+    },
+    "automation": {
+      "type": "object",
+      "required": [
+        "scripts",
+        "data_functions",
+        "mods"
+      ],
+      "properties": {
+        "scripts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/script"
+          }
+        },
+        "data_functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dataFunction"
+          }
+        },
+        "mods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mod"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "bookmarks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bookmark"
+      }
+    },
+    "security": {
+      "type": "object",
+      "required": [
+        "requires_manual_review",
+        "signals"
+      ],
+      "properties": {
+        "requires_manual_review": {
+          "type": "boolean"
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/securitySignal"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "unsupported": {
+      "$ref": "#/$defs/unsupportedList"
+    },
+    "export_errors": {
+      "$ref": "#/$defs/errorList"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "unsupportedList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unsupportedItem"
+      }
+    },
+    "errorList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exportError"
+      }
+    },
+    "unsupportedItem": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "severity"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "blocking"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "exportError": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "recoverable"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "property": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recoverable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectEnvelope": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "name",
+        "unsupported",
+        "export_errors"
+      ],
+      "properties": {
+        "source_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "name": {
+          "type": "string"
+        },
+        "unsupported": {
+          "$ref": "#/$defs/unsupportedList"
+        },
+        "export_errors": {
+          "$ref": "#/$defs/errorList"
+        }
+      }
+    },
+    "artifactHash": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "scope",
+        "status",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "scope": {
+          "const": "dxp_file_bytes"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "table": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "source",
+            "columns",
+            "source_operations"
+          ],
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/tableSource"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/column"
+              }
+            },
+            "source_operations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sourceOperation"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tableSource": {
+      "type": "object",
+      "required": [
+        "kind",
+        "provider",
+        "server",
+        "database"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "database": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "column": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "data_type",
+            "spotfire_data_type",
+            "external_name",
+            "calculated",
+            "expression",
+            "properties"
+          ],
+          "properties": {
+            "data_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "spotfire_data_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "external_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "calculated": {
+              "type": "boolean"
+            },
+            "expression": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "properties": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "sourceOperation": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation_type",
+            "expression",
+            "details"
+          ],
+          "properties": {
+            "operation_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "expression": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "relationEndpoint": {
+      "type": "object",
+      "required": [
+        "table_id",
+        "column_ids"
+      ],
+      "properties": {
+        "table_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "column_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "relation": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "relation_type",
+            "left",
+            "right"
+          ],
+          "properties": {
+            "relation_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "left": {
+              "$ref": "#/$defs/relationEndpoint"
+            },
+            "right": {
+              "$ref": "#/$defs/relationEndpoint"
+            }
+          }
+        }
+      ]
+    },
+    "page": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "description",
+            "visuals",
+            "filters"
+          ],
+          "properties": {
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "visuals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/visual"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visual": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "visual_type",
+            "description",
+            "data_table_id",
+            "axes",
+            "filters",
+            "layout",
+            "mod_id"
+          ],
+          "properties": {
+            "visual_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data_table_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "axes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/axis"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            },
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "mod_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "axis": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "axis_type",
+            "expression",
+            "columns",
+            "aggregation",
+            "sort"
+          ],
+          "properties": {
+            "axis_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "expression": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "aggregation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sort": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "filter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "filter_type",
+            "expression",
+            "column",
+            "selection_mode",
+            "state_summary"
+          ],
+          "properties": {
+            "filter_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "expression": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "column": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "selection_mode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "state_summary": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "required": [
+        "status",
+        "unit",
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "y": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "height": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "filteringScheme": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "filters"
+          ],
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "documentProperty": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "value_type",
+            "value",
+            "redacted"
+          ],
+          "properties": {
+            "value_type": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "value": {},
+            "redacted": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "script": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "language",
+            "description",
+            "enabled",
+            "source_sha256",
+            "source_length",
+            "source_included"
+          ],
+          "properties": {
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "enabled": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "source_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "source_length": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "source_included": {
+              "const": false
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "source"
+                ]
+              },
+              {
+                "required": [
+                  "source_body"
+                ]
+              },
+              {
+                "required": [
+                  "script_body"
+                ]
+              },
+              {
+                "required": [
+                  "script_code"
+                ]
+              },
+              {
+                "required": [
+                  "code"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "ioParameter": {
+      "type": "object",
+      "required": [
+        "name",
+        "data_type",
+        "binding"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "data_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "binding": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataFunction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "language",
+            "description",
+            "function_type",
+            "inputs",
+            "outputs",
+            "source_sha256",
+            "source_length",
+            "source_included"
+          ],
+          "properties": {
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "function_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "inputs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ioParameter"
+              }
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ioParameter"
+              }
+            },
+            "source_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "source_length": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "source_included": {
+              "const": false
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "source"
+                ]
+              },
+              {
+                "required": [
+                  "source_body"
+                ]
+              },
+              {
+                "required": [
+                  "script_body"
+                ]
+              },
+              {
+                "required": [
+                  "script_code"
+                ]
+              },
+              {
+                "required": [
+                  "code"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mod": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "visual_id",
+            "mod_id",
+            "version"
+          ],
+          "properties": {
+            "visual_id": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "mod_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "bookmark": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "description"
+          ],
+          "properties": {
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "securitySignal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectEnvelope"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "status",
+            "detail",
+            "evidence"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "status": {
+              "enum": [
+                "detected",
+                "not_detected",
+                "unknown"
+              ]
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

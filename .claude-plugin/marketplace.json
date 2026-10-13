@@ -183,6 +183,13 @@
       "description": "Metabase models, questions, and dashboards → Sigma data models + workbooks, with MBQL/pMBQL translation, native-SQL remodeling, controls, exact-grid layout, and parity verification. Bundles metabase-to-sigma + the read-only metabase-assessment.",
       "category": "migration",
       "keywords": ["metabase", "mbql", "migration", "bi"]
+    },
+    {
+      "name": "spotfire-to-sigma",
+      "source": "./plugins/spotfire-to-sigma",
+      "description": "Spotfire analyses → Sigma data models and workbooks through an authoritative Application API manifest, conservative formula/visual conversion, layout, readback, and warehouse verification. Bundles the offline-complete converter and read-only assessment.",
+      "category": "migration",
+      "keywords": ["spotfire", "dxp", "migration", "bi"]
     }
   ]
 }

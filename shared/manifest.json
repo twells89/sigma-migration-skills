@@ -76,7 +76,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/sigma_rest.py",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/sigma_rest.py",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/sigma_rest.py",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/sigma_rest.py"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/sigma_rest.py",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/sigma_rest.py"
       ]
     },
     {
@@ -103,7 +104,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/sigma_rest.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/sigma_rest.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/sigma_rest.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/sigma_rest.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/sigma_rest.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/sigma_rest.rb"
       ]
     },
     {
@@ -126,7 +128,8 @@
         "plugins/sigma-authoring/skills/custom-sql-to-data-model/scripts/lib/code_rep.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/code_rep.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/code_rep.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/code_rep.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/code_rep.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/code_rep.rb"
       ]
     },
     {
@@ -185,7 +188,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/preflight_lint.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/preflight_lint.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/preflight_lint.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/preflight_lint.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/preflight_lint.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/preflight_lint.rb"
       ]
     },
     {
@@ -205,7 +209,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/layout_lint.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/layout_lint.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/layout_lint.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/layout_lint.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/layout_lint.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/layout_lint.rb"
       ]
     },
     {
@@ -220,7 +225,8 @@
         "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lib/flip_gate.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/flip_gate.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/flip_gate.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/flip_gate.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/flip_gate.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/flip_gate.rb"
       ]
     },
     {
@@ -236,7 +242,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/degradation_ledger.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/degradation_ledger.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/degradation_ledger.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/degradation_ledger.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/degradation_ledger.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/degradation_ledger.rb"
       ],
       "note": "W2.23's STANDING EXEMPTION for domo/hex was DISCHARGED 2026-08-05: this is the deliberate early-Wave-3 fan-out it called for — BOTH ledger sibs (this file + evidence_ledger.rb) added to domo and hex together, in one atomic commit, with domo's suites run — not a sync-tooling accident. Motivation: assert-phase6-ran.rb is vendored to 8 plugins but this lib was vendored to only 6, so on domo and hex the gate fell through to its legacy uncapped path (\"all gates pass — conversion may declare GREEN\") with no PR-14 verdict derivation — a GREEN there was strictly weaker than the same string from the 6 synced converters. Found while driving domo's 48-card cold run to a defensible gold verdict."
     },
@@ -257,7 +264,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/control_lint.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/control_lint.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/control_lint.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/control_lint.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/control_lint.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/control_lint.rb"
       ]
     },
     {
@@ -455,7 +463,8 @@
         "plugins/quicksight-to-sigma/skills/quicksight-to-sigma/scripts/build-parity-plan.rb",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/build-parity-plan.rb",
         "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/build-parity-plan.rb",
-        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/build-parity-plan.rb"
+        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/build-parity-plan.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/build-parity-plan.rb"
       ]
     },
     {
@@ -474,7 +483,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/verify-warehouse.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/verify-warehouse.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/verify-warehouse.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/verify-warehouse.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/verify-warehouse.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/verify-warehouse.rb"
       ]
     },
     {
@@ -492,7 +502,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/escalate-gap.py",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/escalate-gap.py",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/escalate-gap.py",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/escalate-gap.py"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/escalate-gap.py",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/escalate-gap.py"
       ]
     },
     {
@@ -510,7 +521,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/probe-controls.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/probe-controls.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/probe-controls.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/probe-controls.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/probe-controls.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/probe-controls.rb"
       ]
     },
     {
@@ -528,7 +540,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/sigma-export-png.py",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/sigma-export-png.py",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/sigma-export-png.py",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/sigma-export-png.py"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/sigma-export-png.py",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/sigma-export-png.py"
       ]
     },
     {
@@ -548,7 +561,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/find-or-pick-dm.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/find-or-pick-dm.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/find-or-pick-dm.rb",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/find-or-pick-dm.rb"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/find-or-pick-dm.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/find-or-pick-dm.rb"
       ]
     },
     {
@@ -565,7 +579,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/assert-phase6-ran.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/assert-phase6-ran.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/assert-phase6-ran.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/assert-phase6-ran.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/assert-phase6-ran.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/assert-phase6-ran.rb"
       ]
     },
     {
@@ -582,7 +597,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/record-visual-check.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/record-visual-check.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/record-visual-check.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/record-visual-check.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/record-visual-check.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/record-visual-check.rb"
       ]
     },
     {
@@ -599,7 +615,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/blind_grade.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/lib/blind_grade.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/blind_grade.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/blind_grade.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/blind_grade.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/blind_grade.rb"
       ]
     },
     {
@@ -616,7 +633,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/cli_encoding.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/cli_encoding.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/cli_encoding.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/cli_encoding.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/cli_encoding.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/cli_encoding.rb"
       ]
     },
     {
@@ -639,7 +657,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/get-token.sh",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/get-token.sh",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/get-token.sh",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/get-token.sh"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/get-token.sh",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/get-token.sh"
       ]
     },
     {
@@ -662,7 +681,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/get_token.py",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/get_token.py",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/get_token.py",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/get_token.py"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/get_token.py",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/get_token.py"
       ]
     },
     {
@@ -685,7 +705,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/browser-login.sh",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/browser-login.sh",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/browser-login.sh",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/browser-login.sh"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/browser-login.sh",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/browser-login.sh"
       ]
     },
     {
@@ -708,7 +729,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/refresh-token.sh",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/refresh-token.sh",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/refresh-token.sh",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/refresh-token.sh"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/refresh-token.sh",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/refresh-token.sh"
       ]
     },
     {
@@ -731,7 +753,8 @@
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/browser-login-platform.sh",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/browser-login-platform.sh",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/browser-login-platform.sh",
-        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/browser-login-platform.sh"
+        "plugins/metabase-to-sigma/skills/metabase-to-sigma/scripts/lib/browser-login-platform.sh",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/browser-login-platform.sh"
       ]
     },
     {
@@ -814,7 +837,8 @@
         "plugins/domo-to-sigma/skills/domo-assessment/scripts/dup-dashboards.py",
         "plugins/mode-to-sigma/skills/mode-assessment/scripts/dup-dashboards.py",
         "plugins/streamlit-to-sigma/skills/streamlit-assessment/scripts/dup-dashboards.py",
-        "plugins/metabase-to-sigma/skills/metabase-assessment/scripts/dup-dashboards.py"
+        "plugins/metabase-to-sigma/skills/metabase-assessment/scripts/dup-dashboards.py",
+        "plugins/spotfire-to-sigma/skills/spotfire-assessment/scripts/dup-dashboards.py"
       ]
     },
     {
@@ -1138,7 +1162,8 @@
         "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/verify-anchors.rb",
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/verify-anchors.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/verify-anchors.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/verify-anchors.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/verify-anchors.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/verify-anchors.rb"
       ]
     },
     {
@@ -1172,7 +1197,8 @@
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/evidence_ledger.rb",
         "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lib/evidence_ledger.rb",
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/evidence_ledger.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/evidence_ledger.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/evidence_ledger.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/evidence_ledger.rb"
       ],
       "note": "W2.23's STANDING EXEMPTION (adjudicated R7/§3-A4) was DISCHARGED 2026-08-05 — this is the scheduled early-Wave-3 two-sibling fan-out it described: this file AND degradation_ledger.rb added to domo and hex together, one atomic commit, domo suites run. It is a deliberate runtime behavior change: domo's assert-phase6-ran.rb previously used its guarded inline ev_append fallback and now writes the real ledger."
     },
@@ -1189,7 +1215,8 @@
         "plugins/cognos-to-sigma/skills/cognos-to-sigma/scripts/lib/export_pool.rb",
         "plugins/gooddata-to-sigma/skills/gooddata-to-sigma/scripts/lib/export_pool.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/export_pool.rb",
-        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lib/export_pool.rb"
+        "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lib/export_pool.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/export_pool.rb"
       ]
     },
     {
@@ -1208,7 +1235,8 @@
         "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lib/anchor_values.rb",
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lib/anchor_values.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lib/anchor_values.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/anchor_values.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/anchor_values.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/anchor_values.rb"
       ]
     },
     {
@@ -1347,7 +1375,8 @@
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/cleanup-orphan-workbooks.rb",
         "plugins/qlik-to-sigma/skills/qlik-to-sigma/scripts/cleanup-orphan-workbooks.rb",
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/cleanup-orphan-workbooks.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/cleanup-orphan-workbooks.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/cleanup-orphan-workbooks.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/cleanup-orphan-workbooks.rb"
       ]
     },
     {
@@ -1429,7 +1458,8 @@
         "plugins/domo-to-sigma/skills/domo-to-sigma/scripts/lint-render-integrity.rb",
         "plugins/hex-to-sigma/skills/hex-to-sigma/scripts/lint-render-integrity.rb",
         "plugins/mode-to-sigma/skills/mode-to-sigma/scripts/lint-render-integrity.rb",
-        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lint-render-integrity.rb"
+        "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lint-render-integrity.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lint-render-integrity.rb"
       ]
     },
     {
@@ -1468,7 +1498,8 @@
         "plugins/sisense-to-sigma/skills/sisense-to-sigma/scripts/lib/ruby_compat.rb",
         "plugins/streamlit-to-sigma/skills/streamlit-to-sigma/scripts/lib/ruby_compat.rb",
         "plugins/tableau-to-sigma/skills/tableau-to-sigma/scripts/lib/ruby_compat.rb",
-        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/lib/ruby_compat.rb"
+        "plugins/thoughtspot-to-sigma/skills/thoughtspot-to-sigma/scripts/lib/ruby_compat.rb",
+        "plugins/spotfire-to-sigma/skills/spotfire-to-sigma/scripts/lib/ruby_compat.rb"
       ],
       "reason": "Ruby 2.6 floor polyfill (filter_map/tally/except). Required by every script that uses a 2.7+ Enumerable method; tools/lint-ruby-floor.rb enforces the require."
     }

@@ -1,0 +1,1235 @@
+{
+  "gaps": [
+    {
+      "category": "manual",
+      "evidence": [
+        "mapped output can be consumed, but data-function logic is not translated"
+      ],
+      "object_id": "table:scores",
+      "object_name": "Scores",
+      "object_type": "table",
+      "reason": "mapped output can be consumed, but data-function logic is not translated",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/3",
+        "source_kind": "data-function"
+      },
+      "warning_id": "SPOTFIRE-DATA-FUNCTION-UNSUPPORTED"
+    },
+    {
+      "category": "unhandled",
+      "evidence": [
+        "custom or unsupported visual type 'Spotfire Mod' has no native mapping"
+      ],
+      "object_id": "visual:custom-mod",
+      "object_name": "Forecast Mod",
+      "object_type": "visual",
+      "reason": "custom or unsupported visual type 'Spotfire Mod' has no native mapping",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/4",
+        "page_id": "page:detail"
+      },
+      "warning_id": "SPOTFIRE-VISUAL-UNSUPPORTED"
+    },
+    {
+      "category": "manual",
+      "evidence": [
+        "property maps to a parameter control, but every consumer must be rewired explicitly"
+      ],
+      "object_id": "document-property:forecast-scenario",
+      "object_name": "Forecast Scenario",
+      "object_type": "document-property",
+      "reason": "property maps to a parameter control, but every consumer must be rewired explicitly",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/document_properties/0"
+      },
+      "warning_id": "SPOTFIRE-DOCUMENT-PROPERTY-CONSUMER-REVIEW"
+    },
+    {
+      "category": "manual",
+      "evidence": [
+        "Spotfire bookmark state is not converted automatically"
+      ],
+      "object_id": "bookmark:default",
+      "object_name": "Default view",
+      "object_type": "bookmark",
+      "reason": "Spotfire bookmark state is not converted automatically",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/bookmarks/0"
+      },
+      "warning_id": "SPOTFIRE-BOOKMARK-UNSUPPORTED"
+    },
+    {
+      "category": "manual",
+      "evidence": [
+        "security finding requires explicit Sigma RLS/CLS review"
+      ],
+      "object_id": "security-signal:column-level-security",
+      "object_name": "column level security",
+      "object_type": "security",
+      "reason": "security finding requires explicit Sigma RLS/CLS review",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/security/signals/1"
+      },
+      "warning_id": "SPOTFIRE-SECURITY-REVIEW"
+    },
+    {
+      "category": "manual",
+      "evidence": [
+        "security finding requires explicit Sigma RLS/CLS review"
+      ],
+      "object_id": "security-signal:library-acl",
+      "object_name": "library acl",
+      "object_type": "security",
+      "reason": "security finding requires explicit Sigma RLS/CLS review",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/security/signals/2"
+      },
+      "warning_id": "SPOTFIRE-SECURITY-REVIEW"
+    },
+    {
+      "category": "manual",
+      "evidence": [
+        "security finding requires explicit Sigma RLS/CLS review"
+      ],
+      "object_id": "security-signal:row-level-security",
+      "object_name": "row level security",
+      "object_type": "security",
+      "reason": "security finding requires explicit Sigma RLS/CLS review",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/security/signals/0"
+      },
+      "warning_id": "SPOTFIRE-SECURITY-REVIEW"
+    },
+    {
+      "category": "unhandled",
+      "evidence": [
+        "Spotfire script is not executed or translated"
+      ],
+      "object_id": "script:reset-filters",
+      "object_name": "Reset filters",
+      "object_type": "script",
+      "reason": "Spotfire script is not executed or translated",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/automation/scripts/0"
+      },
+      "warning_id": "SPOTFIRE-SCRIPT-UNSUPPORTED"
+    },
+    {
+      "category": "unhandled",
+      "evidence": [
+        "data-function logic must be rebuilt upstream"
+      ],
+      "object_id": "data-function:customer-score",
+      "object_name": "Customer score",
+      "object_type": "data-function",
+      "reason": "data-function logic must be rebuilt upstream",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/automation/data_functions/0"
+      },
+      "warning_id": "SPOTFIRE-DATA-FUNCTION-UNSUPPORTED"
+    },
+    {
+      "category": "unhandled",
+      "evidence": [
+        "Spotfire Mod requires a manual Sigma rebuild"
+      ],
+      "object_id": "mod:forecast",
+      "object_name": "Forecast Mod",
+      "object_type": "mod",
+      "reason": "Spotfire Mod requires a manual Sigma rebuild",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/automation/mods/0"
+      },
+      "warning_id": "SPOTFIRE-MOD-UNSUPPORTED"
+    },
+    {
+      "category": "unhandled",
+      "evidence": [
+        "One bookmark state property was unavailable"
+      ],
+      "object_id": "export-error-a7fd678c2518@/export_errors/0",
+      "object_name": "Export Error 1",
+      "object_type": "export-error",
+      "reason": "One bookmark state property was unavailable",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/export_errors/0"
+      },
+      "warning_id": "SPOTFIRE-EXPORT-ERROR"
+    }
+  ],
+  "objects": [
+    {
+      "evidence": [
+        "document is the source container for model and presentation objects"
+      ],
+      "id": "document:sales-operations",
+      "name": "Sales Operations",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/source"
+      },
+      "status": "not-applicable",
+      "type": "document"
+    },
+    {
+      "evidence": [
+        "table resolves through an explicit warehouse target"
+      ],
+      "id": "table:customers",
+      "name": "Customers",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/1",
+        "source_kind": "embedded"
+      },
+      "status": "auto",
+      "type": "table"
+    },
+    {
+      "evidence": [
+        "table resolves through an explicit warehouse target"
+      ],
+      "id": "table:sales",
+      "name": "Sales",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0",
+        "source_kind": "imported"
+      },
+      "status": "auto",
+      "type": "table"
+    },
+    {
+      "evidence": [
+        "mapped output can be consumed, but data-function logic is not translated"
+      ],
+      "id": "table:scores",
+      "name": "Scores",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/3",
+        "source_kind": "data-function"
+      },
+      "status": "manual",
+      "type": "table"
+    },
+    {
+      "evidence": [
+        "table resolves through an explicit warehouse target"
+      ],
+      "id": "table:targets",
+      "name": "Targets",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/2",
+        "source_kind": "on-demand"
+      },
+      "status": "auto",
+      "type": "table"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:customers.Customer ID",
+      "name": "Customer ID",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/1/columns/0",
+        "table_id": "table:customers"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:customers.Customer Name",
+      "name": "Customer Name",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/1/columns/1",
+        "table_id": "table:customers"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:customers.Segment",
+      "name": "Segment",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/1/columns/2",
+        "table_id": "table:customers"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Cost",
+      "name": "Cost",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/4",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Customer ID",
+      "name": "Customer ID",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/6",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "calculated column expression is in the conservative allowlist"
+      ],
+      "id": "table:sales.Margin",
+      "name": "Margin",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/7",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Order Date",
+      "name": "Order Date",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/0",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Product",
+      "name": "Product",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/2",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Quantity",
+      "name": "Quantity",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/5",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Region",
+      "name": "Region",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/1",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:sales.Revenue",
+      "name": "Revenue",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/columns/3",
+        "table_id": "table:sales"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:scores.Customer ID",
+      "name": "Customer ID",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/3/columns/0",
+        "table_id": "table:scores"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:scores.Score",
+      "name": "Score",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/3/columns/1",
+        "table_id": "table:scores"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:targets.Region",
+      "name": "Region",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/2/columns/0",
+        "table_id": "table:targets"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "physical column maps to the landed table"
+      ],
+      "id": "table:targets.Target",
+      "name": "Target",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/2/columns/1",
+        "table_id": "table:targets"
+      },
+      "status": "auto",
+      "type": "column"
+    },
+    {
+      "evidence": [
+        "source operation is represented by the explicit landed-table mapping"
+      ],
+      "id": "source-operation:sales.select",
+      "name": "Select source",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/tables/0/source_operations/0",
+        "table_id": "table:sales"
+      },
+      "status": "hint",
+      "type": "source-operation"
+    },
+    {
+      "evidence": [
+        "relationship endpoints are present; fact/dimension direction still requires review"
+      ],
+      "id": "relation:sales-customers",
+      "name": "Sales to Customers",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/model/relations/0"
+      },
+      "status": "hint",
+      "type": "relationship"
+    },
+    {
+      "evidence": [
+        "page is a source container; child objects are classified separately"
+      ],
+      "id": "page:detail",
+      "name": "Detail",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1"
+      },
+      "status": "not-applicable",
+      "type": "page"
+    },
+    {
+      "evidence": [
+        "page is a source container; child objects are classified separately"
+      ],
+      "id": "page:overview",
+      "name": "Overview",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0"
+      },
+      "status": "not-applicable",
+      "type": "page"
+    },
+    {
+      "evidence": [
+        "custom or unsupported visual type 'Spotfire Mod' has no native mapping"
+      ],
+      "id": "visual:custom-mod",
+      "name": "Forecast Mod",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/4",
+        "page_id": "page:detail"
+      },
+      "status": "unhandled",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Donut Chart maps to donut-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:product-donut",
+      "name": "Quantity Share",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/0",
+        "page_id": "page:detail"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Pie Chart maps to pie-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:product-pie",
+      "name": "Revenue Share",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/5",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Area Chart maps to area-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:revenue-area",
+      "name": "Revenue Area",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/3",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Bar Chart maps to bar-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:revenue-bar",
+      "name": "Revenue by Region",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/1",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Combination Chart maps to combo-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:revenue-combo",
+      "name": "Revenue and Quantity",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/4",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "KPI maps to kpi-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:revenue-kpi",
+      "name": "Revenue",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/0",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Line Chart maps to line-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:revenue-line",
+      "name": "Revenue Trend",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/2",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Scatter Plot maps to scatter-chart and every extracted axis expression is supported"
+      ],
+      "id": "visual:revenue-scatter",
+      "name": "Revenue vs Cost",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/1",
+        "page_id": "page:detail"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Cross Table maps to pivot-table and every extracted axis expression is supported"
+      ],
+      "id": "visual:sales-cross-table",
+      "name": "Sales Matrix",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/3",
+        "page_id": "page:detail"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "Table maps to table and every extracted axis expression is supported"
+      ],
+      "id": "visual:sales-table",
+      "name": "Sales Detail",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/2",
+        "page_id": "page:detail"
+      },
+      "status": "auto",
+      "type": "visual"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:custom-mod.x",
+      "name": "X",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/4/axes/0",
+        "page_id": "page:detail",
+        "visual_id": "visual:custom-mod"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:custom-mod.y",
+      "name": "Y",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/4/axes/1",
+        "page_id": "page:detail",
+        "visual_id": "visual:custom-mod"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:product-donut.color",
+      "name": "Color",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/0/axes/0",
+        "page_id": "page:detail",
+        "visual_id": "visual:product-donut"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:product-donut.values",
+      "name": "Values",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/0/axes/1",
+        "page_id": "page:detail",
+        "visual_id": "visual:product-donut"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:product-pie.color",
+      "name": "Color",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/5/axes/0",
+        "page_id": "page:overview",
+        "visual_id": "visual:product-pie"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:product-pie.values",
+      "name": "Values",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/5/axes/1",
+        "page_id": "page:overview",
+        "visual_id": "visual:product-pie"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-area.x",
+      "name": "X",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/3/axes/0",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-area"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-area.y",
+      "name": "Y",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/3/axes/1",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-area"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-bar.category",
+      "name": "Category",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/1/axes/0",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-bar"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-bar.y",
+      "name": "Y",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/1/axes/1",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-bar"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-combo.quantity",
+      "name": "Quantity",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/4/axes/2",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-combo"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-combo.revenue",
+      "name": "Revenue",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/4/axes/1",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-combo"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-combo.x",
+      "name": "X",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/4/axes/0",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-combo"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-kpi.values",
+      "name": "Values",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/0/axes/0",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-kpi"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-line.x",
+      "name": "X",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/2/axes/0",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-line"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-line.y",
+      "name": "Y",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/visuals/2/axes/1",
+        "page_id": "page:overview",
+        "visual_id": "visual:revenue-line"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-scatter.color",
+      "name": "Region",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/1/axes/2",
+        "page_id": "page:detail",
+        "visual_id": "visual:revenue-scatter"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-scatter.x",
+      "name": "Average Cost",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/1/axes/0",
+        "page_id": "page:detail",
+        "visual_id": "visual:revenue-scatter"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:revenue-scatter.y",
+      "name": "Average Revenue",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/1/axes/1",
+        "page_id": "page:detail",
+        "visual_id": "visual:revenue-scatter"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:sales-cross-table.columns",
+      "name": "Columns",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/3/axes/1",
+        "page_id": "page:detail",
+        "visual_id": "visual:sales-cross-table"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:sales-cross-table.rows",
+      "name": "Rows",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/3/axes/0",
+        "page_id": "page:detail",
+        "visual_id": "visual:sales-cross-table"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:sales-cross-table.values",
+      "name": "Values",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/3/axes/2",
+        "page_id": "page:detail",
+        "visual_id": "visual:sales-cross-table"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:sales-table.product",
+      "name": "Product",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/2/axes/1",
+        "page_id": "page:detail",
+        "visual_id": "visual:sales-table"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:sales-table.region",
+      "name": "Region",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/2/axes/0",
+        "page_id": "page:detail",
+        "visual_id": "visual:sales-table"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "axis expression is in the conservative allowlist"
+      ],
+      "id": "axis:sales-table.revenue",
+      "name": "Revenue",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/1/visuals/2/axes/2",
+        "page_id": "page:detail",
+        "visual_id": "visual:sales-table"
+      },
+      "status": "auto",
+      "type": "axis"
+    },
+    {
+      "evidence": [
+        "filtering scheme is a source container; filters are classified separately"
+      ],
+      "id": "filtering-scheme:default",
+      "name": "Default",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/filtering_schemes/0"
+      },
+      "status": "not-applicable",
+      "type": "filtering-scheme"
+    },
+    {
+      "evidence": [
+        "filter has a column binding candidate"
+      ],
+      "id": "filter:order-date",
+      "name": "Order Date",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/pages/0/filters/0",
+        "page_id": "page:overview"
+      },
+      "status": "auto",
+      "type": "filter"
+    },
+    {
+      "evidence": [
+        "filter has a column binding candidate"
+      ],
+      "id": "filter:region",
+      "name": "Region",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/presentation/filtering_schemes/0/filters/0"
+      },
+      "status": "auto",
+      "type": "filter"
+    },
+    {
+      "evidence": [
+        "property maps to a parameter control, but every consumer must be rewired explicitly"
+      ],
+      "id": "document-property:forecast-scenario",
+      "name": "Forecast Scenario",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/document_properties/0"
+      },
+      "status": "manual",
+      "type": "document-property"
+    },
+    {
+      "evidence": [
+        "Spotfire bookmark state is not converted automatically"
+      ],
+      "id": "bookmark:default",
+      "name": "Default view",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/bookmarks/0"
+      },
+      "status": "manual",
+      "type": "bookmark"
+    },
+    {
+      "evidence": [
+        "security finding requires explicit Sigma RLS/CLS review"
+      ],
+      "id": "security-signal:column-level-security",
+      "name": "column level security",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/security/signals/1"
+      },
+      "status": "manual",
+      "type": "security"
+    },
+    {
+      "evidence": [
+        "security finding requires explicit Sigma RLS/CLS review"
+      ],
+      "id": "security-signal:library-acl",
+      "name": "library acl",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/security/signals/2"
+      },
+      "status": "manual",
+      "type": "security"
+    },
+    {
+      "evidence": [
+        "security finding requires explicit Sigma RLS/CLS review"
+      ],
+      "id": "security-signal:row-level-security",
+      "name": "row level security",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/security/signals/0"
+      },
+      "status": "manual",
+      "type": "security"
+    },
+    {
+      "evidence": [
+        "Spotfire script is not executed or translated"
+      ],
+      "id": "script:reset-filters",
+      "name": "Reset filters",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/automation/scripts/0"
+      },
+      "status": "unhandled",
+      "type": "script"
+    },
+    {
+      "evidence": [
+        "data-function logic must be rebuilt upstream"
+      ],
+      "id": "data-function:customer-score",
+      "name": "Customer score",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/automation/data_functions/0"
+      },
+      "status": "unhandled",
+      "type": "data-function"
+    },
+    {
+      "evidence": [
+        "Spotfire Mod requires a manual Sigma rebuild"
+      ],
+      "id": "mod:forecast",
+      "name": "Forecast Mod",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/automation/mods/0"
+      },
+      "status": "unhandled",
+      "type": "mod"
+    },
+    {
+      "evidence": [
+        "One bookmark state property was unavailable"
+      ],
+      "id": "export-error-a7fd678c2518@/export_errors/0",
+      "name": "Export Error 1",
+      "source": {
+        "artifact": "spotfire-manifest.json",
+        "json_pointer": "/export_errors/0"
+      },
+      "status": "unhandled",
+      "type": "export-error"
+    }
+  ],
+  "schema_version": 1,
+  "security": {
+    "findings": 3,
+    "signals": 3,
+    "status": "review-required"
+  },
+  "source": {
+    "artifact": "spotfire-manifest.json",
+    "format": "1.0"
+  },
+  "summary": {
+    "by_status": {
+      "auto": 55,
+      "hint": 2,
+      "manual": 6,
+      "not-applicable": 4,
+      "unhandled": 5
+    },
+    "by_type": {
+      "axis": 25,
+      "bookmark": 1,
+      "column": 15,
+      "data-function": 1,
+      "document": 1,
+      "document-property": 1,
+      "export-error": 1,
+      "filter": 2,
+      "filtering-scheme": 1,
+      "mod": 1,
+      "page": 2,
+      "relationship": 1,
+      "script": 1,
+      "security": 3,
+      "source-operation": 1,
+      "table": 4,
+      "visual": 11
+    },
+    "gap_categories": {
+      "manual": 6,
+      "unhandled": 5
+    },
+    "gaps": 11,
+    "objects": 72
+  }
+}

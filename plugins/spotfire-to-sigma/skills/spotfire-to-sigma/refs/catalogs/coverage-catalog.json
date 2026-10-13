@@ -1,0 +1,219 @@
+{
+  "version": "spotfire-coverage-v1",
+  "status": "foundation-assumptions",
+  "description": "Canonical Spotfire assessment and converter coverage catalog. Unknown features intentionally fall to conservative defaults.",
+  "categories": {
+    "visuals": {
+      "aliases": {
+        "tableplot": "table",
+        "table_plot": "table",
+        "data_table": "table",
+        "barchart": "bar_chart",
+        "bar_chart_plot": "bar_chart",
+        "linechart": "line_chart",
+        "line_chart_plot": "line_chart",
+        "areachart": "area_chart",
+        "piechart": "pie_chart",
+        "donutchart": "donut_chart",
+        "doughnut": "donut_chart",
+        "doughnut_chart": "donut_chart",
+        "scatterplot": "scatter_plot",
+        "scatter_chart": "scatter_plot",
+        "combinationchart": "combination_chart",
+        "combo_chart": "combination_chart",
+        "kpichart": "kpi_chart",
+        "kpi": "kpi_chart",
+        "summary": "kpi_chart",
+        "summarytable": "summary_table",
+        "crosstable": "cross_table",
+        "cross_table_plot": "cross_table",
+        "pivot": "cross_table",
+        "pivot_table": "cross_table",
+        "mapchart": "map_chart",
+        "heatmap": "heat_map",
+        "treemap": "tree_map",
+        "text_area": "text_area",
+        "spotfire_mod": "custom_visual"
+      },
+      "sigma": {
+        "table": "table",
+        "cross_table": "pivot-table",
+        "kpi_chart": "kpi-chart",
+        "summary_table": "kpi-chart",
+        "bar_chart": "bar-chart",
+        "line_chart": "line-chart",
+        "area_chart": "area-chart",
+        "combination_chart": "combo-chart",
+        "pie_chart": "pie-chart",
+        "donut_chart": "donut-chart",
+        "scatter_plot": "scatter-chart"
+      },
+      "auto": [
+        "table",
+        "bar_chart",
+        "line_chart",
+        "area_chart",
+        "combination_chart",
+        "pie_chart",
+        "donut_chart",
+        "scatter_plot",
+        "kpi_chart",
+        "summary_table",
+        "cross_table"
+      ],
+      "hint": [
+        "text_area",
+        "image",
+        "filter_panel"
+      ],
+      "manual": [
+        "map_chart",
+        "tree_map",
+        "heat_map",
+        "waterfall_chart",
+        "funnel_chart",
+        "parallel_coordinate_plot",
+        "graphical_table",
+        "network_chart",
+        "gantt_chart"
+      ],
+      "unhandled": [
+        "custom_visual",
+        "embedded_web_content"
+      ],
+      "default": "unhandled"
+    },
+    "formulas": {
+      "auto_functions": [
+        "abs",
+        "avg",
+        "case",
+        "ceiling",
+        "coalesce",
+        "concatenate",
+        "count",
+        "countif",
+        "countdistinct",
+        "date",
+        "dateadd",
+        "datediff",
+        "day",
+        "dayofweek",
+        "floor",
+        "if",
+        "isnull",
+        "len",
+        "lower",
+        "max",
+        "median",
+        "min",
+        "month",
+        "now",
+        "percentile",
+        "rank",
+        "real",
+        "round",
+        "stddev",
+        "substring",
+        "sum",
+        "trim",
+        "upper",
+        "year"
+      ],
+      "patterns": {
+        "unhandled": [
+          "\\bExternalMethod\\s*\\(",
+          "\\bIronPython\\b",
+          "\\bTERR\\b"
+        ],
+        "manual": [
+          "\\bOVER\\s*\\(",
+          "\\bTHEN\\b",
+          "\\bINTERSECT\\b",
+          "\\bNavigatePeriod\\s*\\(",
+          "\\bSN\\s*\\(",
+          "\\bRX(?:Extract|Replace)\\s*\\("
+        ],
+        "hint": [
+          "\\bRank\\s*\\(",
+          "\\bDenseRank\\s*\\("
+        ]
+      },
+      "default": "manual"
+    },
+    "security": {
+      "aliases": {
+        "acl": "library_acl",
+        "permissions": "library_acl",
+        "row_level": "row_level_security",
+        "row_filter": "data_limiting",
+        "column_level": "column_security"
+      },
+      "auto": [],
+      "hint": [],
+      "manual": [
+        "library_acl",
+        "row_level_security",
+        "data_limiting",
+        "column_security",
+        "information_link_security",
+        "personalized_view"
+      ],
+      "unhandled": [
+        "custom_authentication",
+        "impersonation",
+        "custom_authorization"
+      ],
+      "default": "manual"
+    },
+    "scripts": {
+      "aliases": {
+        "ipy": "ironpython",
+        "js": "javascript"
+      },
+      "auto": [],
+      "hint": [],
+      "manual": [],
+      "unhandled": [
+        "ironpython",
+        "javascript",
+        "custom_script",
+        "automation_services"
+      ],
+      "default": "unhandled"
+    },
+    "data_functions": {
+      "aliases": {
+        "r": "terr",
+        "python_data_function": "python"
+      },
+      "auto": [],
+      "hint": [],
+      "manual": [],
+      "unhandled": [
+        "python",
+        "terr",
+        "r_service",
+        "matlab",
+        "sas",
+        "data_function"
+      ],
+      "default": "unhandled"
+    },
+    "mods": {
+      "aliases": {
+        "visualization_mod": "spotfire_mod",
+        "mod": "spotfire_mod"
+      },
+      "auto": [],
+      "hint": [],
+      "manual": [],
+      "unhandled": [
+        "spotfire_mod",
+        "visualization_mod",
+        "action_mod"
+      ],
+      "default": "unhandled"
+    }
+  }
+}

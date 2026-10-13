@@ -1,0 +1,567 @@
+{
+  "document": {
+    "elements": [
+      {
+        "columns": [
+          {
+            "formula": "[Customers/Customer ID]",
+            "id": "id0001",
+            "name": "Customer ID"
+          },
+          {
+            "formula": "[Customers/Customer Name]",
+            "id": "id0002",
+            "name": "Customer Name"
+          },
+          {
+            "formula": "[Customers/Segment]",
+            "id": "id0003",
+            "name": "Segment"
+          }
+        ],
+        "id": "id0004",
+        "kind": "table",
+        "name": "Source · Customers",
+        "order": [
+          "id0001",
+          "id0002",
+          "id0003"
+        ],
+        "source": {
+          "dataModelId": "id0005",
+          "elementId": "id0006",
+          "kind": "data-model"
+        },
+        "visibleAsSource": false
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Sales/Order Date]",
+            "id": "id0007",
+            "name": "Order Date"
+          },
+          {
+            "formula": "[Sales/Region]",
+            "id": "id0008",
+            "name": "Region"
+          },
+          {
+            "formula": "[Sales/Product]",
+            "id": "id0009",
+            "name": "Product"
+          },
+          {
+            "formula": "[Sales/Revenue]",
+            "id": "id0010",
+            "name": "Revenue"
+          },
+          {
+            "formula": "[Sales/Cost]",
+            "id": "id0011",
+            "name": "Cost"
+          },
+          {
+            "formula": "[Sales/Quantity]",
+            "id": "id0012",
+            "name": "Quantity"
+          },
+          {
+            "formula": "[Sales/Customer ID]",
+            "id": "id0013",
+            "name": "Customer ID"
+          },
+          {
+            "formula": "[Sales/Margin]",
+            "id": "id0014",
+            "name": "Margin"
+          }
+        ],
+        "id": "id0015",
+        "kind": "table",
+        "name": "Source · Sales",
+        "order": [
+          "id0007",
+          "id0008",
+          "id0009",
+          "id0010",
+          "id0011",
+          "id0012",
+          "id0013",
+          "id0014"
+        ],
+        "source": {
+          "dataModelId": "id0005",
+          "elementId": "id0016",
+          "kind": "data-model"
+        },
+        "visibleAsSource": false
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Scores/Customer ID]",
+            "id": "id0017",
+            "name": "Customer ID"
+          },
+          {
+            "formula": "[Scores/Score]",
+            "id": "id0018",
+            "name": "Score"
+          }
+        ],
+        "id": "id0019",
+        "kind": "table",
+        "name": "Source · Scores",
+        "order": [
+          "id0017",
+          "id0018"
+        ],
+        "source": {
+          "dataModelId": "id0005",
+          "elementId": "id0020",
+          "kind": "data-model"
+        },
+        "visibleAsSource": false
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Targets/Region]",
+            "id": "id0021",
+            "name": "Region"
+          },
+          {
+            "formula": "[Targets/Target]",
+            "id": "id0022",
+            "name": "Target"
+          }
+        ],
+        "id": "id0023",
+        "kind": "table",
+        "name": "Source · Targets",
+        "order": [
+          "id0021",
+          "id0022"
+        ],
+        "source": {
+          "dataModelId": "id0005",
+          "elementId": "id0024",
+          "kind": "data-model"
+        },
+        "visibleAsSource": false
+      },
+      {
+        "controlId": "Region28da8e3a",
+        "controlType": "list",
+        "filters": [
+          {
+            "columnId": "id0008",
+            "source": {
+              "elementId": "id0015",
+              "kind": "table"
+            }
+          }
+        ],
+        "id": "id0025",
+        "kind": "control",
+        "mode": "include",
+        "name": "Region",
+        "selectionMode": "multiple",
+        "source": {
+          "columnId": "id0008",
+          "kind": "source",
+          "source": {
+            "elementId": "id0015",
+            "kind": "table"
+          }
+        },
+        "values": [
+          "East"
+        ]
+      },
+      {
+        "controlId": "OrderDatecbcb0b04",
+        "controlType": "date-range",
+        "filters": [
+          {
+            "columnId": "id0007",
+            "source": {
+              "elementId": "id0015",
+              "kind": "table"
+            }
+          }
+        ],
+        "id": "id0026",
+        "includeNulls": "when-no-value-is-selected",
+        "kind": "control",
+        "mode": "between",
+        "name": "Order Date"
+      },
+      {
+        "columns": [
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0027",
+            "name": "Values"
+          }
+        ],
+        "id": "id0028",
+        "kind": "kpi-chart",
+        "name": "Revenue",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "value": {
+          "columnId": "id0027"
+        }
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Source · Sales/Region]",
+            "id": "id0029",
+            "name": "Category"
+          },
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0030",
+            "name": "Y"
+          }
+        ],
+        "id": "id0031",
+        "kind": "bar-chart",
+        "name": "Revenue by Region",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "xAxis": {
+          "columnId": "id0029"
+        },
+        "yAxis": {
+          "columnIds": [
+            "id0030"
+          ]
+        }
+      },
+      {
+        "columns": [
+          {
+            "formula": "DateTrunc(\"month\", [Source · Sales/Order Date])",
+            "id": "id0032",
+            "name": "X"
+          },
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0033",
+            "name": "Y"
+          }
+        ],
+        "id": "id0034",
+        "kind": "line-chart",
+        "name": "Revenue Trend",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "xAxis": {
+          "columnId": "id0032"
+        },
+        "yAxis": {
+          "columnIds": [
+            "id0033"
+          ]
+        }
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Source · Sales/Region]",
+            "id": "id0035",
+            "name": "X"
+          },
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0036",
+            "name": "Y"
+          }
+        ],
+        "id": "id0037",
+        "kind": "area-chart",
+        "name": "Revenue Area",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "xAxis": {
+          "columnId": "id0035"
+        },
+        "yAxis": {
+          "columnIds": [
+            "id0036"
+          ]
+        }
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Source · Sales/Product]",
+            "id": "id0038",
+            "name": "X"
+          },
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0039",
+            "name": "Revenue"
+          },
+          {
+            "formula": "Sum([Source · Sales/Quantity])",
+            "id": "id0040",
+            "name": "Quantity"
+          }
+        ],
+        "id": "id0041",
+        "kind": "combo-chart",
+        "name": "Revenue and Quantity",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "xAxis": {
+          "columnId": "id0038"
+        },
+        "yAxis": {
+          "columnIds": [
+            "id0039",
+            "id0040"
+          ]
+        }
+      },
+      {
+        "color": {
+          "columnId": "id0042"
+        },
+        "columns": [
+          {
+            "formula": "[Source · Sales/Product]",
+            "id": "id0042",
+            "name": "Color"
+          },
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0043",
+            "name": "Values"
+          }
+        ],
+        "id": "id0044",
+        "kind": "pie-chart",
+        "name": "Revenue Share",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "value": {
+          "columnId": "id0043"
+        }
+      },
+      {
+        "color": {
+          "columnId": "id0045"
+        },
+        "columns": [
+          {
+            "formula": "[Source · Sales/Product]",
+            "id": "id0045",
+            "name": "Color"
+          },
+          {
+            "formula": "Sum([Source · Sales/Quantity])",
+            "id": "id0046",
+            "name": "Values"
+          }
+        ],
+        "id": "id0047",
+        "kind": "donut-chart",
+        "name": "Quantity Share",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "value": {
+          "columnId": "id0046"
+        }
+      },
+      {
+        "color": {
+          "by": "category",
+          "column": "id0050"
+        },
+        "columns": [
+          {
+            "formula": "[Revenue vs Cost · grouped/Average Cost]",
+            "id": "id0048",
+            "name": "Average Cost"
+          },
+          {
+            "formula": "[Revenue vs Cost · grouped/Average Revenue]",
+            "id": "id0049",
+            "name": "Average Revenue"
+          },
+          {
+            "formula": "[Revenue vs Cost · grouped/Region]",
+            "id": "id0050",
+            "name": "Region"
+          }
+        ],
+        "id": "id0051",
+        "kind": "scatter-chart",
+        "name": "Revenue vs Cost",
+        "source": {
+          "elementId": "id0052",
+          "groupingId": "id0064",
+          "kind": "table"
+        },
+        "xAxis": {
+          "columnId": "id0048"
+        },
+        "yAxis": {
+          "columnIds": [
+            "id0049"
+          ]
+        }
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Source · Sales/Region]",
+            "id": "id0053",
+            "name": "Region"
+          },
+          {
+            "formula": "[Source · Sales/Product]",
+            "id": "id0054",
+            "name": "Product"
+          },
+          {
+            "formula": "[Source · Sales/Revenue]",
+            "id": "id0055",
+            "name": "Revenue"
+          }
+        ],
+        "id": "id0056",
+        "kind": "table",
+        "name": "Sales Detail",
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        }
+      },
+      {
+        "columns": [
+          {
+            "formula": "[Source · Sales/Region]",
+            "id": "id0057",
+            "name": "Rows"
+          },
+          {
+            "formula": "[Source · Sales/Product]",
+            "id": "id0058",
+            "name": "Columns"
+          },
+          {
+            "formula": "Sum([Source · Sales/Revenue])",
+            "id": "id0059",
+            "name": "Values"
+          }
+        ],
+        "columnsBy": [
+          {
+            "columnId": "id0058"
+          }
+        ],
+        "id": "id0060",
+        "kind": "pivot-table",
+        "name": "Sales Matrix",
+        "rowsBy": [
+          {
+            "columnId": "id0057"
+          }
+        ],
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "values": [
+          "id0059"
+        ]
+      },
+      {
+        "columns": [
+          {
+            "formula": "Avg([Source · Sales/Cost])",
+            "id": "id0061",
+            "name": "Average Cost"
+          },
+          {
+            "formula": "Avg([Source · Sales/Revenue])",
+            "id": "id0062",
+            "name": "Average Revenue"
+          },
+          {
+            "formula": "[Source · Sales/Region]",
+            "id": "id0063",
+            "name": "Region"
+          }
+        ],
+        "groupings": [
+          {
+            "calculations": [
+              "id0061",
+              "id0062"
+            ],
+            "groupBy": [
+              "id0063"
+            ],
+            "id": "id0064"
+          }
+        ],
+        "id": "id0052",
+        "kind": "table",
+        "name": "Revenue vs Cost · grouped",
+        "order": [
+          "id0061",
+          "id0062",
+          "id0063"
+        ],
+        "source": {
+          "elementId": "id0015",
+          "kind": "table"
+        },
+        "visibleAsSource": false
+      }
+    ],
+    "kind": "workbook",
+    "layout": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n  <Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"data\">\n    <Element elementId=\"source-table-customers\" gridColumn=\"1 / 25\" gridRow=\"1 / 11\"/>\n    <Element elementId=\"source-table-sales\" gridColumn=\"1 / 25\" gridRow=\"11 / 21\"/>\n    <Element elementId=\"source-table-scores\" gridColumn=\"1 / 25\" gridRow=\"21 / 31\"/>\n    <Element elementId=\"source-table-targets\" gridColumn=\"1 / 25\" gridRow=\"31 / 41\"/>\n    <Element elementId=\"scatter-source-visual-revenue-scatter\" gridColumn=\"1 / 25\" gridRow=\"41 / 51\"/>\n  </Page>\n  <Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-overview\">\n    <Element elementId=\"ctrl-global-filter-0\" gridColumn=\"1 / 13\" gridRow=\"1 / 4\"/>\n    <Element elementId=\"ctrl-page-overview-filter-0\" gridColumn=\"13 / 25\" gridRow=\"1 / 4\"/>\n    <Element elementId=\"viz-visual-revenue-kpi\" gridColumn=\"1 / 7\" gridRow=\"4 / 9\"/>\n    <Element elementId=\"viz-visual-revenue-bar\" gridColumn=\"1 / 13\" gridRow=\"8 / 18\"/>\n    <Element elementId=\"viz-visual-revenue-line\" gridColumn=\"13 / 25\" gridRow=\"8 / 18\"/>\n    <Element elementId=\"viz-visual-revenue-area\" gridColumn=\"1 / 9\" gridRow=\"18 / 28\"/>\n    <Element elementId=\"viz-visual-revenue-combo\" gridColumn=\"9 / 17\" gridRow=\"18 / 28\"/>\n    <Element elementId=\"viz-visual-product-pie\" gridColumn=\"17 / 25\" gridRow=\"18 / 28\"/>\n  </Page>\n  <Page type=\"grid\" gridTemplateColumns=\"repeat(24, 1fr)\" gridTemplateRows=\"auto\" id=\"page-detail\">\n    <Element elementId=\"viz-visual-product-donut\" gridColumn=\"1 / 13\" gridRow=\"1 / 10\"/>\n    <Element elementId=\"viz-visual-revenue-scatter\" gridColumn=\"13 / 25\" gridRow=\"1 / 10\"/>\n    <Element elementId=\"viz-visual-sales-table\" gridColumn=\"1 / 13\" gridRow=\"10 / 25\"/>\n    <Element elementId=\"viz-visual-sales-cross-table\" gridColumn=\"13 / 25\" gridRow=\"10 / 21\"/>\n  </Page>",
+    "overlays": [],
+    "pages": [
+      {
+        "id": "id0065",
+        "name": "Data",
+        "visibility": "hidden"
+      },
+      {
+        "id": "id0066",
+        "name": "Overview"
+      },
+      {
+        "id": "id0067",
+        "name": "Detail"
+      }
+    ],
+    "panels": [],
+    "schemaVersion": 1
+  },
+  "name": "Sales Operations (from Spotfire)"
+}

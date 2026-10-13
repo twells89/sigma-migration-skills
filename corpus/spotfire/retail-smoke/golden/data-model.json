@@ -1,0 +1,187 @@
+{
+  "name": "Sales Operations (Spotfire Model)",
+  "pages": [
+    {
+      "elements": [
+        {
+          "columns": [
+            {
+              "formula": "[SALES/ORDER_DATE]",
+              "id": "id0001",
+              "name": "Order Date"
+            },
+            {
+              "formula": "[SALES/REGION]",
+              "id": "id0002",
+              "name": "Region"
+            },
+            {
+              "formula": "[SALES/PRODUCT]",
+              "id": "id0003",
+              "name": "Product"
+            },
+            {
+              "formula": "[SALES/REVENUE]",
+              "id": "id0004",
+              "name": "Revenue"
+            },
+            {
+              "formula": "[SALES/COST]",
+              "id": "id0005",
+              "name": "Cost"
+            },
+            {
+              "formula": "[SALES/QUANTITY]",
+              "id": "id0006",
+              "name": "Quantity"
+            },
+            {
+              "formula": "[SALES/CUSTOMER_ID]",
+              "id": "id0007",
+              "name": "Customer ID"
+            },
+            {
+              "formula": "If(([Revenue] = 0), Null, ((([Revenue] - [Cost])) / [Revenue]))",
+              "id": "id0008",
+              "name": "Margin"
+            }
+          ],
+          "id": "id0009",
+          "kind": "table",
+          "name": "Sales",
+          "order": [
+            "id0001",
+            "id0002",
+            "id0003",
+            "id0004",
+            "id0005",
+            "id0006",
+            "id0007",
+            "id0008"
+          ],
+          "relationships": [
+            {
+              "id": "id0010",
+              "keys": [
+                {
+                  "sourceColumnId": "id0007",
+                  "targetColumnId": "id0011"
+                }
+              ],
+              "name": "Customers",
+              "targetElementId": "id0012"
+            }
+          ],
+          "source": {
+            "connectionId": "00000000-0000-0000-0000-000000000000",
+            "kind": "warehouse-table",
+            "path": [
+              "ANALYTICS",
+              "SPOTFIRE",
+              "SALES"
+            ]
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[CUSTOMERS/CUSTOMER_ID]",
+              "id": "id0011",
+              "name": "Customer ID"
+            },
+            {
+              "formula": "[CUSTOMERS/CUSTOMER_NAME]",
+              "id": "id0013",
+              "name": "Customer Name"
+            },
+            {
+              "formula": "[CUSTOMERS/SEGMENT]",
+              "id": "id0014",
+              "name": "Segment"
+            }
+          ],
+          "id": "id0012",
+          "kind": "table",
+          "name": "Customers",
+          "order": [
+            "id0011",
+            "id0013",
+            "id0014"
+          ],
+          "source": {
+            "connectionId": "00000000-0000-0000-0000-000000000000",
+            "kind": "warehouse-table",
+            "path": [
+              "ANALYTICS",
+              "SPOTFIRE",
+              "CUSTOMERS"
+            ]
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[TARGETS/REGION]",
+              "id": "id0015",
+              "name": "Region"
+            },
+            {
+              "formula": "[TARGETS/TARGET]",
+              "id": "id0016",
+              "name": "Target"
+            }
+          ],
+          "id": "id0017",
+          "kind": "table",
+          "name": "Targets",
+          "order": [
+            "id0015",
+            "id0016"
+          ],
+          "source": {
+            "connectionId": "00000000-0000-0000-0000-000000000000",
+            "kind": "warehouse-table",
+            "path": [
+              "ANALYTICS",
+              "SPOTFIRE",
+              "TARGETS"
+            ]
+          }
+        },
+        {
+          "columns": [
+            {
+              "formula": "[CUSTOMER_SCORES/CUSTOMER_ID]",
+              "id": "id0018",
+              "name": "Customer ID"
+            },
+            {
+              "formula": "[CUSTOMER_SCORES/SCORE]",
+              "id": "id0019",
+              "name": "Score"
+            }
+          ],
+          "id": "id0020",
+          "kind": "table",
+          "name": "Scores",
+          "order": [
+            "id0018",
+            "id0019"
+          ],
+          "source": {
+            "connectionId": "00000000-0000-0000-0000-000000000000",
+            "kind": "warehouse-table",
+            "path": [
+              "ANALYTICS",
+              "SPOTFIRE",
+              "CUSTOMER_SCORES"
+            ]
+          }
+        }
+      ],
+      "id": "id0021",
+      "name": "Model"
+    }
+  ],
+  "schemaVersion": 1
+}

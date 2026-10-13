@@ -1,0 +1,291 @@
+{
+  "$schema": "spotfire-manifest.schema.json",
+  "manifest_type": "spotfire_neutral_manifest",
+  "manifest_version": "1.0",
+  "authority": {
+    "authoritative": true,
+    "api_surface": "Spotfire.Dxp.Application",
+    "dxp_raw_used": false
+  },
+  "export": {
+    "exporter": {
+      "name": "sigma-spotfire-manifest-exporter",
+      "version": "1.0.0"
+    },
+    "generated_at_utc": "2026-10-13T12:00:00Z",
+    "spotfire_version": "14.6.0",
+    "api_version": "14.6.0.0",
+    "execution_context": "analyst",
+    "redaction": {
+      "policy": "connection_secrets_and_sensitive_properties_removed",
+      "script_bodies_included": false,
+      "row_data_included": false
+    },
+    "warnings": []
+  },
+  "source": {
+    "source_id": "document:commerce",
+    "name": "Commerce",
+    "document_id": "commerce",
+    "artifact_hash": {
+      "algorithm": "sha256",
+      "scope": "dxp_file_bytes",
+      "status": "available",
+      "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "reason": null
+    },
+    "unsupported": [],
+    "export_errors": []
+  },
+  "model": {
+    "tables": [
+      {
+        "source_id": "table:sales",
+        "name": "Sales",
+        "source": {
+          "kind": "Spotfire.Dxp.Data.Import.DataTableDataSource",
+          "provider": "Snowflake",
+          "server": "acme.example",
+          "database": "ANALYTICS"
+        },
+        "columns": [
+          {
+            "source_id": "column:sales.revenue",
+            "name": "Revenue",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": "REVENUE",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.margin",
+            "name": "Margin",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": null,
+            "calculated": true,
+            "expression": "[Revenue] - [Cost]",
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "source_operations": [
+          {
+            "source_id": "source-operation:sales.select",
+            "name": "Select source",
+            "operation_type": "DataSourceOperation",
+            "expression": null,
+            "details": {
+              "provider": "Snowflake"
+            },
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "relations": []
+  },
+  "presentation": {
+    "pages": [
+      {
+        "source_id": "page:overview",
+        "name": "Overview",
+        "description": "Executive overview",
+        "visuals": [
+          {
+            "source_id": "visual:revenue-by-region",
+            "name": "Revenue by Region",
+            "visual_type": "BarChart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-by-region.x",
+                "name": "XAxis",
+                "axis_type": "XAxis",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": "Descending",
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [
+              {
+                "source_id": "visual-filter:revenue-by-region",
+                "name": "Filtering selection reference",
+                "filter_type": "FilteringSelectionReference",
+                "expression": null,
+                "column": null,
+                "selection_mode": "Filtering scheme",
+                "state_summary": {},
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "layout": {
+              "status": "available",
+              "unit": "spotfire_layout_units",
+              "x": 0,
+              "y": 0,
+              "width": 640,
+              "height": 360
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "filters": [],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "filtering_schemes": [
+      {
+        "source_id": "filtering-scheme:default",
+        "name": "Default",
+        "filters": [
+          {
+            "source_id": "filter:region",
+            "name": "Region",
+            "filter_type": "ListBoxFilter",
+            "expression": null,
+            "column": "Region",
+            "selection_mode": "Include",
+            "state_summary": {
+              "includeAllValues": true
+            },
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "document_properties": [
+    {
+      "source_id": "document-property:Region",
+      "name": "Region",
+      "value_type": "System.String",
+      "value": "All",
+      "redacted": false,
+      "unsupported": [],
+      "export_errors": []
+    }
+  ],
+  "automation": {
+    "scripts": [
+      {
+        "source_id": "script:reset-filters",
+        "name": "Reset filters",
+        "language": "IronPython",
+        "description": null,
+        "enabled": true,
+        "source_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "source_length": 42,
+        "source_included": false,
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "data_functions": [
+      {
+        "source_id": "data-function:forecast",
+        "name": "Forecast",
+        "language": "R",
+        "description": null,
+        "function_type": "DataFunctionDefinition",
+        "inputs": [
+          {
+            "name": "revenue",
+            "data_type": "Real",
+            "binding": "Sales.Revenue"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "forecast",
+            "data_type": "DataTable",
+            "binding": "Forecast"
+          }
+        ],
+        "source_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "source_length": 88,
+        "source_included": false,
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "mods": [
+      {
+        "source_id": "mod:waterfall",
+        "name": "Waterfall",
+        "visual_id": "visual:revenue-by-region",
+        "mod_id": "com.example.waterfall",
+        "version": "2.0.0",
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "bookmarks": [
+    {
+      "source_id": "bookmark:default",
+      "name": "Default view",
+      "description": null,
+      "unsupported": [],
+      "export_errors": []
+    }
+  ],
+  "security": {
+    "requires_manual_review": true,
+    "signals": [
+      {
+        "source_id": "security-signal:row_level_security",
+        "name": "row level security",
+        "kind": "row_level_security",
+        "status": "unknown",
+        "detail": "Customer review required",
+        "evidence": [],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "security-signal:column_level_security",
+        "name": "column level security",
+        "kind": "column_level_security",
+        "status": "unknown",
+        "detail": "Customer review required",
+        "evidence": [],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "security-signal:library_acl",
+        "name": "library acl",
+        "kind": "library_acl",
+        "status": "unknown",
+        "detail": "Separate evidence required",
+        "evidence": [],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "unsupported": [],
+  "export_errors": []
+}

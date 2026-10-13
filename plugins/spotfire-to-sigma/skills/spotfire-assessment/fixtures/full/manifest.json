@@ -1,0 +1,227 @@
+{
+  "schema_version": "spotfire-export-manifest-v1",
+  "instance": {
+    "name": "synthetic-full",
+    "server_version": "14.6.0"
+  },
+  "data_sources": [
+    {
+      "id": "sales",
+      "name": "Warehouse Sales"
+    },
+    {
+      "id": "risk",
+      "name": "Risk Data"
+    }
+  ],
+  "users": [
+    {
+      "id": "user-1",
+      "name": "Synthetic Owner"
+    }
+  ],
+  "analyses": [
+    {
+      "id": "analysis-sales",
+      "title": "Sales Overview",
+      "path": "/Sales/Sales Overview",
+      "owner": "Synthetic Owner",
+      "source_ids": [
+        "sales"
+      ],
+      "fields": [
+        "Region",
+        "Revenue",
+        "Order Date"
+      ],
+      "pages": [
+        {
+          "id": "page-sales",
+          "title": "Overview"
+        }
+      ],
+      "visuals": [
+        {
+          "id": "visual-sales-bar",
+          "title": "Revenue by region",
+          "type": "bar_chart",
+          "fields": [
+            "Region",
+            "Revenue"
+          ]
+        },
+        {
+          "id": "visual-sales-kpi",
+          "title": "Revenue",
+          "type": "kpi_chart",
+          "fields": [
+            "Revenue"
+          ]
+        }
+      ],
+      "formulas": [
+        {
+          "name": "Net Revenue",
+          "expression": "Sum([Revenue])"
+        }
+      ],
+      "security": [],
+      "scripts": [],
+      "data_functions": [],
+      "mods": [],
+      "usage": {
+        "views": 100,
+        "distinct_viewers": 25
+      }
+    },
+    {
+      "id": "analysis-sales-copy",
+      "title": "Sales Overview Copy",
+      "path": "/Sales/Sales Overview Copy",
+      "owner": "Synthetic Owner",
+      "source_ids": [
+        "sales"
+      ],
+      "fields": [
+        "Region",
+        "Revenue",
+        "Order Date"
+      ],
+      "pages": [
+        {
+          "id": "page-sales-copy",
+          "title": "Overview"
+        }
+      ],
+      "visuals": [
+        {
+          "id": "visual-sales-copy-bar",
+          "title": "Revenue by region",
+          "type": "bar_chart",
+          "fields": [
+            "Region",
+            "Revenue"
+          ]
+        },
+        {
+          "id": "visual-sales-copy-map",
+          "title": "Regional map",
+          "type": "map_chart",
+          "fields": [
+            "Region",
+            "Revenue"
+          ]
+        }
+      ],
+      "formulas": [
+        {
+          "name": "Rolling Revenue",
+          "expression": "Sum([Revenue]) OVER ([Region])"
+        }
+      ],
+      "security": [
+        {
+          "type": "row_level_security",
+          "name": "Region entitlement"
+        }
+      ],
+      "scripts": [],
+      "data_functions": [],
+      "mods": [],
+      "usage": {
+        "views": 30,
+        "distinct_viewers": 4
+      }
+    },
+    {
+      "id": "analysis-risk",
+      "title": "Legacy Risk Lab",
+      "path": "/Risk/Legacy Risk Lab",
+      "owner": "Synthetic Owner",
+      "source_ids": [
+        "risk"
+      ],
+      "fields": [
+        "Account",
+        "Risk Score"
+      ],
+      "pages": [
+        {
+          "id": "page-risk",
+          "title": "Lab"
+        }
+      ],
+      "visuals": [
+        {
+          "id": "visual-risk",
+          "title": "Risk network",
+          "type": "custom_visual",
+          "fields": [
+            "Account",
+            "Risk Score"
+          ]
+        }
+      ],
+      "formulas": [
+        {
+          "name": "Risk Rank",
+          "expression": "Rank([Risk Score])"
+        }
+      ],
+      "security": [],
+      "scripts": [
+        {
+          "name": "Refresh risk",
+          "language": "IronPython"
+        }
+      ],
+      "data_functions": [
+        {
+          "name": "Score risk",
+          "language": "Python"
+        }
+      ],
+      "mods": [
+        {
+          "name": "Risk Mod",
+          "type": "spotfire_mod"
+        }
+      ],
+      "usage": {
+        "views": 20,
+        "distinct_viewers": 3
+      }
+    },
+    {
+      "id": "analysis-unused",
+      "title": "Unused Operations",
+      "path": "/Archive/Unused Operations",
+      "owner": "Synthetic Owner",
+      "source_ids": [
+        "sales"
+      ],
+      "fields": [
+        "Region"
+      ],
+      "pages": [],
+      "visuals": [
+        {
+          "id": "visual-unused",
+          "type": "table",
+          "fields": [
+            "Region"
+          ]
+        }
+      ],
+      "formulas": [],
+      "security": [],
+      "scripts": [],
+      "data_functions": [],
+      "mods": [],
+      "usage": {
+        "views": 0,
+        "distinct_viewers": 0
+      }
+    }
+  ]
+}

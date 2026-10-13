@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spotfire-manifest-provenance.schema.json",
+  "title": "Spotfire neutral-manifest provenance map",
+  "description": "Optional evidence map from neutral-manifest JSON pointers to public Spotfire Application API objects and properties. This is not a warehouse landing map.",
+  "type": "object",
+  "required": [
+    "provenance_map_type",
+    "provenance_map_version",
+    "manifest_version",
+    "exporter_version",
+    "source_artifact_sha256",
+    "mappings"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "spotfire-manifest-provenance.schema.json"
+    },
+    "provenance_map_type": {
+      "const": "spotfire_neutral_manifest_provenance"
+    },
+    "provenance_map_version": {
+      "const": "1.0"
+    },
+    "manifest_version": {
+      "const": "1.0"
+    },
+    "exporter_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_artifact_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "manifest_pointer",
+          "source_id",
+          "api_path",
+          "evidence",
+          "authoritative",
+          "unsupported",
+          "export_errors"
+        ],
+        "properties": {
+          "manifest_pointer": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "api_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "enum": [
+              "public_property",
+              "public_collection",
+              "public_read_only_method",
+              "derived_from_public_values"
+            ]
+          },
+          "authoritative": {
+            "const": true
+          },
+          "unsupported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "export_errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
