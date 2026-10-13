@@ -160,13 +160,7 @@ def visual_kind(visual):
     raw = _first(visual, "type", "visual_type", "visualType", "kind",
                  "class", "class_name", "className")
     token = _normalize_token(raw)
-    direct = VISUAL_KIND.get(token)
-    if direct:
-        return direct
-    for alias in sorted(VISUAL_KIND, key=len, reverse=True):
-        if token.endswith("-" + alias) or token.endswith(alias):
-            return VISUAL_KIND[alias]
-    return None
+    return VISUAL_KIND.get(token)
 
 
 def classify_visual(visual):
@@ -1194,6 +1188,7 @@ def _emit_filter_control(filter_value, context, master, ids, gaps,
     }
     values = _as_list(_first(filter_value, "values", "selected_values",
                              "selectedValues", "selection"))
+    discrete = any(token in kind for token in ("list", "check"))
     if "date" in kind or any(token in data_type for token in (
             "date", "time", "timestamp")):
         return {
@@ -1202,9 +1197,10 @@ def _emit_filter_control(filter_value, context, master, ids, gaps,
             "mode": "between",
             "includeNulls": "when-no-value-is-selected",
         }
-    if any(token in kind for token in ("range", "slider")) or any(
-            token in data_type for token in (
-                "int", "number", "numeric", "decimal", "double", "real", "float")):
+    if any(token in kind for token in ("range", "slider")) or (
+            not discrete and any(token in data_type for token in (
+                "int", "number", "numeric", "decimal", "double", "real",
+                "float"))):
         return {
             **base,
             "controlType": "number-range",

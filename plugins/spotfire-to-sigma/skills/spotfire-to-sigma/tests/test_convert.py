@@ -141,6 +141,36 @@ class ConvertTests(unittest.TestCase):
             {gap["code"] for gap in self.result["gaps"]},
         )
 
+    def test_numeric_list_filter_preserves_discrete_values(self):
+        manifest = copy.deepcopy(self.manifest)
+        region = manifest["model"]["tables"][0]["columns"][1]
+        region["data_type"] = "integer"
+        region["spotfire_data_type"] = "Integer"
+        source_filter = (
+            manifest["presentation"]["filtering_schemes"][0]["filters"][0]
+        )
+        source_filter["filter_type"] = "ListBoxFilter"
+        source_filter["values"] = [42]
+
+        result = convert.convert_manifest(manifest, self.source_map)
+        control = next(
+            element
+            for element in result["workbook"]["document"]["elements"]
+            if element.get("name") == "Region"
+        )
+        self.assertEqual("list", control["controlType"])
+        self.assertEqual([42], control["values"])
+
+    def test_graphical_table_is_not_converted_as_plain_table(self):
+        self.assertEqual(
+            {
+                "source": "Graphical Table",
+                "sigma": None,
+                "status": "unhandled",
+            },
+            convert.classify_visual({"visual_type": "Graphical Table"}),
+        )
+
     def test_layout_is_well_formed_complete_and_24_columns(self):
         document = self.result["workbook"]["document"]
         layout = document["layout"]

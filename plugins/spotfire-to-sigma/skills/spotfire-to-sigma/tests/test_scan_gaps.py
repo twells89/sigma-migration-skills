@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Structured census tests for scan_gaps.py."""
+import copy
 import json
 import os
 import subprocess
@@ -68,6 +69,29 @@ class ScanGapTests(unittest.TestCase):
             if obj["type"] == "visual"
         }
         self.assertEqual(source_ids, census_ids)
+
+    def test_graphical_table_is_reported_as_unsupported(self):
+        manifest = copy.deepcopy(self.manifest)
+        visual = next(
+            visual
+            for page in manifest["presentation"]["pages"]
+            for visual in page["visuals"]
+            if visual["visual_type"] == "Table"
+        )
+        visual["visual_type"] = "Graphical Table"
+        report = scan_gaps.build_report(
+            manifest, "manifest.json", self.source_map
+        )
+        census = next(
+            obj for obj in report["objects"]
+            if obj["type"] == "visual" and obj["id"] == visual["source_id"]
+        )
+        self.assertEqual("unhandled", census["status"])
+        self.assertTrue(any(
+            gap.get("warning_id") == "SPOTFIRE-VISUAL-UNSUPPORTED"
+            and gap["object_id"] == visual["source_id"]
+            for gap in report["gaps"]
+        ))
 
     def test_missing_source_mapping_is_an_unhandled_gap(self):
         source_map = dict(self.source_map)
