@@ -26,6 +26,16 @@ python3 "$ROOT/corpus/lib/corpus_check.py" normalize \
   "$TMP/dm.json" "$TMP/data-model.json"
 python3 "$ROOT/corpus/lib/corpus_check.py" normalize \
   "$TMP/wb.json" "$TMP/workbook.json"
+python3 - "$TMP/gap-report.json" "$TMP/gap-report.lf.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+with open(sys.argv[2], "w", encoding="utf-8", newline="\n") as handle:
+    json.dump(value, handle, indent=2, sort_keys=True, ensure_ascii=False)
+    handle.write("\n")
+PY
 
 python3 "$SKILL/scripts/migrate_spotfire.py" \
   --manifest "$MANIFEST" --source-map "$SOURCE_MAP" \
@@ -64,5 +74,5 @@ PY
 
 cmp "$TMP/data-model.json" "$CASE_DIR/golden/data-model.json"
 cmp "$TMP/workbook.json" "$CASE_DIR/golden/workbook.json"
-cmp "$TMP/gap-report.json" "$CASE_DIR/golden/gap-report.json"
+cmp "$TMP/gap-report.lf.json" "$CASE_DIR/golden/gap-report.json"
 echo "Spotfire authoritative-manifest conversion, lints, dry-run gates, and goldens match"
