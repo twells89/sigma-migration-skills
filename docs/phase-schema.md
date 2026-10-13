@@ -224,3 +224,20 @@ Metabase keeps the standalone skill's established local numbering:
 | C8 Parity hard gate | Phase 4 — live Metabase values vs Sigma/warehouse, control flip test, visual check, and `assert-phase6-ran.rb` |
 | C9 Security/RLS | Security section — detect Metabase sandboxing always; port to Sigma user attributes only after explicit review |
 | C10 Enhance | — shared Phase E is not wired in this release |
+
+### spotfire-to-sigma
+
+Spotfire uses local phase numbering aligned with the canonical arc:
+
+| Canonical | spotfire-to-sigma |
+|---|---|
+| C1 Assess | Phase 0 — `spotfire-assessment` plus `scan_gaps.py` |
+| C2 Discover | Phase 1 — public Application API → authoritative manifest; raw DXP inspection is inventory-only |
+| C3 Reuse-check | Phase 1.5 — warehouse signature + `find-or-pick-dm.rb`; ambiguous matches require an explicit decision |
+| C4 Convert | Phase 2 — `convert.py` + conservative `spotfire_expr.py` |
+| C5 Post-DM gate | Phase 3 — POST/reuse, GET readback, census/error-column gate, and server-id remap |
+| C6 Build workbook | Phase 4 — rebuild against read-back DM ids, lint, POST, and read back |
+| C7 Layout | Phase 5 — source visual bounds → complete 24-column layout in the posted workbook document |
+| C8 Parity hard gate | Phase 6 — live warehouse execution for every visible element; source parity is explicitly not claimed |
+| C9 Security/RLS | Security section — detect signals always; manual decision required because a loaded document cannot prove external policies |
+| C10 Enhance | — shared Phase E is not wired in this foundation release |

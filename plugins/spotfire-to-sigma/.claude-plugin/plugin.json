@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "spotfire-to-sigma",
+  "displayName": "Spotfire → Sigma",
+  "version": "0.1.0",
+  "description": "Migrate Spotfire analyses to Sigma from an authoritative Application API manifest. Bundles an offline-complete converter and read-only assessment; live Spotfire extraction remains unvalidated.",
+  "author": {
+    "name": "Thomas Wells"
+  },
+  "license": "MIT",
+  "keywords": [
+    "spotfire",
+    "sigma",
+    "migration",
+    "bi",
+    "converter"
+  ],
+  "skills": "./skills/"
+}

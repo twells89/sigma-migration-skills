@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AnalysisDocument Version="14.6">
+  <DataTables>
+    <DataTable Id="sales" Name="Sales">
+      <Columns>
+        <Column Name="Revenue" DataType="Real" />
+        <Column Name="Margin" DataType="Real" />
+      </Columns>
+    </DataTable>
+  </DataTables>
+  <Pages>
+    <Page Id="overview" Name="Overview">
+      <Visual Type="BarChart" Title="Revenue by Region" />
+    </Page>
+  </Pages>
+</AnalysisDocument>

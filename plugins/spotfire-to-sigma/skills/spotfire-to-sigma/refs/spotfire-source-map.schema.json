@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spotfire-source-map.schema.json",
+  "title": "Spotfire warehouse source map",
+  "description": "Customer-owned mapping from Spotfire table IDs/names to landed Sigma warehouse targets. This is the --source-map consumed by convert.py and contains no exporter API provenance.",
+  "type": "object",
+  "required": [
+    "tables"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "spotfire-source-map.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "connectionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "database": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tables": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/target"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "target": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "connectionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "database": {
+              "type": "string",
+              "minLength": 1
+            },
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "path": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 3,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              ]
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "table"
+              ]
+            },
+            {
+              "required": [
+                "path"
+              ]
+            }
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

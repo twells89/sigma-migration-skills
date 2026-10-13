@@ -1,0 +1,28 @@
+{
+  "$schema": "spotfire-manifest-provenance.schema.json",
+  "provenance_map_type": "spotfire_neutral_manifest_provenance",
+  "provenance_map_version": "1.0",
+  "manifest_version": "1.0",
+  "exporter_version": "1.0.0",
+  "source_artifact_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "mappings": [
+    {
+      "manifest_pointer": "/model/tables/0",
+      "source_id": "table:sales",
+      "api_path": "Document.Data.Tables[0]",
+      "evidence": "public_collection",
+      "authoritative": true,
+      "unsupported": [],
+      "export_errors": []
+    },
+    {
+      "manifest_pointer": "/presentation/pages/0/visuals/0/axes/0",
+      "source_id": "axis:revenue-by-region.x",
+      "api_path": "Document.Pages[0].Visuals[0].VisualContentObject.XAxis",
+      "evidence": "public_property",
+      "authoritative": true,
+      "unsupported": [],
+      "export_errors": []
+    }
+  ]
+}

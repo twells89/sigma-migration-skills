@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "connectionId": "00000000-0000-0000-0000-000000000000",
+  "database": "ANALYTICS",
+  "schema": "SPOTFIRE",
+  "tables": {
+    "table:sales": {"table": "SALES"},
+    "table:customers": {"table": "CUSTOMERS"},
+    "table:targets": {"table": "TARGETS"},
+    "table:scores": {"table": "CUSTOMER_SCORES"}
+  }
+}

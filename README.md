@@ -33,6 +33,7 @@ shared `~/.sigma-migration/env` under any agent.
 /plugin install mode-to-sigma@sigma-migration-skills
 /plugin install metabase-to-sigma@sigma-migration-skills
 /plugin install streamlit-to-sigma@sigma-migration-skills
+/plugin install spotfire-to-sigma@sigma-migration-skills
 ```
 
 **Other agents (Cursor, Cortex Code, …)** — clone the repo and point your agent at the
@@ -89,6 +90,7 @@ and the skill drives discovery → translation → build → parity.
 | [`mode-to-sigma`](plugins/mode-to-sigma/) | Mode Analytics | `mode-to-sigma` |
 | [`metabase-to-sigma`](plugins/metabase-to-sigma/) | Metabase (OSS / Pro / Enterprise) | `metabase-to-sigma`, `metabase-assessment` |
 | [`streamlit-to-sigma`](plugins/streamlit-to-sigma/) | Streamlit (incl. Streamlit in Snowflake) | `streamlit-to-sigma`, `streamlit-assessment` (scaffold) |
+| [`spotfire-to-sigma`](plugins/spotfire-to-sigma/) | Spotfire Analyst / Server | `spotfire-to-sigma`, `spotfire-assessment` (foundation; live-unvalidated) |
 | [`sigma-authoring`](plugins/sigma-authoring/) | (companion) | `sigma-workbooks`, `sigma-data-models`, … — install alongside every converter |
 
 In Claude Code, installed skills are namespaced — e.g. `/powerbi-to-sigma:powerbi-assessment`.

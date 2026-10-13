@@ -1,0 +1,1061 @@
+{
+  "$schema": "spotfire-manifest.schema.json",
+  "manifest_type": "spotfire_neutral_manifest",
+  "manifest_version": "1.0",
+  "authority": {
+    "authoritative": true,
+    "api_surface": "Spotfire.Dxp.Application",
+    "dxp_raw_used": false
+  },
+  "export": {
+    "exporter": {
+      "name": "sigma-spotfire-manifest-exporter",
+      "version": "1.0.0"
+    },
+    "generated_at_utc": "2026-10-13T12:00:00Z",
+    "spotfire_version": "14.6.0",
+    "api_version": "14.6.0.0",
+    "execution_context": "analyst",
+    "redaction": {
+      "policy": "connection_secrets_and_sensitive_properties_removed",
+      "script_bodies_included": false,
+      "row_data_included": false
+    },
+    "warnings": []
+  },
+  "source": {
+    "source_id": "document:sales-operations",
+    "name": "Sales Operations",
+    "document_id": "dxp-sales",
+    "artifact_hash": {
+      "algorithm": "sha256",
+      "scope": "dxp_file_bytes",
+      "status": "available",
+      "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "reason": null
+    },
+    "unsupported": [],
+    "export_errors": []
+  },
+  "model": {
+    "tables": [
+      {
+        "source_id": "table:sales",
+        "name": "Sales",
+        "source": {
+          "kind": "imported",
+          "provider": "Snowflake",
+          "server": "warehouse.example",
+          "database": "ANALYTICS"
+        },
+        "columns": [
+          {
+            "source_id": "column:sales.order-date",
+            "name": "Order Date",
+            "data_type": "datetime",
+            "spotfire_data_type": "DateTime",
+            "external_name": "ORDER_DATE",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.region",
+            "name": "Region",
+            "data_type": "string",
+            "spotfire_data_type": "String",
+            "external_name": "REGION",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.product",
+            "name": "Product",
+            "data_type": "string",
+            "spotfire_data_type": "String",
+            "external_name": "PRODUCT",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.revenue",
+            "name": "Revenue",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": "REVENUE",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.cost",
+            "name": "Cost",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": "COST",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.quantity",
+            "name": "Quantity",
+            "data_type": "integer",
+            "spotfire_data_type": "Integer",
+            "external_name": "QUANTITY",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.customer-id",
+            "name": "Customer ID",
+            "data_type": "integer",
+            "spotfire_data_type": "Integer",
+            "external_name": "CUSTOMER_ID",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:sales.margin",
+            "name": "Margin",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": null,
+            "calculated": true,
+            "expression": "If([Revenue] = 0, Null, ([Revenue] - [Cost]) / [Revenue])",
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "source_operations": [
+          {
+            "source_id": "source-operation:sales.select",
+            "name": "Select source",
+            "operation_type": "DataSourceOperation",
+            "expression": null,
+            "details": {
+              "provider": "Snowflake"
+            },
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "table:customers",
+        "name": "Customers",
+        "source": {
+          "kind": "embedded",
+          "provider": null,
+          "server": null,
+          "database": null
+        },
+        "columns": [
+          {
+            "source_id": "column:customers.customer-id",
+            "name": "Customer ID",
+            "data_type": "integer",
+            "spotfire_data_type": "Integer",
+            "external_name": "CUSTOMER_ID",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:customers.customer-name",
+            "name": "Customer Name",
+            "data_type": "string",
+            "spotfire_data_type": "String",
+            "external_name": "CUSTOMER_NAME",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:customers.segment",
+            "name": "Segment",
+            "data_type": "string",
+            "spotfire_data_type": "String",
+            "external_name": "SEGMENT",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "source_operations": [],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "table:targets",
+        "name": "Targets",
+        "source": {
+          "kind": "on-demand",
+          "provider": "Information Link",
+          "server": null,
+          "database": null
+        },
+        "columns": [
+          {
+            "source_id": "column:targets.region",
+            "name": "Region",
+            "data_type": "string",
+            "spotfire_data_type": "String",
+            "external_name": "REGION",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:targets.target",
+            "name": "Target",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": "TARGET",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "source_operations": [],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "table:scores",
+        "name": "Scores",
+        "source": {
+          "kind": "data-function",
+          "provider": "TERR",
+          "server": null,
+          "database": null
+        },
+        "columns": [
+          {
+            "source_id": "column:scores.customer-id",
+            "name": "Customer ID",
+            "data_type": "integer",
+            "spotfire_data_type": "Integer",
+            "external_name": "CUSTOMER_ID",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "column:scores.score",
+            "name": "Score",
+            "data_type": "decimal",
+            "spotfire_data_type": "Real",
+            "external_name": "SCORE",
+            "calculated": false,
+            "expression": null,
+            "properties": {},
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "source_operations": [],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "relations": [
+      {
+        "source_id": "relation:sales-customers",
+        "name": "Sales to Customers",
+        "relation_type": "ManyToOne",
+        "left": {
+          "table_id": "table:sales",
+          "column_ids": [
+            "column:sales.customer-id"
+          ]
+        },
+        "right": {
+          "table_id": "table:customers",
+          "column_ids": [
+            "column:customers.customer-id"
+          ]
+        },
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "presentation": {
+    "pages": [
+      {
+        "source_id": "page:overview",
+        "name": "Overview",
+        "description": "Executive overview",
+        "visuals": [
+          {
+            "source_id": "visual:revenue-kpi",
+            "name": "Revenue",
+            "visual_type": "KPI",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-kpi.values",
+                "name": "Values",
+                "axis_type": "Values",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.0,
+              "y": 0.0,
+              "width": 0.24,
+              "height": 0.18
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:revenue-bar",
+            "name": "Revenue by Region",
+            "visual_type": "Bar Chart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-bar.category",
+                "name": "Category",
+                "axis_type": "Category",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-bar.y",
+                "name": "Y",
+                "axis_type": "Y",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.0,
+              "y": 0.2,
+              "width": 0.49,
+              "height": 0.38
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:revenue-line",
+            "name": "Revenue Trend",
+            "visual_type": "Line Chart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-line.x",
+                "name": "X",
+                "axis_type": "X",
+                "expression": "DateTrunc(\"month\", [Order Date])",
+                "columns": [
+                  "Order Date"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-line.y",
+                "name": "Y",
+                "axis_type": "Y",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.51,
+              "y": 0.2,
+              "width": 0.49,
+              "height": 0.38
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:revenue-area",
+            "name": "Revenue Area",
+            "visual_type": "Area Chart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-area.x",
+                "name": "X",
+                "axis_type": "X",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-area.y",
+                "name": "Y",
+                "axis_type": "Y",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.0,
+              "y": 0.6,
+              "width": 0.32,
+              "height": 0.4
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:revenue-combo",
+            "name": "Revenue and Quantity",
+            "visual_type": "Combination Chart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-combo.x",
+                "name": "X",
+                "axis_type": "X",
+                "expression": "[Product]",
+                "columns": [
+                  "Product"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-combo.revenue",
+                "name": "Revenue",
+                "axis_type": "Y",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-combo.quantity",
+                "name": "Quantity",
+                "axis_type": "Y",
+                "expression": "Sum([Quantity])",
+                "columns": [
+                  "Quantity"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.34,
+              "y": 0.6,
+              "width": 0.32,
+              "height": 0.4
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:product-pie",
+            "name": "Revenue Share",
+            "visual_type": "Pie Chart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:product-pie.color",
+                "name": "Color",
+                "axis_type": "Color",
+                "expression": "[Product]",
+                "columns": [
+                  "Product"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:product-pie.values",
+                "name": "Values",
+                "axis_type": "Values",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.68,
+              "y": 0.6,
+              "width": 0.32,
+              "height": 0.4
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "filters": [
+          {
+            "source_id": "filter:order-date",
+            "name": "Order Date",
+            "filter_type": "date-range",
+            "expression": null,
+            "column": "Order Date",
+            "table": "table:sales",
+            "selection_mode": "Include",
+            "state_summary": {},
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "page:detail",
+        "name": "Detail",
+        "description": "Detailed sales analysis",
+        "visuals": [
+          {
+            "source_id": "visual:product-donut",
+            "name": "Quantity Share",
+            "visual_type": "Donut Chart",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:product-donut.color",
+                "name": "Color",
+                "axis_type": "Color",
+                "expression": "[Product]",
+                "columns": [
+                  "Product"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:product-donut.values",
+                "name": "Values",
+                "axis_type": "Values",
+                "expression": "Sum([Quantity])",
+                "columns": [
+                  "Quantity"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.0,
+              "y": 0.0,
+              "width": 0.49,
+              "height": 0.36
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:revenue-scatter",
+            "name": "Revenue vs Cost",
+            "visual_type": "Scatter Plot",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:revenue-scatter.x",
+                "name": "Average Cost",
+                "axis_type": "X",
+                "expression": "Avg([Cost])",
+                "columns": [
+                  "Cost"
+                ],
+                "aggregation": "Avg",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-scatter.y",
+                "name": "Average Revenue",
+                "axis_type": "Y",
+                "expression": "Avg([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Avg",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:revenue-scatter.color",
+                "name": "Region",
+                "axis_type": "Color",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.51,
+              "y": 0.0,
+              "width": 0.49,
+              "height": 0.36
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:sales-table",
+            "name": "Sales Detail",
+            "visual_type": "Table",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:sales-table.region",
+                "name": "Region",
+                "axis_type": "Columns",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:sales-table.product",
+                "name": "Product",
+                "axis_type": "Columns",
+                "expression": "[Product]",
+                "columns": [
+                  "Product"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:sales-table.revenue",
+                "name": "Revenue",
+                "axis_type": "Columns",
+                "expression": "[Revenue]",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.0,
+              "y": 0.38,
+              "width": 0.49,
+              "height": 0.62
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:sales-cross-table",
+            "name": "Sales Matrix",
+            "visual_type": "Cross Table",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:sales-cross-table.rows",
+                "name": "Rows",
+                "axis_type": "Rows",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:sales-cross-table.columns",
+                "name": "Columns",
+                "axis_type": "Columns",
+                "expression": "[Product]",
+                "columns": [
+                  "Product"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:sales-cross-table.values",
+                "name": "Values",
+                "axis_type": "Values",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.51,
+              "y": 0.38,
+              "width": 0.49,
+              "height": 0.42
+            },
+            "mod_id": null,
+            "unsupported": [],
+            "export_errors": []
+          },
+          {
+            "source_id": "visual:custom-mod",
+            "name": "Forecast Mod",
+            "visual_type": "Spotfire Mod",
+            "description": null,
+            "data_table_id": "table:sales",
+            "axes": [
+              {
+                "source_id": "axis:custom-mod.x",
+                "name": "X",
+                "axis_type": "X",
+                "expression": "[Region]",
+                "columns": [
+                  "Region"
+                ],
+                "aggregation": null,
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              },
+              {
+                "source_id": "axis:custom-mod.y",
+                "name": "Y",
+                "axis_type": "Y",
+                "expression": "Sum([Revenue])",
+                "columns": [
+                  "Revenue"
+                ],
+                "aggregation": "Sum",
+                "sort": null,
+                "unsupported": [],
+                "export_errors": []
+              }
+            ],
+            "filters": [],
+            "layout": {
+              "status": "available",
+              "unit": "normalized",
+              "x": 0.51,
+              "y": 0.82,
+              "width": 0.49,
+              "height": 0.18
+            },
+            "mod_id": "com.example.forecast",
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "filters": [],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "filtering_schemes": [
+      {
+        "source_id": "filtering-scheme:default",
+        "name": "Default",
+        "filters": [
+          {
+            "source_id": "filter:region",
+            "name": "Region",
+            "filter_type": "list",
+            "expression": null,
+            "column": "Region",
+            "table": "table:sales",
+            "selection_mode": "Include",
+            "state_summary": {
+              "includeAllValues": false
+            },
+            "values": [
+              "East"
+            ],
+            "unsupported": [],
+            "export_errors": []
+          }
+        ],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "document_properties": [
+    {
+      "source_id": "document-property:forecast-scenario",
+      "name": "Forecast Scenario",
+      "value_type": "System.String",
+      "value": "Base",
+      "values": [
+        "Base",
+        "Upside",
+        "Downside"
+      ],
+      "redacted": false,
+      "unsupported": [],
+      "export_errors": []
+    }
+  ],
+  "automation": {
+    "scripts": [
+      {
+        "source_id": "script:reset-filters",
+        "name": "Reset filters",
+        "language": "IronPython",
+        "description": null,
+        "enabled": true,
+        "source_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "source_length": 42,
+        "source_included": false,
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "data_functions": [
+      {
+        "source_id": "data-function:customer-score",
+        "name": "Customer score",
+        "language": "R",
+        "description": null,
+        "function_type": "DataFunctionDefinition",
+        "inputs": [
+          {
+            "name": "customers",
+            "data_type": "DataTable",
+            "binding": "Customers"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "scores",
+            "data_type": "DataTable",
+            "binding": "Scores"
+          }
+        ],
+        "source_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "source_length": 88,
+        "source_included": false,
+        "unsupported": [],
+        "export_errors": []
+      }
+    ],
+    "mods": [
+      {
+        "source_id": "mod:forecast",
+        "name": "Forecast Mod",
+        "visual_id": "visual:custom-mod",
+        "mod_id": "com.example.forecast",
+        "version": "2.0.0",
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "bookmarks": [
+    {
+      "source_id": "bookmark:default",
+      "name": "Default view",
+      "description": null,
+      "unsupported": [],
+      "export_errors": []
+    }
+  ],
+  "security": {
+    "requires_manual_review": true,
+    "signals": [
+      {
+        "source_id": "security-signal:row-level-security",
+        "name": "row level security",
+        "kind": "row_level_security",
+        "status": "unknown",
+        "detail": "Customer review required",
+        "evidence": [],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "security-signal:column-level-security",
+        "name": "column level security",
+        "kind": "column_level_security",
+        "status": "unknown",
+        "detail": "Customer review required",
+        "evidence": [],
+        "unsupported": [],
+        "export_errors": []
+      },
+      {
+        "source_id": "security-signal:library-acl",
+        "name": "library acl",
+        "kind": "library_acl",
+        "status": "unknown",
+        "detail": "Separate evidence required",
+        "evidence": [],
+        "unsupported": [],
+        "export_errors": []
+      }
+    ]
+  },
+  "unsupported": [],
+  "export_errors": [
+    {
+      "code": "bookmark_state_partial",
+      "message": "One bookmark state property was unavailable",
+      "property": "Bookmark.State",
+      "recoverable": true
+    }
+  ]
+}

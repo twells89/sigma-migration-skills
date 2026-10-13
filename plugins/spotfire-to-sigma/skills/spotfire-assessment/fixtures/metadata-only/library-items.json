@@ -1,0 +1,76 @@
+{
+  "items": [
+    {
+      "id": "folder-sales",
+      "title": "Sales",
+      "path": "/Sales",
+      "type": "spotfire.folder",
+      "created": "2026-01-01T00:00:00Z",
+      "modified": "2026-08-01T00:00:00Z"
+    },
+    {
+      "id": "library-analysis-sales",
+      "title": "Sales Overview",
+      "path": "/Sales/Sales Overview",
+      "type": "spotfire.dxp",
+      "createdBy": {
+        "displayName": "Synthetic Owner",
+        "id": "user-1"
+      },
+      "created": "2026-01-02T00:00:00Z",
+      "modified": "2026-08-01T00:00:00Z",
+      "accessed": "2026-09-30T12:00:00Z",
+      "favoriteCount": 5,
+      "permissions": [
+        {
+          "principalId": "group-sales",
+          "principalName": "Sales Users",
+          "principalType": "GROUP",
+          "permissions": [
+            "READ"
+          ]
+        }
+      ],
+      "properties": []
+    },
+    {
+      "id": "library-analysis-risk",
+      "title": "Risk Lab",
+      "path": "/Risk/Risk Lab",
+      "type": "spotfire.dxp",
+      "createdBy": {
+        "displayName": "Synthetic Owner",
+        "id": "user-1"
+      },
+      "created": "2026-02-02T00:00:00Z",
+      "modified": "2026-08-02T00:00:00Z",
+      "accessed": "2026-09-29T12:00:00Z",
+      "favoriteCount": 1,
+      "permissions": []
+    },
+    {
+      "id": "library-data-function",
+      "title": "Risk Score",
+      "path": "/Data Functions/Risk Score",
+      "type": "spotfire.datafunction"
+    },
+    {
+      "id": "library-script",
+      "title": "Refresh Script",
+      "path": "/Scripts/Refresh Script",
+      "type": "spotfire.dxpscript"
+    },
+    {
+      "id": "library-mod",
+      "title": "Risk Mod",
+      "path": "/Mods/Risk Mod",
+      "type": "spotfire.visualizationmod"
+    },
+    {
+      "id": "library-connection",
+      "title": "Warehouse",
+      "path": "/Connections/Warehouse",
+      "type": "spotfire.dataconnection"
+    }
+  ]
+}

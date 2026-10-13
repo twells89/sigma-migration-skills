@@ -67,6 +67,8 @@ Maturity labels (`gold` / `live` / `foundation` / `scaffold`) are defined in
 | Scope/assess a Streamlit instance | `streamlit-assessment` | scaffold | `plugins/streamlit-to-sigma/skills/streamlit-assessment/` |
 | Convert Metabase models/questions/dashboards → Sigma | `metabase-to-sigma` | live | `plugins/metabase-to-sigma/skills/metabase-to-sigma/` |
 | Scope/assess a Metabase instance | `metabase-assessment` | live | `plugins/metabase-to-sigma/skills/metabase-assessment/` |
+| Convert a Spotfire analysis + data model → Sigma | `spotfire-to-sigma` | foundation | `plugins/spotfire-to-sigma/skills/spotfire-to-sigma/` |
+| Scope/assess a Spotfire instance | `spotfire-assessment` | foundation | `plugins/spotfire-to-sigma/skills/spotfire-assessment/` |
 
 Assessments are read-only (never write to the source or post to Sigma); run one
 to pick what to convert, then hand off to the matching converter.
