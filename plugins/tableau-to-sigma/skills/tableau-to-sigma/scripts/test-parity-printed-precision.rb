@@ -77,6 +77,7 @@ decs = chart && chart['expected_decimals']
 check(decs.is_a?(Array) && decs[1] == 0, "whole-dollar column records 0 printed decimals (got #{decs.inspect})")
 check(decs.is_a?(Array) && decs[2] == 4, "percent column: max 2 printed decimals (12.34%) + 2 = 4 (got #{decs.inspect})")
 check(decs.is_a?(Array) && decs[0].nil?, 'dimension column carries no printed precision')
+check(chart && chart['measure_indices'] == [1, 2], 'plan records plotted measure columns separately from dimensions')
 
 plan2, = build_plan("Account,Variance,Margin\nRev,-100.5,0.25\nCOGS,7,-0.5\n")
 check(plan2 && !plan2['charts'].first.key?('expected_decimals'),
@@ -145,9 +146,18 @@ check(rc == 1 && out.include?('DIVERGE'), "a row with a real measure missing fro
 rc, out = verify('chart' => 'Mixed-format missing row', 'extract' => false,
                  'expected' => [['East', 10.0, 2.0], ['West', nil, 5.0]],
                  'expected_decimals' => [nil, 0, nil],
+                 'measure_indices' => [1, 2],
                  'actual' => { 'rows' => [['East', 10.2, 2.0]] })
 check(rc == 1 && out.include?('DIVERGE'),
       "a row populated only in an unformatted measure still DIVERGEs when missing from Sigma (exit #{rc})")
+
+# Numeric dimensions must not keep otherwise all-null crosstab padding.
+rc, out = verify('chart' => 'Numeric dimension padding', 'extract' => false,
+                 'expected' => [['East', 2025.0, 5.0], ['West', 2025.0, nil]],
+                 'expected_decimals' => [nil, nil, 0],
+                 'measure_indices' => [2],
+                 'actual' => { 'rows' => [['East', 2025.0, 5.2]] })
+check(rc.zero? && out.include?('PASS'), "numeric dimensions are not treated as measures (exit #{rc})")
 
 puts
 if FAILS.empty?

@@ -345,10 +345,8 @@ mode_forced = opts[:mode] == :extract
 # (0.785 -> 0.79 vs 0.78497 -> 0.78). Rows whose measure cells are ALL null are
 # dropped on either side: Tableau's crosstab export pads every dim combination
 # while Sigma emits only real rows.
-def printed_precision_rows(raw_rows, decs)
-  measure_idx = decs.each_index.select do |i|
-    decs[i] || raw_rows.any? { |r| r[i].is_a?(Numeric) }
-  end
+def printed_precision_rows(raw_rows, decs, measure_idx)
+  measure_idx = (measure_idx + decs.each_index.select { |i| decs[i] }).uniq
   raw_rows.reject { |r| measure_idx.all? { |i| r[i].nil? } }.map do |r|
     rounded = round_row(r)
     r.each_with_index.map do |v, i|
@@ -362,7 +360,9 @@ end
 
 results = plan.map do |p|
   decs = p['expected_decimals'].is_a?(Array) && p['expected_decimals'].any? ? p['expected_decimals'] : nil
-  exp = decs ? printed_precision_rows(p['expected'] || [], decs) : (p['expected'] || []).map { |r| round_row(r) }
+  measure_idx = p['measure_indices'].is_a?(Array) ? p['measure_indices'] : []
+  exp = decs ? printed_precision_rows(p['expected'] || [], decs, measure_idx) :
+               (p['expected'] || []).map { |r| round_row(r) }
 
   this_extract = if p.key?('extract')
                    p['extract']
@@ -404,7 +404,7 @@ results = plan.map do |p|
     next result.merge(chart: p['chart'], extract: this_extract, columns: [])
   end
 
-  act = decs ? printed_precision_rows(p.dig('actual', 'rows') || [], decs) :
+  act = decs ? printed_precision_rows(p.dig('actual', 'rows') || [], decs, measure_idx) :
                (p.dig('actual', 'rows') || []).map { |r| round_row(r) }
 
   score_exp = exp

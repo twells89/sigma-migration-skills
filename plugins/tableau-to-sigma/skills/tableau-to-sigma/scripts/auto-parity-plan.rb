@@ -457,6 +457,11 @@ sigma_charts.each do |el|
     'matched_via' => matched_via,
     'expected'    => expected_rows
   }
+  measure_ids = Array(el.dig('yAxis', 'columnIds')) + Array(el['values']) +
+                [el.dig('value', 'columnId'), el.dig('value', 'id')]
+  measure_ids = measure_ids.map { |id| id.is_a?(Hash) ? (id['columnId'] || id['id']) : id }.compact
+  measure_indices = cols.each_index.select { |i| measure_ids.include?(cols[i]) }
+  entry['measure_indices'] = measure_indices unless measure_indices.empty?
   entry['expected_decimals'] = col_decimals if col_decimals.any?
   if opts[:wb_id] && cols.size >= 1
     sel = cols.each_with_index.map { |c, i| %("#{c}" AS f#{i}) }.join(', ')
