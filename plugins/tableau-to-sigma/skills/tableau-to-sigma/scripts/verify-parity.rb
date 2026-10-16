@@ -48,6 +48,10 @@
 require 'json'
 require 'set'
 require 'optparse'
+# UTF-8 external encoding even when LANG is unset: json >= 2.7 raises
+# InvalidByteSequenceError parsing a US-ASCII-tagged plan with non-ASCII chart
+# names (phase6-parity runs this verifier as a child process).
+require_relative 'lib/cli_encoding'
 require_relative 'lib/dim_canon'
 
 opts = { mode: :strict, tol: 0.30 }
