@@ -78,9 +78,9 @@ check(decs.is_a?(Array) && decs[1] == 0, "whole-dollar column records 0 printed 
 check(decs.is_a?(Array) && decs[2] == 4, "percent column: max 2 printed decimals (12.34%) + 2 = 4 (got #{decs.inspect})")
 check(decs.is_a?(Array) && decs[0].nil?, 'dimension column carries no printed precision')
 
-plan2, = build_plan("Account,Variance,Margin\nRev,100.5,0.25\nCOGS,7,0.5\n")
+plan2, = build_plan("Account,Variance,Margin\nRev,-100.5,0.25\nCOGS,7,-0.5\n")
 check(plan2 && !plan2['charts'].first.key?('expected_decimals'),
-      'unformatted numeric CSV records no expected_decimals (default comparison unchanged)')
+      'unformatted numeric CSV, including negatives, records no expected_decimals')
 
 # --- Part B: verify-parity ---------------------------------------------------
 def verify(chart)
@@ -139,6 +139,15 @@ rc, out = verify('chart' => 'Missing row', 'extract' => false,
                  'expected_decimals' => [nil, 0],
                  'actual' => { 'rows' => [['Rev', 5.2]] })
 check(rc == 1 && out.include?('DIVERGE'), "a row with a real measure missing from Sigma still DIVERGEs (exit #{rc})")
+
+# A populated unformatted companion measure makes the row real even when the
+# formatted measure is null.
+rc, out = verify('chart' => 'Mixed-format missing row', 'extract' => false,
+                 'expected' => [['East', 10.0, 2.0], ['West', nil, 5.0]],
+                 'expected_decimals' => [nil, 0, nil],
+                 'actual' => { 'rows' => [['East', 10.2, 2.0]] })
+check(rc == 1 && out.include?('DIVERGE'),
+      "a row populated only in an unformatted measure still DIVERGEs when missing from Sigma (exit #{rc})")
 
 puts
 if FAILS.empty?

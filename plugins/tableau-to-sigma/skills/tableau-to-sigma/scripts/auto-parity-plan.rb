@@ -377,8 +377,10 @@ sigma_charts.each do |el|
     return nil if v.nil? || v.to_s.strip.empty?
     s = v.to_s.strip
     neg = false
+    accounting = false
     if (m = s.match(/\A\((.*)\)\z/))
       neg = true
+      accounting = true
       s = m[1].strip
     end
     if s.start_with?('-', "\u2212")
@@ -391,9 +393,9 @@ sigma_charts.each do |el|
     return v if f.nil?
     decimals = body.include?('.') ? body.split('.', 2)[1].length : 0
     decimals += 2 if pct
-    # Only formatted cells ($ , % or accounting parens/minus) evidence a printed
+    # Only formatted cells ($ , % or accounting parens) evidence a printed
     # precision; a bare "3" or "3.5" cell is left to the default comparison.
-    col_decimals[i] = [col_decimals[i] || 0, decimals].max if s.match?(/[,$%]/) || neg
+    col_decimals[i] = [col_decimals[i] || 0, decimals].max if s.match?(/[,$%]/) || accounting
     f = -f if neg
     pct ? f / 100.0 : f
   end

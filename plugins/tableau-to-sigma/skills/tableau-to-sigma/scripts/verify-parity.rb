@@ -346,7 +346,9 @@ mode_forced = opts[:mode] == :extract
 # dropped on either side: Tableau's crosstab export pads every dim combination
 # while Sigma emits only real rows.
 def printed_precision_rows(raw_rows, decs)
-  measure_idx = decs.each_index.select { |i| decs[i] }
+  measure_idx = decs.each_index.select do |i|
+    decs[i] || raw_rows.any? { |r| r[i].is_a?(Numeric) }
+  end
   raw_rows.reject { |r| measure_idx.all? { |i| r[i].nil? } }.map do |r|
     rounded = round_row(r)
     r.each_with_index.map do |v, i|
