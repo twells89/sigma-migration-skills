@@ -35,6 +35,10 @@ require 'optparse'
 require 'base64'
 require 'open3'
 require 'time'
+# Force UTF-8 external encoding: with LANG unset Open3.capture3 tags the verifier's
+# output US-ASCII and the chart-name scan below dies with "invalid byte sequence
+# in US-ASCII" on any non-ASCII chart name.
+require_relative 'lib/cli_encoding'
 require_relative 'lib/zone_census'
 
 opts = { extract_mode: false, extract_tol: 0.30, renames: [], finalize: false }

@@ -283,6 +283,56 @@ Dir.mktmpdir do |dir|
   check(st.success?, "1-tile census disagreement tolerated → exit 0 (got #{st.exitstatus})", fails)
 end
 
+# ...elements on a HIDDEN page never render → not tiles. A hand-authored
+# workbook that unions its sources on a hidden Data page carries chart-kind
+# elements there; visibleAsSource is data-model-only (the live workbook API
+# 400s on it), so page visibility is the census's only signal. Pre-fix the
+# hidden bar charts inflated the census (kpi+line+3 bar vs the grade's kpi+line)
+# and gate 8b rejected a correct grade as INCONSISTENT.
+Dir.mktmpdir do |dir|
+  base_workdir(dir, blind: false)
+  File.write(File.join(dir, 'wb-readback.json'), JSON.pretty_generate(
+               'document' => {
+                 'kind' => 'workbook',
+                 'pages' => [{ 'id' => 'p1', 'name' => 'Overview' },
+                             { 'id' => 'p-hidden', 'name' => 'Staging', 'visibility' => 'hidden' }],
+                 'elements' => [{ 'id' => 'e1', 'kind' => 'kpi-chart' },
+                                { 'id' => 'e2', 'kind' => 'line-chart' },
+                                { 'id' => 'h1', 'kind' => 'bar-chart' },
+                                { 'id' => 'h2', 'kind' => 'bar-chart' },
+                                { 'id' => 'h3', 'kind' => 'bar-chart' }],
+                 'layout' => '<Page id="p1"><Element elementId="e1"/><Element elementId="e2"/></Page>' \
+                             '<Page id="p-hidden"><Element elementId="h1"/><Element elementId="h2"/><Element elementId="h3"/></Page>'
+               }))
+  BlindFixture.install(dir) # per_tile: kpi + line
+  out, err, st = run_gate(dir)
+  check(st.success?, "hidden-page chart elements are excluded from the 8b kind census → exit 0 (got #{st.exitstatus}: #{err.lines.first(2).join(' ').strip})", fails)
+  check(out.include?('gate 8b: blind grade verified'), 'gate 8b verifies the grade against the visible-tile census', fails)
+end
+
+# ...but the SAME elements on a VISIBLE page still count (the exclusion is
+# keyed to page visibility, not to chart kind).
+Dir.mktmpdir do |dir|
+  base_workdir(dir, blind: false)
+  File.write(File.join(dir, 'wb-readback.json'), JSON.pretty_generate(
+               'document' => {
+                 'kind' => 'workbook',
+                 'pages' => [{ 'id' => 'p1', 'name' => 'Overview' },
+                             { 'id' => 'p2', 'name' => 'Detail' }],
+                 'elements' => [{ 'id' => 'e1', 'kind' => 'kpi-chart' },
+                                { 'id' => 'e2', 'kind' => 'line-chart' },
+                                { 'id' => 'h1', 'kind' => 'bar-chart' },
+                                { 'id' => 'h2', 'kind' => 'bar-chart' },
+                                { 'id' => 'h3', 'kind' => 'bar-chart' }],
+                 'layout' => '<Page id="p1"><Element elementId="e1"/><Element elementId="e2"/></Page>' \
+                             '<Page id="p2"><Element elementId="h1"/><Element elementId="h2"/><Element elementId="h3"/></Page>'
+               }))
+  BlindFixture.install(dir)
+  _out, err, st = run_gate(dir)
+  check(st.exitstatus == 13 && err.include?('INCONSISTENT'),
+        "the same bar charts on a VISIBLE page still trip the census cross-check → exit 13 (got #{st.exitstatus})", fails)
+end
+
 # ---- gate 8b PR-9: valid blind grade → OK line names the sha binding ---------
 Dir.mktmpdir do |dir|
   base_workdir(dir)

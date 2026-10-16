@@ -116,10 +116,10 @@ The prefix depends on the source type:
 
 - **Data-model source**: prefix is the data-model element's own `name`. The column half must be that element's **exposed** column name, as listed by `GET /v2/dataModels/{id}/elements` — relationship-derived columns include a join-leg suffix, so `[Order Fact View/Region (CUSTOMER_DIM)]` rather than `[Order Fact View/Region]`. See `reference/workflows/discover.md`.
 
-- **Union source**: `SourceName` = the union's `name` field. References resolve against the union's `matches[].outputColumnName` values, not the underlying tables' columns.
-  - Union with `name: "All Sales"` → `[All Sales/Order Number]`.
-  - If you omit `name`, Sigma assigns `"Union of N Sources"`; **a bare reference like `[Order Number]` to a column the consuming element also defines named `Order Number` is a circular reference and the SQL won't compile.** Set the `name` explicitly to avoid this.
-  - After POST, GET the consuming element's formulas. Sigma may drop `source.name` and rewrite prefixes to `[Union of N Sources/…]`. Later PUTs must use the readback prefix, not the authored name.
+- **Union source**: `SourceName` = `Union of N Sources` where N is the number of entries in the union's `sources[]` — **not** the union's own `name` (live `/v2/workbooks/spec/verify` rejects that as a prefix). References resolve against the union's `matches[].outputColumnName` values, not the underlying tables' columns.
+  - Two-source union → `[Union of 2 Sources/Order Number]`.
+  - **A bare reference like `[Order Number]` to a column the consuming element also defines named `Order Number` is a circular reference and the SQL won't compile.** Always use the prefixed form.
+  - After POST, GET the consuming element's formulas to confirm the readback prefix; later PUTs must use it.
 
 - Column names must match exactly what the describe endpoint returns. **Never invent column names.** Do not rename a formula column to a display label that contains `$` (`Plan $`, `Loaded $`) — sibling refs like `[Plan $]` compile as `Unknown column`.
 
