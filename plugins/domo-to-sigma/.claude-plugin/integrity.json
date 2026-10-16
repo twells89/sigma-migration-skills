@@ -1,8 +1,8 @@
 {
   "schema": "domo-plugin-integrity/v1",
-  "pluginVersion": "0.16.159",
+  "pluginVersion": "0.16.160",
   "files": {
-    ".claude-plugin/plugin.json": "ec4202122b494b58a05a1d3f385a9b5d2ddfeb4d752fa9212a23069fdba96d42",
+    ".claude-plugin/plugin.json": "b72187a1e390e1a0ca4979855b9142e4359faa47533a8d84f85c97d4fb944f1b",
     "skills/domo-to-sigma/SKILL.md": "4222c9ba13ebd9d53437d3fcba510668fdf681ca2fa30c19c9079d0b9be029f8",
     "skills/domo-to-sigma/scripts/migrate-domo.rb": "6a2a613acc559e207a9480ef84958dc44d80e00576cffa50424fd182a40e0879",
     "skills/domo-to-sigma/scripts/convert-beast-modes.rb": "8c4b82a408ebaa34112c137c30566467642dd686dfdd94f354ce46ec85e296be",
