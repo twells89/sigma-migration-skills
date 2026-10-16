@@ -37,6 +37,11 @@ Dir.mktmpdir do |dir|
   summary = File.exist?(pf) ? JSON.parse(File.read(pf)) : {}
   check.call(summary['pass_names'] == [NAME], "the accented chart name round-trips into parity-final.json pass_names (#{summary['pass_names'].inspect})")
   check.call(summary['status'] == 'PASS', "status PASS (#{summary['status'].inspect})")
+  unless fails.empty?
+    warn '--- phase6-parity stdout ---', out, '--- phase6-parity stderr ---', err
+    txt = File.join(dir, 'parity-final.txt')
+    warn '--- parity-final.txt ---', File.read(txt) if File.exist?(txt)
+  end
 end
 
 puts
