@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "spotfire-to-sigma",
   "displayName": "Spotfire → Sigma",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Migrate Spotfire analyses to Sigma from an authoritative Application API manifest. Bundles an offline-complete converter and read-only assessment; live Spotfire extraction remains unvalidated.",
   "author": {
     "name": "Thomas Wells"

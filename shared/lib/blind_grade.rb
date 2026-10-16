@@ -154,7 +154,11 @@ module BlindGrade
       owner = page_by_element[el['id'].to_s]
       data_page = owner && (owner['name'].to_s.strip.casecmp?('Data') ||
                             owner['id'].to_s.downcase.include?('data'))
-      next if data_page || el['visibleAsSource'] == false
+      # Elements placed on a hidden page never render, so they are not tiles.
+      # visibleAsSource is data-model-only (the live workbook API 400s on it),
+      # so page visibility is the workbook's real "hidden data page" signal.
+      hidden_page = owner && owner['visibility'].to_s == 'hidden'
+      next if data_page || hidden_page || el['visibleAsSource'] == false
       f = family(el['kind'])
       fams << f if chart_family?(f)
     end

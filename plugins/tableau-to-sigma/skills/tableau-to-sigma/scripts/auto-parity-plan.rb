@@ -35,6 +35,9 @@ require 'optparse'
 require 'net/http'
 require 'uri'
 require 'set'
+# UTF-8 external encoding for the view CSVs (unicode minus, accented names) even
+# when LANG is unset — CSV.read otherwise tags the file US-ASCII and raises.
+require_relative 'lib/cli_encoding'
 require_relative 'lib/workbook_code'
 
 opts = { renames: {}, trusted_rename_sources: Set.new }
@@ -364,18 +367,42 @@ sigma_charts.each do |el|
   # Parse a Tableau CSV cell to a comparable value. Measures arrive as
   # formatted strings ("110,788.35" / "$1,234" / "12.3%") — KPI expecteds MUST
   # become floats or the strict compare fails on representation (bead s6fo).
-  parse_cell = lambda do |v|
+  # Accounting negatives ("($41,000)") and a unicode minus parse as negative.
+  # Each column's PRINTED precision is recorded in col_decimals (percent: +2,
+  # since the fraction carries two more places than the label) so the comparator
+  # can judge Sigma at the precision the source actually exported — a "$#,##0"
+  # view carries whole dollars only and can never equal a cent-precision value.
+  col_decimals = Array.new(n_fields)
+  parse_cell = lambda do |v, i|
     return nil if v.nil? || v.to_s.strip.empty?
     s = v.to_s.strip
+    neg = false
+    accounting = false
+    if (m = s.match(/\A\((.*)\)\z/))
+      neg = true
+      accounting = true
+      s = m[1].strip
+    end
+    if s.start_with?('-', "\u2212")
+      neg = !neg
+      s = s[1..].strip
+    end
     pct = s.end_with?('%')
-    f = (Float(s.gsub(/[,$%]/, '')) rescue nil)
+    body = s.gsub(/[,$%]/, '')
+    f = (Float(body) rescue nil)
     return v if f.nil?
+    decimals = body.include?('.') ? body.split('.', 2)[1].length : 0
+    decimals += 2 if pct
+    # Only formatted cells ($ , % or accounting parens) evidence a printed
+    # precision; a bare "3" or "3.5" cell is left to the default comparison.
+    col_decimals[i] = [col_decimals[i] || 0, decimals].max if s.match?(/[,$%]/) || accounting
+    f = -f if neg
     pct ? f / 100.0 : f
   end
   expected_rows = rows.map do |r|
     r.map.with_index do |v, i|
       if n_fields == 1 || i.positive?
-        parse_cell.call(v)
+        parse_cell.call(v, i)
       else
         v.nil? || v.to_s.strip.empty? ? nil : v
       end
@@ -430,6 +457,12 @@ sigma_charts.each do |el|
     'matched_via' => matched_via,
     'expected'    => expected_rows
   }
+  measure_ids = Array(el.dig('yAxis', 'columnIds')) + Array(el['values']) +
+                [el.dig('value', 'columnId'), el.dig('value', 'id')]
+  measure_ids = measure_ids.map { |id| id.is_a?(Hash) ? (id['columnId'] || id['id']) : id }.compact
+  measure_indices = cols.each_index.select { |i| measure_ids.include?(cols[i]) }
+  entry['measure_indices'] = measure_indices unless measure_indices.empty?
+  entry['expected_decimals'] = col_decimals if col_decimals.any?
   if opts[:wb_id] && cols.size >= 1
     sel = cols.each_with_index.map { |c, i| %("#{c}" AS f#{i}) }.join(', ')
     entry['sql_template'] = %(SELECT #{sel} FROM "workbook"."#{el['id']}" ORDER BY 1)

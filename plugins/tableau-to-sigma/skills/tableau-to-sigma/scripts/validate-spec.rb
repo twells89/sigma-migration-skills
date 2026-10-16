@@ -339,6 +339,12 @@ spec.fetch('pages', []).each do |page|
       own_prefixes << src['path'].last
     end
     own_prefixes << 'Custom SQL' if src['kind'] == 'sql'
+    # A union source's output columns resolve under "Union of N Sources" (N =
+    # sources.size) — live /v2/workbooks/spec/verify rejects the union's own
+    # `name` as a prefix.
+    if src['kind'] == 'union' && src['sources'].is_a?(Array)
+      own_prefixes << "Union of #{src['sources'].size} Sources"
+    end
     # bead 1t6c: a master sourcing a DM element (kind: data-model) carries
     # pass-through column formulas like [EMPLOYEES/Department] whose prefix is the
     # DM element's source-table name — that lives INSIDE the data model, not this

@@ -48,6 +48,10 @@
 require 'json'
 require 'set'
 require 'optparse'
+# UTF-8 external encoding even when LANG is unset: json >= 2.7 raises
+# InvalidByteSequenceError parsing a US-ASCII-tagged plan with non-ASCII chart
+# names (phase6-parity runs this verifier as a child process).
+require_relative 'lib/cli_encoding'
 require_relative 'lib/dim_canon'
 
 opts = { mode: :strict, tol: 0.30 }
@@ -337,8 +341,32 @@ end
 # Top-level --extract-mode overrides default
 mode_forced = opts[:mode] == :extract
 
+# Printed-precision compare. When the plan recorded the decimals Tableau
+# actually exported per measure column (auto-parity-plan's expected_decimals),
+# judge BOTH sides at that precision: a "$#,##0" view carries whole dollars and
+# can never equal a cent-precision warehouse value. Rows are rounded from the
+# RAW values — round_row's fixed 2dp pre-round would double-round a 3dp percent
+# (0.785 -> 0.79 vs 0.78497 -> 0.78). Rows whose measure cells are ALL null are
+# dropped on either side: Tableau's crosstab export pads every dim combination
+# while Sigma emits only real rows.
+def printed_precision_rows(raw_rows, decs, measure_idx)
+  measure_idx = (measure_idx + decs.each_index.select { |i| decs[i] }).uniq
+  raw_rows.reject { |r| measure_idx.all? { |i| r[i].nil? } }.map do |r|
+    rounded = round_row(r)
+    r.each_with_index.map do |v, i|
+      num = if v.is_a?(Numeric) then v.to_f
+            elsif v.is_a?(String) && v.strip.match?(/\A-?\d+(\.\d+)?\z/) then v.strip.to_f
+            end
+      decs[i] && num ? num.round(decs[i]) : rounded[i]
+    end
+  end
+end
+
 results = plan.map do |p|
-  exp = (p['expected'] || []).map { |r| round_row(r) }
+  decs = p['expected_decimals'].is_a?(Array) && p['expected_decimals'].any? ? p['expected_decimals'] : nil
+  measure_idx = p['measure_indices'].is_a?(Array) ? p['measure_indices'] : []
+  exp = decs ? printed_precision_rows(p['expected'] || [], decs, measure_idx) :
+               (p['expected'] || []).map { |r| round_row(r) }
 
   this_extract = if p.key?('extract')
                    p['extract']
@@ -380,12 +408,15 @@ results = plan.map do |p|
     next result.merge(chart: p['chart'], extract: this_extract, columns: [])
   end
 
-  act = (p.dig('actual', 'rows') || []).map { |r| round_row(r) }
+  act = decs ? printed_precision_rows(p.dig('actual', 'rows') || [], decs, measure_idx) :
+               (p.dig('actual', 'rows') || []).map { |r| round_row(r) }
 
   score_exp = exp
   score_act = act
   display_precision_columns = []
-  unless this_extract
+  # Printed precision already fixed the comparison grain; the export-display
+  # normalization below would re-derive it from Sigma's values.
+  unless this_extract || decs
     score_exp, score_act, display_precision_columns = normalize_export_precision(exp, act)
   end
   result = this_extract ? extract_compare(exp, act, tol: opts[:tol]) : strict_compare(score_exp, score_act)

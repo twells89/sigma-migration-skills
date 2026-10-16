@@ -231,7 +231,33 @@ wb_elements.each_with_index do |el, i|
     extra_fails << "element #{el_desc}: source data-model elementId \"#{src['elementId']}\" not in #{File.basename(opts[:dm_ids])} — stale readback or wrong DM"
   end
 
+  # A union source exposes its matches[].outputColumnName set under the prefix
+  # "Union of N Sources" (N = sources.size; live verify rejects the union's own
+  # `name`). Those refs resolve against the union, not the DM; its table legs
+  # must precede this element in document order.
+  union_prefix = nil
+  union_outputs = nil
+  if src['kind'] == 'union' && src['sources'].is_a?(Array)
+    union_prefix = "Union of #{src['sources'].size} Sources"
+    union_outputs = Set.new(Array(src['matches']).map { |m| norm(m['outputColumnName'].to_s) })
+    src['sources'].each do |leg|
+      next unless leg.is_a?(Hash) && leg['kind'] == 'table' && leg['elementId']
+      tgt = wb_order_by_id[leg['elementId']]
+      if tgt.nil?
+        extra_fails << "element #{el_desc}: union leg elementId \"#{leg['elementId']}\" not found in the spec — POST fails with Dependency not found"
+      elsif tgt > i
+        extra_fails << "element #{el_desc}: union leg \"#{leg['elementId']}\" is defined LATER in the document; move it before this element"
+      end
+    end
+  end
+
   walk.call(el) do |prefix, col_raw|
+    if union_prefix && prefix.strip == union_prefix
+      unless union_outputs.include?(norm(col_raw))
+        extra_fails << "element #{el_desc}: [#{prefix.strip}/#{col_raw.strip}] is not a union output column (matches[].outputColumnName)"
+      end
+      next
+    end
     if prefix.strip == 'Metrics'
       metric_name = col_raw.to_s.strip
       metric_refs << metric_name

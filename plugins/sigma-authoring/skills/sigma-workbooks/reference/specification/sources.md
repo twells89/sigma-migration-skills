@@ -178,4 +178,4 @@ matches:
 
 `sourceColumns` is an array aligned to `sources` — one entry per source, in order. `outputColumnName` becomes the column users see and the name your element formulas reference.
 
-**Set `name` explicitly.** Formula prefixes for the consuming element use the union's `name`, e.g. `[All Sales/Order ID]`. If you omit `name`, Sigma assigns `"Union of N Sources"`; if your element also defines a column whose `name` matches an `outputColumnName`, a bare `[Order ID]` formula becomes a circular self-reference and the SQL fails to compile. See `formulas.md` > Union source.
+**The formula prefix is `Union of N Sources`, not the union's `name`.** Refs from the consuming element to a union output column use the prefix `Union of N Sources`, where N is `sources.length` — e.g. `[Union of 2 Sources/Order ID]` for the two-source union above. Live `/v2/workbooks/spec/verify` rejects the union's own `name` (`[All Sales/Order ID]`) as a prefix. A bare `[Order ID]` is a circular self-reference when the element also defines a column named `Order ID`, so always use the prefixed form. See `formulas.md` > Union source.
